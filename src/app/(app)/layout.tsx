@@ -1,13 +1,39 @@
+import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
-import { AppShell } from '@/modules/web';
+import { auth, signOut, SIGN_IN_PATH } from '@/modules/projects/auth';
+import { AppShell, Button } from '@/modules/web';
 
 /**
  * Layout for the authenticated area.
  *
- * Route protection — redirect when unauthenticated, `NOT_FOUND` when the resource belongs to
- * someone else — is added by the middleware in task 14 (FR-001 AC-5; AR-2).
+ * The proxy (task 14) already turns an anonymous request away before this renders; the check here is
+ * the second half of defence in depth — the proxy sees only the cookie, this sees whether the
+ * session behind it still exists (FR-001 AC-5/AC-6). Every route under `(app)` therefore has an
+ * authenticated user, and the ownership check that follows is the repository's job (task 13).
  */
-export default function AuthenticatedAreaLayout({ children }: { children: ReactNode }) {
-  return <AppShell>{children}</AppShell>;
+export default async function AuthenticatedAreaLayout({ children }: { children: ReactNode }) {
+  const session = await auth();
+
+  if (!session?.user) redirect(SIGN_IN_PATH);
+
+  const account = (
+    <>
+      <span data-testid="account-email">
+        {session.user.email ?? session.user.name ?? 'Signed in'}
+      </span>
+      <form
+        action={async () => {
+          'use server';
+          await signOut({ redirectTo: SIGN_IN_PATH });
+        }}
+      >
+        <Button type="submit" variant="secondary" size="sm" data-testid="sign-out">
+          Sign out
+        </Button>
+      </form>
+    </>
+  );
+
+  return <AppShell account={account}>{children}</AppShell>;
 }
