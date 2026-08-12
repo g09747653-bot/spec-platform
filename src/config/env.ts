@@ -61,9 +61,17 @@ const boolish = (fallback: boolean) =>
 
 const LLM_PROVIDERS = ['anthropic', 'openai', 'google'] as const;
 
+/**
+ * A required variable. Because `normaliseBlanks` has already turned a blank value into an absent
+ * one, "missing" and "declared but empty" reach this schema identically — and both must produce
+ * the same message naming the variable.
+ */
+const required = (description: string) =>
+  z.string({ error: `required: ${description}` }).min(1, `required: ${description}`);
+
 export const envSchema = z.object({
   // --- Required from Milestone 0 ---
-  DATABASE_URL: z.string().min(1, 'required: the Neon connection string for this environment'),
+  DATABASE_URL: required('the Neon connection string for this environment'),
 
   // --- Auth.js — required from Milestone 1 (task 12) ---
   AUTH_SECRET: z.string().min(1).optional(),
@@ -143,11 +151,34 @@ export class EnvironmentConfigurationError extends Error {
 }
 
 /**
+ * Blank means absent.
+ *
+ * A deployment platform hands a declared-but-unfilled variable to the build as an **empty
+ * string**, not as an absent key — Vercel does this for every variable it proposes when importing
+ * a project. `.optional()` admits `undefined` but not `''`, so without this every unfilled
+ * later-milestone variable would fail the boot it is explicitly allowed to skip (D-12).
+ *
+ * Normalising here rather than per field keeps the rule in one place and keeps it symmetric: a
+ * required variable supplied as `''` is still missing, and still fails by name.
+ */
+function normaliseBlanks(
+  source: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  const normalised: Record<string, string | undefined> = {};
+
+  for (const [key, value] of Object.entries(source)) {
+    normalised[key] = value === undefined || value.trim() === '' ? undefined : value;
+  }
+
+  return normalised;
+}
+
+/**
  * Parses an arbitrary source of variables. Pure and injectable, so the failure path is unit
  * testable without mutating `process.env`.
  */
 export function parseEnv(source: Record<string, string | undefined>): Env {
-  const result = envSchema.safeParse(source);
+  const result = envSchema.safeParse(normaliseBlanks(source));
 
   if (!result.success) {
     const issues = result.error.issues.map((issue) => {
