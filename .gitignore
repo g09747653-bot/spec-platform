@@ -2,7 +2,8 @@
 .env
 .env.*
 !.env.example
-env.seed.txt
+# hand-off files the customer fills with credentials (env.seed.txt, env.m1.txt, …)
+env*.txt
 
 # dependencies
 node_modules/

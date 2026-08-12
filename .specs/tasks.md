@@ -171,7 +171,7 @@ Goal: an empty but correct application whose CI already enforces every structura
 
 Goal: the thinnest complete journey, end to end, against a deterministic stub provider.
 
-- [ ] 11\. Create the users, projects, and sessions schema
+- [x] 11. Create the users, projects, and sessions schema
   - Define Drizzle tables for `users`, `projects`, `sessions`, and `workflow_state` per the solution's data model, with foreign keys and timestamps.
   - Acceptance Criteria:
     - Migration applies cleanly and rolls forward on an existing database.
