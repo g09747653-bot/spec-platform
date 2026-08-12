@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import type { SchemaDatabase } from '@/db';
 import { projects, sessions, workflowState } from '@/db/schema';
 
-import type { OwnerScope } from './owner-scope';
+import type { OwnerScope } from '@/db/owner-scope';
 
 /** A session resolved together with the project that owns it. */
 export interface OwnedSession {

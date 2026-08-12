@@ -5,7 +5,7 @@ import type { SchemaDatabase } from '@/db';
 import { projects, sessions, workflowState } from '@/db/schema';
 import { queryOneRow } from '@/db/sql';
 
-import type { OwnerScope } from './owner-scope';
+import type { OwnerScope } from '@/db/owner-scope';
 
 /** What the creation statement returns. Validated, because raw SQL is a boundary like any other. */
 const CreatedProjectRow = z.object({

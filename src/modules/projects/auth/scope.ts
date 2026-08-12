@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-import { OwnerScope } from '../repositories/owner-scope';
+import { OwnerScope } from '@/db/owner-scope';
 
 import { auth, SIGN_IN_PATH } from './index';
 
