@@ -1,7 +1,7 @@
 import { unzipSync, strFromU8 } from 'fflate';
 import { expect, test } from '@playwright/test';
 
-import { createSignedInUser, revokeSession, signIn } from './fixtures';
+import { createSignedInUser, signIn } from './fixtures';
 
 /**
  * The walking skeleton, end to end (task 23; SC-16; constitution — Testing Approaches item 2).
@@ -124,10 +124,16 @@ test.describe('walking skeleton', () => {
       await intruderContext.close();
     }
 
-    // --- After sign-out the prior cookie is unauthenticated (FR-001 AC-6) ---
-    await revokeSession(owner);
-    const afterSignOut = await page.goto(projectUrl);
-    expect(afterSignOut?.url()).toContain('/signin');
+    // --- Signing out invalidates the session itself, not just the browser's copy (FR-001 AC-6) ---
+    await page.goto('/projects');
+    await page.getByTestId('sign-out').click();
+    await expect(page).toHaveURL(/\/signin/);
+
+    // The claim of AC-6 is about the *prior credential*: put the same token back and it must be
+    // worthless, because the row behind it is gone. Clearing the cookie alone would prove nothing.
+    await signIn(context, owner);
+    const withRevokedToken = await page.goto(projectUrl);
+    expect(withRevokedToken?.url()).toContain('/signin');
   });
 
   test('an anonymous visitor is sent to sign-in and learns nothing about what exists (FR-001 AC-5)', async ({
