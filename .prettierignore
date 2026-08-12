@@ -1,0 +1,19 @@
+node_modules/
+.next/
+coverage/
+playwright-report/
+test-results/
+pnpm-lock.yaml
+next-env.d.ts
+
+# Next.js rewrites and reformats this file on every dev/build run; it owns the
+# formatting, so Prettier must not fight it.
+tsconfig.json
+
+# Generated SQL — Drizzle owns the formatting.
+migrations/
+
+# The specification bundle and its operating instructions are hand-authored
+# source of truth; a formatter must never rewrite them.
+.specs/
+CLAUDE.md

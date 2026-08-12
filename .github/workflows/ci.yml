@@ -1,0 +1,117 @@
+name: CI
+
+# Constitution — Testing Approaches, Rules: "CI is red-blocking: all four mandatory suites must
+# pass before merge." Every job below must be added to the branch protection rule for `main` as a
+# required status check; the workflow makes failures visible, branch protection makes them binding.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # No job in this workflow touches a database: Milestone 0 has no queries, and the unit suite is
+  # forbidden from doing I/O (NFR-012 AC-2). The value exists only to satisfy the Zod environment
+  # loader, which refuses to boot the app without it (task 7). It is deliberately not a real
+  # credential — CI must never hold one (constitution S1).
+  DATABASE_URL: postgres://ci:ci@127.0.0.1:5432/ci-not-a-real-database
+
+jobs:
+  verify:
+    name: Lint, boundaries, types, unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Formatting
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      # Constitution A1 / SC-15: asserts the allowed-edge table still rejects forbidden imports.
+      # Kept as its own step so a boundary regression is legible in the checks list.
+      - name: Module boundaries
+        run: pnpm test:boundaries
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  e2e:
+    name: End-to-end (Chromium, Firefox, WebKit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps
+
+      # NFR-011 / SC-12: the smoke test runs on all three engines. Edge is covered by the
+      # Chromium project (see playwright.config.ts).
+      - name: End-to-end tests
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore

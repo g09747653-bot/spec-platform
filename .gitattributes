@@ -1,0 +1,15 @@
+# Normalise line endings to LF in the repository and in every working copy.
+# Prettier is configured with `endOfLine: lf`; without this, a Windows checkout would produce
+# CRLF files and fail `pnpm format:check` on a clean clone.
+* text=auto eol=lf
+
+# Binary-ish assets git must not touch.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+
+pnpm-lock.yaml -diff linguist-generated

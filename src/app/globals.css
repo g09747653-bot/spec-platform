@@ -1,0 +1,48 @@
+@import 'tailwindcss';
+
+/**
+ * Design tokens (Tailwind v4 CSS-first configuration).
+ *
+ * Every vendored primitive in `src/modules/web/ui` styles itself from these tokens, so a theme
+ * change is one edit here rather than a sweep through components.
+ */
+@theme {
+  --color-canvas: oklch(98.4% 0.003 247.86);
+  --color-surface: oklch(100% 0 0);
+  --color-border-subtle: oklch(92.9% 0.006 264.53);
+  --color-ink: oklch(27.9% 0.041 260.03);
+  --color-ink-muted: oklch(55.1% 0.027 264.36);
+  --color-accent: oklch(48.8% 0.243 264.38);
+  --color-accent-ink: oklch(100% 0 0);
+  --color-danger: oklch(57.7% 0.245 27.33);
+
+  --radius-card: 0.75rem;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family:
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      Roboto,
+      sans-serif;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
