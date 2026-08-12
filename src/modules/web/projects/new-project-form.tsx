@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, type SubmitEvent } from 'react';
+import { useState, useSyncExternalStore, type SubmitEvent } from 'react';
 
 import { Button } from '../ui/button';
 import { Label, Textarea } from '../ui/field';
@@ -37,6 +37,20 @@ export function NewProjectForm() {
   const [prompt, setPrompt] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  /*
+   * The form is JavaScript-driven: it posts with `fetch` and navigates on the response. Before
+   * hydration a click would do nothing at all, so the control is disabled until then — an honest
+   * "not ready yet" rather than a dead click.
+   *
+   * `useSyncExternalStore` with a server snapshot of `false` and a client snapshot of `true` is the
+   * hydration signal itself; the store never changes, so nothing re-subscribes and no state is set
+   * from an effect.
+   */
+  const ready = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  );
 
   async function createProject(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -108,7 +122,7 @@ export function NewProjectForm() {
       <Button
         type="submit"
         data-testid="create-project"
-        disabled={submitting}
+        disabled={!ready || submitting}
         className="self-start"
       >
         {submitting ? 'Starting…' : 'Start a session'}

@@ -231,7 +231,7 @@ Goal: the thinnest complete journey, end to end, against a deterministic stub pr
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 16\. Create the spec files and revisions schema with the immutability trigger
+- [x] 16\. Create the spec files and revisions schema with the immutability trigger
   - Define `spec_files` and `spec_revisions`; add a `BEFORE UPDATE` trigger freezing `content`, `origin`, `derived_from`, `context_attachment_ids`, `revision_number`, `spec_file_id`, and `created_at`.
   - Permit `approved` to move `false → true` only; deny `DELETE` except via project cascade.
   - Constrain `file_name` to the five permitted names and make `(spec_file_id, revision_number)` unique.
@@ -245,7 +245,7 @@ Goal: the thinnest complete journey, end to end, against a deterministic stub pr
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 17\. Implement revision allocation and the RevisionRepository
+- [x] 17\. Implement revision allocation and the RevisionRepository
   - Allocate `revision_number` inside the insert transaction so numbers are gapless; expose resolvers for latest, latest-approved, and latest pre-enrichment revisions.
   - Acceptance Criteria:
     - Concurrent inserts on the same spec file produce consecutive numbers with no gaps or duplicates.
@@ -256,7 +256,7 @@ Goal: the thinnest complete journey, end to end, against a deterministic stub pr
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 18\. Implement the deterministic stub LLM adapter
+- [x] 18\. Implement the deterministic stub LLM adapter
   - Build the `TestDouble` implementation of the adapter interface, returning fixed markdown chunk-by-chunk with configurable delay and failure injection.
   - Acceptance Criteria:
     - The stub streams a known document in deterministic chunks.
@@ -267,7 +267,7 @@ Goal: the thinnest complete journey, end to end, against a deterministic stub pr
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 19\. Implement minimal workflow state persistence and the stage rail
+- [x] 19\. Implement minimal workflow state persistence and the stage rail
   - Persist stage and substage on `workflow_state`; render the current and remaining stages in the session shell.
   - Acceptance Criteria:
     - The stage rail reflects the persisted stage after a page reload.
@@ -278,7 +278,7 @@ Goal: the thinnest complete journey, end to end, against a deterministic stub pr
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 20\. Implement the minimal stub generation path
+- [x] 20\. Implement the minimal stub generation path
   - Implement `POST /api/sessions/:id/generate` in its simplest form: resolve `OwnerScope`, invoke the stub adapter, collect the markdown, and persist it as an **unapproved** `SpecRevision` via the RevisionRepository, returning the spec card payload.
   - No provider registry, failover, chunk log, or event protocol yet — those arrive in tasks 43–45, which extend this handler rather than replacing the route.
   - Acceptance Criteria:
@@ -291,7 +291,7 @@ Goal: the thinnest complete journey, end to end, against a deterministic stub pr
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 21\. Implement the SpecCard with approve and request-changes decisions
+- [x] 21\. Implement the SpecCard with approve and request-changes decisions
   - Render a generated spec with approve and request-changes actions; implement `POST /api/specs/:specFileId/decision`.
   - Requesting changes produces a new **unapproved** revision that is itself presented for approval; the prior revision stays in history.
   - Acceptance Criteria:
@@ -304,7 +304,7 @@ Goal: the thinnest complete journey, end to end, against a deterministic stub pr
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 22\. Implement basic ZIP export of approved revisions
+- [x] 22\. Implement basic ZIP export of approved revisions
   - Implement `GET /api/projects/:id/export` assembling a ZIP from approved revisions with exact file names and no additional entries.
   - Acceptance Criteria:
     - The archive contains only spec markdown files, named exactly, extractable into `.specs/` without renaming.
@@ -315,7 +315,7 @@ Goal: the thinnest complete journey, end to end, against a deterministic stub pr
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 23\. Write the walking-skeleton E2E test
+- [x] 23\. Write the walking-skeleton E2E test
   - Playwright test: sign in with a stubbed identity, create a project from a prompt, generate one stub spec, approve it, download the ZIP, assert its contents.
   - Acceptance Criteria:
     - The test passes headlessly in CI against the stub provider with no live model call.
