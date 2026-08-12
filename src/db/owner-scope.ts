@@ -1,6 +1,10 @@
 /**
  * Authorization as a type, not a habit (NFR-005; AR-2; solution.md D-13).
  *
+ * It lives in the repository layer rather than inside one module because `projects` and `specs` both
+ * need it and neither may import the other (constitution A1 — the allowed-edge table). Both modules may
+ * import repository interfaces, and this is one: the scope is part of every repository signature.
+ *
  * Every repository method that reads or writes project-scoped data takes an `OwnerScope` as its
  * **first** parameter and injects `owner_id = scope.userId` into the query. There is no unscoped
  * read path, so a handler cannot forget the check — the call does not compile without a scope.

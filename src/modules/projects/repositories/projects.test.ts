@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { projects, sessions, users, workflowState } from '@/db/schema';
 import { createMigratedDatabase, type TestDatabase } from '@/db/testing/migrated-database';
 
-import { OwnerScope } from './owner-scope';
+import { OwnerScope } from '@/db/owner-scope';
 import { createProjectRepository, type ProjectRepository } from './projects';
 import { createSessionRepository, type SessionRepository } from './sessions';
 
