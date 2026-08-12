@@ -2,6 +2,35 @@
 
 > Пишет исполнитель. Новые раунды — секцией сверху. Форма: СТАТУС / СДЕЛАНО / ТЕСТЫ-CI / DECISIONS / BLOCKED / НУЖНО ОТ ЗАКАЗЧИКА / СЛЕДУЮЩИЙ ШАГ.
 
+## Раунд 2 — 2026-08-12 · закрытие M0, часть 1 (push + первый CI)
+
+СТАТУС: задание раунда выполнено полностью — push прошёл, первый прогон CI зелёный с первой попытки, чинить было нечего. M0 остаётся частично закрытым: 8 задач из 10 отмечены; 8 и 9 ждут внешних действий (branch protection, Vercel), которые Архитектор отнёс к следующему раунду.
+
+СДЕЛАНО:
+
+- Записаны решения по вердикту раунда 1: амендмент `A-1` в разделе Amendments (`decisions.md`) и `D-11` (локальный Firefox не чинится, матрица проверяется на CI, локально допустимы chromium+webkit).
+- Принят файловый handoff-протокол: `.specs/handoff/` закоммичен, правки `CLAUDE.md` (п. 10) и `execution.md` §2 вошли в коммит `4b94020`.
+- `git push -u origin main` → ветка `main` создана в `g09747653-bot/spec-platform`; запушены три коммита: `670f709` (M0), `c3a0376` (BLOCKED-записи), `4b94020` (handoff + A-1 + D-11).
+- Задача 5 закрыта по AC: чекбокс отмечен в `tasks.md`. BLOCKED-записи задач 5 и 8 в `decisions.md` помечены снятыми с указанием, чем именно закрыты.
+
+ТЕСТЫ/CI: прогон **31611334337** (event: push, sha `4b94020`), вывод `gh run view` — `"conclusion":"success"`, оба job'а `success`:
+
+- **Lint, boundaries, types, unit** — 41 c. `All matched files use Prettier code style!`; `eslint .` без ошибок; boundary-фикстуры — 4 `ok rejected` + 1 `ok allowed`, `Boundary fixture check passed (5 fixtures)`; `tsc --noEmit` чист; Vitest `Test Files 2 passed (2)`, `Tests 12 passed (12)`.
+- **End-to-end (Chromium, Firefox, WebKit)** — 3 м 02 с. `Running 3 tests using 1 worker` → **`3 passed (18.2s)`**. **Firefox на ubuntu-latest проходит.** Доказательство соответствия: `pnpm exec playwright test --list` даёт ровно `[chromium]`, `[firefox]`, `[webkit]` × один смоук = `Total: 3 tests in 1 file`, то есть «3 passed» — это все три проекта. Локально по-прежнему зелены только chromium+webkit (D-11).
+
+Некритичное наблюдение (не дефект, ничего не ломает): GitHub аннотирует прогон предупреждением, что `actions/upload-artifact@v4`, `actions/cache@v4` и `pnpm/action-setup@v4` объявляют Node.js 20 и принудительно исполняются на Node.js 24. Записано в Backlog `decisions.md`, не реализовано.
+
+DECISIONS: новые — `A-1` (амендмент, Amendments) и `D-11`. Прежние `D-1 … D-10` без изменений.
+
+BLOCKED: снято две записи (задачи 5 и 8 — обе помечены СНЯТ в `decisions.md` с указанием прогона CI). Остаётся одна: `BLOCKED task 9` (нет доступа к Vercel).
+
+НУЖНО ОТ ЗАКАЗЧИКА (для закрытия чекбоксов 8 и 9):
+
+1. **Branch protection на `main`** — у исполнителя нет прав (`gh api repos/... --jq .permissions` → `admin:false`), защита сейчас отсутствует (`/branches/main/protection` → 404). Нужно сделать required status checks ровно два: `Lint, boundaries, types, unit` и `End-to-end (Chromium, Firefox, WebKit)`; required approvals = 0 согласно амендменту `A-1`. Без этого AC задачи 8 («PR с падающим тестом / с запрещённым импортом нельзя влить») не выполнен: пайплайн делает падение видимым, блокирующим его делает branch protection.
+2. **Vercel** — импорт репозитория и `DATABASE_URL` раздельно для Production (ветка production Neon) и Preview (ветка preview). Пошаговый чек-лист и способ проверки обоих AC — `docs/deployment.md`.
+
+СЛЕДУЮЩИЙ ШАГ: жду новый `START_HERE.md`. Когда branch protection будет включена, проверю AC задачи 8 честно — PR с намеренно падающим unit-тестом и PR с запрещённым cross-module импортом должны стать неvливаемыми; после этого отмечу чекбокс 8. Чекбокс 9 отмечу после проверки обоих AC по журналам сборки Vercel. M1 не начат.
+
 ## Раунд 1 — 2026-08-12 (перенесено Архитектором из чата; вердикт: условно принято, см. decisions.md A-1, D-11)
 
 СТАТУС: M0 частично — 7 задач из 10 приняты по AC; задачи 5, 8, 9 упираются во внешние ресурсы (доступ к GitHub-репозиторию, Vercel, запуск Firefox на этой машине).

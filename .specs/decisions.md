@@ -30,11 +30,13 @@ D-10 | task 10 | Примитивы shadcn/ui внесены в репозито
 
 ## BLOCKED
 
-BLOCKED task 5 (частично, только локальный прогон): проект `firefox` в `pnpm test:e2e` падает с `browserType.launch: spawn UNKNOWN`; в журнале Windows — `Activation context generation failed ... Dependent Assembly mozglue version="1.0.0.0" could not be found`. Проекты `chromium` и `webkit` проходят.
+~~BLOCKED task 5~~ — СНЯТ 2026-08-12 (раунд 2): AC задачи 5 закрыт на CI — прогон 31611334337, job «End-to-end (Chromium, Firefox, WebKit)», `Running 3 tests using 1 worker` → `3 passed (18.2s)`; `playwright test --list` подтверждает, что эти 3 теста = один смоук × три проекта, то есть firefox на ubuntu-latest проходит. Локальный сбой остаётся дефектом машины и по D-11 не чинится.
+Исходная запись (частично, только локальный прогон): проект `firefox` в `pnpm test:e2e` падает с `browserType.launch: spawn UNKNOWN`; в журнале Windows — `Activation context generation failed ... Dependent Assembly mozglue version="1.0.0.0" could not be found`. Проекты `chromium` и `webkit` проходят.
 / Подход 1: `playwright install --force firefox` — переустановка не помогла; проверены зависимости бинарника (`winldd`): все VC-runtime DLL резолвятся, `mozglue.dll` присутствует и содержит встроенный манифест с точно совпадающим `assemblyIdentity`, mark-of-the-web отсутствует. Подход 2: установлен независимый Playwright 1.55.1 с Firefox build 1490 в отдельной директории — тот же `spawn UNKNOWN`, то есть дефект не в конкретной сборке.
 / Гипотеза: ограничение самой рабочей машины (SxS-активация / политика запуска процессов, AV-EDR или AppLocker), а не дефект репозитория. Конфигурация Playwright содержит все три проекта и не ослаблена; матрица из трёх браузеров подлежит проверке на CI (ubuntu-latest, задача 8), где сборка Firefox для Linux штатная. См. пункт в «НУЖНО ОТ ЗАКАЗЧИКА» рапорта.
 
-BLOCKED task 8: пайплайн `.github/workflows/ci.yml` написан, все его шаги прогнаны локально и зелёные, но CI ни разу не запускался — `git push` в `https://github.com/g09747653-bot/spec-platform` отклонён с `remote: Repository not found`.
+~~BLOCKED task 8~~ — СНЯТ 2026-08-12 (раунд 2): доступ выдан (`DictorBob`, permission WRITE), `git push -u origin main` прошёл, первый прогон CI (run 31611334337, sha `4b94020`) зелёный в обоих jobs. Остаток задачи 8 — не блокировка, а внешнее действие: branch protection на `main` (нужны админ-права, у исполнителя их нет: `admin:false`). Чекбокс 8 не отмечен, пока оба check'а не станут required.
+Исходная запись: пайплайн `.github/workflows/ci.yml` написан, все его шаги прогнаны локально и зелёные, но CI ни разу не запускался — `git push` в `https://github.com/g09747653-bot/spec-platform` отклонён с `remote: Repository not found`.
 / Подход 1: `gh repo view g09747653-bot/spec-platform` → `Could not resolve to a Repository`; аутентифицированный аккаунт — `DictorBob` (scopes: repo, workflow), то есть прав на push хватило бы. Подход 2: `gh api users/g09747653-bot` → пользователь существует, тип User, публичных репозиториев нет; поиск по владельцу недоступен. То есть репозиторий либо не создан, либо `DictorBob` не добавлен в коллабораторы.
 / Гипотеза: не закрыт первый пункт чек-листа execution.md §6 («GitHub-репозиторий (пустой, с main)») либо не выдан доступ. Локально сделано всё, что можно без доступа: репозиторий инициализирован, коммит `670f709` на ветке `main` готов, `origin` прописан — после выдачи доступа достаточно одного `git push -u origin main`. Обходной путь (создать репозиторий под другим владельцем) не применялся сознательно.
 
@@ -47,6 +49,7 @@ BLOCKED task 9: конфигурация деплоя в репозитории 
 - Ужесточить `no-restricted-properties` для `process.env` до полного запрета в `src/**` после того, как в M1 появятся серверные экшены (сейчас исключение — только сам загрузчик и конфиги инструментов).
 - Добавить в `pnpm test:boundaries` фикстуру на запрет импорта репозиториев из `web` — реальные каталоги `repositories/` появляются в задачах 13 и 17, зона в `eslint.boundaries.js` уже заведена.
 - Рассмотреть переход на TypeScript 7 после появления поддержки в typescript-eslint (см. D-2).
+- Обновить GitHub Actions, объявляющие Node.js 20 (`actions/upload-artifact@v4`, `actions/cache@v4`, `pnpm/action-setup@v4`), когда выйдут версии на Node.js 24 — сейчас runner форсирует их на Node 24 и выдаёт аннотацию-предупреждение; на результат прогона не влияет.
 
 ## Amendments (заполняет Архитектор после утверждения заказчиком)
 

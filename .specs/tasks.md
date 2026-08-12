@@ -99,7 +99,7 @@ Goal: an empty but correct application whose CI already enforces every structura
   - _Complexity: Small_
   - _Parallel-safe: yes_
 
-- [ ] 5\. Set up Playwright with the supported browser matrix
+- [x] 5\. Set up Playwright with the supported browser matrix
   - Configure Playwright projects for Chromium, Firefox, and WebKit; document that Edge is covered by the Chromium project.
   - Add a trivial smoke test against the placeholder route.
   - Acceptance Criteria:
