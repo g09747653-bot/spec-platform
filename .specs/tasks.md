@@ -134,7 +134,7 @@ Goal: an empty but correct application whose CI already enforces every structura
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 8\. Set up the GitHub Actions CI pipeline
+- [x] 8\. Set up the GitHub Actions CI pipeline
   - Run lint, the boundary fixture, typecheck, unit tests, and E2E tests on every pull request; block merge on any failure.
   - Cache dependencies and Playwright browsers.
   - Acceptance Criteria:
@@ -146,7 +146,7 @@ Goal: an empty but correct application whose CI already enforces every structura
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 9\. Configure the Vercel project with previews and a migration deploy step
+- [x] 9\. Configure the Vercel project with previews and a migration deploy step
   - Connect the repository, set server-side environment variables, and add a deploy step running `db:migrate` against the target branch.
   - Acceptance Criteria:
     - A pull request produces a preview deployment bound to the preview database branch.
