@@ -18,20 +18,34 @@ Leave the build and install commands untouched — `vercel.json` already supplie
 Set these as **server-side** variables. None may be prefixed `NEXT_PUBLIC_`: no value here is
 allowed to reach a client bundle (constitution S1; NFR-006).
 
-| Variable       | Production                                   | Preview                                   |
-| -------------- | -------------------------------------------- | ----------------------------------------- |
-| `DATABASE_URL` | Neon **production** branch connection string | Neon **preview** branch connection string |
+| Variable             | Production                                         | Preview                                   |
+| -------------------- | -------------------------------------------------- | ----------------------------------------- |
+| `DATABASE_URL`       | Neon **production** branch connection string       | Neon **preview** branch connection string |
+| `AUTH_SECRET`        | any fresh random value (`openssl rand -base64 32`) | same or another random value              |
+| `AUTH_GOOGLE_ID`     | Google OAuth client id                             | same                                      |
+| `AUTH_GOOGLE_SECRET` | Google OAuth client secret                         | same                                      |
+| `AUTH_GITHUB_ID`     | GitHub OAuth client id                             | same                                      |
+| `AUTH_GITHUB_SECRET` | GitHub OAuth client secret                         | same                                      |
 
 The preview environment must point at the preview branch, so a pull request never migrates or
-writes to production data. Everything else in the Configuration table of `solution.md` is
-optional until its milestone (`.specs/decisions.md` D-8) and is added then:
+writes to production data.
 
-- Milestone 1 — `AUTH_SECRET`, `AUTH_URL`, `AUTH_GOOGLE_ID/_SECRET`, `AUTH_GITHUB_ID/_SECRET`
+**Do not set `AUTH_URL` on a deployment** (`.specs/decisions.md` D-21). Auth.js derives the callback
+base from the request, which is what lets one build serve the production domain _and_ every preview
+URL — and preview URLs change per commit, so a pinned value breaks them. It belongs in local `.env`
+only.
+
+The build reads configuration through `src/config/env.ts`, so a missing required variable fails the
+build with a message naming it rather than surfacing at request time. Everything else in the
+Configuration table of `solution.md` stays optional until its milestone (D-8):
+
 - Milestone 3 — `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`
 - Milestone 5 — `BLOB_READ_WRITE_TOKEN`, `WEB_SEARCH_API_KEY`
 - Milestone 8 — `SENTRY_DSN`
 
-`AUTH_URL` differs per environment and must match the deployment's own origin.
+**OAuth redirect URIs.** Each provider's application must list the callback for every origin that
+signs users in: `https://<production-domain>/api/auth/callback/google` and `.../callback/github`, plus
+`http://localhost:3000/api/auth/callback/{google,github}` for local work.
 
 ## 3. Migration deploy step
 
