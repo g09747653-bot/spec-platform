@@ -24,6 +24,8 @@ D-8 | task 7 | Переменные окружения будущих milestone 
 
 D-9 | task 10 | Tailwind CSS v4 с CSS-first конфигурацией (`@import 'tailwindcss'` + `@theme` в `globals.css`, плагин `@tailwindcss/postcss`), файл `tailwind.config.ts` не создаётся | в v4 конфиг живёт в CSS; отдельный JS-конфиг — legacy-режим | AC задачи 10 («shell рендерится со стилями Tailwind, без внешней runtime-зависимости компонентов») выполнено; `_Touches:_` — ориентир, а не контракт
 
+D-11 | task 5 | Локальный запуск Firefox не чинится; матрица браузеров проверяется на CI (ubuntu-latest), локальные прогоны допустимы как `chromium`+`webkit` | вердикт Архитектора в START_HERE раунда 2: время на машинную неисправность не тратится; см. `BLOCKED task 5` ниже | конфигурация Playwright не ослаблена — все три проекта остаются в `playwright.config.ts` и обязательны на CI; NFR-011 и SC-12 не затронуты
+
 D-10 | task 10 | Примитивы shadcn/ui внесены в репозиторий вручную (`src/modules/web/ui/*`) вместо запуска `shadcn init` | CLI тянет свой набор зависимостей и переписывает конфиги проекта; solution.md требует именно вендоринга: «Components are vendored into the repo, so there is no third-party runtime to track» | внешней runtime-зависимости компонентов нет; `class-variance-authority`/`clsx`/`tailwind-merge` — build-time утилиты стилей, как в исходных шаблонах shadcn/ui
 
 ## BLOCKED
@@ -48,4 +50,4 @@ BLOCKED task 9: конфигурация деплоя в репозитории 
 
 ## Amendments (заполняет Архитектор после утверждения заказчиком)
 
-_(пока пусто)_
+A-1 | constitution → Coding Standards | «mandatory PR review» в v1 исполняется как обязательный зелёный CI на PR (branch protection) + гейт-приёмка Архитектора на каждом milestone; required approvals = 0 | утверждено заказчиком 2026-08-12 | основание: single-executor модель execution.md §2
