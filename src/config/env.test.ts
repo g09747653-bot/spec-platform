@@ -9,12 +9,32 @@ import { EnvironmentConfigurationError, parseEnv } from './env';
  * mutation, no I/O, no ordering coupling between tests (NFR-012 AC-2).
  */
 
-const MINIMAL = { DATABASE_URL: 'postgres://user:pw@host/db' } as const;
+/**
+ * Everything required as of Milestone 1. The five `AUTH_*` credentials moved from optional to
+ * required in task 12, per the milestone-driven rule of D-8.
+ */
+const MINIMAL = {
+  DATABASE_URL: 'postgres://user:pw@host/db',
+  AUTH_SECRET: 'gr4hVX0Yy5tGqk8p9jJ1lQ4bM2nB6vC8xZ0aS1dF3gH=',
+  AUTH_GOOGLE_ID: 'google-client-id',
+  AUTH_GOOGLE_SECRET: 'google-client-secret',
+  AUTH_GITHUB_ID: 'github-client-id',
+  AUTH_GITHUB_SECRET: 'github-client-secret',
+} as const;
+
+const REQUIRED_TODAY = Object.keys(MINIMAL);
+
+/** `MINIMAL` with one variable left out — the shape of a deployment that forgot to set it. */
+const without = (omitted: string): Record<string, string | undefined> =>
+  Object.fromEntries(Object.entries(MINIMAL).filter(([name]) => name !== omitted));
 
 describe('parseEnv', () => {
   it('accepts a configuration carrying only the variables required today', () => {
     const env = parseEnv({ ...MINIMAL });
     expect(env.DATABASE_URL).toBe(MINIMAL.DATABASE_URL);
+    expect(env.AUTH_SECRET).toBe(MINIMAL.AUTH_SECRET);
+    expect(env.AUTH_GOOGLE_ID).toBe(MINIMAL.AUTH_GOOGLE_ID);
+    expect(env.AUTH_GITHUB_ID).toBe(MINIMAL.AUTH_GITHUB_ID);
   });
 
   it('rejects a missing required variable and names it', () => {
@@ -28,6 +48,33 @@ describe('parseEnv', () => {
       const { issues, message } = error as EnvironmentConfigurationError;
       expect(issues.some((issue) => issue.startsWith('DATABASE_URL:'))).toBe(true);
       expect(message).toContain('DATABASE_URL');
+    }
+  });
+
+  describe('the Auth.js credentials are required from this milestone (D-8, task 12)', () => {
+    for (const name of REQUIRED_TODAY) {
+      it(`fails by name when ${name} is absent`, () => {
+        try {
+          parseEnv(without(name));
+          expect.unreachable(`${name} must be required`);
+        } catch (error) {
+          const { issues } = error as EnvironmentConfigurationError;
+          expect(issues.some((issue) => issue.startsWith(`${name}:`))).toBe(true);
+        }
+      });
+
+      it(`fails identically when ${name} is declared but blank`, () => {
+        const issuesFor = (source: Record<string, string | undefined>) => {
+          try {
+            parseEnv(source);
+            return null;
+          } catch (error) {
+            return (error as EnvironmentConfigurationError).issues;
+          }
+        };
+
+        expect(issuesFor({ ...MINIMAL, [name]: '   ' })).toEqual(issuesFor(without(name)));
+      });
     }
   });
 
@@ -83,8 +130,18 @@ describe('parseEnv', () => {
   it('keeps later-milestone variables optional until their milestone', () => {
     const env = parseEnv({ ...MINIMAL });
     expect(env.ANTHROPIC_API_KEY).toBeUndefined();
-    expect(env.AUTH_SECRET).toBeUndefined();
+    expect(env.BLOB_READ_WRITE_TOKEN).toBeUndefined();
     expect(env.SENTRY_DSN).toBeUndefined();
+  });
+
+  it('keeps AUTH_URL optional, so one build can serve every deployment hostname', () => {
+    expect(parseEnv({ ...MINIMAL }).AUTH_URL).toBeUndefined();
+    expect(parseEnv({ ...MINIMAL, AUTH_URL: 'http://localhost:3000' }).AUTH_URL).toBe(
+      'http://localhost:3000',
+    );
+    expect(() => parseEnv({ ...MINIMAL, AUTH_URL: 'not-a-url' })).toThrow(
+      EnvironmentConfigurationError,
+    );
   });
 });
 
@@ -97,24 +154,19 @@ describe('parseEnv', () => {
  */
 describe('parseEnv treats a blank value as an absent one', () => {
   it('accepts an optional variable declared but left empty', () => {
-    const env = parseEnv({ ...MINIMAL, AUTH_SECRET: '' });
-    expect(env.AUTH_SECRET).toBeUndefined();
+    const env = parseEnv({ ...MINIMAL, SENTRY_DSN: '' });
+    expect(env.SENTRY_DSN).toBeUndefined();
   });
 
   it('accepts an optional variable containing only whitespace', () => {
-    const env = parseEnv({ ...MINIMAL, AUTH_SECRET: '   ' });
-    expect(env.AUTH_SECRET).toBeUndefined();
+    const env = parseEnv({ ...MINIMAL, SENTRY_DSN: '   ' });
+    expect(env.SENTRY_DSN).toBeUndefined();
   });
 
   it('accepts every later-milestone variable declared and empty at once', () => {
     const env = parseEnv({
       ...MINIMAL,
-      AUTH_SECRET: '',
       AUTH_URL: '',
-      AUTH_GOOGLE_ID: '',
-      AUTH_GOOGLE_SECRET: '',
-      AUTH_GITHUB_ID: '',
-      AUTH_GITHUB_SECRET: '',
       ANTHROPIC_API_KEY: '',
       OPENAI_API_KEY: '',
       GOOGLE_GENERATIVE_AI_API_KEY: '',
@@ -145,7 +197,7 @@ describe('parseEnv treats a blank value as an absent one', () => {
 
   it('still rejects a required variable supplied as an empty string, by name', () => {
     try {
-      parseEnv({ DATABASE_URL: '' });
+      parseEnv({ ...MINIMAL, DATABASE_URL: '' });
       expect.unreachable('an empty required variable must not pass');
     } catch (error) {
       expect(error).toBeInstanceOf(EnvironmentConfigurationError);
@@ -156,7 +208,7 @@ describe('parseEnv treats a blank value as an absent one', () => {
 
   it('still rejects a required variable supplied as whitespace, by name', () => {
     try {
-      parseEnv({ DATABASE_URL: '  \t ' });
+      parseEnv({ ...MINIMAL, DATABASE_URL: '  \t ' });
       expect.unreachable('a whitespace-only required variable must not pass');
     } catch (error) {
       const { issues } = error as EnvironmentConfigurationError;
@@ -174,7 +226,9 @@ describe('parseEnv treats a blank value as an absent one', () => {
       }
     };
 
-    expect(messageFor({ DATABASE_URL: '' })).toEqual(messageFor({}));
+    expect(messageFor({ ...MINIMAL, DATABASE_URL: '' })).toEqual(
+      messageFor({ ...MINIMAL, DATABASE_URL: undefined }),
+    );
   });
 
   it('leaves a filled value untouched, including its internal whitespace', () => {

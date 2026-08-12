@@ -182,7 +182,7 @@ Goal: the thinnest complete journey, end to end, against a deterministic stub pr
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 12\. Implement Auth.js with Google and GitHub providers
+- [x] 12\. Implement Auth.js with Google and GitHub providers
   - Configure Auth.js with the database session strategy, httpOnly `Secure` `SameSite=Lax` cookies, and both OAuth providers.
   - Ensure a returning identity resolves to the existing account rather than creating a duplicate.
   - Acceptance Criteria:
@@ -195,7 +195,7 @@ Goal: the thinnest complete journey, end to end, against a deterministic stub pr
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 13\. Implement the OwnerScope repository pattern
+- [x] 13\. Implement the OwnerScope repository pattern
   - Define `OwnerScope` and make it a required first parameter on every project-scoped repository method; inject the ownership predicate into every query.
   - Add a lint rule or type-level guard preventing an unscoped project query.
   - Acceptance Criteria:
@@ -207,7 +207,7 @@ Goal: the thinnest complete journey, end to end, against a deterministic stub pr
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 14\. Implement route protection and not-found equivalence
+- [x] 14\. Implement route protection and not-found equivalence
   - Add middleware protecting every application and API route except the auth handlers; map unauthenticated access to a redirect and unowned access to `NOT_FOUND`.
   - Acceptance Criteria:
     - An unauthenticated request to a project route redirects to sign-in without revealing existence.
@@ -218,7 +218,7 @@ Goal: the thinnest complete journey, end to end, against a deterministic stub pr
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 15\. Build the project list and create-from-prompt flow
+- [x] 15\. Build the project list and create-from-prompt flow
   - Implement `GET /api/projects` and `POST /api/projects`; the create form takes a free-text prompt, persists it as the session's grounding input, and enters the `interview` stage.
   - Reject empty or whitespace-only prompts client- and server-side.
   - Acceptance Criteria:

@@ -14,11 +14,18 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # No job in this workflow touches a database: Milestone 0 has no queries, and the unit suite is
-  # forbidden from doing I/O (NFR-012 AC-2). The value exists only to satisfy the Zod environment
-  # loader, which refuses to boot the app without it (task 7). It is deliberately not a real
-  # credential — CI must never hold one (constitution S1).
+  # Nothing here is a real credential — CI must never hold one (constitution S1).
+  #
+  # The unit suite runs its database tests against PGlite, an in-process PostgreSQL, and the E2E suite
+  # against a throwaway PGlite server started by Playwright (D-18); neither reads these values. They
+  # exist to satisfy the Zod environment loader, which refuses to boot the app — and therefore the
+  # build — without them (task 7, D-8).
   DATABASE_URL: postgres://ci:ci@127.0.0.1:5432/ci-not-a-real-database
+  AUTH_SECRET: ci-not-a-real-secret-ci-not-a-real-secret=
+  AUTH_GOOGLE_ID: ci-not-a-real-google-client-id
+  AUTH_GOOGLE_SECRET: ci-not-a-real-google-client-secret
+  AUTH_GITHUB_ID: ci-not-a-real-github-client-id
+  AUTH_GITHUB_SECRET: ci-not-a-real-github-client-secret
 
 jobs:
   verify:

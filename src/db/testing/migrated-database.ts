@@ -1,6 +1,10 @@
+import { readFileSync } from 'node:fs';
+
 import { PGlite } from '@electric-sql/pglite';
+import { sql } from 'drizzle-orm';
 import { drizzle, type PgliteDatabase } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
+import { z } from 'zod';
 
 import * as schema from '@/db/schema';
 
@@ -41,6 +45,27 @@ export async function createMigratedDatabase(): Promise<TestDatabase> {
     migrateAgain: () => migrate(db, { migrationsFolder: MIGRATIONS_FOLDER }),
     close: () => client.close(),
   };
+}
+
+const Journal = z.object({ entries: z.array(z.object({ tag: z.string() })) });
+
+/** How many migrations the repository ships, read from Drizzle's journal. */
+export function inRepoMigrationCount(): number {
+  const journal = Journal.parse(
+    JSON.parse(readFileSync(`${MIGRATIONS_FOLDER}/meta/_journal.json`, 'utf8')),
+  );
+
+  return journal.entries.length;
+}
+
+/** How many migrations this database has recorded as applied. */
+export async function appliedMigrationCount(database: TestDatabase): Promise<number> {
+  const result = await database.db.execute(
+    sql`SELECT count(*)::int AS applied FROM drizzle.__drizzle_migrations`,
+  );
+
+  return z.object({ rows: z.tuple([z.object({ applied: z.number() })]) }).parse(result).rows[0]
+    .applied;
 }
 
 /**

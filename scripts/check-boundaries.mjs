@@ -35,6 +35,11 @@ const EXPECTATIONS = [
     why: "'adapters/*' must not import a core module",
   },
   {
+    file: 'src/modules/web/__fixtures__/web-imports-repository.ts',
+    shouldFail: true,
+    why: "'web' must not reach a repository directly (D-13); it goes through a server action",
+  },
+  {
     file: 'src/modules/prompts/__fixtures__/prompts-imports-specs.ts',
     shouldFail: false,
     why: "'prompts' MAY import 'specs' (the section schema)",

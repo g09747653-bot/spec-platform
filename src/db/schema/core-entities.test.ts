@@ -3,8 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { projects, sessions, users, workflowState } from '@/db/schema';
 import {
+  appliedMigrationCount,
   captureDatabaseError,
   createMigratedDatabase,
+  inRepoMigrationCount,
   type TestDatabase,
 } from '@/db/testing/migrated-database';
 
@@ -44,11 +46,9 @@ describe('core entity schema (task 11)', () => {
     // runs the same migrator against a database that already carries earlier migrations.
     await expect(database.migrateAgain()).resolves.toBeUndefined();
 
-    const applied = await database.db.execute(
-      sql`SELECT hash FROM drizzle.__drizzle_migrations ORDER BY created_at`,
-    );
-
-    expect(applied.rows).toHaveLength(2);
+    // Asserted against the journal rather than a hard-coded count, so adding a migration does not
+    // require editing this test — only failing to apply one does.
+    expect(await appliedMigrationCount(database)).toBe(inRepoMigrationCount());
   });
 
   it('rejects a project whose owner is null', async () => {
