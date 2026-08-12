@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
-import { Client } from 'pg';
 import type { BrowserContext } from '@playwright/test';
+import { Client } from 'pg';
+
+import { TEST_DATABASE_URL } from './test-database';
 
 /**
  * End-to-end fixtures: a signed-in identity, without an OAuth round-trip.
@@ -16,8 +18,6 @@ import type { BrowserContext } from '@playwright/test';
  * The live OAuth hop with Google and GitHub cannot be automated — it needs a real account and a consent
  * screen — and is verified by hand at the milestone gate.
  */
-const TEST_DATABASE_URL =
-  process.env.DATABASE_URL ?? 'postgres://postgres:postgres@127.0.0.1:5497/postgres';
 
 /** The cookie name Auth.js uses over plain http, which is what the test server speaks. */
 const SESSION_COOKIE = 'authjs.session-token';

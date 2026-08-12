@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+import { TEST_DATABASE_URL, TEST_DB_PORT } from './e2e/test-database';
+
 /**
  * End-to-end harness (constitution — Testing Approaches item 2; NFR-011; SC-12).
  *
@@ -19,9 +21,6 @@ import { defineConfig, devices } from '@playwright/test';
  */
 const PORT = 3100;
 const BASE_URL = `http://127.0.0.1:${String(PORT)}`;
-
-const DB_PORT = 5497;
-export const TEST_DATABASE_URL = `postgres://postgres:postgres@127.0.0.1:${String(DB_PORT)}/postgres`;
 
 export default defineConfig({
   testDir: './e2e',
@@ -45,7 +44,7 @@ export default defineConfig({
   webServer: [
     {
       command: 'pnpm db:test-server',
-      port: DB_PORT,
+      port: TEST_DB_PORT,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       stdout: 'ignore',
