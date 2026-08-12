@@ -57,9 +57,18 @@ export default defineConfig({
       timeout: 180_000,
       stdout: 'ignore',
       stderr: 'pipe',
-      // Overrides `.env`: Next never overwrites a variable that is already set in the environment,
-      // so the application under test talks to the throwaway database rather than to Neon.
-      env: { DATABASE_URL: TEST_DATABASE_URL },
+      /*
+       * Overrides `.env`: Next never overwrites a variable that is already set in the environment.
+       *
+       * `DATABASE_URL` points the application at the throwaway database instead of Neon.
+       *
+       * `AUTH_URL` is blanked — and blank means absent (D-12) — so Auth.js derives the callback and
+       * redirect base from the request, exactly as it does on a deployment where the variable is
+       * deliberately unset (D-21). Left at its local value, every redirect would aim at port 3000
+       * while the suite runs on 3100; the point is not to dodge that, it is that the suite should
+       * exercise the production behaviour rather than a local pin.
+       */
+      env: { DATABASE_URL: TEST_DATABASE_URL, AUTH_URL: '' },
     },
   ],
 });

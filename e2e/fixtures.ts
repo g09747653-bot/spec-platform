@@ -78,10 +78,3 @@ export async function signIn(context: BrowserContext, user: SignedInUser): Promi
     },
   ]);
 }
-
-/** Deletes the session row, as signing out does — the cookie stays in the browser. */
-export async function revokeSession(user: SignedInUser): Promise<void> {
-  await withClient(async (client) => {
-    await client.query('DELETE FROM auth_sessions WHERE session_token = $1', [user.sessionToken]);
-  });
-}
