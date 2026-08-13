@@ -685,7 +685,7 @@ Goal: real models produce structurally valid specs, survive provider failure, an
 
 Goal: every stage is reviewed, refinements are gated by an accepted diff, and decisions can be typed as well as clicked.
 
-- [ ] 53\. Create the review feedback schema
+- [x] 53\. Create the review feedback schema
   - Define `review_feedback` with `outcome`, `items` (each carrying a stable `id`), `decision`, and `selected_item_ids`, null for accept and ignore decisions.
   - Acceptance Criteria:
     - Every persisted feedback item has a stable, non-empty id.
@@ -696,7 +696,7 @@ Goal: every stage is reviewed, refinements are gated by an accepted diff, and de
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 54\. Implement the ReviewAgent
+- [x] 54\. Implement the ReviewAgent
   - Produce `{ outcome, mustfix[], recommendations[] }` validated against `ReviewArtifact`; each item carries a section reference, description, and concrete suggestion.
   - Acceptance Criteria:
     - Output is Zod-validated before persistence.
@@ -708,7 +708,7 @@ Goal: every stage is reviewed, refinements are gated by an accepted diff, and de
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 55\. Build the ReviewBoard UI with per-item selection
+- [x] 55\. Build the ReviewBoard UI with per-item selection
   - Render blocking and advisory items separately with per-item checkboxes; present accept, ignore, and request-changes actions.
   - Acceptance Criteria:
     - The workflow waits until one of the three actions is chosen.
@@ -720,7 +720,7 @@ Goal: every stage is reviewed, refinements are gated by an accepted diff, and de
   - _Complexity: Large_
   - _Parallel-safe: yes_
 
-- [ ] 56\. Implement the review decision endpoint and gate wiring
+- [x] 56\. Implement the review decision endpoint and gate wiring
   - Implement `POST /api/reviews/:id/decision` with `ReviewDecision` validation; accept and ignore permit the next stage, request-changes returns the stage to `generate`.
   - Acceptance Criteria:
     - Accept or ignore satisfies `reviewGate` for the stage.
@@ -732,7 +732,7 @@ Goal: every stage is reviewed, refinements are gated by an accepted diff, and de
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 57\. Implement the RevisionAgent with filtered feedback
+- [x] 57\. Implement the RevisionAgent with filtered feedback
   - Extend the ContextAssembler so the revision prompt contains only the selected feedback items; omit unselected items entirely rather than marking them optional.
   - Acceptance Criteria:
     - A prompt built with two of five selected items contains only those two.

@@ -41,11 +41,29 @@ export interface ContextSpec {
   content: string;
 }
 
-/** Review feedback the user chose to apply. Empty until task 57 filters it. */
+/** One review finding, as the revision prompt would state it. */
 export interface ContextFeedback {
   id: string;
   description: string;
   suggestion: string;
+}
+
+/**
+ * The review's findings **and** the subset the user ticked (task 57; FR-010 AC-7).
+ *
+ * Both halves are passed in, and the assembler applies the selection itself. That is deliberate and
+ * it is the whole of the task: had this field been "the items to include", every caller would carry
+ * the duty of filtering, and the failure mode of forgetting is silent — a revision prompt listing a
+ * recommendation the user declined, applied without anyone noticing. With the selection here, the
+ * only reachable behaviour is the correct one.
+ *
+ * Unselected items are **absent**, not marked optional. A model told "here is a suggestion, but the
+ * user did not ask for it" has still been told the suggestion, and models act on what they read.
+ */
+export interface ContextFeedbackSelection {
+  items: readonly ContextFeedback[];
+  /** The ids the user ticked. Nothing outside this list reaches the prompt. */
+  selectedIds: readonly string[];
 }
 
 export interface ContextSources {
@@ -53,7 +71,7 @@ export interface ContextSources {
   answers: readonly ContextAnswer[];
   attachments: readonly ContextAttachment[];
   approvedSpecs: readonly ContextSpec[];
-  feedback?: readonly ContextFeedback[];
+  feedback?: ContextFeedbackSelection;
 }
 
 export interface ContextBudget {
@@ -148,11 +166,23 @@ function renderSpecs(specs: readonly ContextSpec[]): string {
     .join('\n\n');
 }
 
-function renderFeedback(feedback: readonly ContextFeedback[]): string {
-  return [...feedback]
-    .sort((a, b) => a.id.localeCompare(b.id))
-    .map((item) => `- ${item.description} — ${item.suggestion}`)
-    .join('\n');
+/**
+ * The ticked findings, in a deterministic order, and nothing else.
+ *
+ * Exported so the filter itself is testable in isolation: "only the selected items appear" is the
+ * acceptance criterion of task 57, and it deserves an assertion that does not have to read a
+ * rendered document to find out.
+ */
+export function selectedFeedback(feedback: ContextFeedbackSelection): readonly ContextFeedback[] {
+  const selected = new Set(feedback.selectedIds);
+
+  return [...feedback.items]
+    .filter((item) => selected.has(item.id))
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function renderFeedback(items: readonly ContextFeedback[]): string {
+  return items.map((item) => `- ${item.description} — ${item.suggestion}`).join('\n');
 }
 
 /**
@@ -199,11 +229,13 @@ export function assembleContext(
     },
   ];
 
-  if (sources.feedback !== undefined && sources.feedback.length > 0) {
+  const feedback = sources.feedback === undefined ? [] : selectedFeedback(sources.feedback);
+
+  if (feedback.length > 0) {
     sections.push({
       key: 'feedback',
       heading: '## Review feedback the user chose to apply',
-      body: renderFeedback(sources.feedback),
+      body: renderFeedback(feedback),
       fixed: false,
     });
   }

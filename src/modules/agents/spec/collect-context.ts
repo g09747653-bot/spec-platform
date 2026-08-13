@@ -1,9 +1,11 @@
 import type { SchemaDatabase } from '@/db';
 import type { OwnerScope } from '@/db/owner-scope';
 import { createInterviewRepository } from '@/modules/projects/repositories/interview';
+import type { SpecType } from '@/modules/specs/model/spec-files';
+import { createReviewRepository } from '@/modules/specs/repositories/reviews';
 import { createSpecFileRepository } from '@/modules/specs/repositories/spec-files';
 
-import type { ContextAnswer, ContextSources } from '../context-assembler';
+import type { ContextAnswer, ContextFeedbackSelection, ContextSources } from '../context-assembler';
 
 /**
  * Reads the four context sources out of persisted state (task 50; FR-008 AC-6).
@@ -19,7 +21,13 @@ import type { ContextAnswer, ContextSources } from '../context-assembler';
 export async function collectContextSources(
   db: SchemaDatabase,
   scope: OwnerScope,
-  input: { sessionId: string; projectId: string; initialPrompt: string },
+  input: {
+    sessionId: string;
+    projectId: string;
+    initialPrompt: string;
+    /** When given, a pending request-changes review of this stage's file joins the sources. */
+    specType?: SpecType;
+  },
 ): Promise<ContextSources> {
   const interview = createInterviewRepository(db);
 
@@ -44,12 +52,40 @@ export async function collectContextSources(
     }
   }
 
-  const approved = await createSpecFileRepository(db).approvedForExport(scope, input.projectId);
+  const specFiles = createSpecFileRepository(db);
+  const approved = await specFiles.approvedForExport(scope, input.projectId);
+
+  /*
+   * The review that sent this stage back for changes, carried as items **plus** the selection
+   * (task 57; FR-010 AC-7). The assembler applies the filter; nothing here decides what to include,
+   * which is precisely why an unselected recommendation cannot slip through a caller's oversight.
+   */
+  let feedback: ContextFeedbackSelection | undefined;
+
+  if (input.specType !== undefined) {
+    const file = await specFiles.findByProjectAndType(scope, input.projectId, input.specType);
+    const review =
+      file === null
+        ? null
+        : await createReviewRepository(db).requestedChangesForFile(scope, file.id);
+
+    if (review !== null) {
+      feedback = {
+        items: review.items.map((item) => ({
+          id: item.id,
+          description: item.description,
+          suggestion: item.suggestion,
+        })),
+        selectedIds: review.selectedItemIds ?? [],
+      };
+    }
+  }
 
   return {
     initialPrompt: input.initialPrompt,
     answers,
     attachments: [],
     approvedSpecs: approved.map((file) => ({ specType: file.specType, content: file.content })),
+    ...(feedback === undefined ? {} : { feedback }),
   };
 }

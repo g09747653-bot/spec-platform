@@ -97,6 +97,34 @@ export async function reachDrafting(page: Page): Promise<void> {
   await expect(page.getByTestId('stage-substage')).toHaveText(/generate/);
 }
 
+/**
+ * The id of the review awaiting a decision for a given owner, read straight from the database.
+ *
+ * The board does not put the id in the DOM, and it should not have to: the id is an API detail, not
+ * something the user sees. A test that needs to call the endpoint as *somebody else* needs a real id
+ * though — a made-up UUID would prove only that unknown ids 404, not that owned-by-another ones do.
+ */
+export async function pendingReviewIdFor(userId: string): Promise<string> {
+  return withClient(async (client) => {
+    const found = await client.query<{ id: string }>(
+      `SELECT rf.id
+         FROM review_feedback rf
+         JOIN spec_revisions sr ON sr.id = rf.spec_revision_id
+         JOIN spec_files sf ON sf.id = sr.spec_file_id
+         JOIN projects p ON p.id = sf.project_id
+        WHERE p.owner_id = $1 AND rf.decision IS NULL
+        ORDER BY rf.created_at DESC
+        LIMIT 1`,
+      [userId],
+    );
+
+    const row = found.rows[0];
+    if (row === undefined) throw new Error('fixture found no pending review for that owner');
+
+    return row.id;
+  });
+}
+
 /** Puts the session cookie in the browser context, which is what "being signed in" means here. */
 export async function signIn(context: BrowserContext, user: SignedInUser): Promise<void> {
   await context.addCookies([

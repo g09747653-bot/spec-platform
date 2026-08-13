@@ -67,6 +67,11 @@ export interface PromptVariables {
     unmetNeeds: string;
     replyBlock: string;
   };
+  'review.board.v1': {
+    /** Named in the instruction only — the review does not derive a section list (see below). */
+    specType: string;
+    specContent: string;
+  };
   'interview.reply-assessment.skeleton.v1': {
     declaredNeeds: string;
     reply: string;
@@ -103,6 +108,38 @@ const SPEC_GENERATION: PromptAsset = {
   ].join('\n'),
   variables: ['specType', 'initialPrompt', 'context', 'changeInstruction'],
   derived: ['requiredSections'],
+};
+
+/**
+ * The review board asset (task 54; FR-010 AC-1..AC-3).
+ *
+ * Note what it does **not** carry: `requiredSections`. Structural conformance is `validateStructure`'s
+ * verdict, not an opinion to be re-derived by a second model call, and listing the headings here would
+ * put structural truth in a third place (constitution P3, and the lint of task 39 would reject it).
+ * The reviewer judges substance; structure is already decided by the time a spec is approved.
+ *
+ * It states the outcome vocabulary but no rule about *what* to do next: `accept`/`ignore`/
+ * `request_changes` is the user's alphabet (P2), and a prompt that offered it to the model would be
+ * inviting it to decide.
+ */
+const REVIEW_BOARD: PromptAsset = {
+  id: 'review.board.v1',
+  system: [
+    'You are reviewing one file of a software specification bundle for the coding agent that will',
+    'build from it. Report only defects you can point at: a vague requirement, an untestable',
+    'acceptance criterion, a contradiction, a gap that would leave the agent guessing.',
+    'Return JSON only — no prose, no code fence. Shape:',
+    '{"outcome": "pass"|"needs_revision", "mustfix": [item], "recommendations": [item]}, where item',
+    'is {"id", "section", "line", "confidenceScore", "description", "suggestion"}.',
+    'Put a finding in "mustfix" when the document is unusable without it and in "recommendations"',
+    'otherwise. "id" is a short stable slug, unique across both lists; "section" names the heading',
+    'the finding is in; "line" is a positive line number; "confidenceScore" is an integer from 5 to',
+    '10; "description" states the problem and "suggestion" states a concrete change.',
+    'Use "pass" only when "mustfix" is empty. Report nothing you are not at least moderately',
+    'confident about: an empty review is a valid answer.',
+  ].join(' '),
+  user: ['Review the {{specType}} document below.', '', '{{specContent}}'].join('\n'),
+  variables: ['specType', 'specContent'],
 };
 
 /*
@@ -167,6 +204,7 @@ const SESSION_SUMMARY: PromptAsset = {
 
 export const promptRegistry: Readonly<Record<PromptId, PromptAsset>> = Object.freeze({
   'spec.generation.v2': SPEC_GENERATION,
+  'review.board.v1': REVIEW_BOARD,
   'interview.questions.skeleton.v1': INTERVIEW_QUESTIONS,
   'interview.reply-assessment.skeleton.v1': REPLY_ASSESSMENT,
   'interview.summary.skeleton.v1': SESSION_SUMMARY,

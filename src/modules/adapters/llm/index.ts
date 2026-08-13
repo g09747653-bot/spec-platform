@@ -49,3 +49,4 @@ export {
   stubReplyAssessmentDocument,
   stubSessionSummaryDocument,
 } from './stub-interview';
+export { looksLikeReviewPrompt, specTypeFromReviewPrompt, stubReviewDocument } from './stub-review';
