@@ -97,11 +97,11 @@ test.describe('walking skeleton', () => {
     const names = Object.keys(archive);
 
     expect(names).toEqual(['constitution.md']);
-    expect(strFromU8(archive['constitution.md'] ?? new Uint8Array())).toContain('# Constitution');
+    const exported = strFromU8(archive['constitution.md'] ?? new Uint8Array());
+
+    expect(exported).toContain('Specification');
     // The revision that was approved is the one exported — the second, not the first.
-    expect(strFromU8(archive['constitution.md'] ?? new Uint8Array())).toContain(
-      'Add a non-goals section.',
-    );
+    expect(exported).toContain('Add a non-goals section.');
 
     // --- The project now appears in the list with its stage and name (FR-002 AC-1) ---
     await page.goto('/projects');

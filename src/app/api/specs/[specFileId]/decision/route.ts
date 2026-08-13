@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
 import { getDatabase } from '@/db/client';
-import { createTestDoubleAdapter, stubDocumentFor } from '@/modules/adapters/llm';
+import { createTestDoubleAdapter } from '@/modules/adapters/llm';
 import { createSpecAgent } from '@/modules/agents/spec/spec-agent';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
@@ -99,15 +99,21 @@ export async function POST(
   // request-changes decision on it is answered by the capability code rather than served wrongly.
   if (!isCoreSpecType(specFile.specType)) return errorResponse('CAPABILITY_NOT_REGISTERED');
 
-  const agent = createSpecAgent(
-    createTestDoubleAdapter({ document: stubDocumentFor(specFile.specType) }),
-  );
+  /*
+   * Still the skeleton's path: a deterministic stub stands in for the RevisionAgent of task 57. It
+   * answers the assembled prompt, so what it produces carries the sections the schema asked for — and
+   * the verdict below is checked even here, because a document that fails structural validation must
+   * never reach the revision chain, whichever code path produced it (FR-008 AC-7).
+   */
+  const agent = createSpecAgent(createTestDoubleAdapter({ followPrompt: true }));
   const regenerated = await agent.generate({
     specType: specFile.specType,
     initialPrompt: project.initialPrompt,
     changeInstruction: parsed.data.instruction,
     runId: randomUUID(),
   });
+
+  if (!regenerated.structure.valid) return errorResponse('GENERATION_FAILED');
 
   const revision = await revisions.append({
     specFileId: specFile.id,

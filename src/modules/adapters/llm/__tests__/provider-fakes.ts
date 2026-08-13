@@ -1,5 +1,6 @@
 import type { ProviderEntry } from '../provider-registry';
 import type { ProviderStream } from '../providers';
+import { documentFromPrompt } from '../test-double';
 import type { ProviderId } from '../types';
 
 /**
@@ -14,6 +15,13 @@ import type { ProviderId } from '../types';
 export interface FakeBehaviour {
   /** Text to stream, split into whitespace-preserving chunks. */
   document?: string;
+  /**
+   * Answer the prompt instead: write the sections it asked for, in the order it asked for them.
+   *
+   * What a conformant document looks like is the section schema's business, so a test that needs one
+   * derives it the same way the application does rather than spelling headings out (constitution P3).
+   */
+  followPrompt?: boolean;
   /** Fail after this many chunks. `0` refuses before streaming anything. */
   failAfterChunks?: number;
   /** Never resolve, so the caller's per-provider timeout is what ends the attempt. */
@@ -37,7 +45,7 @@ export function chunksOf(text: string): string[] {
 }
 
 export function fakeProviderStream(id: ProviderId, behaviour: FakeBehaviour = {}): ProviderStream {
-  return async ({ onDelta, signal }) => {
+  return async ({ messages, onDelta, signal }) => {
     if (behaviour.hang === true) {
       return new Promise<string>((_resolve, reject) => {
         signal?.addEventListener(
@@ -50,7 +58,12 @@ export function fakeProviderStream(id: ProviderId, behaviour: FakeBehaviour = {}
       });
     }
 
-    const chunks = chunksOf(behaviour.document ?? `text from ${id}. `);
+    const document =
+      behaviour.followPrompt === true
+        ? documentFromPrompt(messages.map((message) => message.content).join('\n'))
+        : (behaviour.document ?? `text from ${id}. `);
+
+    const chunks = chunksOf(document);
     let emitted = 0;
 
     for (const chunk of chunks) {

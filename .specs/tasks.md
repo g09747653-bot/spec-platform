@@ -633,7 +633,7 @@ Goal: real models produce structurally valid specs, survive provider failure, an
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 49\. Implement generation failure handling and retry
+- [x] 49\. Implement generation failure handling and retry
   - On `AllProvidersFailedError` or structural-validation failure, mark the run failed, emit a sanitised `error`, and offer a retry that resumes from the same workflow position with identical context.
   - Acceptance Criteria:
     - All prior answers, approved specs, and revisions survive the failure.
@@ -645,7 +645,7 @@ Goal: real models produce structurally valid specs, survive provider failure, an
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 50\. Implement the ContextAssembler
+- [x] 50\. Implement the ContextAssembler
   - Assemble generation context from the session prompt, all prior answers, attachment text, and every previously approved spec, in deterministic order with an explicit size budget and truncation policy.
   - Expose the insertion points later extended by feedback filtering (task 57), late attachments (task 69), and untrusted-content wrapping (task 71).
   - Acceptance Criteria:
@@ -658,7 +658,7 @@ Goal: real models produce structurally valid specs, survive provider failure, an
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 51\. Implement the SpecAgent
+- [x] 51\. Implement the SpecAgent
   - Invoke the model with the assembled context and stream the result; validate output through `validateStructure` before persisting a revision.
   - Acceptance Criteria:
     - Output failing structural validation is treated as a failed generation and is not persisted.
@@ -670,7 +670,7 @@ Goal: real models produce structurally valid specs, survive provider failure, an
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 52\. Write LLM adapter tests
+- [x] 52\. Write LLM adapter tests
   - Cover failover ordering, mid-stream restart, chunk batching, `first_token_at` stamping, and resume replay from a sequence number, using the stub provider.
   - Acceptance Criteria:
     - Every test runs with no live provider call.

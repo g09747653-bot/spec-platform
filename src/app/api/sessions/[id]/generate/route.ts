@@ -2,6 +2,8 @@ import { getEnv } from '@/config/env';
 import { getDatabase } from '@/db/client';
 import { createGenerationStore } from '@/modules/adapters/llm';
 import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
+import { assembleContext } from '@/modules/agents/context-assembler';
+import { collectContextSources } from '@/modules/agents/spec/collect-context';
 import { runGeneration } from '@/modules/agents/spec/run-generation';
 import { targetSpecType } from '@/modules/agents/spec/target-spec-type';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
@@ -94,6 +96,17 @@ export async function POST(
 
   const specType = targetSpecType(stage);
   const store = createGenerationStore(db);
+
+  // Assembled before the stream opens, so a context that cannot be read is an error the client gets
+  // as a status code rather than as a half-written document (FR-008 AC-6).
+  const context = assembleContext(
+    await collectContextSources(db, scope, {
+      sessionId: session.id,
+      projectId: session.projectId,
+      initialPrompt: session.initialPrompt,
+    }),
+  );
+
   const run = await store.createRun(session.id, stage);
 
   const adapter = createDefaultAdapter();
@@ -127,6 +140,7 @@ export async function POST(
           projectId: session.projectId,
           specType,
           initialPrompt: session.initialPrompt,
+          context: context.text,
           signal: abort.signal,
           progress: {
             delta: (sequence, text) => {

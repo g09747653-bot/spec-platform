@@ -1,19 +1,23 @@
 import type { LlmAdapter } from '@/modules/adapters/llm';
 import { specGenerationPrompt } from '@/modules/prompts/assets/spec-generation';
 import type { CoreSpecType } from '@/modules/specs/model/spec-files';
+import { validateStructure, type StructureResult } from '@/modules/specs/validate-structure';
 
 /**
- * The spec writer (task 20; solution.md — `agents`).
+ * The spec writer (tasks 20 and 51; solution.md — `agents`).
  *
- * It assembles context, calls the model through the one adapter interface, and returns markdown. It
- * decides nothing about stage order — that is the state machine's job and asking a model to decide it
- * would violate P1. It also knows nothing about which provider served the call, or whether the provider
- * was real: the walking skeleton runs it against the deterministic stub, and tasks 43–45 swap in the
- * provider registry without touching this file.
+ * It builds the prompt, calls the model through the one adapter interface, and returns markdown **with
+ * the verdict on its structure**. It decides nothing about stage order — that is the state machine's
+ * job, and asking a model to decide it would violate P1 — and it knows nothing about which provider
+ * served the call, or whether the provider was real.
  *
- * Structural validation against the section schema (FR-008 AC-4/AC-7) arrives with `validateStructure`
- * in task 40. Until then the agent returns what the adapter produced, and the skeleton's job is to prove
- * the path, not the prose.
+ * The verdict travels with the content rather than being left to the caller's memory: every path that
+ * could persist a document has to look at it, which is what makes "output failing structural
+ * validation is never persisted" (FR-008 AC-4/AC-7) a property of the type rather than of discipline.
+ * The check goes through `validateStructure`; the heading list itself never reaches this file (D-16).
+ *
+ * The streaming path — durable chunks, failover restarts, revision persistence — lives in
+ * `run-generation.ts`, which is this agent's run inside a request.
  */
 export interface SpecAgentInput {
   specType: CoreSpecType;
@@ -29,6 +33,8 @@ export interface SpecAgentInput {
 export interface SpecAgentResult {
   content: string;
   promptId: string;
+  /** Whether the content carries its required sections, in order. Never `undefined`. */
+  structure: StructureResult;
 }
 
 export function createSpecAgent(adapter: LlmAdapter) {
@@ -51,7 +57,11 @@ export function createSpecAgent(adapter: LlmAdapter) {
         signal: input.signal,
       });
 
-      return { content: result.text, promptId: prompt.id };
+      return {
+        content: result.text,
+        promptId: prompt.id,
+        structure: validateStructure(input.specType, result.text),
+      };
     },
   };
 }

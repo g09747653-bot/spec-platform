@@ -27,6 +27,8 @@ export const ERROR_STATUS = {
   CONFLICT: 409,
   /** A question-set draft failed validation twice; nothing was persisted (FR-005; D-2). */
   DRAFT_INVALID: 422,
+  /** Providers exhausted, or output that failed the section schema (FR-018 AC-2; FR-008 AC-7). */
+  GENERATION_FAILED: 502,
 } as const;
 
 export type ErrorCode = keyof typeof ERROR_STATUS;
@@ -45,6 +47,8 @@ const DEFAULT_MESSAGE: Record<ErrorCode, string> = {
   CAPABILITY_NOT_REGISTERED: 'That option is not available.',
   CONFLICT: 'The session moved on; refresh and try again.',
   DRAFT_INVALID: 'The drafted questions were not usable. Try asking again.',
+  // Deliberately says nothing about which provider, or why beyond "not complete" (FR-018 AC-7).
+  GENERATION_FAILED: 'Generation did not complete. Your answers and approved specs are safe.',
 };
 
 export function errorResponse(code: ErrorCode, details?: unknown): Response {
