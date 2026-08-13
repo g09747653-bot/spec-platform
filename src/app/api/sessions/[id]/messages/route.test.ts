@@ -176,6 +176,8 @@ describe('POST /api/sessions/:id/messages (task 62)', () => {
     }));
 
   describe('AC-1 — a typed approval produces the identical persisted state as clicking approve', () => {
+    // Explicit timeout: this boots a second PGlite instance *inside the test body*, which the
+    // config's `hookTimeout` does not cover — see the note on the same pattern in `spec-revisions.test.ts`.
     it('leaves the same rows behind as the card does', async () => {
       // The chat path, on this database.
       const viaChat = await chat(fixture.sessionId, 'approve it');
@@ -210,7 +212,7 @@ describe('POST /api/sessions/:id/messages (task 62)', () => {
       } finally {
         await control.close();
       }
-    });
+    }, 60_000);
 
     it('marks the revision approved, exactly once, with no extra revision', async () => {
       await chat(fixture.sessionId, 'approve it');

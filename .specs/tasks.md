@@ -809,7 +809,7 @@ Goal: every stage is reviewed, refinements are gated by an accepted diff, and de
 
 Goal: user documents and live web research ground the generated specs, safely.
 
-- [ ] 63\. Create the attachments schema and the storage adapter
+- [x] 63\. Create the attachments schema and the storage adapter
   - Define `attachments`; implement `StorageAdapter` over private Vercel Blob with owner-scoped signed URL issuance and bulk deletion.
   - Acceptance Criteria:
     - Stored objects are not publicly addressable.
@@ -820,7 +820,7 @@ Goal: user documents and live web research ground the generated specs, safely.
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 64\. Implement the upload guard
+- [x] 64\. Implement the upload guard
   - Validate declared type, sniffed content type, and size against `MAX_UPLOAD_BYTES` and `ALLOWED_UPLOAD_TYPES` **before** any bytes are written to storage.
   - Acceptance Criteria:
     - An oversized file is rejected with `UPLOAD_REJECTED` and no blob is written.
@@ -831,7 +831,7 @@ Goal: user documents and live web research ground the generated specs, safely.
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 65\. Implement the extractor registry with MIME sniffing and timeouts
+- [x] 65\. Implement the extractor registry with MIME sniffing and timeouts
   - Build `ExtractorRegistry` keyed by sniffed MIME type, enforcing `PARSE_TIMEOUT_MS` per extraction and recording `parse_status` and `extracted_text` on the attachment.
   - Extraction runs once at upload, never per generation.
   - Acceptance Criteria:

@@ -494,6 +494,12 @@ describe('spec_revisions immutability (task 16)', () => {
    * is falsifiable evidence rather than a coincidence.
    *
    * Its own database instance, so dropping the trigger cannot leak into the suite above.
+   *
+   * That instance is booted **inside the test body**, which is why it carries an explicit timeout: the
+   * config's generous `hookTimeout` covers `beforeAll`, and only that. Booting a WASM PostgreSQL while
+   * every other suite is doing the same comfortably exceeds the 5 s default for a test, and the failure
+   * that produces names this test rather than the contention that caused it (the same reasoning as the
+   * note on `hookTimeout` in `vitest.config.ts`).
    */
   describe('control run — the trigger is what refuses the write', () => {
     it('accepts the same UPDATE with the trigger dropped, and refuses it again when restored', async () => {
@@ -553,7 +559,7 @@ describe('spec_revisions immutability (task 16)', () => {
       } finally {
         await control.close();
       }
-    });
+    }, 60_000);
 
     it('installs the three triggers the migration declares, with the timing it declares', async () => {
       const result = await database.db.execute(sql`
