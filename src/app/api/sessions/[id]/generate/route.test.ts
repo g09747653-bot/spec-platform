@@ -272,6 +272,33 @@ describe('POST /api/sessions/:id/generate (task 45)', () => {
       expect(revision?.contextAttachmentIds).toHaveLength(2);
     });
 
+    /**
+     * Task 70 / FR-019 AC-1..AC-4. Research runs on its own, is announced on the stream, and — here,
+     * with no `WEB_SEARCH_API_KEY` in the test environment — finds nothing and changes nothing. That
+     * is the same path an outage takes, which is why the null adapter is not a test double: it is the
+     * no-research behaviour, exercised on every run.
+     */
+    it('announces research on the stream and completes the stage without it (AC-2/AC-4)', async () => {
+      await readyToGenerate();
+
+      const events = await readEvents(await post(sessionId));
+      const research = events.filter((event) => event.type === 'research');
+
+      expect(research.map((event) => ('status' in event ? event.status : ''))).toEqual([
+        'started',
+        'finished',
+      ]);
+
+      // The indicator clears before the document starts arriving, and the stage still completes.
+      const firstDelta = events.findIndex((event) => event.type === 'delta');
+      const finished = events.findIndex(
+        (event) => event.type === 'research' && event.status === 'finished',
+      );
+      expect(finished).toBeLessThan(firstDelta);
+      expect(events.at(-1)?.type).toBe('complete');
+      expect(await database.db.select().from(specRevisions)).toHaveLength(1);
+    });
+
     it('records an empty set when the session has no documents', async () => {
       await readyToGenerate();
       await readEvents(await post(sessionId));

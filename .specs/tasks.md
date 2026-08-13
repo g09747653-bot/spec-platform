@@ -892,7 +892,7 @@ Goal: user documents and live web research ground the generated specs, safely.
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 70\. Implement the research adapter with budget and fallback
+- [x] 70\. Implement the research adapter with budget and fallback
   - Implement search and fetch bounded by `WEB_FETCH_MAX_BYTES` and `WEB_FETCH_TIMEOUT_MS`; on failure or timeout resolve to no result, log `RESEARCH_UNAVAILABLE`, and continue generation.
   - Emit `research` stream events so the UI can show an activity indicator distinct from ordinary generation.
   - Acceptance Criteria:
@@ -906,7 +906,7 @@ Goal: user documents and live web research ground the generated specs, safely.
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 71\. Implement untrusted-content wrapping in context assembly
+- [x] 71\. Implement untrusted-content wrapping in context assembly
   - Insert attachment text and fetched web content inside clearly delimited, labelled untrusted-data blocks, never as instructions.
   - Acceptance Criteria:
     - Attachment and web content appear only inside untrusted blocks in the assembled context.

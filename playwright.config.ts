@@ -81,11 +81,19 @@ export default defineConfig({
        * in-memory one. Same suite, two behaviours, one of them touching a real service (NFR-012
        * AC-2). Blank means absent (D-12), so both run against the in-process store.
        */
+      /*
+       * `WEB_SEARCH_API_KEY` is blanked for the same reason as the Blob token, and it is the sharper
+       * case: a live search is a paid third-party call made from a test, per generation, at whatever
+       * pace the suite runs. Blank selects the null research adapter, whose behaviour is identical to
+       * an outage — which is exactly the path FR-019 AC-4 requires the stage to survive, so the suite
+       * exercises it on every run rather than never.
+       */
       env: {
         DATABASE_URL: TEST_DATABASE_URL,
         AUTH_URL: '',
         LLM_PROVIDER_ORDER: 'stub',
         BLOB_READ_WRITE_TOKEN: '',
+        WEB_SEARCH_API_KEY: '',
       },
     },
   ],

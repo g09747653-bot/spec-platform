@@ -2,7 +2,9 @@ import { getEnv } from '@/config/env';
 import { getDatabase } from '@/db/client';
 import { createGenerationStore } from '@/modules/adapters/llm';
 import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
+import { createDefaultResearch } from '@/modules/adapters/research';
 import { assembleContext, selectedFeedback } from '@/modules/agents/context-assembler';
+import { performResearch } from '@/modules/agents/spec/research-step';
 import { reviseInstruction } from '@/modules/agents/revision/revision-agent';
 import { collectContextSources } from '@/modules/agents/spec/collect-context';
 import { runGeneration } from '@/modules/agents/spec/run-generation';
@@ -111,7 +113,6 @@ export async function POST(
     specType,
   });
   const { sources } = collected;
-  const context = assembleContext(sources);
   const applied = sources.feedback === undefined ? [] : selectedFeedback(sources.feedback);
 
   const run = await store.createRun(session.id, stage);
@@ -139,6 +140,32 @@ export async function POST(
       send({ type: 'run', runId: run.id, stage, attempt: 1 });
 
       try {
+        /*
+         * Live research (task 70; FR-019).
+         *
+         * **Inside the open stream**, so the activity is visible while it happens (AC-2): the
+         * `research` event has been in the protocol since M3 waiting for exactly this, and the
+         * indicator it drives is what distinguishes "reading the web" from "writing the document".
+         *
+         * **Before the model call**, because what it finds belongs in the prompt. The base context
+         * was assembled before the stream opened; this adds a section to it.
+         *
+         * **Inside the `try`**, deliberately. The adapter resolves every error to "no result", so in
+         * principle nothing here can throw — but "in principle" is a promise about code that will be
+         * edited later, and the enclosing `try`/`finally` is what makes it structural: any throw
+         * becomes the same sanitised error event as a failed generation, and the stream still closes.
+         */
+        send({ type: 'research', status: 'started' });
+        const found = await performResearch(createDefaultResearch(), {
+          specType,
+          initialPrompt: session.initialPrompt,
+        });
+        send({ type: 'research', status: 'finished' });
+
+        const context = assembleContext(
+          found.pages.length === 0 ? sources : { ...sources, research: found.pages },
+        );
+
         const outcome = await runGeneration({
           db,
           adapter,
