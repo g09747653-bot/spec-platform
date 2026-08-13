@@ -36,6 +36,13 @@
       "when": 1786615092272,
       "tag": "0004_interview_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786626587031,
+      "tag": "0005_generation_tables",
+      "breakpoints": true
     }
   ]
 }

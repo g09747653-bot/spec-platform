@@ -12,6 +12,7 @@
 import { ESLint } from 'eslint';
 
 const RULE = 'import-x/no-restricted-paths';
+/** Covers both specifier restrictions: the section schema's chain and the provider-SDK edge. */
 const SCHEMA_IMPORT_RULE = 'no-restricted-imports';
 const HEADINGS_RULE = 'spec-platform/no-duplicated-section-headings';
 
@@ -64,6 +65,12 @@ const EXPECTATIONS = [
     shouldFail: true,
     rule: HEADINGS_RULE,
     why: 'a heading list restated in a prompt asset is duplicated structural truth (P3)',
+  },
+  {
+    file: 'src/modules/agents/__fixtures__/agents-imports-provider-sdk.ts',
+    shouldFail: true,
+    rule: SCHEMA_IMPORT_RULE,
+    why: 'only adapters/llm/providers.ts may import a provider SDK (constitution P7)',
   },
 ];
 

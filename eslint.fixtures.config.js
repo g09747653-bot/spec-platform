@@ -3,6 +3,7 @@ import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescrip
 import tseslint from 'typescript-eslint';
 
 import { noRestrictedPathsRule } from './eslint.boundaries.js';
+import { restrictedImportRule } from './eslint.restricted-imports.js';
 import { specPlatformPlugin } from './eslint.section-schema.js';
 
 /**
@@ -26,24 +27,9 @@ export default tseslint.config({
   },
   rules: {
     'import-x/no-restricted-paths': noRestrictedPathsRule,
-    // Task 39: the section schema's consumption chain, checked on deliberate violations.
+    // Tasks 39 and 42: the section schema's consumption chain and the vendor edge, checked on
+    // deliberate violations. Both rule definitions are imported, never restated.
     'spec-platform/no-duplicated-section-headings': 'error',
-    'no-restricted-imports': [
-      'error',
-      {
-        patterns: [
-          {
-            group: [
-              '@/modules/specs/section-schema',
-              './section-schema',
-              '../section-schema',
-              '**/specs/section-schema',
-            ],
-            message:
-              'Only assemblePrompt and validateStructure may import specs/section-schema.ts (constitution P3, D-16).',
-          },
-        ],
-      },
-    ],
+    ...restrictedImportRule,
   },
 });

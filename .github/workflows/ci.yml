@@ -26,6 +26,10 @@ env:
   AUTH_GOOGLE_SECRET: ci-not-a-real-google-client-secret
   AUTH_GITHUB_ID: ci-not-a-real-github-client-id
   AUTH_GITHUB_SECRET: ci-not-a-real-github-client-secret
+  # Required from task 42 because `google` is the provider the default chain names (D-46). No test
+  # reaches a vendor — every suite generates through the deterministic stub (IR-001-AC-5) — so this
+  # value only has to exist, and must not be real.
+  GOOGLE_GENERATIVE_AI_API_KEY: ci-not-a-real-google-generative-ai-key
 
 jobs:
   verify:

@@ -10,8 +10,9 @@ import { EnvironmentConfigurationError, parseEnv } from './env';
  */
 
 /**
- * Everything required as of Milestone 1. The five `AUTH_*` credentials moved from optional to
- * required in task 12, per the milestone-driven rule of D-8.
+ * Everything required as of Milestone 3. The five `AUTH_*` credentials moved from optional to
+ * required in task 12, per the milestone-driven rule of D-8; the Google key is required from task 42
+ * not because of the milestone but because it is the provider the default chain names (D-46).
  */
 const MINIMAL = {
   DATABASE_URL: 'postgres://user:pw@host/db',
@@ -20,6 +21,7 @@ const MINIMAL = {
   AUTH_GOOGLE_SECRET: 'google-client-secret',
   AUTH_GITHUB_ID: 'github-client-id',
   AUTH_GITHUB_SECRET: 'github-client-secret',
+  GOOGLE_GENERATIVE_AI_API_KEY: 'google-generative-ai-key',
 } as const;
 
 const REQUIRED_TODAY = Object.keys(MINIMAL);
@@ -51,7 +53,7 @@ describe('parseEnv', () => {
     }
   });
 
-  describe('the Auth.js credentials are required from this milestone (D-8, task 12)', () => {
+  describe('every credential required today fails by name when it is absent (D-8)', () => {
     for (const name of REQUIRED_TODAY) {
       it(`fails by name when ${name} is absent`, () => {
         try {
@@ -96,12 +98,17 @@ describe('parseEnv', () => {
 
     expect(env.MAX_ROUNDS_PER_STAGE).toBe(3);
     expect(env.QUALITY_STAGE_ENABLED).toBe(false);
-    expect(env.LLM_PROVIDER_ORDER).toEqual(['anthropic', 'openai', 'google']);
+    expect(env.LLM_PROVIDER_ORDER).toEqual(['google']);
     expect(env.LLM_REQUEST_TIMEOUT_MS).toBe(60_000);
   });
 
   it('parses the failover chain as an ordered list of known providers', () => {
-    const env = parseEnv({ ...MINIMAL, LLM_PROVIDER_ORDER: 'openai, anthropic' });
+    const env = parseEnv({
+      ...MINIMAL,
+      LLM_PROVIDER_ORDER: 'openai, anthropic',
+      OPENAI_API_KEY: 'openai-key',
+      ANTHROPIC_API_KEY: 'anthropic-key',
+    });
     expect(env.LLM_PROVIDER_ORDER).toEqual(['openai', 'anthropic']);
   });
 
@@ -129,9 +136,75 @@ describe('parseEnv', () => {
 
   it('keeps later-milestone variables optional until their milestone', () => {
     const env = parseEnv({ ...MINIMAL });
-    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
     expect(env.BLOB_READ_WRITE_TOKEN).toBeUndefined();
     expect(env.SENTRY_DSN).toBeUndefined();
+  });
+
+  /**
+   * The chain decides which keys are mandatory (D-46; IR-001-AC-4).
+   *
+   * The two failure modes this replaces are both real: "all three keys required" fails the build of
+   * every deployment that pays for one vendor, and "no key required" lets a chain be configured that
+   * cannot make a single call. Neither is caught by types, so both are checked here.
+   */
+  describe('a provider in the chain must have its key', () => {
+    const withChain = (order: string, extra: Record<string, string> = {}) => ({
+      ...MINIMAL,
+      LLM_PROVIDER_ORDER: order,
+      ...extra,
+    });
+
+    const issuesFor = (source: Record<string, string | undefined>) => {
+      try {
+        parseEnv(source);
+        return null;
+      } catch (error) {
+        return (error as EnvironmentConfigurationError).issues;
+      }
+    };
+
+    it('fails, naming the variable, when a chain provider has no key', () => {
+      const issues = issuesFor(withChain('openai'));
+
+      expect(issues?.some((issue) => issue.startsWith('OPENAI_API_KEY:'))).toBe(true);
+      expect(issues?.join(' ')).toContain('LLM_PROVIDER_ORDER');
+    });
+
+    it('fails identically when the key is declared but blank', () => {
+      expect(issuesFor(withChain('openai', { OPENAI_API_KEY: '   ' }))).toEqual(
+        issuesFor(withChain('openai')),
+      );
+    });
+
+    it('leaves the key of a provider outside the chain optional', () => {
+      const env = parseEnv(withChain('google'));
+
+      expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+      expect(env.OPENAI_API_KEY).toBeUndefined();
+      expect(env.LLM_PROVIDER_ORDER).toEqual(['google']);
+    });
+
+    it('requires every key of a longer chain, and names each missing one', () => {
+      const issues = issuesFor(withChain('anthropic,openai,google'));
+
+      expect(issues?.some((issue) => issue.startsWith('ANTHROPIC_API_KEY:'))).toBe(true);
+      expect(issues?.some((issue) => issue.startsWith('OPENAI_API_KEY:'))).toBe(true);
+      // Google's key is present in MINIMAL, so it must not be reported.
+      expect(issues?.some((issue) => issue.startsWith('GOOGLE_GENERATIVE_AI_API_KEY:'))).toBe(
+        false,
+      );
+    });
+
+    it('accepts a full three-provider chain once every key is supplied', () => {
+      const env = parseEnv(
+        withChain('anthropic,openai,google', {
+          ANTHROPIC_API_KEY: 'anthropic-key',
+          OPENAI_API_KEY: 'openai-key',
+        }),
+      );
+
+      expect(env.LLM_PROVIDER_ORDER).toEqual(['anthropic', 'openai', 'google']);
+    });
   });
 
   it('keeps AUTH_URL optional, so one build can serve every deployment hostname', () => {
@@ -169,7 +242,6 @@ describe('parseEnv treats a blank value as an absent one', () => {
       AUTH_URL: '',
       ANTHROPIC_API_KEY: '',
       OPENAI_API_KEY: '',
-      GOOGLE_GENERATIVE_AI_API_KEY: '',
       LLM_PROVIDER_ORDER: '',
       LLM_REQUEST_TIMEOUT_MS: '',
       QUALITY_STAGE_ENABLED: '',
@@ -190,7 +262,7 @@ describe('parseEnv treats a blank value as an absent one', () => {
     // Blank must fall back to the documented default, not to a coerced zero or empty list.
     expect(env.MAX_ROUNDS_PER_STAGE).toBe(3);
     expect(env.LLM_REQUEST_TIMEOUT_MS).toBe(60_000);
-    expect(env.LLM_PROVIDER_ORDER).toEqual(['anthropic', 'openai', 'google']);
+    expect(env.LLM_PROVIDER_ORDER).toEqual(['google']);
     expect(env.QUALITY_STAGE_ENABLED).toBe(false);
     expect(env.ALLOWED_UPLOAD_TYPES).toContain('application/pdf');
   });

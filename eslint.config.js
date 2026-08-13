@@ -6,6 +6,7 @@ import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescrip
 import tseslint from 'typescript-eslint';
 
 import { noRestrictedPathsRule } from './eslint.boundaries.js';
+import { restrictedImportConfigs } from './eslint.restricted-imports.js';
 import { sectionSchemaConfigs } from './eslint.section-schema.js';
 
 /**
@@ -106,7 +107,9 @@ export default tseslint.config(
   },
 
   // Constitution P3 / D-16: one home for the required-heading list, and exactly two consumers.
+  // Constitution P7: one file may import a provider SDK.
   ...sectionSchemaConfigs,
+  ...restrictedImportConfigs,
 
   // Plain JS tooling scripts are outside the TypeScript program.
   {
