@@ -4,7 +4,12 @@ import type { ParsingAdapter } from '@/modules/adapters/parsing';
 import type { StorageAdapter } from '@/modules/adapters/storage';
 
 import { createAttachmentRepository, type Attachment } from '../repositories/attachments';
-import { guardUpload, type UploadCandidate, type UploadLimits } from './upload-guard';
+import {
+  guardUpload,
+  type UploadCandidate,
+  type UploadLimits,
+  type UploadRejectionReason,
+} from './upload-guard';
 
 /**
  * `AttachmentService` — upload, parse, extract, remove (solution.md — `projects`; tasks 63–65).
@@ -15,8 +20,11 @@ import { guardUpload, type UploadCandidate, type UploadLimits } from './upload-g
  * 2. **put** — reached only on `ok`, so a rejected upload writes no bytes anywhere;
  * 3. **record** — the row exists in `pending` *before* extraction, so a crash mid-parse leaves a row
  *    pointing at the object rather than an object no cascade can find;
- * 4. **extract once** — on the bytes already in hand, with the result persisted, so no later
- *    generation ever re-parses the file (DR-8).
+ * 4. **extract once**, with the result persisted, so no later generation re-parses the file (DR-8).
+ *    The parsing adapter reads the object back rather than being handed the bytes that arrived: one
+ *    extra read, and it buys the guarantee that the persisted text corresponds to *what was stored*.
+ *    A store that truncated or rewrote the object would otherwise leave a session grounded in text
+ *    that no file contains.
  *
  * The adapters arrive as parameters. Not for testability alone: `projects` may not construct its own
  * vendor clients (constitution A1, D-5), and the composition root that does is the route handler.
@@ -31,7 +39,13 @@ export interface AttachmentServiceDeps {
 
 export type UploadOutcome =
   | { status: 'stored'; attachment: Attachment }
-  | { status: 'rejected'; code: 'UPLOAD_REJECTED'; reason: string; message: string }
+  | {
+      status: 'rejected';
+      code: 'UPLOAD_REJECTED';
+      /** Which rule refused it — what the route maps to 413 or 415 (solution.md — Error Codes). */
+      reason: UploadRejectionReason;
+      message: string;
+    }
   | { status: 'not-found' };
 
 export interface UploadRequest extends UploadCandidate {

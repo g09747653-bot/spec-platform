@@ -4,6 +4,7 @@ import { getEnv } from '@/config/env';
 import { getDatabase } from '@/db/client';
 import { QuestionSetSchema } from '@/modules/agents/schemas/question-set';
 import { requireOwnerScope } from '@/modules/projects/auth/scope';
+import { createAttachmentRepository } from '@/modules/projects/repositories/attachments';
 import { createInterviewRepository } from '@/modules/projects/repositories/interview';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
 import { CORE_SPEC_FILE_NAMES } from '@/modules/specs/model/spec-files';
@@ -19,6 +20,7 @@ import { createWorkflowStateRepository } from '@/modules/workflow/repositories/w
 import { assembleWorkflowSnapshot } from '@/modules/workflow/snapshot-assembler';
 import { unmetNeedNames, type WorkflowSnapshot } from '@/modules/workflow/snapshot';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/modules/web';
+import { Attachments, type AttachmentModel } from '@/modules/web/session/attachments';
 import { ChatPanel } from '@/modules/web/session/chat-panel';
 import { DiffCard, type PendingProposalModel } from '@/modules/web/session/diff-card';
 import { ExportPanel } from '@/modules/web/session/export-panel';
@@ -128,6 +130,13 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           recommendations: pendingReview.items.filter((entry) => entry.severity === 'advisory'),
           decision: pendingReview.decision,
         };
+
+  /*
+   * The session's documents (task 68; FR-004 AC-6). Listed from persisted state like everything else,
+   * so a reload shows the same set with the same parse outcomes — including the failures, which are
+   * reported rather than hidden (AC-5).
+   */
+  const attachments = await createAttachmentRepository(db).listForSession(scope, project.sessionId);
 
   // The interview surface renders from the same snapshot the gates evaluate (FR-017).
   const assembled = await assembleWorkflowSnapshot(db, project.sessionId, {
@@ -261,6 +270,19 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           </p>
         </CardContent>
       </Card>
+
+      <Attachments
+        sessionId={project.sessionId}
+        attachments={attachments.map((attachment): AttachmentModel => ({
+          id: attachment.id,
+          fileName: attachment.fileName,
+          mimeType: attachment.mimeType,
+          sizeBytes: attachment.sizeBytes,
+          parseStatus: attachment.parseStatus,
+          parseReason: attachment.parseReason,
+          attachedAtStage: attachment.attachedAtStage,
+        }))}
+      />
 
       {interview !== null && (
         <InterviewPanel
