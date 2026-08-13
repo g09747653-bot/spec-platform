@@ -67,15 +67,21 @@ export function toSdkTools(tools: readonly ToolDefinition[] | undefined): ToolSe
  * changes the model under a deployment with no diff and no review — and the bundle is the product
  * (constitution P4), so which model wrote it is not a detail.
  *
- * The Google id was chosen by probing the funded account: `gemini-2.5-flash` and `gemini-2.5-pro` are
- * closed to new users, and `gemini-pro-latest` is outside the free tier's quota. Anthropic's and
- * OpenAI's ids come from their SDK's own model-id union and are **unverified against a live account**,
- * because neither provider is funded (D-45).
+ * The Google id was chosen by probing the funded account, and then re-chosen after the live smoke:
+ * `gemini-2.5-flash` and `gemini-2.5-pro` are closed to new users, `gemini-pro-latest` is outside the
+ * free tier's quota, and `gemini-3.6-flash` — the newest that answered — turned out to be the one that
+ * *sometimes* does not: it returned "this model is currently experiencing high demand" on one probe
+ * and exceeded the 60-second per-provider timeout on a live generation. `gemini-3.5-flash` completed
+ * every attempt, so it is the default. Availability beats novelty for the model that writes the
+ * product (D-45).
+ *
+ * Anthropic's and OpenAI's ids come from their SDK's own model-id union and are **unverified against a
+ * live account**, because neither provider is funded.
  */
 export const DEFAULT_MODELS: Readonly<Record<ProviderId, string>> = Object.freeze({
   anthropic: 'claude-sonnet-5',
   openai: 'gpt-5.2',
-  google: 'gemini-3.6-flash',
+  google: 'gemini-3.5-flash',
   stub: 'deterministic-stub',
 });
 
