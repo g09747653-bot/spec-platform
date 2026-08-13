@@ -62,6 +62,27 @@ const boolish = (fallback: boolean) =>
 const LLM_PROVIDERS = ['anthropic', 'openai', 'google'] as const;
 
 /**
+ * Which variable holds which provider's credential.
+ *
+ * The chain is what makes a key mandatory (see `requireChainKeys` below), so this map is the join
+ * between "which providers are configured" and "which secrets must therefore exist".
+ */
+const PROVIDER_KEYS: Readonly<Record<(typeof LLM_PROVIDERS)[number], string>> = Object.freeze({
+  anthropic: 'ANTHROPIC_API_KEY',
+  openai: 'OPENAI_API_KEY',
+  google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+});
+
+/**
+ * The default failover chain.
+ *
+ * `google` alone, because that is the only provider funded for this deployment. This is a
+ * configuration value and nothing else: adding a second provider is `LLM_PROVIDER_ORDER=google,openai`
+ * plus that provider's key, with no code change anywhere (IR-001-AC-4).
+ */
+const DEFAULT_PROVIDER_ORDER = ['google'] as const;
+
+/**
  * A required variable. Because `normaliseBlanks` has already turned a blank value into an absent
  * one, "missing" and "declared but empty" reach this schema identically — and both must produce
  * the same message naming the variable.
@@ -69,7 +90,7 @@ const LLM_PROVIDERS = ['anthropic', 'openai', 'google'] as const;
 const required = (description: string) =>
   z.string({ error: `required: ${description}` }).min(1, `required: ${description}`);
 
-export const envSchema = z.object({
+const baseEnvSchema = z.object({
   // --- Required from Milestone 0 ---
   DATABASE_URL: required('the Neon connection string for this environment'),
 
@@ -87,12 +108,19 @@ export const envSchema = z.object({
    */
   AUTH_URL: z.url().optional(),
 
-  // --- LLM providers — required from Milestone 3 (tasks 39–44) ---
+  /*
+   * --- LLM providers — Milestone 3 (tasks 42–43) ---
+   *
+   * Declared optional here and made mandatory by the chain: `requireChainKeys` demands a key for
+   * every provider named in `LLM_PROVIDER_ORDER`, and leaves the others alone. That rule is stricter
+   * than "all three are required" for the providers that matter, and — unlike it — keeps working at
+   * any chain length, which is what lets a provider be added later by configuration alone (D-46).
+   */
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
   GOOGLE_GENERATIVE_AI_API_KEY: z.string().min(1).optional(),
   /** Ordered failover chain — configuration, never code (IR-001-AC-4). */
-  LLM_PROVIDER_ORDER: csv(LLM_PROVIDERS).pipe(z.array(z.enum(LLM_PROVIDERS)).min(1)),
+  LLM_PROVIDER_ORDER: csv(DEFAULT_PROVIDER_ORDER).pipe(z.array(z.enum(LLM_PROVIDERS)).min(1)),
   LLM_REQUEST_TIMEOUT_MS: positiveInt(60_000),
 
   // --- Workflow tuning (constitution A2; FR-005 AC-10; D-4) ---
@@ -135,6 +163,36 @@ export const envSchema = z.object({
   // --- Observability — required from Milestone 8 (task 95) ---
   SENTRY_DSN: z.string().min(1).optional(),
 });
+
+/**
+ * A provider in the chain must have its key; a provider outside it need not.
+ *
+ * This is the rule rather than "the three keys are required", and the difference is not academic.
+ * Requiring all three would fail the build of every deployment that pays for one vendor — including
+ * this one — while requiring none would let a chain be configured that cannot make a single call. The
+ * chain is the thing that is actually true about an environment, so the chain is what the check reads
+ * (D-46; IR-001-AC-4).
+ */
+function requireChainKeys(
+  env: z.infer<typeof baseEnvSchema>,
+  ctx: z.RefinementCtx<z.infer<typeof baseEnvSchema>>,
+): void {
+  const source: Record<string, unknown> = { ...env };
+
+  for (const provider of env.LLM_PROVIDER_ORDER) {
+    const variable = PROVIDER_KEYS[provider];
+
+    if (source[variable] === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [variable],
+        message: `required: the API key for "${provider}", which is listed in LLM_PROVIDER_ORDER`,
+      });
+    }
+  }
+}
+
+export const envSchema = baseEnvSchema.superRefine(requireChainKeys);
 
 export type Env = z.infer<typeof envSchema>;
 

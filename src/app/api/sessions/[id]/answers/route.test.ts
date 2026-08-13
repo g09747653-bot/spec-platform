@@ -20,20 +20,14 @@ vi.mock('@/modules/projects/auth/scope', () => ({
 
 vi.mock('@/db/client', () => ({ getDatabase: vi.fn() }));
 
+import { TEST_ENV } from '@/config/testing/test-env';
+
 vi.mock('@/config/env', async (importOriginal) => {
   const actual = await importOriginal<typeof EnvModule>();
 
   return {
     ...actual,
-    getEnv: () =>
-      actual.parseEnv({
-        DATABASE_URL: 'postgresql://unused:unused@localhost:5432/unused',
-        AUTH_SECRET: 'test-secret',
-        AUTH_GOOGLE_ID: 'test',
-        AUTH_GOOGLE_SECRET: 'test',
-        AUTH_GITHUB_ID: 'test',
-        AUTH_GITHUB_SECRET: 'test',
-      }),
+    getEnv: () => actual.parseEnv(TEST_ENV),
   };
 });
 

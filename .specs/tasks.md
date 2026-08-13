@@ -547,7 +547,7 @@ Goal: real models produce structurally valid specs, survive provider failure, an
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 42\. Implement the LLM adapter over the AI SDK
+- [x] 42\. Implement the LLM adapter over the AI SDK
   - Wrap `@ai-sdk/anthropic`, `@ai-sdk/openai`, and `@ai-sdk/google` behind one `generateStreaming` interface accepting assembled messages and tools; keep provider types inside the module.
   - Build the provider registry from `LLM_PROVIDER_ORDER`.
   - Acceptance Criteria:
@@ -559,7 +559,7 @@ Goal: real models produce structurally valid specs, survive provider failure, an
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 43\. Implement the failover client
+- [x] 43\. Implement the failover client
   - Apply `LLM_REQUEST_TIMEOUT_MS` per provider; on error or timeout advance to the next provider; raise `AllProvidersFailedError` only when the chain is exhausted.
   - Strip provider names and raw payloads from user-facing errors.
   - Acceptance Criteria:
@@ -572,7 +572,7 @@ Goal: real models produce structurally valid specs, survive provider failure, an
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 44\. Create the generation runs and chunks schema with the StreamRecorder
+- [x] 44\. Create the generation runs and chunks schema with the StreamRecorder
   - Define `generation_runs` (including `first_token_at` and `completed_at`) and `generation_chunks`; implement batched appends (~250 ms or 2 KB) and stamp `first_token_at` on the first delta of the successful attempt.
   - Prune chunks once a run reaches `complete`.
   - Acceptance Criteria:

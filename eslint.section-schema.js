@@ -2,15 +2,13 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 /**
- * The section schema's consumption chain, as lint (task 39; constitution P3, D-16).
+ * "No duplicated structural truth", as lint (task 39; constitution P3, D-16).
  *
  * P3 makes two demands that review discipline cannot keep: the required-heading list must have
- * exactly one home, and exactly two consumers. Both are encoded here.
- *
- * 1. **Import restriction** — only `assemblePrompt` and `validateStructure` may import
- *    `specs/section-schema.ts`. Everything else asks `validateStructure`.
- * 2. **No restatement** — a heading list rewritten anywhere else (a prompt file, a test fixture, a
- *    UI string) is an error, because a second copy is exactly the drift P3 exists to prevent.
+ * exactly one home, and exactly two consumers. The *import* half lives in
+ * `eslint.restricted-imports.js`; this file holds the other half — a heading list rewritten anywhere
+ * else (a prompt file, a test fixture, a UI string) is an error, because a second copy is exactly the
+ * drift P3 exists to prevent.
  *
  * Imported by `eslint.config.js` (production lint) and `eslint.fixtures.config.js` (the
  * deliberate-violation fixtures behind `pnpm test:boundaries`), so the two can never disagree.
@@ -20,18 +18,7 @@ const REPO_ROOT = import.meta.dirname;
 
 const SCHEMA_FILE = 'src/modules/specs/section-schema.ts';
 
-/**
- * The only two files permitted to import the schema module.
- *
- * `assemblePrompt` derives the section list it instructs the model to produce; `validateStructure`
- * asserts generated output against it. A third consumer means structural truth has leaked.
- */
-const ALLOWED_IMPORTERS = [
-  'src/modules/prompts/assemble-prompt.ts',
-  'src/modules/specs/validate-structure.ts',
-];
-
-/** Files linted for both rules below. */
+/** Files linted for the rule below. */
 const LINTED = ['src/**/*.{ts,tsx}', 'e2e/**/*.ts'];
 
 const MARKER_START = '/* section-schema:headings:start */';
@@ -147,30 +134,7 @@ export const specPlatformPlugin = {
   rules: { 'no-duplicated-section-headings': noDuplicatedSectionHeadings },
 };
 
-/**
- * Import-source patterns naming the schema module.
- *
- * Both spellings are covered: the `@/` alias every module uses, and the relative form available from
- * inside `specs` itself.
- */
-const SCHEMA_IMPORT_PATTERNS = [
-  '@/modules/specs/section-schema',
-  './section-schema',
-  '../section-schema',
-  '**/specs/section-schema',
-];
-
-const IMPORT_MESSAGE =
-  'Only assemblePrompt and validateStructure may import specs/section-schema.ts. ' +
-  'Ask validateStructure whether a document conforms — it is the single structural-validation entry point (constitution P3, D-16).';
-
-/**
- * The config blocks both ESLint configurations spread in.
- *
- * The import restriction uses core `no-restricted-imports` rather than the boundary rule, so the two
- * never overwrite each other's options — ESLint merges configs by last-wins per rule, and the
- * allowed-edge table must keep applying to the two exempt files.
- */
+/** The config blocks both ESLint configurations spread in. */
 export const sectionSchemaConfigs = [
   {
     files: LINTED,
@@ -180,21 +144,9 @@ export const sectionSchemaConfigs = [
     },
   },
   {
-    files: LINTED,
-    ignores: [SCHEMA_FILE, ...ALLOWED_IMPORTERS],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        { patterns: [{ group: SCHEMA_IMPORT_PATTERNS, message: IMPORT_MESSAGE }] },
-      ],
-    },
-  },
-  {
-    // The schema module is where the headings live. The two consumers are *not* exempt: they read the
+    // The schema module is where the headings live. Its two consumers are *not* exempt: they read the
     // list through the import, so they have no reason to spell one out either.
     files: [SCHEMA_FILE],
     rules: { 'spec-platform/no-duplicated-section-headings': 'off' },
   },
 ];
-
-export const sectionSchemaMeta = { SCHEMA_FILE, ALLOWED_IMPORTERS, LINTED };

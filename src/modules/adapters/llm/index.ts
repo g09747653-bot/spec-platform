@@ -3,12 +3,38 @@ export const MODULE_ID = 'adapters/llm';
 
 export {
   AllProvidersFailedError,
+  type AttemptStart,
   type GenerateOptions,
   type GenerateResult,
   type LlmAdapter,
   type ModelMessage,
   type ProviderId,
+  type ToolDefinition,
 } from './types';
+export {
+  createFailoverClient,
+  type FailoverClientOptions,
+  type ProviderFailure,
+} from './failover-client';
+export {
+  buildProviderRegistry,
+  providerChain,
+  ProviderConfigurationError,
+  type ProviderEntry,
+} from './provider-registry';
+export {
+  createStreamRecorder,
+  DEFAULT_BATCH_BYTES,
+  DEFAULT_BATCH_MS,
+  type ChunkStore,
+  type RecordedChunk,
+  type StreamRecorder,
+} from './stream-recorder';
+export {
+  createGenerationStore,
+  type GenerationRun,
+  type GenerationStore,
+} from './generation-store';
 export {
   chunkDocument,
   createTestDoubleAdapter,
