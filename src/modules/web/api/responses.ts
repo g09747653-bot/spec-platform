@@ -17,6 +17,14 @@ export const ERROR_STATUS = {
   VALIDATION_FAILED: 422,
   /** A decision is already pending for this file (FR-009). */
   PENDING_DECISION: 409,
+  /** A transition or action a workflow gate refused; details carry the `ReasonCode` (NFR-012 AC-4). */
+  GATE_REJECTED: 409,
+  /** The stage's question-round budget is exhausted (FR-005 AC-10). */
+  ROUND_LIMIT_REACHED: 409,
+  /** The Quality module is not installed; the client hides Quality affordances (A6). */
+  CAPABILITY_NOT_REGISTERED: 409,
+  /** Optimistic version mismatch — another request moved first; refetch and retry (FR-007 AC-6). */
+  CONFLICT: 409,
 } as const;
 
 export type ErrorCode = keyof typeof ERROR_STATUS;
@@ -30,6 +38,10 @@ const DEFAULT_MESSAGE: Record<ErrorCode, string> = {
   NOT_FOUND: 'Not found.',
   VALIDATION_FAILED: 'The request was not valid.',
   PENDING_DECISION: 'A decision is already pending for this file.',
+  GATE_REJECTED: 'That step is not available yet.',
+  ROUND_LIMIT_REACHED: 'The question budget for this stage is used up.',
+  CAPABILITY_NOT_REGISTERED: 'That option is not available.',
+  CONFLICT: 'The session moved on; refresh and try again.',
 };
 
 export function errorResponse(code: ErrorCode, details?: unknown): Response {
