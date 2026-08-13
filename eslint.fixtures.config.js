@@ -3,6 +3,7 @@ import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescrip
 import tseslint from 'typescript-eslint';
 
 import { noRestrictedPathsRule } from './eslint.boundaries.js';
+import { specPlatformPlugin } from './eslint.section-schema.js';
 
 /**
  * Configuration used only by `pnpm test:boundaries`.
@@ -19,11 +20,30 @@ export default tseslint.config({
     parser: tseslint.parser,
     parserOptions: { sourceType: 'module', ecmaVersion: 'latest' },
   },
-  plugins: { 'import-x': importX },
+  plugins: { 'import-x': importX, 'spec-platform': specPlatformPlugin },
   settings: {
     'import-x/resolver-next': [createTypeScriptImportResolver({ project: './tsconfig.json' })],
   },
   rules: {
     'import-x/no-restricted-paths': noRestrictedPathsRule,
+    // Task 39: the section schema's consumption chain, checked on deliberate violations.
+    'spec-platform/no-duplicated-section-headings': 'error',
+    'no-restricted-imports': [
+      'error',
+      {
+        patterns: [
+          {
+            group: [
+              '@/modules/specs/section-schema',
+              './section-schema',
+              '../section-schema',
+              '**/specs/section-schema',
+            ],
+            message:
+              'Only assemblePrompt and validateStructure may import specs/section-schema.ts (constitution P3, D-16).',
+          },
+        ],
+      },
+    ],
   },
 });

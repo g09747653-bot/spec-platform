@@ -7,6 +7,7 @@ import { createTestDoubleAdapter, stubDocumentFor } from '@/modules/adapters/llm
 import { createSpecAgent } from '@/modules/agents/spec/spec-agent';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
+import { isCoreSpecType } from '@/modules/specs/model/spec-files';
 import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
 import { createSpecFileRepository } from '@/modules/specs/repositories/spec-files';
 import { errorResponse, jsonResponse } from '@/modules/web/api/responses';
@@ -92,6 +93,11 @@ export async function POST(
 
   const project = await projects.findById(scope, specFile.projectId);
   if (project === null) return errorResponse('NOT_FOUND');
+
+  // The parity path regenerates parity files. `quality.md` belongs to the optional Quality module,
+  // which owns its own generation outright (constitution A6) and is not registered here — so a
+  // request-changes decision on it is answered by the capability code rather than served wrongly.
+  if (!isCoreSpecType(specFile.specType)) return errorResponse('CAPABILITY_NOT_REGISTERED');
 
   const agent = createSpecAgent(
     createTestDoubleAdapter({ document: stubDocumentFor(specFile.specType) }),

@@ -509,7 +509,7 @@ Goal: replace the skeleton's implicit flow with the real, exhaustively tested st
 
 Goal: real models produce structurally valid specs, survive provider failure, and survive dropped connections.
 
-- [ ] 39\. Implement the section schema module
+- [x] 39\. Implement the section schema module
   - Create `specs/section-schema.ts` as the single typed source of required headings per spec type, validated by Zod, and export the reusable Zod shape type for other modules to build their own schemas from.
   - Establish the **consumption chain**: only `assemblePrompt` (task 41) and `validateStructure` (task 40) import the schema module; every other structural check goes through `validateStructure`.
   - Add a lint rule enforcing that import restriction and forbidding heading lists restated anywhere else.
@@ -523,7 +523,7 @@ Goal: real models produce structurally valid specs, survive provider failure, an
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 40\. Implement validateStructure and the parity structural check
+- [x] 40\. Implement validateStructure and the parity structural check
   - Implement heading presence and ordering validation against the section schema, exposed as the single structural-validation entry point for all other modules.
   - Add the build-blocking parity test asserting default-mode output is exactly the four files with required headings in order.
   - Acceptance Criteria:
@@ -536,7 +536,7 @@ Goal: real models produce structurally valid specs, survive provider failure, an
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 41\. Implement the prompts module
+- [x] 41\. Implement the prompts module
   - Store prompts as versioned file assets keyed by identifier; implement `assemblePrompt` with typed interpolation deriving required sections from the section schema.
   - Acceptance Criteria:
     - A missing prompt identifier or unfilled variable fails at build or boot, not at request time.
