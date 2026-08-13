@@ -10,3 +10,9 @@ export {
   type ParsingAdapter,
 } from './registry';
 export { DOCX_MIME, sniffMimeType, XLSX_MIME, type SniffInput } from './sniff';
+export { createDefaultParsing, DEFAULT_EXTRACTORS } from './default-registry';
+export { extractPdf } from './pdf';
+export { extractDocx } from './docx';
+export { extractXlsx } from './xlsx';
+export { extractPlainText } from './text';
+export { passThroughImage } from './image';
