@@ -28,6 +28,7 @@ const RUN_STATUSES = ['running', 'restarted', 'complete', 'failed'] as const;
 const RunRow = z.object({
   id: z.uuid(),
   session_id: z.uuid(),
+  project_id: z.uuid(),
   stage: z.string(),
   status: z.enum(RUN_STATUSES),
   provider_used: z.string().nullable(),
@@ -45,6 +46,7 @@ const ChunkRow = z.object({
 export interface GenerationRun {
   id: string;
   sessionId: string;
+  projectId: string;
   stage: string;
   status: (typeof RUN_STATUSES)[number];
   providerUsed: string | null;
@@ -58,6 +60,7 @@ function toRun(row: z.infer<typeof RunRow>): GenerationRun {
   return {
     id: row.id,
     sessionId: row.session_id,
+    projectId: row.project_id,
     stage: row.stage,
     status: row.status,
     providerUsed: row.provider_used,
@@ -110,10 +113,14 @@ export function createGenerationStore(db: SchemaDatabase) {
       const row = await queryOneRow(
         db,
         sql`
-          INSERT INTO ${generationRuns} (session_id, stage)
-          VALUES (${sessionId}::uuid, ${stage})
-          RETURNING id, session_id, stage, status, provider_used, attempt,
-                    created_at, first_token_at, completed_at
+          WITH created AS (
+            INSERT INTO ${generationRuns} (session_id, stage)
+            VALUES (${sessionId}::uuid, ${stage})
+            RETURNING id, session_id, stage, status, provider_used, attempt,
+                      created_at, first_token_at, completed_at
+          )
+          SELECT created.*, ${sessions}.project_id
+          FROM created JOIN ${sessions} ON ${sessions}.id = created.session_id
         `,
         RunRow,
       );
@@ -159,10 +166,10 @@ export function createGenerationStore(db: SchemaDatabase) {
       const rows = await queryRows(
         db,
         sql`
-          SELECT ${generationRuns}.id, ${generationRuns}.session_id, ${generationRuns}.stage,
-                 ${generationRuns}.status, ${generationRuns}.provider_used, ${generationRuns}.attempt,
-                 ${generationRuns}.created_at, ${generationRuns}.first_token_at,
-                 ${generationRuns}.completed_at
+          SELECT ${generationRuns}.id, ${generationRuns}.session_id, ${sessions}.project_id,
+                 ${generationRuns}.stage, ${generationRuns}.status, ${generationRuns}.provider_used,
+                 ${generationRuns}.attempt, ${generationRuns}.created_at,
+                 ${generationRuns}.first_token_at, ${generationRuns}.completed_at
           FROM ${generationRuns}
           JOIN ${sessions} ON ${sessions}.id = ${generationRuns}.session_id
           JOIN ${projects} ON ${projects}.id = ${sessions}.project_id
@@ -174,6 +181,28 @@ export function createGenerationStore(db: SchemaDatabase) {
 
       const row = rows[0];
       return row === undefined ? null : toRun(row);
+    },
+
+    /**
+     * The run's liveness, without the ownership join.
+     *
+     * The resume stream polls this while it follows a run in flight (D-15: one long-running function
+     * per generation, so a second invocation cannot share the first one's stream in memory — the
+     * durable log is the channel between them). Ownership was settled before the first read; asking
+     * again on every poll would be three joins a second for an answer that cannot change.
+     */
+    async statusOf(
+      runId: string,
+    ): Promise<{ status: GenerationRun['status']; attempt: number } | null> {
+      if (!UUID.test(runId)) return null;
+
+      const rows = await queryRows(
+        db,
+        sql`SELECT status, attempt FROM ${generationRuns} WHERE id = ${runId}::uuid`,
+        z.object({ status: z.enum(RUN_STATUSES), attempt: z.number().int().positive() }),
+      );
+
+      return rows[0] ?? null;
     },
 
     /** Everything the client has not rendered yet, in order. */

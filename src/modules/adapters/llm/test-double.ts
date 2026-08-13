@@ -156,6 +156,32 @@ export function chunkDocument(document: string, wordsPerChunk: number): string[]
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/**
+ * The double as a **provider**, for the registry (D-48).
+ *
+ * It answers the prompt it is given — writing exactly the sections the assembled prompt asked for —
+ * so an end-to-end run against it exercises the whole path, including structural validation, without
+ * a vendor. Delays are simulated so the streaming path is genuinely streaming rather than one batch.
+ */
+export function createStubProviderStream(): (input: {
+  messages: readonly { role: string; content: string }[];
+  onDelta: (text: string) => void;
+  signal?: AbortSignal;
+}) => Promise<string> {
+  return async ({ messages, onDelta, signal }) => {
+    const prompt = messages.map((message) => message.content).join('\n');
+    const document = documentFromPrompt(prompt);
+
+    for (const chunk of chunkDocument(document, DEFAULT_WORDS_PER_CHUNK)) {
+      signal?.throwIfAborted();
+      await sleep(1);
+      onDelta(chunk);
+    }
+
+    return document;
+  };
+}
+
 export function createTestDoubleAdapter(options: TestDoubleOptions = {}): LlmAdapter {
   const document = options.document ?? STUB_DOCUMENT;
   const wordsPerChunk = options.wordsPerChunk ?? DEFAULT_WORDS_PER_CHUNK;

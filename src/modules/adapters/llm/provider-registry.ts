@@ -1,6 +1,7 @@
 import { getEnv, type Env } from '@/config/env';
 
 import { createProviderStream, DEFAULT_MODELS, type ProviderStream } from './providers';
+import { createStubProviderStream } from './test-double';
 import type { ProviderId } from './types';
 
 /**
@@ -54,7 +55,12 @@ export function buildProviderRegistry(env: Env = getEnv()): readonly ProviderEnt
       id,
       model,
       priority: index + 1,
-      stream: createProviderStream(id, apiKeyFor(env, id), model),
+      // The double is a provider like any other from here: same interface, chosen the same way, and
+      // reached with no key because it has no vendor behind it (D-48; IR-001-AC-5).
+      stream:
+        id === 'stub'
+          ? createStubProviderStream()
+          : createProviderStream(id, apiKeyFor(env, id), model),
     };
   });
 }

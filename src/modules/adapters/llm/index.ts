@@ -22,6 +22,7 @@ export {
   ProviderConfigurationError,
   type ProviderEntry,
 } from './provider-registry';
+export { createDefaultAdapter } from './default-adapter';
 export {
   createStreamRecorder,
   DEFAULT_BATCH_BYTES,
