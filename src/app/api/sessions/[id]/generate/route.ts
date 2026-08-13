@@ -2,7 +2,9 @@ import { getEnv } from '@/config/env';
 import { getDatabase } from '@/db/client';
 import { createGenerationStore } from '@/modules/adapters/llm';
 import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
+import { createDefaultResearch } from '@/modules/adapters/research';
 import { assembleContext, selectedFeedback } from '@/modules/agents/context-assembler';
+import { performResearch } from '@/modules/agents/spec/research-step';
 import { reviseInstruction } from '@/modules/agents/revision/revision-agent';
 import { collectContextSources } from '@/modules/agents/spec/collect-context';
 import { runGeneration } from '@/modules/agents/spec/run-generation';
@@ -111,7 +113,6 @@ export async function POST(
     specType,
   });
   const { sources } = collected;
-  const context = assembleContext(sources);
   const applied = sources.feedback === undefined ? [] : selectedFeedback(sources.feedback);
 
   const run = await store.createRun(session.id, stage);
@@ -137,6 +138,29 @@ export async function POST(
 
       // `run` is always first: it is what the client stores in order to resume (FR-017).
       send({ type: 'run', runId: run.id, stage, attempt: 1 });
+
+      /*
+       * Live research (task 70; FR-019).
+       *
+       * It happens **inside** the open stream so the activity is visible while it is happening
+       * (AC-2): the `research` event has been in the protocol since M3 waiting for exactly this, and
+       * the indicator it drives is what distinguishes "reading the web" from "writing the document".
+       *
+       * It also happens **before** the model call, because what it finds belongs in the prompt. The
+       * base context was assembled before the stream opened; this adds a section to it. Nothing here
+       * can fail the stage — the adapter resolves every error to no result (AC-4) — so there is no
+       * catch around it beyond the one the whole run already has.
+       */
+      send({ type: 'research', status: 'started' });
+      const found = await performResearch(createDefaultResearch(), {
+        specType,
+        initialPrompt: session.initialPrompt,
+      });
+      send({ type: 'research', status: 'finished' });
+
+      const context = assembleContext(
+        found.pages.length === 0 ? sources : { ...sources, research: found.pages },
+      );
 
       try {
         const outcome = await runGeneration({

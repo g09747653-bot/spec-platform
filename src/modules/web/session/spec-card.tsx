@@ -171,6 +171,17 @@ export function SpecCard({
             </pre>
           )}
 
+          {/*
+            The research indicator (task 70; FR-019 AC-2). Distinct from ordinary generation on
+            purpose: "reading the web" and "writing the document" take different amounts of time and
+            a single spinner for both makes a slow search look like a stalled generation.
+          */}
+          {stream.researching && (
+            <p className="text-ink-muted text-sm" data-testid="stream-researching">
+              Reading current sources on the web…
+            </p>
+          )}
+
           {stream.status === 'reconnecting' && (
             <p className="text-ink-muted text-sm" data-testid="stream-reconnecting">
               The connection dropped. Reconnecting — nothing written so far is lost.
