@@ -411,7 +411,7 @@ Goal: replace the skeleton's implicit flow with the real, exhaustively tested st
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 31\. Create the question rounds, answers, and information needs schema
+- [x] 31\. Create the question rounds, answers, and information needs schema
   - Define `question_rounds`, `answers`, and `information_needs`; make `(session_id, stage, round_number)` and `(session_id, stage, name)` unique.
   - Acceptance Criteria:
     - Duplicate information-need names within a stage are rejected by the database.
@@ -422,7 +422,7 @@ Goal: replace the skeleton's implicit flow with the real, exhaustively tested st
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 32\. Implement the QuestionSet schema with repair-once validation
+- [x] 32\. Implement the QuestionSet schema with repair-once validation
   - Implement `QuestionSetSchema` enforcing 2–8 options per question, single/multiple type, and mandatory `allowOther: true`; on failure, attempt one repair pass, then abort with `DRAFT_INVALID`.
   - Acceptance Criteria:
     - A set with 1 option or 9 options is rejected.
@@ -434,7 +434,7 @@ Goal: replace the skeleton's implicit flow with the real, exhaustively tested st
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 33\. Implement the InterviewAgent
+- [x] 33\. Implement the InterviewAgent
   - Produce question rounds from the session prompt and prior answers, declaring the information needs each round intends to satisfy; validate through `QuestionSetSchema` before persistence.
   - Never re-declare an information need already marked satisfied for the stage.
   - Acceptance Criteria:
@@ -446,7 +446,7 @@ Goal: replace the skeleton's implicit flow with the real, exhaustively tested st
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 34\. Build the MCQ card UI
+- [x] 34\. Build the MCQ card UI
   - Render validated question sets as single- or multi-select cards, always rendering exactly one free-text "other" field derived from `allowOther`.
   - Block generation while a card awaits submission.
   - Acceptance Criteria:
@@ -458,7 +458,7 @@ Goal: replace the skeleton's implicit flow with the real, exhaustively tested st
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 35\. Implement answer submission and information-need satisfaction
+- [x] 35\. Implement answer submission and information-need satisfaction
   - Implement `POST /api/sessions/:id/answers`, persisting selected option ids and free text, and marking the round's information needs satisfied.
   - Persist answers before rendering the next step.
   - Acceptance Criteria:
@@ -470,7 +470,7 @@ Goal: replace the skeleton's implicit flow with the real, exhaustively tested st
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 36\. Handle free-text replies to a pending question card
+- [x] 36\. Handle free-text replies to a pending question card
   - When the user replies in chat instead of submitting the pending card, persist the reply as stage context and mark any information needs it demonstrably satisfies.
   - Then either emit a narrower follow-up round (subject to `roundBudgetGate`) or, if `collectGate` now passes, proceed to generation.
   - Acceptance Criteria:
@@ -483,7 +483,7 @@ Goal: replace the skeleton's implicit flow with the real, exhaustively tested st
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 37\. Implement the round-exhaustion fallback
+- [x] 37\. Implement the round-exhaustion fallback
   - When `roundBudgetGate` is exhausted and `collectGate` is unsatisfied, present the unmet information needs with a free-text entry that records the answer directly; when `collectGate` is satisfied, proceed to generation.
   - Acceptance Criteria:
     - Exhausting the budget with unmet needs never leaves the session without an action.
@@ -494,7 +494,7 @@ Goal: replace the skeleton's implicit flow with the real, exhaustively tested st
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 38\. Implement session summary persistence and wire the interview exit gate
+- [x] 38\. Implement session summary persistence and wire the interview exit gate
   - Persist a short session summary during the interview and connect `interviewGate` to the real transition endpoint.
   - Acceptance Criteria:
     - Leaving `interview` is refused until grounding input, one answered round, and a summary all exist.

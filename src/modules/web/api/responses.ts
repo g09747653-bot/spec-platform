@@ -25,6 +25,8 @@ export const ERROR_STATUS = {
   CAPABILITY_NOT_REGISTERED: 409,
   /** Optimistic version mismatch — another request moved first; refetch and retry (FR-007 AC-6). */
   CONFLICT: 409,
+  /** A question-set draft failed validation twice; nothing was persisted (FR-005; D-2). */
+  DRAFT_INVALID: 422,
 } as const;
 
 export type ErrorCode = keyof typeof ERROR_STATUS;
@@ -42,6 +44,7 @@ const DEFAULT_MESSAGE: Record<ErrorCode, string> = {
   ROUND_LIMIT_REACHED: 'The question budget for this stage is used up.',
   CAPABILITY_NOT_REGISTERED: 'That option is not available.',
   CONFLICT: 'The session moved on; refresh and try again.',
+  DRAFT_INVALID: 'The drafted questions were not usable. Try asking again.',
 };
 
 export function errorResponse(code: ErrorCode, details?: unknown): Response {

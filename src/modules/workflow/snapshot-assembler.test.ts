@@ -2,7 +2,17 @@ import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import type { SchemaDatabase } from '@/db';
-import { projects, sessions, specFiles, specRevisions, users, workflowState } from '@/db/schema';
+import {
+  answers,
+  informationNeeds,
+  projects,
+  questionRounds,
+  sessions,
+  specFiles,
+  specRevisions,
+  users,
+  workflowState,
+} from '@/db/schema';
 import { createMigratedDatabase, type TestDatabase } from '@/db/testing/migrated-database';
 
 import { assembleWorkflowSnapshot, type SnapshotAssemblyOptions } from './snapshot-assembler';
@@ -92,7 +102,7 @@ describe('workflow snapshot assembler (task 25)', () => {
       informationNeeds: [],
     });
 
-    // No interview tables yet (they land with task 31): zero everywhere, never undefined.
+    // Nothing asked yet: zero everywhere, never undefined.
     expect(assembled?.snapshot.answeredRounds).toMatchObject({ interview: 0, constitution: 0 });
     expect(assembled?.snapshot.specApproved).toEqual({
       constitution: false,
@@ -169,15 +179,55 @@ describe('workflow snapshot assembler (task 25)', () => {
     expect(assembled?.snapshot.capabilities).toEqual(['quality']);
   });
 
+  it('counts only answered rounds and reads the needs register (FR-005 AC-11)', async () => {
+    const [answeredRound] = await database.db
+      .insert(questionRounds)
+      .values({
+        sessionId,
+        stage: 'interview',
+        roundNumber: 1,
+        questions: { stage: 'interview', questions: [] },
+      })
+      .returning({ id: questionRounds.id });
+    await database.db
+      .insert(answers)
+      .values({ roundId: answeredRound?.id ?? '', questionId: 'q1', freeText: 'answered' });
+
+    // A presented-but-unanswered round must not count (the budget counts answered rounds).
+    await database.db.insert(questionRounds).values({
+      sessionId,
+      stage: 'interview',
+      roundNumber: 2,
+      questions: { stage: 'interview', questions: [] },
+    });
+
+    await database.db.insert(informationNeeds).values([
+      {
+        sessionId,
+        stage: 'interview',
+        name: 'target-users',
+        satisfiedByRound: answeredRound?.id ?? null,
+      },
+      { sessionId, stage: 'interview', name: 'success-criteria' },
+    ]);
+
+    const snapshot = (await assembleWorkflowSnapshot(database.db, sessionId, OPTIONS))?.snapshot;
+
+    expect(snapshot?.answeredRounds.interview).toBe(1);
+    expect(snapshot?.informationNeeds).toEqual([
+      { stage: 'interview', name: 'success-criteria', satisfied: false },
+      { stage: 'interview', name: 'target-users', satisfied: true },
+    ]);
+  });
+
   it('stays within the documented query budget', async () => {
     const counter = { statements: 0 };
     const counted = countingDatabase(database.db, counter);
 
     await assembleWorkflowSnapshot(counted, sessionId, OPTIONS);
 
-    // Two statements today: session+position, approval flags. The task 31 tables add the two
-    // interview reads; the documented ceiling is four.
+    // Four statements, as documented: session+position, approval flags, answered rounds, needs.
     expect(counter.statements).toBeLessThanOrEqual(4);
-    expect(counter.statements).toBe(2);
+    expect(counter.statements).toBe(4);
   });
 });
