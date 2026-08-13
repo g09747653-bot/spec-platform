@@ -330,7 +330,7 @@ Goal: the thinnest complete journey, end to end, against a deterministic stub pr
 
 Goal: replace the skeleton's implicit flow with the real, exhaustively tested state machine and the structured interview.
 
-- [ ] 24\. Implement the stage model and the explicit transition table
+- [x] 24\. Implement the stage model and the explicit transition table
   - Define `StagePosition`, `Substage`, and the static transition table covering every legal edge including `complete → quality`; each row references a gate by identifier.
   - Acceptance Criteria:
     - The table is a plain exported array enumerable by tests.
@@ -341,7 +341,7 @@ Goal: replace the skeleton's implicit flow with the real, exhaustively tested st
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 25\. Implement the WorkflowSnapshot assembler
+- [x] 25\. Implement the WorkflowSnapshot assembler
   - Build the repository query producing a snapshot: stage, substage, answered rounds per stage, satisfied information needs, spec approval flags, review decisions, quality flag, registered capabilities.
   - Acceptance Criteria:
     - The snapshot is a plain serialisable object constructible in a test from fixtures.
@@ -352,7 +352,7 @@ Goal: replace the skeleton's implicit flow with the real, exhaustively tested st
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 26\. Implement the gate predicates
+- [x] 26\. Implement the gate predicates
   - Implement `interviewGate`, `collectGate`, `approvalGate`, `reviewGate`, and `completionGate` as pure functions over the snapshot, each returning a typed reason code on rejection.
   - No gate may perform network, database, filesystem, or model I/O.
   - Acceptance Criteria:
@@ -365,7 +365,7 @@ Goal: replace the skeleton's implicit flow with the real, exhaustively tested st
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 27\. Implement the round budget gate
+- [x] 27\. Implement the round budget gate
   - Implement `roundBudgetGate` as `answeredRounds(stage) < MAX_ROUNDS_PER_STAGE` with the default of 3 read from configuration; return `ROUND_LIMIT_REACHED` when exhausted.
   - Acceptance Criteria:
     - A fourth round request for a stage is refused with `ROUND_LIMIT_REACHED`.
@@ -376,7 +376,7 @@ Goal: replace the skeleton's implicit flow with the real, exhaustively tested st
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 28\. Implement applyTransition with optimistic concurrency
+- [x] 28\. Implement applyTransition with optimistic concurrency
   - Persist transitions in a transaction guarded by `workflow_state.version`; a stale version fails with `CONFLICT`.
   - Acceptance Criteria:
     - Two concurrent transitions produce exactly one success and one `CONFLICT`.
@@ -387,7 +387,7 @@ Goal: replace the skeleton's implicit flow with the real, exhaustively tested st
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 29\. Implement the transition API endpoint
+- [x] 29\. Implement the transition API endpoint
   - Implement `POST /api/sessions/:id/transition` returning 200 on success and 409 with the machine-readable reason code on rejection.
   - Acceptance Criteria:
     - An out-of-order transition returns 409 carrying the unmet gate's reason code.
@@ -398,7 +398,7 @@ Goal: replace the skeleton's implicit flow with the real, exhaustively tested st
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 30\. Write exhaustive transition matrix unit tests
+- [x] 30\. Write exhaustive transition matrix unit tests
   - Enumerate the transition table programmatically and assert every legal edge is allowed under a satisfying snapshot and rejected under each unsatisfying one; assert every illegal pair is refused.
   - Include both Quality orderings and the `complete → quality → complete` cycle. Task 81 extends this same suite with capability-registration cases.
   - Acceptance Criteria:
