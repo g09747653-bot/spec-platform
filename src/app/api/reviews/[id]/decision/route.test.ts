@@ -32,6 +32,8 @@ vi.mock('@/modules/projects/auth/scope', () => ({
 
 vi.mock('@/db/client', () => ({ getDatabase: vi.fn() }));
 
+vi.mock('@/modules/adapters/llm/default-adapter', () => ({ createDefaultAdapter: vi.fn() }));
+
 import { TEST_ENV } from '@/config/testing/test-env';
 
 vi.mock('@/config/env', async (importOriginal) => {
@@ -41,6 +43,8 @@ vi.mock('@/config/env', async (importOriginal) => {
 });
 
 import { getDatabase } from '@/db/client';
+import { stubReviewDocument } from '@/modules/adapters/llm';
+import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
 import { assembleContext } from '@/modules/agents/context-assembler';
 import { collectContextSources } from '@/modules/agents/spec/collect-context';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
@@ -98,6 +102,12 @@ describe('POST /api/reviews/:id/decision (task 56)', () => {
   let reviewId: string;
 
   beforeAll(async () => {
+    // The one seam that keeps a vendor out of the suite (D-23): entering `review` calls the chain.
+    vi.mocked(createDefaultAdapter).mockReturnValue({
+      generateStreaming: () =>
+        Promise.resolve({ text: stubReviewDocument(), providerUsed: 'stub', attempts: 1 }),
+    });
+
     database = await createMigratedDatabase();
     vi.mocked(getDatabase).mockReturnValue(
       database.db as unknown as ReturnType<typeof getDatabase>,

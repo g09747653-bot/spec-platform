@@ -1,3 +1,4 @@
+import { looksLikeRefinementPrompt, stubRefinementDocument } from './stub-refinement';
 import { looksLikeReviewPrompt, specTypeFromReviewPrompt, stubReviewDocument } from './stub-review';
 import {
   AllProvidersFailedError,
@@ -173,7 +174,9 @@ export function createStubProviderStream(): (input: {
     const prompt = messages.map((message) => message.content).join('\n');
     const document = looksLikeReviewPrompt(prompt)
       ? stubReviewDocument(specTypeFromReviewPrompt(prompt))
-      : documentFromPrompt(prompt);
+      : looksLikeRefinementPrompt(prompt)
+        ? stubRefinementDocument(prompt)
+        : documentFromPrompt(prompt);
 
     for (const chunk of chunkDocument(document, DEFAULT_WORDS_PER_CHUNK)) {
       signal?.throwIfAborted();

@@ -743,7 +743,7 @@ Goal: every stage is reviewed, refinements are gated by an accepted diff, and de
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 58\. Create the proposed changes schema
+- [x] 58\. Create the proposed changes schema
   - Define `proposed_changes` with a partial unique index on `(spec_file_id) WHERE status = 'pending'`.
   - Acceptance Criteria:
     - Inserting a second pending proposal for the same file violates the index.
@@ -754,7 +754,7 @@ Goal: every stage is reviewed, refinements are gated by an accepted diff, and de
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 59\. Implement the ProposedChangeService and DiffService
+- [x] 59\. Implement the ProposedChangeService and DiffService
   - Compute proposed content from a plain-language instruction without persisting a revision; produce a line-level unified diff against the current revision.
   - Refuse a proposal that would remove a required section, using `validateStructure` rather than reading the section schema directly.
   - Acceptance Criteria:
@@ -767,7 +767,7 @@ Goal: every stage is reviewed, refinements are gated by an accepted diff, and de
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 60\. Build the DiffCard with accept and reject
+- [x] 60\. Build the DiffCard with accept and reject
   - Render the diff with accept and reject actions; accept persists a new revision, reject discards the proposal leaving content byte-identical.
   - Block a second change to the same file while a proposal is pending.
   - Acceptance Criteria:

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
 import { getDatabase } from '@/db/client';
-import { createTestDoubleAdapter } from '@/modules/adapters/llm';
+import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
 import { createRevisionAgent } from '@/modules/agents/revision/revision-agent';
 import { collectContextSources } from '@/modules/agents/spec/collect-context';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
@@ -115,7 +115,7 @@ export async function POST(
    * can write a revision: a document missing a required section never reaches the chain, whichever
    * code produced it (FR-008 AC-7; D-52).
    */
-  const agent = createRevisionAgent(createTestDoubleAdapter({ followPrompt: true }));
+  const agent = createRevisionAgent(createDefaultAdapter());
   const regenerated = await agent.revise({
     specType: specFile.specType,
     sources: await collectContextSources(db, scope, {

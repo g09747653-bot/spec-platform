@@ -50,3 +50,9 @@ export {
   stubSessionSummaryDocument,
 } from './stub-interview';
 export { looksLikeReviewPrompt, specTypeFromReviewPrompt, stubReviewDocument } from './stub-review';
+export {
+  documentFromRefinementPrompt,
+  instructionFromRefinementPrompt,
+  looksLikeRefinementPrompt,
+  stubRefinementDocument,
+} from './stub-refinement';
