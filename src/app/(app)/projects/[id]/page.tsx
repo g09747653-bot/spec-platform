@@ -7,6 +7,7 @@ import { requireOwnerScope } from '@/modules/projects/auth/scope';
 import { createInterviewRepository } from '@/modules/projects/repositories/interview';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
 import { CORE_SPEC_FILE_NAMES } from '@/modules/specs/model/spec-files';
+import { createReviewRepository } from '@/modules/specs/repositories/reviews';
 import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
 import { createSpecFileRepository } from '@/modules/specs/repositories/spec-files';
 import { registeredCapabilityIds } from '@/modules/workflow/capabilities';
@@ -20,6 +21,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/mod
 import { ExportPanel } from '@/modules/web/session/export-panel';
 import { InterviewPanel, type TransitionTargetModel } from '@/modules/web/session/interview-panel';
 import type { QuestionRoundModel } from '@/modules/web/session/question-round';
+import { ReviewBoard, type ReviewBoardModel } from '@/modules/web/session/review-board';
 import { SpecCard } from '@/modules/web/session/spec-card';
 import { StageRail } from '@/modules/web/session/stage-rail';
 
@@ -49,6 +51,11 @@ function nextTarget(snapshot: WorkflowSnapshot): TransitionTargetModel | null {
   } else if (position.substage === 'collect') {
     to = { stage: position.stage, substage: 'generate' };
     label = 'Proceed to drafting';
+  } else if (position.substage === 'generate') {
+    // Approval permits this move (FR-009 AC-3) and entering it is what produces the review
+    // (FR-010 AC-1), so the door is offered here rather than opened as a side effect of approving.
+    to = { stage: position.stage, substage: 'review' };
+    label = 'Proceed to review';
   }
 
   if (to === null) return null;
@@ -65,7 +72,9 @@ function nextTarget(snapshot: WorkflowSnapshot): TransitionTargetModel | null {
       ) ?? [
         verdict.reason === 'NO_ANSWERED_ROUND'
           ? 'one answered question round for this stage'
-          : verdict.reason,
+          : verdict.reason === 'SPEC_NOT_APPROVED'
+            ? 'your approval of the current draft'
+            : verdict.reason,
       ]);
 
   return {
@@ -95,11 +104,39 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const currentFile = await specFileRepository.currentFile(scope, project.id);
   const latest = currentFile === null ? null : await revisions.latest(currentFile.id);
 
+  /*
+   * The review board, when the approved revision has one awaiting a decision (task 55; FR-010 AC-4).
+   * Rendered from persisted state like everything else here, so a reload shows the same pending
+   * board rather than losing it — and the stored `severity` is what splits the two lists, so the
+   * board never has to re-derive a classification the reviewer already made.
+   */
+  const pendingReview =
+    currentFile === null
+      ? null
+      : await createReviewRepository(db).pendingForFile(scope, currentFile.id);
+
+  const reviewModel: ReviewBoardModel | null =
+    pendingReview === null
+      ? null
+      : {
+          reviewId: pendingReview.id,
+          outcome: pendingReview.outcome,
+          mustfix: pendingReview.items.filter((entry) => entry.severity === 'blocking'),
+          recommendations: pendingReview.items.filter((entry) => entry.severity === 'advisory'),
+          decision: pendingReview.decision,
+        };
+
   // The interview surface renders from the same snapshot the gates evaluate (FR-017).
   const assembled = await assembleWorkflowSnapshot(db, project.sessionId, {
     roundBudget: getEnv().MAX_ROUNDS_PER_STAGE,
     capabilities: registeredCapabilityIds(),
   });
+
+  /** The door out of `generate`, shown on the spec card rather than in the interview panel. */
+  const draftingTarget =
+    assembled !== null && assembled.snapshot.position.substage === 'generate'
+      ? nextTarget(assembled.snapshot)
+      : null;
 
   let interview: {
     stage: string;
@@ -211,6 +248,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       <SpecCard
         sessionId={project.sessionId}
         generationBlocked={interview !== null && interview.pendingRound !== null}
+        target={draftingTarget}
         revision={
           latest === null || currentFile === null
             ? null
@@ -223,6 +261,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               }
         }
       />
+
+      {reviewModel !== null && <ReviewBoard review={reviewModel} />}
 
       <ExportPanel
         projectId={project.id}

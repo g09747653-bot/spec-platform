@@ -99,12 +99,15 @@ describe('completeness (AC-2)', () => {
     expect(text).toContain('(no specification files approved yet)');
   });
 
-  it('includes selected feedback only when there is some (the task 57 insertion point)', () => {
+  it('includes selected feedback only when there is some (task 57)', () => {
     expect(assembleContext(sources).text).not.toContain('Review feedback');
 
     const withFeedback = assembleContext({
       ...sources,
-      feedback: [{ id: 'f1', description: 'Scope is vague', suggestion: 'Name a non-goal' }],
+      feedback: {
+        items: [{ id: 'f1', description: 'Scope is vague', suggestion: 'Name a non-goal' }],
+        selectedIds: ['f1'],
+      },
     }).text;
 
     expect(withFeedback).toContain('Scope is vague');

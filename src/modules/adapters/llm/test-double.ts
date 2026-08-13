@@ -1,3 +1,4 @@
+import { looksLikeReviewPrompt, specTypeFromReviewPrompt, stubReviewDocument } from './stub-review';
 import {
   AllProvidersFailedError,
   type GenerateOptions,
@@ -170,7 +171,9 @@ export function createStubProviderStream(): (input: {
 }) => Promise<string> {
   return async ({ messages, onDelta, signal }) => {
     const prompt = messages.map((message) => message.content).join('\n');
-    const document = documentFromPrompt(prompt);
+    const document = looksLikeReviewPrompt(prompt)
+      ? stubReviewDocument(specTypeFromReviewPrompt(prompt))
+      : documentFromPrompt(prompt);
 
     for (const chunk of chunkDocument(document, DEFAULT_WORDS_PER_CHUNK)) {
       signal?.throwIfAborted();

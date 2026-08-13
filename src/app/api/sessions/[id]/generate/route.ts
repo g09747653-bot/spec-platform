@@ -2,7 +2,8 @@ import { getEnv } from '@/config/env';
 import { getDatabase } from '@/db/client';
 import { createGenerationStore } from '@/modules/adapters/llm';
 import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
-import { assembleContext } from '@/modules/agents/context-assembler';
+import { assembleContext, selectedFeedback } from '@/modules/agents/context-assembler';
+import { reviseInstruction } from '@/modules/agents/revision/revision-agent';
 import { collectContextSources } from '@/modules/agents/spec/collect-context';
 import { runGeneration } from '@/modules/agents/spec/run-generation';
 import { targetSpecType } from '@/modules/agents/spec/target-spec-type';
@@ -99,13 +100,18 @@ export async function POST(
 
   // Assembled before the stream opens, so a context that cannot be read is an error the client gets
   // as a status code rather than as a half-written document (FR-008 AC-6).
-  const context = assembleContext(
-    await collectContextSources(db, scope, {
-      sessionId: session.id,
-      projectId: session.projectId,
-      initialPrompt: session.initialPrompt,
-    }),
-  );
+  //
+  // Passing `specType` is what makes this a *revision* when the review board sent the stage back:
+  // the sources then carry the review's items and the user's selection, and the assembler includes
+  // only the ticked ones (task 57; FR-010 AC-6/AC-7).
+  const sources = await collectContextSources(db, scope, {
+    sessionId: session.id,
+    projectId: session.projectId,
+    initialPrompt: session.initialPrompt,
+    specType,
+  });
+  const context = assembleContext(sources);
+  const applied = sources.feedback === undefined ? [] : selectedFeedback(sources.feedback);
 
   const run = await store.createRun(session.id, stage);
 
@@ -141,6 +147,7 @@ export async function POST(
           specType,
           initialPrompt: session.initialPrompt,
           context: context.text,
+          ...(applied.length === 0 ? {} : { changeInstruction: reviseInstruction(applied.length) }),
           signal: abort.signal,
           progress: {
             delta: (sequence, text) => {

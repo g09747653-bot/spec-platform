@@ -12,6 +12,7 @@ import {
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
+import { REVIEW_DECISIONS, REVIEW_OUTCOMES } from '@/modules/specs/model/review';
 import { REVISION_ORIGINS, SPEC_FILE_NAMES, SPEC_TYPES } from '@/modules/specs/model/spec-files';
 
 import { projects } from './projects';
@@ -116,5 +117,101 @@ export const specRevisions = pgTable(
   ],
 );
 
+/**
+ * The automated review of one approved revision, and the user's decision on it (FR-010; task 53).
+ *
+ * Keyed to a **revision**, not a file: FR-010 AC-8 requires a revised spec to get a fresh review of
+ * the new content, and "fresh" is only mechanically true if the review names the exact bytes it read.
+ * A file-keyed row would have to be overwritten, and overwriting the review of content the user
+ * already decided on is how a stale verdict survives into the next stage.
+ *
+ * `items` is the flat list of everything the agent found; `mustfix` and `recommendations` are the same
+ * items split by `severity`, so `selected_item_ids` references one namespace rather than two.
+ *
+ * The two acceptance criteria of task 53 are database rules, not repository discipline:
+ *
+ * - **every item has a stable, non-empty id** — `review_feedback_items_have_stable_ids`, because the
+ *   ids are what `selected_item_ids` points at, and a missing id makes selection meaningless (AC-7);
+ * - **`selected_item_ids` is populated only for request-changes** — `review_feedback_selection_matches_decision`,
+ *   which also states the converse: accept and ignore store `NULL`, never an empty array. "The user
+ *   selected nothing" and "the user was never asked to select" are different facts, and a decision
+ *   path that confused them would silently apply no feedback where it should have applied some.
+ */
+export const reviewFeedback = pgTable(
+  'review_feedback',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    specRevisionId: uuid('spec_revision_id')
+      .notNull()
+      .references(() => specRevisions.id, { onDelete: 'cascade' }),
+    outcome: text('outcome').notNull(),
+    items: jsonb('items')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /** Null until the user decides — the pending state the workflow waits on (FR-010 AC-4). */
+    decision: text('decision'),
+    selectedItemIds: jsonb('selected_item_ids'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    decidedAt: timestamp('decided_at', { withTimezone: true, mode: 'date' }),
+  },
+  (table) => [
+    /*
+     * One review per revision. Two rows would make "the pending review card" a choice rather than a
+     * lookup — the same ambiguity DR-11 removes from proposed changes, and the same fix.
+     */
+    unique('review_feedback_spec_revision_unique').on(table.specRevisionId),
+    check('review_feedback_outcome_valid', sql`${table.outcome} IN (${list(REVIEW_OUTCOMES)})`),
+    check(
+      'review_feedback_decision_valid',
+      sql`${table.decision} IS NULL OR ${table.decision} IN (${list(REVIEW_DECISIONS)})`,
+    ),
+    check('review_feedback_items_is_array', sql`jsonb_typeof(${table.items}) = 'array'`),
+    /*
+     * AC-1 of task 53, as a constraint. `jsonb_path_exists` asks the inverse question — "is there an
+     * element whose id is missing, non-string or empty?" — because a CHECK cannot run the aggregate
+     * that "every element has one" would need. The `!exists(@.id)` arm is not redundant with the type
+     * test: on a missing key `@.id.type()` yields no rows and the comparison is unknown, not true, so
+     * without it an item with no `id` at all would pass.
+     */
+    check(
+      'review_feedback_items_have_stable_ids',
+      sql`NOT jsonb_path_exists(
+            ${table.items},
+            '$[*] ? (!exists(@.id) || @.id.type() != "string" || @.id == "")'
+          )`,
+    ),
+    /*
+     * AC-2 of task 53. Stated over all three states of `decision` so none is left to interpretation:
+     * pending stores NULL, accept/ignore store NULL, request_changes stores a non-empty array. The
+     * length test is what keeps `ReviewDecision`'s refine from being the only thing standing between
+     * a request-changes decision and a revision prompt with no feedback in it.
+     *
+     * Written as a `CASE`, not as a disjunction of the three states, for the reason spelled out on
+     * `spec_revisions_origin_derivation_paired`: **a CHECK accepts NULL**. The obvious form —
+     * `(decision = 'request_changes' AND jsonb_typeof(selected_item_ids) = 'array' AND …) OR (…)` —
+     * evaluates to NULL rather than false when `selected_item_ids` is NULL, because `jsonb_typeof`
+     * of NULL is NULL; the constraint then admits exactly the row it exists to refuse. Its first
+     * draft did, and the two tests below are what caught it. A `CASE` yields a boolean on every
+     * path: an unknown `WHEN` falls to `ELSE`, and both branches end in an `IS NULL` test.
+     */
+    check(
+      'review_feedback_selection_matches_decision',
+      sql`CASE WHEN ${table.decision} = 'request_changes'
+                 THEN ${table.selectedItemIds} IS NOT NULL
+                      AND jsonb_typeof(${table.selectedItemIds}) = 'array'
+                      AND jsonb_array_length(${table.selectedItemIds}) > 0
+                 ELSE ${table.selectedItemIds} IS NULL
+          END`,
+    ),
+    /* A decision and its timestamp arrive together; neither is inferable from the other. */
+    check(
+      'review_feedback_decision_timestamp_paired',
+      sql`(${table.decision} IS NULL AND ${table.decidedAt} IS NULL)
+          OR (${table.decision} IS NOT NULL AND ${table.decidedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
 export type SpecFileRow = typeof specFiles.$inferSelect;
 export type SpecRevisionRow = typeof specRevisions.$inferSelect;
+export type ReviewFeedbackRow = typeof reviewFeedback.$inferSelect;

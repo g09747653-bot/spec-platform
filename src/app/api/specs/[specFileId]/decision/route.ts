@@ -4,7 +4,8 @@ import { z } from 'zod';
 
 import { getDatabase } from '@/db/client';
 import { createTestDoubleAdapter } from '@/modules/adapters/llm';
-import { createSpecAgent } from '@/modules/agents/spec/spec-agent';
+import { createRevisionAgent } from '@/modules/agents/revision/revision-agent';
+import { collectContextSources } from '@/modules/agents/spec/collect-context';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
 import { isCoreSpecType } from '@/modules/specs/model/spec-files';
@@ -81,6 +82,12 @@ export async function POST(
     await revisions.approve(latest.id);
     await projects.touch(scope, specFile.projectId);
 
+    /*
+     * Approval **permits** `generate → review` (FR-009 AC-3); it does not perform it, and it does
+     * not produce the review. The feedback is generated when the stage actually enters `review`
+     * (FR-010 AC-1), which is the transition endpoint's job — the same separation that keeps
+     * deciding and moving apart everywhere else in this workflow.
+     */
     return jsonResponse({
       specFileId: specFile.id,
       fileName: specFile.fileName,
@@ -100,16 +107,24 @@ export async function POST(
   if (!isCoreSpecType(specFile.specType)) return errorResponse('CAPABILITY_NOT_REGISTERED');
 
   /*
-   * Still the skeleton's path: a deterministic stub stands in for the RevisionAgent of task 57. It
-   * answers the assembled prompt, so what it produces carries the sections the schema asked for — and
-   * the verdict below is checked even here, because a document that fails structural validation must
-   * never reach the revision chain, whichever code path produced it (FR-008 AC-7).
+   * The RevisionAgent of task 57, on the card's trigger (FR-009 AC-4).
+   *
+   * It regenerates through the assembled context rather than from the instruction alone (FR-008
+   * AC-6), and it carries any ticked review feedback for this file with it — filtered to the
+   * selection by the assembler. The structural verdict is checked here as on every other path that
+   * can write a revision: a document missing a required section never reaches the chain, whichever
+   * code produced it (FR-008 AC-7; D-52).
    */
-  const agent = createSpecAgent(createTestDoubleAdapter({ followPrompt: true }));
-  const regenerated = await agent.generate({
+  const agent = createRevisionAgent(createTestDoubleAdapter({ followPrompt: true }));
+  const regenerated = await agent.revise({
     specType: specFile.specType,
-    initialPrompt: project.initialPrompt,
-    changeInstruction: parsed.data.instruction,
+    sources: await collectContextSources(db, scope, {
+      sessionId: project.sessionId,
+      projectId: specFile.projectId,
+      initialPrompt: project.initialPrompt,
+      specType: specFile.specType,
+    }),
+    instruction: parsed.data.instruction,
     runId: randomUUID(),
   });
 
@@ -117,8 +132,8 @@ export async function POST(
 
   const revision = await revisions.append({
     specFileId: specFile.id,
-    // The instruction is echoed into the document so the skeleton visibly reflects the request; the
-    // real revision agent (task 57) rewrites the content itself.
+    // The instruction is echoed as a trailing comment so the card visibly reflects what was asked;
+    // the document itself is the agent's, rewritten against the instruction and the context.
     content: `${regenerated.content}\n\n<!-- requested change: ${parsed.data.instruction} -->\n`,
   });
   await projects.touch(scope, specFile.projectId);

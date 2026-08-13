@@ -7,6 +7,7 @@ import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Label, Textarea } from '../ui/field';
 
+import type { TransitionTargetModel } from './interview-panel';
 import { useResumableStream } from './useResumableStream';
 
 /**
@@ -39,6 +40,14 @@ interface SpecCardProps {
    * (task 34; FR-005 AC-4). Presentation of a rule the server owns — not the enforcement.
    */
   generationBlocked?: boolean;
+  /**
+   * Where "proceed" leads from `generate` — the door into `review` (task 56).
+   *
+   * It lives on this card because approval is what opens it (FR-009 AC-3), so the control belongs
+   * beside the decision that unlocked it. Whether it is *permitted* is still the gate's answer, read
+   * from the same snapshot the page evaluated; this only presents the verdict.
+   */
+  target?: TransitionTargetModel | null;
 }
 
 function isSpecCardState(value: unknown): value is SpecCardState {
@@ -52,9 +61,14 @@ function isSpecCardState(value: unknown): value is SpecCardState {
   );
 }
 
-export function SpecCard({ sessionId, revision, generationBlocked = false }: SpecCardProps) {
+export function SpecCard({
+  sessionId,
+  revision,
+  generationBlocked = false,
+  target = null,
+}: SpecCardProps) {
   const router = useRouter();
-  const [busy, setBusy] = useState<'approve' | 'changes' | null>(null);
+  const [busy, setBusy] = useState<'approve' | 'changes' | 'proceed' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [instruction, setInstruction] = useState('');
   const [showInstruction, setShowInstruction] = useState(false);
@@ -69,6 +83,34 @@ export function SpecCard({ sessionId, revision, generationBlocked = false }: Spe
     // The revision is persisted before `complete` is sent, so refreshing here shows the card the
     // server would render on a reload — the same state, arrived at two ways (FR-017 AC-4).
     if (outcome.status === 'complete') router.refresh();
+  }
+
+  /** The one door a session moves through — the same endpoint the interview panel calls (P1). */
+  async function proceed(to: TransitionTargetModel) {
+    setBusy('proceed');
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          toStage: to.toStage,
+          ...(to.toSubstage === null ? {} : { toSubstage: to.toSubstage }),
+        }),
+      });
+
+      if (!response.ok) {
+        setError('That step is not available yet.');
+        return;
+      }
+
+      router.refresh();
+    } catch {
+      setError('That step is not available yet.');
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function send(action: 'approve' | 'changes', url: string, body?: Record<string, unknown>) {
@@ -240,6 +282,28 @@ export function SpecCard({ sessionId, revision, generationBlocked = false }: Spe
                   {busy === 'changes' ? 'Revising…' : 'Send instruction'}
                 </Button>
               </div>
+            )}
+          </div>
+        )}
+
+        {target !== null && (
+          <div className="flex flex-col gap-1">
+            <Button
+              variant={target.ready ? 'primary' : 'secondary'}
+              data-testid="proceed"
+              disabled={busy !== null || !target.ready}
+              onClick={() => {
+                void proceed(target);
+              }}
+              className="self-start"
+            >
+              {busy === 'proceed' ? 'Checking the gate…' : target.label}
+            </Button>
+
+            {!target.ready && target.unmet.length > 0 && (
+              <p className="text-ink-muted text-xs" data-testid="proceed-unmet">
+                still needed: {target.unmet.join(', ')}
+              </p>
             )}
           </div>
         )}

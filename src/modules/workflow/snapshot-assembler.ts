@@ -6,12 +6,14 @@ import {
   answers,
   informationNeeds,
   questionRounds,
+  reviewFeedback,
   sessions,
   specFiles,
   specRevisions,
   workflowState,
 } from '@/db/schema';
 import { queryRows } from '@/db/sql';
+import { GATE_OPENING_REVIEW_DECISIONS } from '@/modules/specs/model/review';
 import { isSpecType } from '@/modules/specs/model/spec-files';
 
 import type { CapabilityId } from './model/capabilities';
@@ -40,12 +42,11 @@ import type { InformationNeedState, WorkflowSnapshot } from './snapshot';
  * **Query budget: at most four statements.** Documented per the task's acceptance criteria:
  *
  * 1. session + workflow position (one join);
- * 2. per-file approval flags (one pass over `spec_files` with correlated lookups);
+ * 2. per-file approval and review-decision flags (one pass over `spec_files` with correlated
+ *    lookups) — task 56 added the review flag here rather than as a fifth statement, because it is
+ *    keyed by the same file and resolved from the same latest revision;
  * 3. answered rounds per asking stage (a round with at least one answer row);
  * 4. information needs with their satisfaction state.
- *
- * Review decisions read as undecided until the Milestone 4 table exists — the engine fails
- * closed: no stage exit before a review can be decided.
  *
  * Configuration (`roundBudget`) and the capability registry are inputs, not reads: the caller
  * passes them so this module touches neither `process.env` nor module-level state, and tests can
@@ -80,6 +81,7 @@ const ApprovalRow = z.object({
   spec_type: z.string(),
   latest_approved: z.boolean(),
   has_approved: z.boolean(),
+  review_decided: z.boolean(),
 });
 
 const AnsweredRoundsRow = z.object({
@@ -118,6 +120,9 @@ const zeroRounds = (): Record<AskingStage, number> =>
 const allFalse = (): Record<SpecStage, boolean> =>
   Object.fromEntries(SPEC_STAGES.map((stage) => [stage, false])) as Record<SpecStage, boolean>;
 
+/** The advancing decisions, as a SQL value list — one source of truth with the table constraint. */
+const gateOpening = sql.raw(GATE_OPENING_REVIEW_DECISIONS.map((name) => `'${name}'`).join(', '));
+
 export async function assembleWorkflowSnapshot(
   db: SchemaDatabase,
   sessionId: string,
@@ -150,9 +155,16 @@ export async function assembleWorkflowSnapshot(
   if (state === undefined) return null;
 
   // Query 2 — approval flags per spec file: whether the latest revision is approved
-  // (`approvalGate`) and whether any approved revision exists (`completionGate`). One statement
-  // for all files of the project; files that do not exist yet simply produce no row and stay
-  // false, which is the fail-closed default.
+  // (`approvalGate`), whether any approved revision exists (`completionGate`), and whether the
+  // latest revision's review was decided accept-or-ignore (`reviewGate`, task 56; FR-010 AC-5).
+  // One statement for all files of the project; files that do not exist yet simply produce no row
+  // and stay false, which is the fail-closed default.
+  //
+  // Note the shape of the review lookup: the latest revision is resolved *first*, and only then is
+  // its review looked up. Joining `review_feedback` into the ordering instead would silently skip
+  // an unreviewed newest revision and answer with an older reviewed one — so a revision produced by
+  // request-changes would inherit the decision taken on the text it replaced, and the stage would
+  // advance on a review of content the user never saw.
   const approvalRows = await queryRows(
     db,
     sql`
@@ -173,7 +185,21 @@ export async function assembleWorkflowSnapshot(
           FROM ${specRevisions}
           WHERE ${specRevisions.specFileId} = ${specFiles.id}
             AND ${specRevisions.approved} = true
-        ) AS has_approved
+        ) AS has_approved,
+        COALESCE(
+          (
+            SELECT ${reviewFeedback.decision} IN (${gateOpening})
+            FROM ${reviewFeedback}
+            WHERE ${reviewFeedback.specRevisionId} = (
+              SELECT ${specRevisions.id}
+              FROM ${specRevisions}
+              WHERE ${specRevisions.specFileId} = ${specFiles.id}
+              ORDER BY ${specRevisions.revisionNumber} DESC
+              LIMIT 1
+            )
+          ),
+          false
+        ) AS review_decided
       FROM ${specFiles}
       WHERE ${specFiles.projectId} = ${state.project_id}::uuid
     `,
@@ -182,11 +208,13 @@ export async function assembleWorkflowSnapshot(
 
   const specApproved = allFalse();
   const approvedRevisionExists = allFalse();
+  const reviewDecided = allFalse();
 
   for (const row of approvalRows) {
     if (!isSpecType(row.spec_type)) continue;
     specApproved[row.spec_type] = row.latest_approved;
     approvedRevisionExists[row.spec_type] = row.has_approved;
+    reviewDecided[row.spec_type] = row.review_decided;
   }
 
   // Query 3 — answered rounds per stage. "Answered" means at least one answer row exists,
@@ -241,8 +269,7 @@ export async function assembleWorkflowSnapshot(
     informationNeeds: needs,
     specApproved,
     approvedRevisionExists,
-    // Review decisions are a Milestone 4 table (task 53); undecided until then — fail closed.
-    reviewDecided: allFalse(),
+    reviewDecided,
     qualityEnabled: state.quality_enabled,
     capabilities: options.capabilities,
   };

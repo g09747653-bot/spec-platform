@@ -196,10 +196,13 @@ describe('POST /api/sessions/:id/transition (task 29)', () => {
     const response = await post(sessionId, { toStage: 'constitution', toSubstage: 'review' });
 
     expect(response.status).toBe(200);
+    // Entering `review` also produces the stage's review (task 56; FR-010 AC-1), so the body
+    // carries its id alongside the new position.
     expect(await asJson(response)).toEqual({
       stage: 'constitution',
       substage: 'review',
       version: 2,
+      reviewId: expect.any(String) as unknown,
     });
 
     const after = await database.db
