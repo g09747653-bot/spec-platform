@@ -879,7 +879,7 @@ Goal: user documents and live web research ground the generated specs, safely.
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 69\. Implement context recording and late-attachment analysis
+- [x] 69\. Implement context recording and late-attachment analysis
   - Record `context_attachment_ids` on every spec revision at generation time; implement `LateAttachmentAnalyzer` computing which approved files predate a new attachment and notify the owner by file name with a direct refine action.
   - Never modify an approved file automatically.
   - Acceptance Criteria:

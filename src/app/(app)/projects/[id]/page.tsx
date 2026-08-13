@@ -149,11 +149,15 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
    * against the revision the proposal was based on, so the card shows what the user was offered even
    * if the file has since moved on — a diff against "whatever is current now" would silently change
    * what accepting means.
+   *
+   * Looked up across the **project**, not only the current file: the late-attachment action of task 69
+   * can start a refinement on a file the session has already moved past, and a diff the user cannot
+   * see is a decision they cannot make.
    */
-  const pendingProposal =
-    currentFile === null
-      ? null
-      : await createProposedChangeService(db).pendingForFile(scope, currentFile.id);
+  const pendingProposal = await createProposedChangeService(db).pendingForProject(
+    scope,
+    project.id,
+  );
 
   const proposalDiff =
     pendingProposal === null

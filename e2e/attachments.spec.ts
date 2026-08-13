@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { createSignedInUser, signIn } from './fixtures';
+import { createSignedInUser, reachDrafting, signIn } from './fixtures';
 
 /**
  * Documents as grounding context, end to end (task 68; FR-004 AC-1/AC-2/AC-4/AC-5/AC-6/AC-7).
@@ -94,6 +94,46 @@ test.describe('document attachments', () => {
     // The interview is still usable: a parse failure is not a session failure.
     await page.getByTestId('ask-round').click();
     await expect(page.getByTestId('mcq-card')).toBeVisible({ timeout: 20_000 });
+  });
+
+  /**
+   * Task 69 — a document attached after a file was approved (FR-004 AC-9/AC-10).
+   *
+   * Two claims, and the second is the one that matters: the notice names the approved file, and
+   * nothing about the file changes because of it. The revision number is checked before and after,
+   * because "no approved file changes as a side effect" is a statement about state, not about intent.
+   */
+  test('a late document names the approved files and changes none of them (AC-9/AC-10)', async ({
+    page,
+    context,
+  }) => {
+    await signIn(context, await createSignedInUser('late'));
+    await startSession(page);
+
+    await reachDrafting(page);
+    await page.getByTestId('generate-spec').click();
+    await expect(page.getByTestId('spec-card')).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId('approve-spec').click();
+    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-revision-number')).toHaveText('1');
+
+    await page.getByTestId('attachment-input').setInputFiles({
+      name: 'late-brief.md',
+      mimeType: 'text/markdown',
+      buffer: Buffer.from('# Late brief\n\nThe budget halved.\n'),
+    });
+
+    await expect(page.getByTestId('late-attachment-notice')).toBeVisible();
+    await expect(page.getByTestId('late-attachment-file')).toHaveText('constitution.md');
+
+    // AC-10: the approved file is untouched — still revision 1, still approved.
+    await expect(page.getByTestId('spec-revision-number')).toHaveText('1');
+    await expect(page.getByTestId('spec-card')).toContainText('approved');
+
+    // The direct action offers a change; it does not make one.
+    await page.getByTestId('late-attachment-refine').click();
+    await expect(page.getByTestId('diff-card')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('spec-revision-number')).toHaveText('1');
   });
 
   test('removing a document empties the list (AC-7)', async ({ page, context }) => {

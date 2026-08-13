@@ -131,13 +131,13 @@ async function answer(
   pending: PendingDecision,
   text: string,
 ): Promise<string> {
-  const context = assembleContext(
-    await collectContextSources(db, scope, {
-      sessionId: session.id,
-      projectId: session.projectId,
-      initialPrompt: session.initialPrompt,
-    }),
-  );
+  const collected = await collectContextSources(db, scope, {
+    sessionId: session.id,
+    projectId: session.projectId,
+    initialPrompt: session.initialPrompt,
+  });
+  // Answering a question writes no revision, so the context set is not recorded anywhere here.
+  const context = assembleContext(collected.sources);
 
   const prompt = assemblePrompt('chat.answer.v1', {
     message: text,

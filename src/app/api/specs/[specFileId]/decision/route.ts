@@ -115,15 +115,17 @@ export async function POST(
    * can write a revision: a document missing a required section never reaches the chain, whichever
    * code produced it (FR-008 AC-7; D-52).
    */
+  const collected = await collectContextSources(db, scope, {
+    sessionId: project.sessionId,
+    projectId: specFile.projectId,
+    initialPrompt: project.initialPrompt,
+    specType: specFile.specType,
+  });
+
   const agent = createRevisionAgent(createDefaultAdapter());
   const regenerated = await agent.revise({
     specType: specFile.specType,
-    sources: await collectContextSources(db, scope, {
-      sessionId: project.sessionId,
-      projectId: specFile.projectId,
-      initialPrompt: project.initialPrompt,
-      specType: specFile.specType,
-    }),
+    sources: collected.sources,
     instruction: parsed.data.instruction,
     runId: randomUUID(),
   });
@@ -135,6 +137,8 @@ export async function POST(
     // The instruction is echoed as a trailing comment so the card visibly reflects what was asked;
     // the document itself is the agent's, rewritten against the instruction and the context.
     content: `${regenerated.content}\n\n<!-- requested change: ${parsed.data.instruction} -->\n`,
+    // The same set the context was built from — a revision written by any path records it (DR-12).
+    contextAttachmentIds: collected.contextAttachmentIds,
   });
   await projects.touch(scope, specFile.projectId);
 

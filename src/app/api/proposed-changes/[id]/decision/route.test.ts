@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import { OwnerScope } from '@/db/owner-scope';
 import {
+  attachments,
   projects,
   proposedChanges,
   sessions,
@@ -68,6 +69,7 @@ function submit(specFileId: string, instruction: string): Promise<Response> {
 describe('conversational refinement endpoints (tasks 59, 60)', () => {
   let database: TestDatabase;
   let ownerId: string;
+  let sessionId: string;
   let specFileId: string;
   let originalContent: string;
 
@@ -132,9 +134,10 @@ describe('conversational refinement endpoints (tasks 59, 60)', () => {
       .insert(sessions)
       .values({ projectId, initialPrompt: 'Build it', summary: 'Summarised.' })
       .returning({ id: sessions.id });
+    sessionId = session?.id ?? '';
     await database.db
       .insert(workflowState)
-      .values({ sessionId: session?.id ?? '', stage: 'constitution', substage: 'generate' });
+      .values({ sessionId, stage: 'constitution', substage: 'generate' });
 
     const [file] = await database.db
       .insert(specFiles)
@@ -317,6 +320,52 @@ describe('conversational refinement endpoints (tasks 59, 60)', () => {
       const response = await decide(await pendingProposal(), { decision: 'accept' });
 
       expect((await asJson(response)).approved).toBe(false);
+    });
+
+    /**
+     * Task 69 / DR-12. The set recorded is the one that existed **when the text was produced**, not
+     * when it was accepted: a document attached in between was never in front of the agent, and
+     * recording it would make the file look as though it had already taken it into account — hiding
+     * exactly the situation FR-004 AC-9 exists to report.
+     */
+    it('records the attachment set as it was when the proposal was made', async () => {
+      const [before] = await database.db
+        .insert(attachments)
+        .values({
+          sessionId,
+          fileName: 'early.md',
+          mimeType: 'text/markdown',
+          sizeBytes: 10,
+          blobKey: `attachments/${ownerId}/${sessionId}/early.md`,
+          parseStatus: 'ok',
+          extractedText: 'Early.',
+          attachedAtStage: 'constitution',
+        })
+        .returning({ id: attachments.id });
+
+      const proposalId = await pendingProposal();
+
+      // Attached after the text was produced, so it belongs to no revision this proposal writes.
+      await database.db.insert(attachments).values({
+        sessionId,
+        fileName: 'later.md',
+        mimeType: 'text/markdown',
+        sizeBytes: 10,
+        blobKey: `attachments/${ownerId}/${sessionId}/later.md`,
+        parseStatus: 'ok',
+        extractedText: 'Later.',
+        attachedAtStage: 'constitution',
+        uploadedAt: new Date(Date.now() + 60_000),
+      });
+
+      await decide(proposalId, { decision: 'accept' });
+
+      const [revision] = await database.db
+        .select()
+        .from(specRevisions)
+        .where(eq(specRevisions.revisionNumber, 2));
+
+      expect(revision?.contextAttachmentIds).toEqual([before?.id]);
     });
 
     it('marks the proposal accepted, and frees the file', async () => {

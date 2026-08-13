@@ -104,12 +104,13 @@ export async function POST(
   // Passing `specType` is what makes this a *revision* when the review board sent the stage back:
   // the sources then carry the review's items and the user's selection, and the assembler includes
   // only the ticked ones (task 57; FR-010 AC-6/AC-7).
-  const sources = await collectContextSources(db, scope, {
+  const collected = await collectContextSources(db, scope, {
     sessionId: session.id,
     projectId: session.projectId,
     initialPrompt: session.initialPrompt,
     specType,
   });
+  const { sources } = collected;
   const context = assembleContext(sources);
   const applied = sources.feedback === undefined ? [] : selectedFeedback(sources.feedback);
 
@@ -147,6 +148,8 @@ export async function POST(
           specType,
           initialPrompt: session.initialPrompt,
           context: context.text,
+          // What the prompt was built from, recorded on the revision this run writes (DR-12).
+          contextAttachmentIds: collected.contextAttachmentIds,
           ...(applied.length === 0 ? {} : { changeInstruction: reviseInstruction(applied.length) }),
           signal: abort.signal,
           progress: {

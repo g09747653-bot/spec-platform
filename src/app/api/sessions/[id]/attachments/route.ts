@@ -2,6 +2,7 @@ import { getEnv } from '@/config/env';
 import { getDatabase } from '@/db/client';
 import { createDefaultParsing } from '@/modules/adapters/parsing';
 import { createDefaultStorage } from '@/modules/adapters/storage';
+import { createLateAttachmentAnalyzer } from '@/modules/projects/attachments/late-analyzer';
 import { createAttachmentService } from '@/modules/projects/attachments/service';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
@@ -91,9 +92,27 @@ export async function POST(
       return uploadRejectedResponse(outcome.reason, outcome.message);
     case 'not-found':
       return errorResponse('NOT_FOUND');
-    case 'stored':
+    case 'stored': {
       await createProjectRepository(db).touch(scope, session.projectId);
 
-      return jsonResponse({ attachment: outcome.attachment }, 201);
+      /*
+       * Which approved files predate this document (task 69; FR-004 AC-9).
+       *
+       * Read-only, and computed after the upload rather than as part of it: the analysis is a report,
+       * and nothing about it may change a file. AC-10 is explicit that a late attachment never
+       * modifies an approved spec — the user is offered a refinement, which is a proposal they still
+       * have to accept.
+       */
+      const impact = await createLateAttachmentAnalyzer(db).analyze(
+        scope,
+        session.id,
+        outcome.attachment.id,
+      );
+
+      return jsonResponse(
+        { attachment: outcome.attachment, affectedFiles: impact.affectedFiles },
+        201,
+      );
+    }
   }
 }

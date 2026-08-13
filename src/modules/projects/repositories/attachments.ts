@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import type { SchemaDatabase } from '@/db';
 import type { OwnerScope } from '@/db/owner-scope';
-import { attachments, projects, sessions } from '@/db/schema';
+import { attachments, projects, sessions, specFiles, specRevisions } from '@/db/schema';
 import { queryRows } from '@/db/sql';
 
 import { PARSE_STATUSES, type ParseStatus } from '../attachments/model';
@@ -79,6 +79,17 @@ export interface RecordUploadInput {
   sizeBytes: number;
   blobKey: string;
   attachedAtStage: string;
+}
+
+/**
+ * An approved file that predates an attachment (FR-004 AC-9).
+ *
+ * The name is what the owner is told; the id is what the refine action needs in order to act on that
+ * file rather than on whichever one the page happens to be showing.
+ */
+export interface AffectedSpecFile {
+  specFileId: string;
+  fileName: string;
 }
 
 export type ExtractionRecord =
@@ -222,6 +233,91 @@ export function createAttachmentRepository(db: SchemaDatabase) {
 
       const row = rows[0];
       return row === undefined ? null : { blobKey: row.blob_key };
+    },
+
+    /**
+     * The attachment set that was available to a generation (DR-12; task 69).
+     *
+     * "Available" means **existing**, not "contributed text": a document whose parse failed and an
+     * image with nothing to extract were both available to the user and to the run. Recording only
+     * the ones that produced text would make a later attachment look late relative to revisions that
+     * already knew about it.
+     *
+     * `asOf` exists for a revision whose content was generated earlier than it was written — an
+     * accepted refinement, whose text was produced when the proposal was made. Passing the proposal's
+     * timestamp asks the question the revision needs answered: what was available *then*.
+     */
+    async idsForSession(scope: OwnerScope, sessionId: string, asOf?: Date): Promise<string[]> {
+      if (!UUID.test(sessionId)) return [];
+
+      const cutoff = asOf === undefined ? null : asOf.toISOString();
+
+      const rows = await queryRows(
+        db,
+        sql`
+          SELECT ${attachments.id} AS id
+          FROM ${attachments}
+          JOIN ${sessions} ON ${sessions.id} = ${attachments.sessionId}
+          JOIN ${projects} ON ${projects.id} = ${sessions.projectId}
+          WHERE ${sessions.id} = ${sessionId}::uuid
+            AND ${projects.ownerId} = ${scope.userId}
+            AND (${cutoff}::timestamptz IS NULL OR ${attachments.uploadedAt} <= ${cutoff}::timestamptz)
+          ORDER BY ${attachments.uploadedAt} ASC, ${attachments.id} ASC
+        `,
+        z.object({ id: z.uuid() }),
+      );
+
+      return rows.map((row) => row.id);
+    },
+
+    /**
+     * The approved spec files whose newest approved revision was generated without this attachment
+     * (FR-004 AC-9; DR-12; task 69).
+     *
+     * Computed from `spec_revisions.context_attachment_ids` — persisted state written by the run
+     * itself — rather than by comparing timestamps or stage names, which is the whole point of DR-12:
+     * "was this document in front of the agent?" is a fact the generation recorded, not one inferred
+     * afterwards from when things happened.
+     *
+     * Only the **latest approved** revision of each file is consulted. An earlier revision that
+     * predates the document is not a problem the user can act on: it has already been superseded.
+     */
+    async filesGeneratedWithout(
+      scope: OwnerScope,
+      sessionId: string,
+      attachmentId: string,
+    ): Promise<AffectedSpecFile[]> {
+      if (!UUID.test(sessionId) || !UUID.test(attachmentId)) return [];
+
+      const rows = await queryRows(
+        db,
+        sql`
+          WITH owned_files AS (
+            SELECT ${specFiles.id} AS spec_file_id, ${specFiles.fileName} AS file_name
+            FROM ${specFiles}
+            JOIN ${projects} ON ${projects.id} = ${specFiles.projectId}
+            JOIN ${sessions} ON ${sessions.projectId} = ${projects.id}
+            WHERE ${sessions.id} = ${sessionId}::uuid
+              AND ${projects.ownerId} = ${scope.userId}
+          ), latest_approved AS (
+            SELECT DISTINCT ON (owned_files.spec_file_id)
+              owned_files.spec_file_id,
+              owned_files.file_name,
+              ${specRevisions.contextAttachmentIds} AS context_attachment_ids
+            FROM owned_files
+            JOIN ${specRevisions} ON ${specRevisions.specFileId} = owned_files.spec_file_id
+            WHERE ${specRevisions.approved} = true
+            ORDER BY owned_files.spec_file_id, ${specRevisions.revisionNumber} DESC
+          )
+          SELECT spec_file_id, file_name
+          FROM latest_approved
+          WHERE NOT (context_attachment_ids @> ${JSON.stringify([attachmentId])}::jsonb)
+          ORDER BY file_name ASC
+        `,
+        z.object({ spec_file_id: z.uuid(), file_name: z.string() }),
+      );
+
+      return rows.map((row) => ({ specFileId: row.spec_file_id, fileName: row.file_name }));
     },
 
     /** Every stored object under a project — what DR-6's cascade must also delete from the store. */
