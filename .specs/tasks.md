@@ -780,7 +780,7 @@ Goal: every stage is reviewed, refinements are gated by an accepted diff, and de
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 61\. Implement the DecisionIntentResolver
+- [x] 61\. Implement the DecisionIntentResolver
   - Resolve a typed message against the pending decision: deterministic phrase match first, constrained model classification only if inconclusive, abstain below the confidence threshold or when the message reads as a question.
   - Acceptance Criteria:
     - A clear "approve" phrase resolves with no model call.
@@ -792,7 +792,7 @@ Goal: every stage is reviewed, refinements are gated by an accepted diff, and de
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 62\. Implement the chat message endpoint routing to decision endpoints
+- [x] 62\. Implement the chat message endpoint routing to decision endpoints
   - Implement `POST /api/sessions/:id/messages`; a resolved intent is dispatched internally to the same endpoint the card would call, and the response reports which decision was applied.
   - An unresolved intent returns the assistant's textual answer with `pendingAction` unchanged.
   - Acceptance Criteria:

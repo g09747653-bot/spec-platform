@@ -19,6 +19,7 @@ import { createWorkflowStateRepository } from '@/modules/workflow/repositories/w
 import { assembleWorkflowSnapshot } from '@/modules/workflow/snapshot-assembler';
 import { unmetNeedNames, type WorkflowSnapshot } from '@/modules/workflow/snapshot';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/modules/web';
+import { ChatPanel } from '@/modules/web/session/chat-panel';
 import { DiffCard, type PendingProposalModel } from '@/modules/web/session/diff-card';
 import { ExportPanel } from '@/modules/web/session/export-panel';
 import { InterviewPanel, type TransitionTargetModel } from '@/modules/web/session/interview-panel';
@@ -297,6 +298,13 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       {currentFile !== null && latest !== null && (
         <DiffCard specFileId={currentFile.id} proposal={proposalModel} />
       )}
+
+      <ChatPanel
+        sessionId={project.sessionId}
+        hasPendingDecision={
+          proposalModel !== null || reviewModel !== null || (latest !== null && !latest.approved)
+        }
+      />
 
       <ExportPanel
         projectId={project.id}
