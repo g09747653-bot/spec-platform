@@ -138,6 +138,47 @@ export function createWorkflowStateRepository(db: SchemaDatabase) {
         version: row.version,
       });
     },
+
+    /**
+     * Replaces the pending action without moving the position — presenting a question round,
+     * consuming an answered one (FR-017 AC-3/AC-4).
+     *
+     * Same optimistic token as `advance`, and it bumps the version too: a pending-action claim
+     * and a transition racing each other must produce one winner and one `CONFLICT`, or two
+     * requests could each believe their card is the pending one.
+     */
+    async setPendingAction(
+      sessionId: string,
+      pendingAction: unknown,
+      expectedVersion: number,
+    ): Promise<WorkflowPosition | null> {
+      const updated = await db
+        .update(workflowState)
+        .set({
+          pendingAction,
+          version: expectedVersion + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(eq(workflowState.sessionId, sessionId), eq(workflowState.version, expectedVersion)),
+        )
+        .returning({
+          stage: workflowState.stage,
+          substage: workflowState.substage,
+          version: workflowState.version,
+          pendingAction: workflowState.pendingAction,
+        });
+
+      const row = updated[0];
+      if (row === undefined) return null;
+
+      return toPosition({
+        stage: row.stage,
+        substage: row.substage,
+        pending_action: row.pendingAction,
+        version: row.version,
+      });
+    },
   };
 }
 

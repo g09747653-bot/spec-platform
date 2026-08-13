@@ -2,13 +2,22 @@ import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import type { SchemaDatabase } from '@/db';
-import { sessions, specFiles, specRevisions, workflowState } from '@/db/schema';
+import {
+  answers,
+  informationNeeds,
+  questionRounds,
+  sessions,
+  specFiles,
+  specRevisions,
+  workflowState,
+} from '@/db/schema';
 import { queryRows } from '@/db/sql';
 import { isSpecType } from '@/modules/specs/model/spec-files';
 
 import type { CapabilityId } from './model/capabilities';
 import {
   ASKING_STAGES,
+  isAskingStage,
   isSpecStage,
   isStage,
   isSubstage,
@@ -17,7 +26,7 @@ import {
   type SpecStage,
   type StagePosition,
 } from './model/stages';
-import type { WorkflowSnapshot } from './snapshot';
+import type { InformationNeedState, WorkflowSnapshot } from './snapshot';
 
 /**
  * Builds the `WorkflowSnapshot` from persisted state (task 25; solution.md — `WorkflowSnapshot`).
@@ -32,13 +41,11 @@ import type { WorkflowSnapshot } from './snapshot';
  *
  * 1. session + workflow position (one join);
  * 2. per-file approval flags (one pass over `spec_files` with correlated lookups);
- * 3. answered rounds per stage — arrives with the task 31 tables;
- * 4. information needs — arrives with the task 31 tables.
+ * 3. answered rounds per asking stage (a round with at least one answer row);
+ * 4. information needs with their satisfaction state.
  *
- * Until the interview tables exist (they land with tasks 31–38 in this same milestone), queries 3
- * and 4 have nothing to read and the assembler reports zero answered rounds and no needs — the
- * engine then fails closed: no interview exit, no `collect → generate`. Review decisions likewise
- * read as undecided until the Milestone 4 table exists.
+ * Review decisions read as undecided until the Milestone 4 table exists — the engine fails
+ * closed: no stage exit before a review can be decided.
  *
  * Configuration (`roundBudget`) and the capability registry are inputs, not reads: the caller
  * passes them so this module touches neither `process.env` nor module-level state, and tests can
@@ -73,6 +80,17 @@ const ApprovalRow = z.object({
   spec_type: z.string(),
   latest_approved: z.boolean(),
   has_approved: z.boolean(),
+});
+
+const AnsweredRoundsRow = z.object({
+  stage: z.string(),
+  answered: z.number().int().nonnegative(),
+});
+
+const NeedRow = z.object({
+  stage: z.string(),
+  name: z.string(),
+  satisfied: z.boolean(),
 });
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -171,16 +189,56 @@ export async function assembleWorkflowSnapshot(
     approvedRevisionExists[row.spec_type] = row.has_approved;
   }
 
-  // Queries 3 and 4 — answered rounds and information needs — join in with the task 31 schema.
-  // Until those tables exist there is nothing to count, and zero is the truthful, fail-closed
-  // reading of "no round has been answered".
+  // Query 3 — answered rounds per stage. "Answered" means at least one answer row exists,
+  // whether it came from the card or from a free-text reply (task 36) — both are the user
+  // answering, and both are what `collectGate` and `roundBudgetGate` count.
+  const roundRows = await queryRows(
+    db,
+    sql`
+      SELECT qr.stage AS stage, count(*)::int AS answered
+      FROM ${questionRounds} qr
+      WHERE qr.session_id = ${sessionId}::uuid
+        AND EXISTS (SELECT 1 FROM ${answers} a WHERE a.round_id = qr.id)
+      GROUP BY qr.stage
+    `,
+    AnsweredRoundsRow,
+  );
+
+  const answeredRounds = zeroRounds();
+  for (const row of roundRows) {
+    if (!isAskingStage(row.stage)) {
+      throw new Error(`question_rounds.stage holds an unknown stage: ${row.stage}`);
+    }
+    answeredRounds[row.stage] = row.answered;
+  }
+
+  // Query 4 — the needs register with satisfaction state (FR-005 AC-11: derived from persisted
+  // rounds, never from conversational memory).
+  const needRows = await queryRows(
+    db,
+    sql`
+      SELECT stage, name, (satisfied_by_round IS NOT NULL) AS satisfied
+      FROM ${informationNeeds}
+      WHERE session_id = ${sessionId}::uuid
+      ORDER BY stage, name
+    `,
+    NeedRow,
+  );
+
+  const needs: InformationNeedState[] = needRows.map((row) => {
+    if (!isAskingStage(row.stage)) {
+      throw new Error(`information_needs.stage holds an unknown stage: ${row.stage}`);
+    }
+    return { stage: row.stage, name: row.name, satisfied: row.satisfied };
+  });
+
   const snapshot: WorkflowSnapshot = {
     position: toPosition(state.stage, state.substage),
     groundingInputRecorded: state.grounding_recorded,
     summaryPersisted: state.summary_persisted,
     roundBudget: options.roundBudget,
-    answeredRounds: zeroRounds(),
-    informationNeeds: [],
+    answeredRounds,
+    informationNeeds: needs,
     specApproved,
     approvedRevisionExists,
     // Review decisions are a Milestone 4 table (task 53); undecided until then — fail closed.

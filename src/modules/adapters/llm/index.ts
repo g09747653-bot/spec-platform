@@ -16,3 +16,8 @@ export {
   stubDocumentFor,
   type TestDoubleOptions,
 } from './test-double';
+export {
+  stubInterviewRoundDocument,
+  stubReplyAssessmentDocument,
+  stubSessionSummaryDocument,
+} from './stub-interview';

@@ -129,6 +129,31 @@ describe('workflow state persistence (task 19)', () => {
     expect((await repository.find(sessionId))?.pendingAction).toBeNull();
   });
 
+  it('sets and clears the pending action under the same version guard (FR-017 AC-3)', async () => {
+    const pending = { kind: 'question-round', roundId: '11111111-2222-3333-4444-555555555555' };
+
+    const claimed = await repository.setPendingAction(sessionId, pending, 1);
+    expect(claimed?.pendingAction).toEqual(pending);
+    expect(claimed?.version).toBe(2);
+    expect(claimed?.stage).toBe('interview');
+
+    // A stale claim loses, exactly like a stale transition.
+    expect(await repository.setPendingAction(sessionId, null, 1)).toBeNull();
+
+    const cleared = await repository.setPendingAction(sessionId, null, 2);
+    expect(cleared?.pendingAction).toBeNull();
+    expect(cleared?.version).toBe(3);
+  });
+
+  it('a pending-action claim and a transition racing on one version produce one winner', async () => {
+    const [claim, advance] = await Promise.all([
+      repository.setPendingAction(sessionId, { kind: 'question-round', roundId: 'x' }, 1),
+      repository.advance(sessionId, { stage: 'constitution', substage: 'collect' }, 1),
+    ]);
+
+    expect([claim, advance].filter((outcome) => outcome !== null)).toHaveLength(1);
+  });
+
   it('cannot write a position the stage model forbids — the database refuses it', async () => {
     // `interview` has no substages (constitution A2). The repository does not re-check this: the CHECK
     // constraint of task 11 is the single enforcement point, and this asserts it is still wired up.

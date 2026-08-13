@@ -1,7 +1,9 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
+import { z } from 'zod';
 
 import type { SchemaDatabase } from '@/db';
 import { projects, sessions, workflowState } from '@/db/schema';
+import { queryRows } from '@/db/sql';
 
 import type { OwnerScope } from '@/db/owner-scope';
 
@@ -53,6 +55,33 @@ export function createSessionRepository(db: SchemaDatabase) {
         .where(and(eq(sessions.id, sessionId), eq(projects.ownerId, scope.userId)));
 
       return row ?? null;
+    },
+
+    /**
+     * Persists the interview summary (task 38; FR-006 AC-1(c)).
+     *
+     * The owner predicate rides in the UPDATE itself — the same statement-level scoping every
+     * repository write carries (NFR-005 AC-1). A blank summary is refused here as the last line
+     * of defence: the gate condition is "a summary exists", and persisting whitespace would
+     * satisfy the letter while defeating the point.
+     */
+    async updateSummary(scope: OwnerScope, sessionId: string, summary: string): Promise<boolean> {
+      if (!UUID.test(sessionId) || summary.trim() === '') return false;
+
+      const rows = await queryRows(
+        db,
+        sql`
+          UPDATE ${sessions} SET summary = ${summary.trim()}
+          FROM ${projects}
+          WHERE ${sessions.id} = ${sessionId}::uuid
+            AND ${projects.id} = ${sessions.projectId}
+            AND ${projects.ownerId} = ${scope.userId}
+          RETURNING ${sessions.id} AS id
+        `,
+        z.object({ id: z.uuid() }),
+      );
+
+      return rows.length > 0;
     },
   };
 }

@@ -28,6 +28,11 @@ interface SpecCardProps {
   sessionId: string;
   /** The current revision, or `null` when nothing has been generated yet. */
   revision: SpecCardState | null;
+  /**
+   * True while a question card awaits submission: generation is blocked in that interaction
+   * (task 34; FR-005 AC-4). Presentation of a rule the server owns — not the enforcement.
+   */
+  generationBlocked?: boolean;
 }
 
 function isSpecCardState(value: unknown): value is SpecCardState {
@@ -41,7 +46,7 @@ function isSpecCardState(value: unknown): value is SpecCardState {
   );
 }
 
-export function SpecCard({ sessionId, revision }: SpecCardProps) {
+export function SpecCard({ sessionId, revision, generationBlocked = false }: SpecCardProps) {
   const router = useRouter();
   const [busy, setBusy] = useState<'generate' | 'approve' | 'changes' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -95,16 +100,23 @@ export function SpecCard({ sessionId, revision }: SpecCardProps) {
               {error}
             </p>
           )}
-          <Button
-            data-testid="generate-spec"
-            disabled={busy !== null}
-            onClick={() => {
-              void send('generate', `/api/sessions/${sessionId}/generate`);
-            }}
-            className="self-start"
-          >
-            {busy === 'generate' ? 'Generating…' : 'Generate'}
-          </Button>
+          {generationBlocked ? (
+            <p className="text-ink-muted text-sm" data-testid="generation-blocked">
+              A question card is waiting for your answers above — nothing generates until it is
+              submitted.
+            </p>
+          ) : (
+            <Button
+              data-testid="generate-spec"
+              disabled={busy !== null}
+              onClick={() => {
+                void send('generate', `/api/sessions/${sessionId}/generate`);
+              }}
+              className="self-start"
+            >
+              {busy === 'generate' ? 'Generating…' : 'Generate'}
+            </Button>
+          )}
         </CardContent>
       </Card>
     );
