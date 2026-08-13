@@ -1,6 +1,6 @@
 import type { LlmAdapter } from '@/modules/adapters/llm';
 import { specGenerationPrompt } from '@/modules/prompts/assets/spec-generation';
-import type { SpecType } from '@/modules/specs/model/spec-files';
+import type { CoreSpecType } from '@/modules/specs/model/spec-files';
 
 /**
  * The spec writer (task 20; solution.md — `agents`).
@@ -16,8 +16,10 @@ import type { SpecType } from '@/modules/specs/model/spec-files';
  * the path, not the prose.
  */
 export interface SpecAgentInput {
-  specType: SpecType;
+  specType: CoreSpecType;
   initialPrompt: string;
+  /** Assembled generation context (task 50). Absent in the skeleton path. */
+  context?: string;
   changeInstruction?: string;
   runId: string;
   onChunk?: (text: string) => void;
@@ -35,6 +37,7 @@ export function createSpecAgent(adapter: LlmAdapter) {
       const prompt = specGenerationPrompt({
         specType: input.specType,
         initialPrompt: input.initialPrompt,
+        context: input.context,
         changeInstruction: input.changeInstruction,
       });
 

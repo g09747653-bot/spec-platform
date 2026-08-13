@@ -10,8 +10,14 @@ import { MODULE_ID } from '@/modules/specs';
  * onward; kept as the canary that the harness itself still works.
  */
 
-/** A pure function: same input, same output, no I/O. */
-function normaliseHeading(raw: string): string {
+/**
+ * A pure function: same input, same output, no I/O.
+ *
+ * Its samples are deliberately nonsense words. They used to be real section names, which task 39
+ * turned into structural vocabulary that may live in exactly one module — and the new lint rule
+ * caught this file on the first run, which is the rule doing its job.
+ */
+function squash(raw: string): string {
   return raw.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
@@ -21,13 +27,13 @@ describe('unit test harness', () => {
   });
 
   it('evaluates a pure function deterministically', () => {
-    expect(normaliseHeading('  Core   Principles ')).toBe('core principles');
-    expect(normaliseHeading('  Core   Principles ')).toBe(normaliseHeading('Core Principles'));
+    expect(squash('  Lorem   Ipsum ')).toBe('lorem ipsum');
+    expect(squash('  Lorem   Ipsum ')).toBe(squash('Lorem Ipsum'));
   });
 
   it('runs without a network fetch', () => {
     const before = globalThis.fetch;
-    expect(normaliseHeading('Overview')).toBe('overview');
+    expect(squash('Dolor')).toBe('dolor');
     expect(globalThis.fetch).toBe(before);
   });
 });

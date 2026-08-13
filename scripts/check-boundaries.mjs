@@ -1,18 +1,21 @@
 #!/usr/bin/env node
 /**
- * Boundary fixture check (task 3; constitution A1, SC-15).
+ * Boundary fixture check (task 3; constitution A1, SC-15) and section-schema chain check
+ * (task 39; constitution P3, D-16).
  *
- * Asserts that the lint-encoded allowed-edge table actually rejects forbidden cross-module
- * imports — and, just as importantly, still permits the allowed ones. Run in CI as its own
- * build-blocking step so that a boundary rule silently losing its teeth is a red build.
+ * Asserts that the lint-encoded rules actually reject the violations they exist for — and, just as
+ * importantly, still permit the allowed ones. Run in CI as its own build-blocking step so that a
+ * rule silently losing its teeth is a red build.
  *
  * Exits non-zero on the first expectation that does not hold.
  */
 import { ESLint } from 'eslint';
 
 const RULE = 'import-x/no-restricted-paths';
+const SCHEMA_IMPORT_RULE = 'no-restricted-imports';
+const HEADINGS_RULE = 'spec-platform/no-duplicated-section-headings';
 
-/** @type {{ file: string, shouldFail: boolean, why: string }[]} */
+/** @type {{ file: string, shouldFail: boolean, why: string, rule?: string }[]} */
 const EXPECTATIONS = [
   {
     file: 'src/modules/web/__fixtures__/web-imports-adapters.ts',
@@ -44,6 +47,24 @@ const EXPECTATIONS = [
     shouldFail: false,
     why: "'prompts' MAY import 'specs' (the section schema)",
   },
+  {
+    file: 'src/modules/agents/__fixtures__/agents-imports-section-schema.ts',
+    shouldFail: true,
+    rule: SCHEMA_IMPORT_RULE,
+    why: 'only assemblePrompt and validateStructure may import section-schema.ts (P3)',
+  },
+  {
+    file: 'src/modules/specs/__fixtures__/specs-relative-imports-section-schema.ts',
+    shouldFail: true,
+    rule: SCHEMA_IMPORT_RULE,
+    why: 'the relative spelling of the same import is restricted too',
+  },
+  {
+    file: 'src/modules/prompts/__fixtures__/prompts-restates-headings.ts',
+    shouldFail: true,
+    rule: HEADINGS_RULE,
+    why: 'a heading list restated in a prompt asset is duplicated structural truth (P3)',
+  },
 ];
 
 const eslint = new ESLint({
@@ -65,14 +86,15 @@ for (const expectation of EXPECTATIONS) {
     continue;
   }
 
-  const violations = result.messages.filter((m) => m.ruleId === RULE);
+  const rule = expectation.rule ?? RULE;
+  const violations = result.messages.filter((m) => m.ruleId === rule);
   const didFail = violations.length > 0;
 
   if (didFail !== expectation.shouldFail) {
     failures.push(
       expectation.shouldFail
-        ? `${expectation.file}: expected a ${RULE} error because ${expectation.why}, got none. The boundary rule has lost its teeth.`
-        : `${expectation.file}: expected NO ${RULE} error because ${expectation.why}, got ${String(violations.length)}: ${violations.map((v) => v.message).join(' | ')}`,
+        ? `${expectation.file}: expected a ${rule} error because ${expectation.why}, got none. The rule has lost its teeth.`
+        : `${expectation.file}: expected NO ${rule} error because ${expectation.why}, got ${String(violations.length)}: ${violations.map((v) => v.message).join(' | ')}`,
     );
     continue;
   }

@@ -1,5 +1,9 @@
-import { isSpecStage, type Stage } from '@/modules/workflow/model/stages';
-import { CORE_SPEC_TYPES, type SpecType } from '@/modules/specs/model/spec-files';
+import type { Stage } from '@/modules/workflow/model/stages';
+import {
+  CORE_SPEC_TYPES,
+  isCoreSpecType,
+  type CoreSpecType,
+} from '@/modules/specs/model/spec-files';
 
 /**
  * Which file a generation writes, given where the session is (task 20).
@@ -8,13 +12,14 @@ import { CORE_SPEC_TYPES, type SpecType } from '@/modules/specs/model/spec-files
  * answer is the stage itself; `interview` maps to the first core file, because the walking skeleton
  * generates before the interview gate and the transition table exist.
  *
- * **This is a placeholder with a known replacement.** Task 24 introduces the transition table, after
- * which the target follows from the stage the engine has moved the session into, and `interview` will no
- * longer be a generating position at all. It is a function rather than an inline branch precisely so
- * that replacement is one edit with a test attached (D-24).
+ * **The parity path writes core files only.** `quality.md` is produced by the optional `quality`
+ * module, which owns Quality-stage behaviour outright (constitution A6) — the spec agent never writes
+ * it, so the return type is narrowed to the four parity types (task 41). `interview` retains its
+ * skeleton mapping to the first core file; once the gate of task 45 is wired it is no longer a
+ * generating position, and the branch becomes unreachable rather than wrong (D-24).
  */
-export function targetSpecType(stage: Stage): SpecType {
-  if (isSpecStage(stage)) return stage;
+export function targetSpecType(stage: Stage): CoreSpecType {
+  if (isCoreSpecType(stage)) return stage;
 
   const [firstCore] = CORE_SPEC_TYPES;
 

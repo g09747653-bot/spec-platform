@@ -21,6 +21,11 @@ import {
 export interface TestDoubleOptions {
   /** The document to stream. Defaults to a small structured markdown file. */
   document?: string;
+  /**
+   * Answer the prompt instead of streaming a fixed document: write the sections the prompt asked for,
+   * in the order it asked for them. This is the mode the parity check runs in (task 40).
+   */
+  followPrompt?: boolean;
   /** Words per chunk. Chunking is by whitespace, so the reassembled text is byte-identical. */
   wordsPerChunk?: number;
   /** Delay between chunks in milliseconds, for exercising streaming behaviour. Default 0. */
@@ -84,6 +89,42 @@ export function stubDocumentFor(label: string): string {
   ].join('\n');
 }
 
+/**
+ * A stub that does what it was told: it reads the required sections out of the prompt and writes a
+ * document with exactly those headings, in order.
+ *
+ * This is what lets the parity check (task 40) be a real end-to-end assertion rather than a fixture
+ * comparison. The heading list reaches the stub the same way it reaches a real model — through the
+ * prompt `assemblePrompt` derived from the section schema — so nothing here restates structural truth,
+ * and renaming a section in the schema changes both the instruction and this output at once.
+ *
+ * The list is recognised by the numbered form `assemblePrompt` renders: `1. ## Section Name`.
+ */
+const PROMPTED_SECTION = /^[ \t]*\d+\.[ \t]+(#{1,6})[ \t]+(.+?)[ \t]*$/;
+
+export function documentFromPrompt(prompt: string, fallback: string = STUB_DOCUMENT): string {
+  const sections = prompt
+    .split(/\r?\n/)
+    .map((line) => PROMPTED_SECTION.exec(line))
+    .filter((match): match is RegExpExecArray => match !== null)
+    .map((match) => ({ level: (match[1] ?? '').length, heading: match[2] ?? '' }));
+
+  if (sections.length === 0) return fallback;
+
+  return [
+    '# Specification',
+    '',
+    'Written by the deterministic stub provider, following the section list it was given.',
+    ...sections.flatMap((section) => [
+      '',
+      `${'#'.repeat(section.level)} ${section.heading}`,
+      '',
+      `Content for ${section.heading.toLowerCase()}.`,
+    ]),
+    '',
+  ].join('\n');
+}
+
 const DEFAULT_WORDS_PER_CHUNK = 6;
 
 /** Splits text into chunks that reassemble to exactly the original string. */
@@ -124,7 +165,15 @@ export function createTestDoubleAdapter(options: TestDoubleOptions = {}): LlmAda
 
   return {
     async generateStreaming(generateOptions: GenerateOptions): Promise<GenerateResult> {
-      const chunks = chunkDocument(document, wordsPerChunk);
+      const text =
+        options.followPrompt === true
+          ? documentFromPrompt(
+              generateOptions.messages.map((message) => message.content).join('\n'),
+              document,
+            )
+          : document;
+
+      const chunks = chunkDocument(text, wordsPerChunk);
       let emitted = 0;
 
       for (const chunk of chunks) {
@@ -146,7 +195,7 @@ export function createTestDoubleAdapter(options: TestDoubleOptions = {}): LlmAda
         throw new AllProvidersFailedError(1);
       }
 
-      return { text: document, providerUsed, attempts: 1 };
+      return { text, providerUsed, attempts: 1 };
     },
   };
 }

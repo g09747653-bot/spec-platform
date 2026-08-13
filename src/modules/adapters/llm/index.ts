@@ -12,6 +12,7 @@ export {
 export {
   chunkDocument,
   createTestDoubleAdapter,
+  documentFromPrompt,
   STUB_DOCUMENT,
   stubDocumentFor,
   type TestDoubleOptions,

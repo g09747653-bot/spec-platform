@@ -1,53 +1,42 @@
-import type { SpecType } from '@/modules/specs/model/spec-files';
+import type { CoreSpecType } from '@/modules/specs/model/spec-files';
+
+import { assemblePrompt } from '../assemble-prompt';
+import type { AssembledPrompt } from '../registry';
 
 /**
- * Prompt asset for spec generation (constitution — Coding Standards: prompts are assets, referenced by
- * identifier, never string literals in logic).
+ * Spec generation, as a call on the registry (task 41).
  *
- * This is the walking skeleton's version: it states the task and hands over the grounding input. It
- * does **not** derive required sections — that is `assemblePrompt`'s job once the section schema exists
- * (tasks 39–41), and inventing a heading list here would duplicate structural truth, which P3 forbids.
+ * The prompt *text* lives in `registry.ts` as a versioned asset; this file is the typed doorway to
+ * it — it turns an agent's input into the asset's variables and nothing more. Optional inputs are
+ * rendered here into the block the template expects, because a template with a conditional in it is
+ * a small programming language, and prompts are assets rather than programs.
  *
- * The identifier carries a version, so a prompt change is visible in a diff and in a revision's history
- * rather than being an anonymous edit.
+ * The required section list is deliberately absent: `assemblePrompt` derives it from the section
+ * schema (constitution P3), and restating it here would be the duplication lint now rejects.
  */
-export const SPEC_GENERATION_PROMPT_ID = 'spec.generation.skeleton.v1';
+export const SPEC_GENERATION_PROMPT_ID = 'spec.generation.v2';
 
 export interface SpecPromptInput {
-  specType: SpecType;
+  specType: CoreSpecType;
   /** The session's grounding input, verbatim (FR-003 AC-3). */
   initialPrompt: string;
+  /** Assembled context: prior answers, attachment text, approved specs (task 50; FR-008 AC-6). */
+  context?: string;
   /** What the user asked to change, when this is a re-generation (FR-009 AC-4). */
   changeInstruction?: string;
 }
 
-export interface AssembledPrompt {
-  id: string;
-  system: string;
-  user: string;
-}
-
 export function specGenerationPrompt(input: SpecPromptInput): AssembledPrompt {
-  const system = [
-    'You are writing one file of a software specification bundle.',
-    'Write GitHub-flavoured Markdown. Return the document only, with no preamble and no code fence',
-    'around the whole file.',
-  ].join(' ');
+  const context = input.context?.trim() ?? '';
+  const changeInstruction = input.changeInstruction?.trim() ?? '';
 
-  const sections = [
-    `Write the ${input.specType} document for the following product idea.`,
-    '',
-    'Product idea:',
-    input.initialPrompt,
-  ];
-
-  if (input.changeInstruction !== undefined && input.changeInstruction.trim() !== '') {
-    sections.push(
-      '',
-      'The previous draft was returned for changes. Apply this instruction:',
-      input.changeInstruction.trim(),
-    );
-  }
-
-  return { id: SPEC_GENERATION_PROMPT_ID, system, user: sections.join('\n') };
+  return assemblePrompt('spec.generation.v2', {
+    specType: input.specType,
+    initialPrompt: input.initialPrompt,
+    context: context === '' ? '' : `\nContext gathered so far:\n${context}`,
+    changeInstruction:
+      changeInstruction === ''
+        ? ''
+        : `\nThe previous draft was returned for changes. Apply this instruction:\n${changeInstruction}`,
+  });
 }

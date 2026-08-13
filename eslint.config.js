@@ -6,6 +6,7 @@ import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescrip
 import tseslint from 'typescript-eslint';
 
 import { noRestrictedPathsRule } from './eslint.boundaries.js';
+import { sectionSchemaConfigs } from './eslint.section-schema.js';
 
 /**
  * Build-blocking lint configuration.
@@ -103,6 +104,9 @@ export default tseslint.config(
       'import-x/no-restricted-paths': noRestrictedPathsRule,
     },
   },
+
+  // Constitution P3 / D-16: one home for the required-heading list, and exactly two consumers.
+  ...sectionSchemaConfigs,
 
   // Plain JS tooling scripts are outside the TypeScript program.
   {

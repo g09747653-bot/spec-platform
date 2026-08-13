@@ -6,3 +6,15 @@
  * Must not import: any other module.
  */
 export const MODULE_ID = 'prompts';
+
+export { assemblePrompt, PromptAssemblyError } from './assemble-prompt';
+export {
+  assertPromptRegistry,
+  promptRegistry,
+  PromptRegistryError,
+  PROMPT_IDS,
+  type AssembledPrompt,
+  type PromptAsset,
+  type PromptId,
+  type PromptVariables,
+} from './registry';
