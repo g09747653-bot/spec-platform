@@ -356,6 +356,8 @@ describe('review_feedback (task 53)', () => {
    * the two constraints and replaying the very same inserts shows they are accepted without them.
    */
   describe('control run — the constraints are what refuse the write', () => {
+    // Explicit timeout: this boots a second PGlite instance *inside the test body*, which the
+    // config's `hookTimeout` does not cover — see the note on the same pattern in `spec-revisions.test.ts`.
     it('accepts an id-less item and a mismatched selection once the constraints are dropped', async () => {
       const control = await createMigratedDatabase();
 
@@ -409,6 +411,6 @@ describe('review_feedback (task 53)', () => {
       } finally {
         await control.close();
       }
-    });
+    }, 60_000);
   });
 });

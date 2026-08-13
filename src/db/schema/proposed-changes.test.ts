@@ -171,6 +171,8 @@ describe('proposed_changes (task 58)', () => {
      * A test expecting an error passes for any error. Dropping the index and replaying the same two
      * inserts shows they are accepted without it — and that nothing else was quietly enforcing DR-11.
      */
+    // Explicit timeout: this boots a second PGlite instance *inside the test body*, which the
+    // config's `hookTimeout` does not cover — see the note on the same pattern in `spec-revisions.test.ts`.
     it('accepts a second pending proposal once the index is dropped, and refuses it again after', async () => {
       const control = await createMigratedDatabase();
 
@@ -216,7 +218,7 @@ describe('proposed_changes (task 58)', () => {
       } finally {
         await control.close();
       }
-    });
+    }, 60_000);
   });
 
   describe('AC-2 — a proposal is never readable through any spec-content query path (DR-10)', () => {
