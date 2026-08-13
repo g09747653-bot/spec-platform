@@ -17,6 +17,7 @@ import {
 import { createMigratedDatabase, type TestDatabase } from '@/db/testing/migrated-database';
 import { TEST_ENV } from '@/config/testing/test-env';
 import { decodeEvents, type GenerationEvent } from '@/modules/web/api/stream-protocol';
+import { validateStructure } from '@/modules/specs/validate-structure';
 
 /**
  * Task 45 — the generation endpoint at the HTTP level, plus tasks 48 and 49 as they surface here.
@@ -53,7 +54,11 @@ import type { ProviderId } from '@/modules/adapters/llm';
 
 import { POST } from './route';
 
-const DOCUMENT = '# Constitution\n\nOne two three four five six seven eight nine ten.';
+/**
+ * The stub answers the prompt, so its document carries exactly the sections the schema asked for.
+ * Nothing here spells a heading out, and a schema change moves the fixture with it (constitution P3).
+ */
+const CONFORMANT: FakeBehaviour = { followPrompt: true };
 
 type ChainEntry = readonly [ProviderId, FakeBehaviour];
 
@@ -120,7 +125,7 @@ describe('POST /api/sessions/:id/generate (task 45)', () => {
 
     vi.mocked(currentOwnerScope).mockResolvedValue(OwnerScope.forAuthenticatedUser(ownerId));
 
-    useChain(['google', { document: DOCUMENT }]);
+    useChain(['google', CONFORMANT]);
   });
 
   /** Moves the session to `constitution/collect` with one answered round, so the gate can open. */
@@ -210,8 +215,10 @@ describe('POST /api/sessions/:id/generate (task 45)', () => {
 
       const revisions = await database.db.select().from(specRevisions);
       expect(revisions).toHaveLength(1);
-      expect(revisions[0]?.content).toBe(DOCUMENT);
       expect(revisions[0]?.approved).toBe(false);
+      // Persisted means conformant: a document missing a required section never becomes a revision
+      // (task 51; FR-008 AC-4/AC-7).
+      expect(validateStructure('constitution', revisions[0]?.content ?? '').violations).toEqual([]);
 
       const complete = events.at(-1);
       if (complete?.type !== 'complete') throw new Error('expected a complete event');
@@ -222,9 +229,12 @@ describe('POST /api/sessions/:id/generate (task 45)', () => {
       await readyToGenerate();
       const events = await readEvents(await post(sessionId));
 
+      const [revision] = await database.db.select().from(specRevisions);
       const deltas = events.filter((event) => event.type === 'delta');
+
       expect(deltas.map((delta) => delta.sequence)).toEqual(deltas.map((_delta, index) => index));
-      expect(deltas.map((delta) => delta.text).join('')).toBe(DOCUMENT);
+      // What was streamed is what was stored, byte for byte — no reassembly gap, no lost chunk.
+      expect(deltas.map((delta) => delta.text).join('')).toBe(revision?.content);
     });
 
     it('marks the run complete with the provider that served it, and prunes the chunk log', async () => {
@@ -263,7 +273,7 @@ describe('POST /api/sessions/:id/generate (task 45)', () => {
       await readyToGenerate();
       useChain(
         ['anthropic', { document: 'PARTIAL partial partial partial partial', failAfterChunks: 3 }],
-        ['google', { document: DOCUMENT }],
+        ['google', CONFORMANT],
       );
 
       const events = await readEvents(await post(sessionId));
@@ -272,8 +282,8 @@ describe('POST /api/sessions/:id/generate (task 45)', () => {
       expect(restart).toMatchObject({ reason: 'provider_failover', attempt: 2 });
 
       const [revision] = await database.db.select().from(specRevisions);
-      expect(revision?.content).toBe(DOCUMENT);
       expect(revision?.content).not.toContain('PARTIAL');
+      expect(validateStructure('constitution', revision?.content ?? '').valid).toBe(true);
 
       // Everything after the restart is numbered from zero again, so a resuming client that honours
       // the restart cannot splice the two attempts together.
@@ -284,10 +294,7 @@ describe('POST /api/sessions/:id/generate (task 45)', () => {
 
     it('records the successful provider, not the one that died', async () => {
       await readyToGenerate();
-      useChain(
-        ['anthropic', { document: 'x y z', failAfterChunks: 1 }],
-        ['google', { document: DOCUMENT }],
-      );
+      useChain(['anthropic', { document: 'x y z', failAfterChunks: 1 }], ['google', CONFORMANT]);
 
       await readEvents(await post(sessionId));
 
@@ -325,6 +332,39 @@ describe('POST /api/sessions/:id/generate (task 45)', () => {
       expect(run?.status).toBe('failed');
     });
 
+    it('treats a structurally invalid document as a failed generation (task 51; FR-008 AC-7)', async () => {
+      await readyToGenerate();
+      // Well-formed prose that answers nothing the schema asked for — the shape a model produces
+      // when it ignores the instruction rather than when it errors.
+      useChain(['google', { document: '# Constitution\n\nSome prose and no required sections.' }]);
+
+      const events = await readEvents(await post(sessionId));
+      const failure = events.at(-1);
+
+      if (failure?.type !== 'error') throw new Error('expected an error event');
+      expect(failure.code).toBe('GENERATION_FAILED');
+      expect(failure.retryable).toBe(true);
+
+      // Not persisted, and not persisted *as anything*: no revision, approved or otherwise.
+      expect(await database.db.select().from(specRevisions)).toEqual([]);
+
+      const [run] = await database.db.select().from(generationRuns);
+      expect(run?.status).toBe('failed');
+    });
+
+    it('recovers on retry once a conformant document arrives, with no duplicated stage', async () => {
+      await readyToGenerate();
+      useChain(['google', { document: '# Constitution\n\nNothing the schema asked for.' }]);
+      await readEvents(await post(sessionId));
+
+      useChain(['google', CONFORMANT]);
+      const events = await readEvents(await post(sessionId));
+
+      expect(events.at(-1)?.type).toBe('complete');
+      expect(await database.db.select().from(specRevisions)).toHaveLength(1);
+      expect(await database.db.select().from(questionRounds)).toHaveLength(1);
+    });
+
     it('keeps the session at the same position, so retry resumes rather than restarts', async () => {
       await readyToGenerate();
       useChain(['google', { failAfterChunks: 0 }]);
@@ -339,7 +379,7 @@ describe('POST /api/sessions/:id/generate (task 45)', () => {
       expect(state?.substage).toBe('generate');
 
       // Retrying from that position succeeds, with no duplicated stage and one revision.
-      useChain(['google', { document: DOCUMENT }]);
+      useChain(['google', CONFORMANT]);
       const events = await readEvents(await post(sessionId));
 
       expect(events.at(-1)?.type).toBe('complete');

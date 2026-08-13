@@ -9,6 +9,7 @@ import {
 import { specGenerationPrompt } from '@/modules/prompts/assets/spec-generation';
 import type { CoreSpecType } from '@/modules/specs/model/spec-files';
 import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
+import { describeViolations, validateStructure } from '@/modules/specs/validate-structure';
 
 /**
  * One generation run, end to end (task 45; solution.md — Generation Sequence).
@@ -53,7 +54,21 @@ export type GenerationOutcome =
       providerUsed: ProviderId;
       attempts: number;
     }
-  | { status: 'failed'; code: 'GENERATION_FAILED'; attempts: number };
+  | {
+      status: 'failed';
+      code: 'GENERATION_FAILED';
+      attempts: number;
+      /**
+       * Why, for the server's eyes. `structure` means the model produced a document missing or
+       * reordering a required section; `providers` means the chain was exhausted. The user sees the
+       * same sanitised message either way — both are "generation did not complete, retry" — but the
+       * two have very different remedies and telling them apart in a log is what makes a systematic
+       * prompt problem visible (FR-008 AC-7; FR-018 AC-2).
+       */
+      reason: 'providers' | 'structure';
+      /** Structural violations, in the machine-readable form; never rendered to the user. */
+      detail?: string;
+    };
 
 export async function runGeneration(input: RunGenerationInput): Promise<GenerationOutcome> {
   const { db, adapter, store, runId, projectId, specType, progress, signal } = input;
@@ -104,7 +119,31 @@ export async function runGeneration(input: RunGenerationInput): Promise<Generati
 
     await recorder.flush();
 
-    // The document is whole. Only now does it become a revision (FR-008 AC-3; NFR-003 AC-2).
+    /*
+     * Structure is checked before anything is written (FR-008 AC-4/AC-7; task 51).
+     *
+     * A document missing a required section is a failed generation, not a spec to be fixed later: it
+     * would otherwise sit in the revision chain looking exactly like a real one, and P3's baseline
+     * would be true of the checker and false of the bundle. The check goes through
+     * `validateStructure`; the agent never sees the heading list itself (D-16).
+     */
+    const structure = validateStructure(specType, result.text);
+
+    if (!structure.valid) {
+      await recorder.fail();
+      await store.markFailed(runId, result.attempts);
+
+      return {
+        status: 'failed',
+        code: 'GENERATION_FAILED',
+        attempts: result.attempts,
+        reason: 'structure',
+        detail: describeViolations(structure.violations),
+      };
+    }
+
+    // The document is whole and conformant. Only now does it become a revision (FR-008 AC-3;
+    // NFR-003 AC-2).
     const revisions = createRevisionRepository(db);
     const specFile = await revisions.ensureSpecFile(projectId, specType);
     const revision = await revisions.append({ specFileId: specFile.id, content: result.text });
@@ -127,7 +166,12 @@ export async function runGeneration(input: RunGenerationInput): Promise<Generati
     await store.markFailed(runId, attempts);
 
     if (error instanceof AllProvidersFailedError) {
-      return { status: 'failed', code: 'GENERATION_FAILED', attempts: error.attempts };
+      return {
+        status: 'failed',
+        code: 'GENERATION_FAILED',
+        attempts: error.attempts,
+        reason: 'providers',
+      };
     }
 
     throw error;
