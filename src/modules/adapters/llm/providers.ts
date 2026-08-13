@@ -76,6 +76,7 @@ export const DEFAULT_MODELS: Readonly<Record<ProviderId, string>> = Object.freez
   anthropic: 'claude-sonnet-5',
   openai: 'gpt-5.2',
   google: 'gemini-3.6-flash',
+  stub: 'deterministic-stub',
 });
 
 /**

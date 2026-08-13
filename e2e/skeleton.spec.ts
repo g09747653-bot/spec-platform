@@ -1,14 +1,19 @@
 import { unzipSync, strFromU8 } from 'fflate';
 import { expect, test } from '@playwright/test';
 
-import { createSignedInUser, signIn } from './fixtures';
+import { createSignedInUser, reachDrafting, signIn } from './fixtures';
 
 /**
  * The walking skeleton, end to end (task 23; SC-16; constitution — Testing Approaches item 2).
  *
- * Sign in → prompt → generate a stub spec → approve → download the ZIP, driven through the real
+ * Sign in → prompt → interview → generate a spec → approve → download the ZIP, driven through the real
  * application against a real database and the deterministic stub provider. No model is contacted, so the
  * run is repeatable and a failure means something is broken rather than that a model varied.
+ *
+ * The journey grew an interview in the middle at task 45, and that is the point rather than an
+ * inconvenience: generation now checks the `collect → generate` gate before it calls a model, so
+ * reaching a draft *requires* answering the questions. A skeleton that could still skip the gate would
+ * be evidence the gate was not wired.
  *
  * This is the journey the milestone gate is walked by hand; the test exists so it cannot silently rot as
  * the later milestones deepen it.
@@ -45,12 +50,17 @@ test.describe('walking skeleton', () => {
     // --- Nothing is approved yet, so the export would omit all four files (FR-015 AC-7) ---
     await expect(page.getByTestId('export-omitted')).toContainText('constitution.md');
 
-    // --- Generation persists one unapproved revision and presents it (FR-008 AC-3; FR-009 AC-1) ---
+    // --- Drafting is gated: the interview and the stage's own collection come first (P1) ---
+    await reachDrafting(page);
+
+    // --- Generation streams, then persists one unapproved revision (FR-008 AC-2/AC-3; FR-009 AC-1) ---
     await page.getByTestId('generate-spec').click();
-    await expect(page.getByTestId('spec-card')).toBeVisible();
+    await expect(page.getByTestId('spec-card')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId('spec-file-name')).toHaveText('constitution.md');
     await expect(page.getByTestId('spec-revision-number')).toHaveText('1');
-    await expect(page.getByTestId('spec-content')).toContainText('# Constitution');
+    // The stub writes the sections the assembled prompt asked for, so the document's headings come
+    // from the section schema rather than from anything spelled out here (constitution P3).
+    await expect(page.getByTestId('spec-content')).toContainText('Specification');
     await expect(page.getByTestId('approve-spec')).toBeVisible();
 
     // --- The decision survives a reload: the same card comes back (FR-017 AC-4) ---
@@ -97,7 +107,7 @@ test.describe('walking skeleton', () => {
     await page.goto('/projects');
     // The name is derived from the prompt (D-20); this one is short enough to be used whole.
     await expect(page.getByTestId('project-name')).toHaveText(prompt);
-    await expect(page.getByTestId('project-stage')).toHaveText('Interview');
+    await expect(page.getByTestId('project-stage')).toHaveText('Constitution');
 
     // --- Another user cannot see or open it: 404, not 403 (NFR-005 AC-2; AR-2) ---
     const intruder = await createSignedInUser('intruder');

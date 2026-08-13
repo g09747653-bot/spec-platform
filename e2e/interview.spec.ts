@@ -86,10 +86,10 @@ test.describe('workflow gates and the structured interview', () => {
     await page.getByTestId('proceed').click();
     await expect(page.getByTestId('stage-substage')).toHaveText(/generate/);
 
-    // --- At generate, the skeleton's drafting path is open again (no pending card) ---
+    // --- At generate, the drafting path is open again (no pending card), and it streams ---
     await expect(page.getByTestId('generate-spec')).toBeVisible();
     await page.getByTestId('generate-spec').click();
-    await expect(page.getByTestId('spec-card')).toBeVisible();
+    await expect(page.getByTestId('spec-card')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId('spec-file-name')).toHaveText('constitution.md');
   });
 

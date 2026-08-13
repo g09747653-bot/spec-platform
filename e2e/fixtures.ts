@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { BrowserContext } from '@playwright/test';
+import { expect, type BrowserContext, type Page } from '@playwright/test';
 import { Client } from 'pg';
 
 import { TEST_DATABASE_URL } from './test-database';
@@ -62,6 +62,39 @@ export async function createSignedInUser(label: string): Promise<SignedInUser> {
   });
 
   return { userId, email, sessionToken };
+}
+
+/**
+ * Walks a fresh session from `interview` to `constitution/generate`, through the real gates.
+ *
+ * From task 45 the generation endpoint checks the `collect → generate` gate before it calls a model,
+ * so drafting is reachable only by answering a round in the interview and a round in the stage. That
+ * is not an obstacle the tests route around — it is the behaviour constitution P1 requires — so the
+ * walk lives here and every journey that needs a draft performs it.
+ */
+export async function reachDrafting(page: Page): Promise<void> {
+  await expect(page.getByTestId('interview-panel')).toBeVisible();
+
+  // The grounding interview: one answered round plus the persisted summary opens the exit gate.
+  await page.getByTestId('ask-round').click();
+  await expect(page.getByTestId('mcq-card')).toBeVisible();
+  await page.getByTestId('mcq-option-q-audience-solo-devs').check();
+  await page.getByTestId('mcq-option-q-problem-context').check();
+  await page.getByTestId('mcq-submit').click();
+
+  await expect(page.getByTestId('interview-panel')).toContainText('summary saved');
+  await page.getByTestId('proceed').click();
+  await expect(page.getByTestId('stage-current')).toHaveText(/Constitution/);
+
+  // The stage collects for itself before it drafts (FR-007 AC-2).
+  await page.getByTestId('ask-round').click();
+  await expect(page.getByTestId('mcq-card')).toBeVisible();
+  await page.getByTestId('mcq-option-q-constitution-scope-strict').check();
+  await page.getByTestId('mcq-submit').click();
+
+  await expect(page.getByTestId('interview-panel')).toBeVisible();
+  await page.getByTestId('proceed').click();
+  await expect(page.getByTestId('stage-substage')).toHaveText(/generate/);
 }
 
 /** Puts the session cookie in the browser context, which is what "being signed in" means here. */

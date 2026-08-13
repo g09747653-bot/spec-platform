@@ -118,6 +118,37 @@ export function createSpecFileRepository(db: SchemaDatabase) {
     },
 
     /**
+     * The file a given stage writes, if it exists.
+     *
+     * A read, deliberately — `ensureSpecFile` creates, and a resume request answering "what did this
+     * run produce?" must not bring a file into existence as a side effect of asking (task 47).
+     */
+    async findByProjectAndType(
+      scope: OwnerScope,
+      projectId: string,
+      specType: SpecType,
+    ): Promise<OwnedSpecFile | null> {
+      if (!UUID.test(projectId)) return null;
+
+      const rows = await queryRows(
+        db,
+        sql`
+          SELECT ${specFiles}.id, ${specFiles}.project_id, ${specFiles}.spec_type,
+                 ${specFiles}.file_name, ${specFiles}.current_revision
+          FROM ${specFiles}
+          JOIN ${projects} ON ${projects}.id = ${specFiles}.project_id
+          WHERE ${specFiles}.project_id = ${projectId}::uuid
+            AND ${specFiles}.spec_type = ${specType}
+            AND ${projects}.owner_id = ${scope.userId}::uuid
+        `,
+        SpecFileRow,
+      );
+
+      const row = rows[0];
+      return row === undefined ? null : toOwnedSpecFile(row);
+    },
+
+    /**
      * What a default-mode export contains: for each file of this project, its latest **approved,
      * pre-enrichment** revision (FR-015 AC-2; A6).
      *

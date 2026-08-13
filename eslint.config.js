@@ -79,8 +79,13 @@ export default tseslint.config(
 
   // IR-X2: the environment is read in exactly one place. `src/config/env.ts` grants itself an
   // explicit inline exemption; nothing else in the application may reach `process.env`.
+  //
+  // D-8 / task 46: `EventSource` is banned outright. It cannot issue the `POST` the generation stream
+  // needs, cannot set headers, and reconnects on a policy resume cannot control — one fetch-based
+  // reader covers both stream paths instead. Both spellings are blocked, because a rule that only
+  // catches the bare global is a rule that teaches people to write `window.EventSource`.
   {
-    files: ['src/**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}', 'e2e/**/*.ts'],
     rules: {
       'no-restricted-properties': [
         'error',
@@ -89,6 +94,26 @@ export default tseslint.config(
           property: 'env',
           message:
             'Read configuration through `getEnv()` in src/config/env.ts — it is Zod-validated and parsed once at boot (IR-X2).',
+        },
+        {
+          object: 'window',
+          property: 'EventSource',
+          message:
+            'EventSource is not used in this codebase (D-8). Consume both streams with response.body.getReader() through useResumableStream.',
+        },
+        {
+          object: 'globalThis',
+          property: 'EventSource',
+          message:
+            'EventSource is not used in this codebase (D-8). Consume both streams with response.body.getReader() through useResumableStream.',
+        },
+      ],
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'EventSource',
+          message:
+            'EventSource is not used in this codebase (D-8). Consume both streams with response.body.getReader() through useResumableStream.',
         },
       ],
     },

@@ -72,6 +72,12 @@ const EXPECTATIONS = [
     rule: SCHEMA_IMPORT_RULE,
     why: 'only adapters/llm/providers.ts may import a provider SDK (constitution P7)',
   },
+  {
+    file: 'src/modules/web/__fixtures__/web-uses-eventsource.ts',
+    shouldFail: true,
+    rule: 'no-restricted-globals',
+    why: 'EventSource is not used anywhere in this codebase (task 46 AC-2; D-8)',
+  },
 ];
 
 const eslint = new ESLint({

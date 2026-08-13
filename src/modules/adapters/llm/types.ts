@@ -9,8 +9,15 @@
  * asks for generation and learns afterwards which provider served it.
  */
 
-/** The three providers the constitution mandates, in configuration order. */
-export type ProviderId = 'anthropic' | 'openai' | 'google';
+/**
+ * The three providers the constitution mandates, plus the deterministic double.
+ *
+ * `stub` is a provider in the same sense the others are — it implements the same interface and is
+ * chosen the same way, by naming it in `LLM_PROVIDER_ORDER`. It is how IR-001-AC-5's "substitutable
+ * with a test double that requires no network" holds for the running application and not merely for a
+ * unit test (D-48). No deployment configures it.
+ */
+export type ProviderId = 'anthropic' | 'openai' | 'google' | 'stub';
 
 /** A conversation turn. Deliberately minimal — the shape every provider can express. */
 export interface ModelMessage {

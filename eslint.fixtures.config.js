@@ -31,5 +31,14 @@ export default tseslint.config({
     // deliberate violations. Both rule definitions are imported, never restated.
     'spec-platform/no-duplicated-section-headings': 'error',
     ...restrictedImportRule,
+    // Task 46 AC-2 / D-8: `EventSource` is not used in this codebase.
+    'no-restricted-globals': [
+      'error',
+      {
+        name: 'EventSource',
+        message:
+          'EventSource is not used in this codebase (D-8). Consume both streams with response.body.getReader().',
+      },
+    ],
   },
 });

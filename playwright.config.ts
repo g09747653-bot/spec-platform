@@ -68,7 +68,13 @@ export default defineConfig({
        * while the suite runs on 3100; the point is not to dodge that, it is that the suite should
        * exercise the production behaviour rather than a local pin.
        */
-      env: { DATABASE_URL: TEST_DATABASE_URL, AUTH_URL: '' },
+      /*
+       * `LLM_PROVIDER_ORDER` points the chain at the deterministic double (D-48; IR-001-AC-5). The
+       * suite therefore drives the real routes, the real engine and the real streaming path with no
+       * vendor involved — the same move as pointing `DATABASE_URL` at a throwaway database, and the
+       * reason no end-to-end run can be made to depend on a model having a good day.
+       */
+      env: { DATABASE_URL: TEST_DATABASE_URL, AUTH_URL: '', LLM_PROVIDER_ORDER: 'stub' },
     },
   ],
 });

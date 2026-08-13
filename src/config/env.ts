@@ -59,19 +59,31 @@ const boolish = (fallback: boolean) =>
       return z.NEVER;
     });
 
-const LLM_PROVIDERS = ['anthropic', 'openai', 'google'] as const;
+/**
+ * The providers a chain may name.
+ *
+ * `stub` is the deterministic test double of IR-001-AC-5, selected the same way every other provider
+ * is — by configuration. That is what makes "substitutable with a test double that requires no
+ * network" true of the *running application* and not only of a unit test: the end-to-end suite points
+ * `LLM_PROVIDER_ORDER` at it and exercises the real routes, the real engine and the real streaming
+ * path with no vendor involved, exactly as it points `DATABASE_URL` at a throwaway database (D-18).
+ * It needs no key, and no deployment names it (D-48).
+ */
+const LLM_PROVIDERS = ['anthropic', 'openai', 'google', 'stub'] as const;
 
 /**
  * Which variable holds which provider's credential.
  *
  * The chain is what makes a key mandatory (see `requireChainKeys` below), so this map is the join
- * between "which providers are configured" and "which secrets must therefore exist".
+ * between "which providers are configured" and "which secrets must therefore exist". `stub` is absent
+ * on purpose: it has no credential to demand.
  */
-const PROVIDER_KEYS: Readonly<Record<(typeof LLM_PROVIDERS)[number], string>> = Object.freeze({
-  anthropic: 'ANTHROPIC_API_KEY',
-  openai: 'OPENAI_API_KEY',
-  google: 'GOOGLE_GENERATIVE_AI_API_KEY',
-});
+const PROVIDER_KEYS: Readonly<Partial<Record<(typeof LLM_PROVIDERS)[number], string>>> =
+  Object.freeze({
+    anthropic: 'ANTHROPIC_API_KEY',
+    openai: 'OPENAI_API_KEY',
+    google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+  });
 
 /**
  * The default failover chain.
@@ -181,6 +193,8 @@ function requireChainKeys(
 
   for (const provider of env.LLM_PROVIDER_ORDER) {
     const variable = PROVIDER_KEYS[provider];
+
+    if (variable === undefined) continue;
 
     if (source[variable] === undefined) {
       ctx.addIssue({

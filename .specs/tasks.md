@@ -585,7 +585,7 @@ Goal: real models produce structurally valid specs, survive provider failure, an
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 45\. Extend the generation handler with gating and the event protocol
+- [x] 45\. Extend the generation handler with gating and the event protocol
   - Extend the task 20 handler: check the gate before any model call, open the stream, and emit `run`, `delta`, `research`, `restart`, `complete`, and `error` events as newline-delimited JSON.
   - Acceptance Criteria:
     - A rejected gate returns 409 with the reason code and issues no model call.
@@ -597,7 +597,7 @@ Goal: real models produce structurally valid specs, survive provider failure, an
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 46\. Implement the fetch-based resumable stream client
+- [x] 46\. Implement the fetch-based resumable stream client
   - Implement `useResumableStream` consuming both the POST generation stream and the GET resume stream with `response.body.getReader()`; track the highest rendered sequence and reconnect with backoff.
   - Acceptance Criteria:
     - Streaming renders incrementally, never only on completion.
@@ -609,7 +609,7 @@ Goal: real models produce structurally valid specs, survive provider failure, an
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 47\. Implement the stream resume endpoint
+- [x] 47\. Implement the stream resume endpoint
   - Implement `GET /api/generations/:runId/stream?from=<seq>`: resolve `OwnerScope` through run → session → project → owner before replaying, then replay chunks above the sequence and attach to the live stream, or return `complete` if finished.
   - Acceptance Criteria:
     - A resume request for another user's run returns `NOT_FOUND`, indistinguishable from a missing run.
@@ -621,7 +621,7 @@ Goal: real models produce structurally valid specs, survive provider failure, an
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 48\. Implement mid-stream failover restart semantics
+- [x] 48\. Implement mid-stream failover restart semantics
   - On failover after streaming has begun, discard buffered chunks, emit `restart`, and re-append from sequence zero for the new attempt; never concatenate output across providers.
   - Acceptance Criteria:
     - Forcing a failure at chunk five emits `restart` and the client clears rendered text.

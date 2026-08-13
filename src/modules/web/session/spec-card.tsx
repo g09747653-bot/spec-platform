@@ -7,14 +7,20 @@ import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Label, Textarea } from '../ui/field';
 
+import { useResumableStream } from './useResumableStream';
+
 /**
- * The spec card: generate, then decide (task 21; FR-009).
+ * The spec card: generate, then decide (tasks 21, 45, 46, 49; FR-008, FR-009, FR-018).
  *
  * The card is rendered from persisted state, so a reload shows the same pending decision rather than
  * losing it (FR-017 AC-4). Nothing advances on its own — approve and request-changes are the only two
  * ways forward, which is P2 made visible.
  *
- * Both actions keep a visible in-flight state, so no interaction sits silent (NFR-002).
+ * Generation **streams**: the document appears as it is written rather than after it is finished
+ * (FR-008 AC-2; A5), a mid-stream provider failover clears what was rendered and starts again (D-9),
+ * and a dropped connection reconnects on its own. A failure that exhausts every provider is not a
+ * dead end: it says so plainly, without naming a vendor, and offers the same button again — which
+ * resumes from the same workflow position with the same context (FR-018 AC-2/AC-3/AC-7).
  */
 export interface SpecCardState {
   specFileId: string;
@@ -48,16 +54,24 @@ function isSpecCardState(value: unknown): value is SpecCardState {
 
 export function SpecCard({ sessionId, revision, generationBlocked = false }: SpecCardProps) {
   const router = useRouter();
-  const [busy, setBusy] = useState<'generate' | 'approve' | 'changes' | null>(null);
+  const [busy, setBusy] = useState<'approve' | 'changes' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [instruction, setInstruction] = useState('');
   const [showInstruction, setShowInstruction] = useState(false);
+  const { state: stream, start } = useResumableStream();
 
-  async function send(
-    action: 'generate' | 'approve' | 'changes',
-    url: string,
-    body?: Record<string, unknown>,
-  ) {
+  const generating = stream.status === 'streaming' || stream.status === 'reconnecting';
+
+  async function generate() {
+    setError(null);
+    const outcome = await start(sessionId);
+
+    // The revision is persisted before `complete` is sent, so refreshing here shows the card the
+    // server would render on a reload — the same state, arrived at two ways (FR-017 AC-4).
+    if (outcome.status === 'complete') router.refresh();
+  }
+
+  async function send(action: 'approve' | 'changes', url: string, body?: Record<string, unknown>) {
     setBusy(action);
     setError(null);
 
@@ -90,8 +104,7 @@ export function SpecCard({ sessionId, revision, generationBlocked = false }: Spe
         <CardHeader>
           <CardTitle>Generate the first specification file</CardTitle>
           <CardDescription>
-            The walking skeleton generates against a deterministic stub provider — no model is
-            called.
+            The document is written straight into the page as the model produces it.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -100,6 +113,28 @@ export function SpecCard({ sessionId, revision, generationBlocked = false }: Spe
               {error}
             </p>
           )}
+
+          {stream.error !== null && (
+            <p role="alert" data-testid="generation-error" className="text-sm text-red-700">
+              {stream.error.message}
+            </p>
+          )}
+
+          {stream.text !== '' && (
+            <pre
+              data-testid="spec-stream"
+              className="bg-canvas border-border-subtle max-h-72 overflow-auto rounded-md border p-3 text-xs whitespace-pre-wrap"
+            >
+              {stream.text}
+            </pre>
+          )}
+
+          {stream.status === 'reconnecting' && (
+            <p className="text-ink-muted text-sm" data-testid="stream-reconnecting">
+              The connection dropped. Reconnecting — nothing written so far is lost.
+            </p>
+          )}
+
           {generationBlocked ? (
             <p className="text-ink-muted text-sm" data-testid="generation-blocked">
               A question card is waiting for your answers above — nothing generates until it is
@@ -108,13 +143,13 @@ export function SpecCard({ sessionId, revision, generationBlocked = false }: Spe
           ) : (
             <Button
               data-testid="generate-spec"
-              disabled={busy !== null}
+              disabled={generating}
               onClick={() => {
-                void send('generate', `/api/sessions/${sessionId}/generate`);
+                void generate();
               }}
               className="self-start"
             >
-              {busy === 'generate' ? 'Generating…' : 'Generate'}
+              {generating ? 'Generating…' : stream.error !== null ? 'Try again' : 'Generate'}
             </Button>
           )}
         </CardContent>
