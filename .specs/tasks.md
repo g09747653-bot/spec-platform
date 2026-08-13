@@ -844,7 +844,7 @@ Goal: user documents and live web research ground the generated specs, safely.
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 66\. Implement the PDF and DOCX extractors
+- [x] 66\. Implement the PDF and DOCX extractors
   - Implement extraction with `unpdf` and `mammoth` behind the `ParsingAdapter` interface.
   - Acceptance Criteria:
     - A multi-page PDF and a DOCX both yield extracted text stored on the attachment.
@@ -855,7 +855,7 @@ Goal: user documents and live web research ground the generated specs, safely.
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 67\. Implement the XLSX, text, and image handlers
+- [x] 67\. Implement the XLSX, text, and image handlers
   - Implement `xlsx` extraction, plain-text and Markdown passthrough, and image passthrough with no extraction attempt for vision-capable models.
   - Acceptance Criteria:
     - A spreadsheet yields extracted cell text.
