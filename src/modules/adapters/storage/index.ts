@@ -32,8 +32,22 @@ export { createMemoryStorage, type MemoryStorage } from './memory-store';
  * variable becomes required for the deployments that serve uploads (D-8/D-46), and why this function
  * is the only place that can silently be either.
  */
+/**
+ * One in-process store per process, not one per call.
+ *
+ * A fresh `Map` per request would make an object written by the upload endpoint invisible to every
+ * later request — a signed URL or a re-parse would find nothing — and the fallback would be a store
+ * only in the sense that `put` returns a key. Process-scoped is as durable as an in-memory store can
+ * honestly be; the deployments that need more get the Blob token.
+ */
+let inProcessStore: StorageStore | undefined;
+
 export function createDefaultStorage(env: Env = getEnv()): StorageStore {
   const token = env.BLOB_READ_WRITE_TOKEN;
 
-  return token === undefined ? createMemoryStorage() : createBlobStore(token);
+  if (token !== undefined) return createBlobStore(token);
+
+  inProcessStore ??= createMemoryStorage();
+
+  return inProcessStore;
 }

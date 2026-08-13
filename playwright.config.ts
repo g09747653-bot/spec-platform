@@ -74,7 +74,19 @@ export default defineConfig({
        * vendor involved — the same move as pointing `DATABASE_URL` at a throwaway database, and the
        * reason no end-to-end run can be made to depend on a model having a good day.
        */
-      env: { DATABASE_URL: TEST_DATABASE_URL, AUTH_URL: '', LLM_PROVIDER_ORDER: 'stub' },
+      /*
+       * `BLOB_READ_WRITE_TOKEN` is blanked for the same reason, and it matters more than it looks:
+       * without this, a developer whose `.env` holds a real token would have every upload in the
+       * suite written to the project's live Blob store, while CI — which has no `.env` — used the
+       * in-memory one. Same suite, two behaviours, one of them touching a real service (NFR-012
+       * AC-2). Blank means absent (D-12), so both run against the in-process store.
+       */
+      env: {
+        DATABASE_URL: TEST_DATABASE_URL,
+        AUTH_URL: '',
+        LLM_PROVIDER_ORDER: 'stub',
+        BLOB_READ_WRITE_TOKEN: '',
+      },
     },
   ],
 });

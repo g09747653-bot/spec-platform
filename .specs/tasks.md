@@ -867,7 +867,7 @@ Goal: user documents and live web research ground the generated specs, safely.
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 68\. Build the attachment upload and list UI
+- [x] 68\. Build the attachment upload and list UI
   - Allow attaching at session start and at any later point; list attachments with name, type, parse status, and the stage at which each was attached; support removal.
   - Acceptance Criteria:
     - A document attached mid-session is available to the current and all subsequent stages.

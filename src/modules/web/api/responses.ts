@@ -27,6 +27,14 @@ export const ERROR_STATUS = {
   CONFLICT: 409,
   /** A question-set draft failed validation twice; nothing was persisted (FR-005; D-2). */
   DRAFT_INVALID: 422,
+  /**
+   * An upload refused on size or type, before any bytes were stored (FR-004 AC-4; NFR-008 AC-3).
+   *
+   * The solution's table gives this code **two** statuses — 413 for size, 415 for type — so this
+   * entry is the size case and `uploadRejectedResponse` below is the only way to produce either. A
+   * handler still does not choose a status; the rejection reason does.
+   */
+  UPLOAD_REJECTED: 413,
   /** Providers exhausted, or output that failed the section schema (FR-018 AC-2; FR-008 AC-7). */
   GENERATION_FAILED: 502,
 } as const;
@@ -49,6 +57,8 @@ const DEFAULT_MESSAGE: Record<ErrorCode, string> = {
   DRAFT_INVALID: 'The drafted questions were not usable. Try asking again.',
   // Deliberately says nothing about which provider, or why beyond "not complete" (FR-018 AC-7).
   GENERATION_FAILED: 'Generation did not complete. Your answers and approved specs are safe.',
+  // Replaced in every real rejection by a message naming the limit or the supported types.
+  UPLOAD_REJECTED: 'That file could not be accepted.',
 };
 
 export function errorResponse(code: ErrorCode, details?: unknown): Response {
@@ -60,4 +70,23 @@ export function errorResponse(code: ErrorCode, details?: unknown): Response {
 
 export function jsonResponse(payload: unknown, status = 200): Response {
   return Response.json(payload, { status });
+}
+
+/**
+ * The one code in the table with two statuses (task 64; FR-004 AC-4).
+ *
+ * 413 for a size violation, 415 for a type the platform does not handle — as the solution's error
+ * table specifies. The mapping lives here, beside the table, rather than in the upload handler: a
+ * handler that picked its own status would be the second place the table exists.
+ *
+ * The message is always the guard's, because AC-4 requires it to name the limit or the supported
+ * types, and only the guard knows which limit was exceeded.
+ */
+export function uploadRejectedResponse(
+  reason: 'size' | 'empty' | 'type',
+  message: string,
+): Response {
+  const body: ApiError = { error: { code: 'UPLOAD_REJECTED', message } };
+
+  return Response.json(body, { status: reason === 'type' ? 415 : 413 });
 }
