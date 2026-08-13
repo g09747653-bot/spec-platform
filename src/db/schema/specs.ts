@@ -8,11 +8,12 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
-import { REVIEW_DECISIONS, REVIEW_OUTCOMES } from '@/modules/specs/model/review';
+import { PROPOSAL_STATUSES, REVIEW_DECISIONS, REVIEW_OUTCOMES } from '@/modules/specs/model/review';
 import { REVISION_ORIGINS, SPEC_FILE_NAMES, SPEC_TYPES } from '@/modules/specs/model/spec-files';
 
 import { projects } from './projects';
@@ -212,6 +213,69 @@ export const reviewFeedback = pgTable(
   ],
 );
 
+/**
+ * A conversational refinement, before it is a revision — or instead of ever becoming one
+ * (FR-011; DR-10; DR-11; task 58).
+ *
+ * The whole reason this table exists rather than an unapproved revision: **a proposal is not spec
+ * content.** Nothing that resolves spec content reads this table — not the export, not the revision
+ * repository, not the diff of history — so a proposal cannot leak into a bundle by being forgotten
+ * about. `proposed_content` sits here until the user accepts, at which point the accepted text is
+ * appended to `spec_revisions` and this row is marked `accepted`. Rejecting marks it `rejected` and
+ * writes nothing (FR-011 AC-5; FR-012 AC-6).
+ *
+ * `base_revision` is the revision the proposal was computed against. It is what makes the diff
+ * honest: if the file has moved on since, the proposal is against text that is no longer current,
+ * and the reader can tell.
+ *
+ * The one-pending rule is a **partial unique index**, not an application check (DR-11). Two requests
+ * arriving together would both pass a `SELECT ... WHERE status = 'pending'` and both insert; the
+ * index makes the second one fail no matter who is asking or how close together. `PENDING_DECISION`
+ * is then a caught constraint violation rather than a race the application hoped to win.
+ */
+export const proposedChanges = pgTable(
+  'proposed_changes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    specFileId: uuid('spec_file_id')
+      .notNull()
+      .references(() => specFiles.id, { onDelete: 'cascade' }),
+    /** The revision this was computed from — the left-hand side of the diff (FR-011 AC-2). */
+    baseRevision: integer('base_revision').notNull(),
+    proposedContent: text('proposed_content').notNull(),
+    /** The user's plain-language instruction, kept so the card can restate what was asked. */
+    instruction: text('instruction').notNull(),
+    status: text('status').notNull().default('pending'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    decidedAt: timestamp('decided_at', { withTimezone: true, mode: 'date' }),
+  },
+  (table) => [
+    /*
+     * DR-11, as a database invariant. `uniqueIndex(...).where(...)` is a partial index: rows whose
+     * status is not `pending` are not in it at all, so a file may accumulate any number of decided
+     * proposals and still accept a new one — while never holding two undecided at once.
+     */
+    uniqueIndex('proposed_changes_one_pending_per_file')
+      .on(table.specFileId)
+      .where(sql`${table.status} = 'pending'`),
+    check('proposed_changes_status_valid', sql`${table.status} IN (${list(PROPOSAL_STATUSES)})`),
+    check('proposed_changes_base_revision_positive', sql`${table.baseRevision} >= 1`),
+    /* The same rule `spec_revisions` carries: nothing blank can become a revision (FR-015 AC-9). */
+    check('proposed_changes_content_not_blank', sql`${table.proposedContent} ~ '[^[:space:]]'`),
+    check('proposed_changes_instruction_not_blank', sql`${table.instruction} ~ '[^[:space:]]'`),
+    /* A decided proposal has a decision time; a pending one has none. Written as a CASE — see the
+     * note on `review_feedback_selection_matches_decision` for why a disjunction is unsafe here. */
+    check(
+      'proposed_changes_decision_timestamp_paired',
+      sql`CASE WHEN ${table.status} = 'pending'
+                 THEN ${table.decidedAt} IS NULL
+                 ELSE ${table.decidedAt} IS NOT NULL
+          END`,
+    ),
+  ],
+);
+
 export type SpecFileRow = typeof specFiles.$inferSelect;
 export type SpecRevisionRow = typeof specRevisions.$inferSelect;
 export type ReviewFeedbackRow = typeof reviewFeedback.$inferSelect;
+export type ProposedChangeRow = typeof proposedChanges.$inferSelect;

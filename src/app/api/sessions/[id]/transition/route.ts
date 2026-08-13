@@ -6,7 +6,8 @@ import { getEnv } from '@/config/env';
 import type { SchemaDatabase } from '@/db';
 import { getDatabase } from '@/db/client';
 import type { OwnerScope } from '@/db/owner-scope';
-import { createTestDoubleAdapter, stubReviewDocument } from '@/modules/adapters/llm';
+import { AllProvidersFailedError } from '@/modules/adapters/llm';
+import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
 import { createReviewAgent } from '@/modules/agents/review/review-agent';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
@@ -74,14 +75,27 @@ async function ensureStageReview(
   const approved = await createRevisionRepository(db).latestApproved(specFile.id);
   if (approved === null) return null;
 
-  const agent = createReviewAgent(
-    createTestDoubleAdapter({ document: stubReviewDocument(position.stage) }),
-  );
-  const review = await agent.review({
-    specType: position.stage,
-    specContent: approved.content,
-    runId: randomUUID(),
-  });
+  // The configured chain, with failover, exactly as generation uses it: the review agent needs no
+  // provider of its own and no configuration of its own (A3; P7).
+  const agent = createReviewAgent(createDefaultAdapter());
+
+  /*
+   * The exhausted-chain case is caught here rather than allowed to propagate, and that is the whole
+   * of the paragraph above made real: `AllProvidersFailedError` escaping this function would turn a
+   * permitted, already-persisted transition into a 500, losing the user's position to protect an
+   * advisory artifact. The board is simply empty until they step back in.
+   */
+  let review;
+  try {
+    review = await agent.review({
+      specType: position.stage,
+      specContent: approved.content,
+      runId: randomUUID(),
+    });
+  } catch (error) {
+    if (!(error instanceof AllProvidersFailedError)) throw error;
+    return null;
+  }
 
   if (review.kind !== 'review') return null;
 

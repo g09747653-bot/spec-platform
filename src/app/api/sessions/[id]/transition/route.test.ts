@@ -22,6 +22,8 @@ vi.mock('@/modules/projects/auth/scope', () => ({
 
 vi.mock('@/db/client', () => ({ getDatabase: vi.fn() }));
 
+vi.mock('@/modules/adapters/llm/default-adapter', () => ({ createDefaultAdapter: vi.fn() }));
+
 import { TEST_ENV } from '@/config/testing/test-env';
 
 vi.mock('@/config/env', async (importOriginal) => {
@@ -35,6 +37,8 @@ vi.mock('@/config/env', async (importOriginal) => {
 });
 
 import { getDatabase } from '@/db/client';
+import { stubReviewDocument } from '@/modules/adapters/llm';
+import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
 
 import { POST } from './route';
@@ -60,6 +64,13 @@ describe('POST /api/sessions/:id/transition (task 29)', () => {
   let projectId: string;
 
   beforeAll(async () => {
+    // Entering `review` now produces the stage's review (task 56), so the adapter seam is mocked
+    // here for the same reason the generate route's test mocks it: no automated run reaches a vendor.
+    vi.mocked(createDefaultAdapter).mockReturnValue({
+      generateStreaming: () =>
+        Promise.resolve({ text: stubReviewDocument(), providerUsed: 'stub', attempts: 1 }),
+    });
+
     database = await createMigratedDatabase();
     vi.mocked(getDatabase).mockReturnValue(
       // The route needs any Drizzle handle over this schema; the test hands it the PGlite one.

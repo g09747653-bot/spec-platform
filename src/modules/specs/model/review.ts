@@ -41,3 +41,19 @@ export function opensReviewGate(decision: ReviewDecisionName): boolean {
 export const FEEDBACK_SEVERITIES = ['blocking', 'advisory'] as const;
 
 export type FeedbackSeverity = (typeof FEEDBACK_SEVERITIES)[number];
+
+/**
+ * The lifecycle of a conversational refinement (FR-011; DR-10; DR-11).
+ *
+ * `pending` is the only status the partial unique index counts, and it is the only one the user can
+ * act on. `accepted` and `rejected` are both terminal: a proposal is decided once, and the row stays
+ * afterwards as the record of that decision — a rejected proposal is evidence that the user said no,
+ * not something to delete (FR-012 AC-6 only forbids it becoming a *revision*).
+ */
+export const PROPOSAL_STATUSES = ['pending', 'accepted', 'rejected'] as const;
+
+export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
+
+export function isProposalStatus(value: string): value is ProposalStatus {
+  return (PROPOSAL_STATUSES as readonly string[]).includes(value);
+}

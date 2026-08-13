@@ -17,6 +17,13 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    /*
+     * Booting PGlite is a WASM PostgreSQL start-up, and a dozen suites do it in parallel. On a busy
+     * machine — and on a CI runner with fewer cores than a laptop — that comfortably exceeds the
+     * 10 s default, which shows up as `beforeAll` timing out in whichever suites lost the race
+     * rather than as a defect in any of them. The work is not slow; the contention is.
+     */
+    hookTimeout: 60_000,
     exclude: ['node_modules/**', '.next/**', 'e2e/**', 'src/modules/**/__fixtures__/**'],
     coverage: {
       provider: 'v8',

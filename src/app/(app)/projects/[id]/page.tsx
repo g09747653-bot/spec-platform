@@ -7,6 +7,7 @@ import { requireOwnerScope } from '@/modules/projects/auth/scope';
 import { createInterviewRepository } from '@/modules/projects/repositories/interview';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
 import { CORE_SPEC_FILE_NAMES } from '@/modules/specs/model/spec-files';
+import { createProposedChangeService } from '@/modules/specs/proposed-changes/proposed-change-service';
 import { createReviewRepository } from '@/modules/specs/repositories/reviews';
 import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
 import { createSpecFileRepository } from '@/modules/specs/repositories/spec-files';
@@ -18,6 +19,7 @@ import { createWorkflowStateRepository } from '@/modules/workflow/repositories/w
 import { assembleWorkflowSnapshot } from '@/modules/workflow/snapshot-assembler';
 import { unmetNeedNames, type WorkflowSnapshot } from '@/modules/workflow/snapshot';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/modules/web';
+import { DiffCard, type PendingProposalModel } from '@/modules/web/session/diff-card';
 import { ExportPanel } from '@/modules/web/session/export-panel';
 import { InterviewPanel, type TransitionTargetModel } from '@/modules/web/session/interview-panel';
 import type { QuestionRoundModel } from '@/modules/web/session/question-round';
@@ -131,6 +133,34 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     roundBudget: getEnv().MAX_ROUNDS_PER_STAGE,
     capabilities: registeredCapabilityIds(),
   });
+
+  /*
+   * The pending refinement, if the file has one (task 60; FR-011 AC-3/AC-6). Its diff is recomputed
+   * against the revision the proposal was based on, so the card shows what the user was offered even
+   * if the file has since moved on — a diff against "whatever is current now" would silently change
+   * what accepting means.
+   */
+  const pendingProposal =
+    currentFile === null
+      ? null
+      : await createProposedChangeService(db).pendingForFile(scope, currentFile.id);
+
+  const proposalDiff =
+    pendingProposal === null
+      ? null
+      : await createProposedChangeService(db).diffFor(scope, pendingProposal);
+
+  const proposalModel: PendingProposalModel | null =
+    pendingProposal === null || proposalDiff === null
+      ? null
+      : {
+          proposedChangeId: pendingProposal.id,
+          fileName: pendingProposal.fileName,
+          instruction: pendingProposal.instruction,
+          unifiedDiff: proposalDiff.unifiedDiff,
+          added: proposalDiff.diff.added,
+          removed: proposalDiff.diff.removed,
+        };
 
   /** The door out of `generate`, shown on the spec card rather than in the interview panel. */
   const draftingTarget =
@@ -263,6 +293,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       />
 
       {reviewModel !== null && <ReviewBoard review={reviewModel} />}
+
+      {currentFile !== null && latest !== null && (
+        <DiffCard specFileId={currentFile.id} proposal={proposalModel} />
+      )}
 
       <ExportPanel
         projectId={project.id}
