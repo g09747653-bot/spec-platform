@@ -381,13 +381,15 @@ describe('POST /api/reviews/:id/decision (task 56)', () => {
    * filter; this proves the plumbing that feeds it, which is the half that would fail silently.
    */
   describe('the selection reaches the revision context (FR-010 AC-6/AC-7)', () => {
-    const sourcesFor = () =>
-      collectContextSources(database.db, OwnerScope.forAuthenticatedUser(ownerId), {
-        sessionId,
-        projectId,
-        initialPrompt: 'Build it',
-        specType: 'constitution',
-      });
+    const sourcesFor = async () => {
+      const collected = await collectContextSources(
+        database.db,
+        OwnerScope.forAuthenticatedUser(ownerId),
+        { sessionId, projectId, initialPrompt: 'Build it', specType: 'constitution' },
+      );
+
+      return collected.sources;
+    };
 
     it('carries the review items and exactly the ticked ids', async () => {
       await post(reviewId, { decision: 'request_changes', selectedItemIds: ['rec-1'] });

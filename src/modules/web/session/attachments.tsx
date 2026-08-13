@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
+import { z } from 'zod';
 
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
@@ -32,6 +33,12 @@ export interface AttachmentModel {
   attachedAtStage: string;
 }
 
+/** An approved file that predates a just-attached document (task 69; FR-004 AC-9). */
+export interface AffectedFileModel {
+  specFileId: string;
+  fileName: string;
+}
+
 interface AttachmentsProps {
   sessionId: string;
   attachments: readonly AttachmentModel[];
@@ -60,6 +67,25 @@ function statusLine(attachment: AttachmentModel): string {
   }
 }
 
+/**
+ * Reads the affected-file list out of an upload response.
+ *
+ * Parsed rather than cast: this is a boundary, and the constitution says boundaries are validated.
+ * Anything unexpected yields an empty list — a malformed field must not stop the upload from being
+ * reported as the success it was.
+ */
+const UploadResponse = z.object({
+  affectedFiles: z
+    .array(z.object({ specFileId: z.string().min(1), fileName: z.string().min(1) }))
+    .optional(),
+});
+
+function affectedFilesOf(payload: unknown): AffectedFileModel[] {
+  const parsed = UploadResponse.safeParse(payload);
+
+  return parsed.success ? (parsed.data.affectedFiles ?? []) : [];
+}
+
 const sizeLabel = (bytes: number): string =>
   bytes < 1_024
     ? `${String(bytes)} B`
@@ -72,10 +98,15 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [late, setLate] = useState<{
+    fileName: string;
+    affected: readonly AffectedFileModel[];
+  } | null>(null);
 
   async function upload(file: File): Promise<void> {
     setBusy(true);
     setError(null);
+    setLate(null);
 
     try {
       const body = new FormData();
@@ -103,6 +134,16 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
         return;
       }
 
+      /*
+       * Which approved files predate this document (FR-004 AC-9). The server computed it from the
+       * context set each revision recorded; nothing was changed by the computation, and nothing is
+       * changed by showing it (AC-10).
+       */
+      const payload: unknown = await response.json().catch(() => null);
+      const affected = affectedFilesOf(payload);
+
+      if (affected.length > 0) setLate({ fileName: file.name, affected });
+
       // The server is the source of the list, including the parse outcome it has just recorded.
       router.refresh();
     } catch {
@@ -110,6 +151,51 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
     } finally {
       setBusy(false);
       if (inputRef.current !== null) inputRef.current.value = '';
+    }
+  }
+
+  /**
+   * The direct refine action of FR-004 AC-10.
+   *
+   * It proposes a change to the named file — a *proposal*, which the user still has to accept, so no
+   * approved file moves without a decision. It names the document rather than describing the edit,
+   * because what to change is the agent's judgement given the document, not this panel's.
+   */
+  async function refine(file: AffectedFileModel, documentName: string): Promise<void> {
+    setBusy(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/specs/${file.specFileId}/proposed-changes`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          instruction: `Take the newly attached document "${documentName}" into account.`,
+        }),
+      });
+
+      if (!response.ok) {
+        setError(
+          response.status === 409
+            ? 'That file already has a change awaiting your decision.'
+            : 'The refinement could not be started.',
+        );
+        return;
+      }
+
+      setLate((current) =>
+        current === null
+          ? null
+          : {
+              ...current,
+              affected: current.affected.filter((entry) => entry.specFileId !== file.specFileId),
+            },
+      );
+      router.refresh();
+    } catch {
+      setError('The refinement could not be started.');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -188,6 +274,41 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
               </li>
             ))}
           </ul>
+        )}
+
+        {late !== null && late.affected.length > 0 && (
+          <div
+            data-testid="late-attachment-notice"
+            className="border-border-subtle bg-canvas flex flex-col gap-2 rounded-md border p-3"
+          >
+            <p className="text-sm">
+              These approved files were written before <strong>{late.fileName}</strong> was
+              attached, so they were generated without it:
+            </p>
+            <ul className="flex flex-col gap-2">
+              {late.affected.map((file) => (
+                <li key={file.specFileId} className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium" data-testid="late-attachment-file">
+                    {file.fileName}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={busy}
+                    data-testid="late-attachment-refine"
+                    onClick={() => {
+                      void refine(file, late.fileName);
+                    }}
+                  >
+                    Refine {file.fileName}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            <p className="text-ink-muted text-xs">
+              Nothing has been changed. Refining proposes an update you can review and accept.
+            </p>
+          </div>
         )}
 
         {error !== null && (

@@ -43,6 +43,7 @@ const ProposalRow = z.object({
   proposed_content: z.string(),
   instruction: z.string(),
   status: z.string(),
+  created_at: z.union([z.date(), z.string()]),
 });
 
 export interface StoredProposal {
@@ -55,6 +56,8 @@ export interface StoredProposal {
   proposedContent: string;
   instruction: string;
   status: ProposalStatus;
+  /** When the proposed text was produced — the moment its context set is asked about (DR-12). */
+  createdAt: Date;
 }
 
 function toProposal(row: z.infer<typeof ProposalRow>): StoredProposal {
@@ -72,6 +75,7 @@ function toProposal(row: z.infer<typeof ProposalRow>): StoredProposal {
     proposedContent: row.proposed_content,
     instruction: row.instruction,
     status: row.status,
+    createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
   };
 }
 
@@ -84,7 +88,8 @@ const PROPOSAL_COLUMNS = sql`
   ${proposedChanges}.base_revision,
   ${proposedChanges}.proposed_content,
   ${proposedChanges}.instruction,
-  ${proposedChanges}.status
+  ${proposedChanges}.status,
+  ${proposedChanges}.created_at
 `;
 
 const OWNED_PROPOSAL = sql`
@@ -159,9 +164,42 @@ export function createProposedChangeService(db: SchemaDatabase) {
     return row === undefined ? null : toProposal(row);
   }
 
+  /**
+   * The project's pending proposal, whichever file it belongs to (task 69).
+   *
+   * DR-11 bounds pending proposals per *file*, not per project, so this can in principle find more
+   * than one; the newest is returned and the rest stay pending until decided. It exists because a
+   * refinement can now be started against a file that is not the one the page is currently showing —
+   * the late-attachment action of FR-004 AC-10 does exactly that — and a diff the user cannot see is
+   * a decision they cannot make.
+   */
+  async function pendingForProject(
+    scope: OwnerScope,
+    projectId: string,
+  ): Promise<StoredProposal | null> {
+    if (!UUID.test(projectId)) return null;
+
+    const rows = await queryRows(
+      db,
+      sql`
+        SELECT ${PROPOSAL_COLUMNS} ${OWNED_PROPOSAL}
+        WHERE ${specFiles}.project_id = ${projectId}::uuid
+          AND ${projects}.owner_id = ${scope.userId}::uuid
+          AND ${proposedChanges}.status = 'pending'
+        ORDER BY ${proposedChanges}.created_at DESC
+        LIMIT 1
+      `,
+      ProposalRow,
+    );
+
+    const row = rows[0];
+    return row === undefined ? null : toProposal(row);
+  }
+
   return {
     findOwned,
     pendingForFile,
+    pendingForProject,
 
     /**
      * Computes and stores a proposal — and writes **no revision** (FR-011 AC-1/AC-2).

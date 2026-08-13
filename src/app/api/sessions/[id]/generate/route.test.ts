@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import type * as EnvModule from '@/config/env';
 import { OwnerScope } from '@/db/owner-scope';
 import {
+  attachments,
   generationChunks,
   generationRuns,
   projects,
@@ -223,6 +224,61 @@ describe('POST /api/sessions/:id/generate (task 45)', () => {
       const complete = events.at(-1);
       if (complete?.type !== 'complete') throw new Error('expected a complete event');
       expect(complete.revisionNumber).toBe(1);
+    });
+
+    /**
+     * Task 69 / DR-12 / FR-004 AC-11: the revision records the attachment set that existed when it
+     * was generated, and it records **every** attachment — including one whose parse failed, which
+     * was available to the run whether or not it contributed text.
+     */
+    it('records the attachment set the context was built from (AC-11)', async () => {
+      await readyToGenerate();
+
+      const [readable] = await database.db
+        .insert(attachments)
+        .values({
+          sessionId,
+          fileName: 'brief.md',
+          mimeType: 'text/markdown',
+          sizeBytes: 12,
+          blobKey: `attachments/${ownerId}/${sessionId}/brief.md`,
+          parseStatus: 'ok',
+          extractedText: 'The brief.',
+          attachedAtStage: 'interview',
+        })
+        .returning({ id: attachments.id });
+
+      const [unreadable] = await database.db
+        .insert(attachments)
+        .values({
+          sessionId,
+          fileName: 'broken.pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: 40,
+          blobKey: `attachments/${ownerId}/${sessionId}/broken.pdf`,
+          parseStatus: 'failed',
+          parseReason: 'corrupt xref table',
+          attachedAtStage: 'interview',
+        })
+        .returning({ id: attachments.id });
+
+      await readEvents(await post(sessionId));
+
+      const [revision] = await database.db.select().from(specRevisions);
+
+      expect(revision?.contextAttachmentIds).toEqual(
+        expect.arrayContaining([readable?.id, unreadable?.id]),
+      );
+      expect(revision?.contextAttachmentIds).toHaveLength(2);
+    });
+
+    it('records an empty set when the session has no documents', async () => {
+      await readyToGenerate();
+      await readEvents(await post(sessionId));
+
+      const [revision] = await database.db.select().from(specRevisions);
+
+      expect(revision?.contextAttachmentIds).toEqual([]);
     });
 
     it('streams the document in order, and the deltas reassemble to it exactly', async () => {

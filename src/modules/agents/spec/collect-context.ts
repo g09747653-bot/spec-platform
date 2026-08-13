@@ -1,5 +1,7 @@
 import type { SchemaDatabase } from '@/db';
 import type { OwnerScope } from '@/db/owner-scope';
+import { contributesText } from '@/modules/projects/attachments/model';
+import { createAttachmentRepository } from '@/modules/projects/repositories/attachments';
 import { createInterviewRepository } from '@/modules/projects/repositories/interview';
 import type { SpecType } from '@/modules/specs/model/spec-files';
 import { createReviewRepository } from '@/modules/specs/repositories/reviews';
@@ -14,10 +16,23 @@ import type { ContextAnswer, ContextFeedbackSelection, ContextSources } from '..
  * assembled in a test from literals and in production from the database, and both produce the same
  * string from the same values.
  *
- * **Attachments are empty here, and that is not an oversight.** Uploads arrive in Milestone 5
- * (tasks 63–67); the section exists in the assembled context from today so that when they do, the
- * shape of the prompt does not change — only its contents.
+ * **Attachments enter here twice, and the two are not the same list** (task 69; DR-12):
+ *
+ * - `sources.attachments` carries the documents that have text to read. An image and a failed parse
+ *   contribute nothing to a prompt, and listing them with empty bodies would tell a model the user
+ *   supplied empty documents.
+ * - `contextAttachmentIds` carries **every** attachment of the session, and that is what the revision
+ *   records. "Was this document available when the file was generated?" is a question about
+ *   existence: an image was available, and so was a document whose parse failed. Recording only the
+ *   readable ones would make a later attachment look late relative to a revision that already knew
+ *   about it (FR-004 AC-9).
  */
+export interface CollectedContext {
+  sources: ContextSources;
+  /** The set to persist on any revision produced from these sources (DR-12). */
+  contextAttachmentIds: readonly string[];
+}
+
 export async function collectContextSources(
   db: SchemaDatabase,
   scope: OwnerScope,
@@ -28,7 +43,7 @@ export async function collectContextSources(
     /** When given, a pending request-changes review of this stage's file joins the sources. */
     specType?: SpecType;
   },
-): Promise<ContextSources> {
+): Promise<CollectedContext> {
   const interview = createInterviewRepository(db);
 
   // Bounded fan-out: at most one round budget per asking stage, so this is a handful of queries on a
@@ -81,11 +96,25 @@ export async function collectContextSources(
     }
   }
 
+  const attachments = await createAttachmentRepository(db).listForSession(scope, input.sessionId);
+
   return {
-    initialPrompt: input.initialPrompt,
-    answers,
-    attachments: [],
-    approvedSpecs: approved.map((file) => ({ specType: file.specType, content: file.content })),
-    ...(feedback === undefined ? {} : { feedback }),
+    sources: {
+      initialPrompt: input.initialPrompt,
+      answers,
+      attachments: attachments
+        .filter(
+          (attachment) =>
+            contributesText(attachment.parseStatus) && attachment.extractedText !== null,
+        )
+        .map((attachment) => ({
+          id: attachment.id,
+          fileName: attachment.fileName,
+          text: attachment.extractedText ?? '',
+        })),
+      approvedSpecs: approved.map((file) => ({ specType: file.specType, content: file.content })),
+      ...(feedback === undefined ? {} : { feedback }),
+    },
+    contextAttachmentIds: attachments.map((attachment) => attachment.id),
   };
 }

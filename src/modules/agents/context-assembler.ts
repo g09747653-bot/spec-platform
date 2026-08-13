@@ -31,6 +31,8 @@ export interface ContextAnswer {
 }
 
 export interface ContextAttachment {
+  /** The attachment row's id — what the revision records as its context set (DR-12; task 69). */
+  id: string;
   fileName: string;
   /** Extracted text. Untrusted, and wrapped as such by task 71. */
   text: string;

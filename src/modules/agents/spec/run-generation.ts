@@ -41,6 +41,14 @@ export interface RunGenerationInput {
   initialPrompt: string;
   /** Assembled generation context (task 50). */
   context?: string;
+  /**
+   * The attachments available when this context was assembled, recorded on the revision (DR-12).
+   *
+   * It travels with the context rather than being read here, because the fact being recorded is
+   * "what the prompt was built from" — a second query at write time would answer a slightly later
+   * question and could disagree with the document that was actually generated.
+   */
+  contextAttachmentIds?: readonly string[];
   changeInstruction?: string;
   progress: GenerationProgress;
   signal?: AbortSignal;
@@ -146,7 +154,11 @@ export async function runGeneration(input: RunGenerationInput): Promise<Generati
     // NFR-003 AC-2).
     const revisions = createRevisionRepository(db);
     const specFile = await revisions.ensureSpecFile(projectId, specType);
-    const revision = await revisions.append({ specFileId: specFile.id, content: result.text });
+    const revision = await revisions.append({
+      specFileId: specFile.id,
+      content: result.text,
+      contextAttachmentIds: input.contextAttachmentIds ?? [],
+    });
 
     await store.markComplete(runId, result.providerUsed, result.attempts);
     await recorder.complete();

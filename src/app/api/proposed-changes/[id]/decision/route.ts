@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { getDatabase } from '@/db/client';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
+import { createAttachmentRepository } from '@/modules/projects/repositories/attachments';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
 import { createProposedChangeService } from '@/modules/specs/proposed-changes/proposed-change-service';
 import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
@@ -73,11 +74,33 @@ export async function POST(
     });
   }
 
+  const projects = createProjectRepository(db);
+
+  /*
+   * The context set recorded on this revision is the one that existed **when the text was produced**,
+   * not when it was accepted (DR-12).
+   *
+   * The distinction is not academic: a document attached between proposing and accepting was never in
+   * front of the agent, and recording it here would make the file look as though it had already taken
+   * that document into account — which is exactly the fact FR-004 AC-9 needs to be able to report.
+   * The proposal's own timestamp is what answers the question, from persisted state.
+   */
+  const project = await projects.findById(scope, proposal.projectId);
+  const contextAttachmentIds =
+    project === null
+      ? []
+      : await createAttachmentRepository(db).idsForSession(
+          scope,
+          project.sessionId,
+          proposal.createdAt,
+        );
+
   const revision = await createRevisionRepository(db).append({
     specFileId: proposal.specFileId,
     content: proposal.proposedContent,
+    contextAttachmentIds,
   });
-  await createProjectRepository(db).touch(scope, proposal.projectId);
+  await projects.touch(scope, proposal.projectId);
 
   return jsonResponse({
     proposedChangeId: proposal.id,

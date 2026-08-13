@@ -37,8 +37,8 @@ const sources: ContextSources = {
     },
   ],
   attachments: [
-    { fileName: 'brief.pdf', text: 'The brief says: no life stories.' },
-    { fileName: 'audit.docx', text: 'The audit says: too much scrolling.' },
+    { id: 'att-1', fileName: 'brief.pdf', text: 'The brief says: no life stories.' },
+    { id: 'att-2', fileName: 'audit.docx', text: 'The audit says: too much scrolling.' },
   ],
   approvedSpecs: [
     { specType: 'requirements', content: '# Requirements\n\nFR-001 …' },
@@ -119,7 +119,7 @@ describe('the size budget (AC-3)', () => {
   const huge: ContextSources = {
     ...sources,
     approvedSpecs: [{ specType: 'constitution', content: 'C'.repeat(5_000) }],
-    attachments: [{ fileName: 'big.pdf', text: 'A'.repeat(5_000) }],
+    attachments: [{ id: 'att-3', fileName: 'big.pdf', text: 'A'.repeat(5_000) }],
   };
 
   it('truncates rather than dropping a source', () => {
