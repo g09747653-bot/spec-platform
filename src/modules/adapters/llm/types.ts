@@ -110,33 +110,101 @@ export class AllProvidersFailedError extends Error {
 }
 
 /**
- * Whether a provider error is an explicit "you are going too fast" (round 2, Д-5).
+ * Whether a provider error means "come back in a moment" (round 2, Д-5).
  *
- * Recognised structurally rather than by vendor: every SDK in the chain surfaces the HTTP status
- * somewhere on the error, and the two statuses that mean *retry later* are 429 and 503. The message
- * fallback catches the SDKs that stringify before they throw. Anything ambiguous reads as **not** a
- * rate limit, so an ordinary fault is never retried into a long wait.
+ * Recognised structurally rather than by vendor: 429 and 503 are the two statuses that mean *retry
+ * later*, and every SDK in the chain puts the status somewhere on the error.
+ *
+ * **The shapes below are the ones production actually throws**, captured from a live call during the
+ * gate remediation rather than guessed:
+ *
+ * ```
+ * name: AI_APICallError
+ * message: This model is currently experiencing high demand. Spikes in demand are usually
+ *          temporary. Please try again later.
+ * statusCode: 503
+ * isRetryable: true
+ * ```
+ *
+ * and, once the AI SDK has exhausted its own internal retries, that error wrapped in an
+ * `AI_RetryError` — which carries `lastError` and `errors`, **not** `cause`. A walker that followed
+ * only `cause` would have missed every real occurrence, which is precisely the sort of detector that
+ * passes its unit tests and never fires.
+ *
+ * Note the message wording: "high demand", not "rate limit". Matching on vocabulary alone would have
+ * missed it too; the status is what makes this reliable, and the phrases are the belt to that braces.
+ *
+ * Anything ambiguous reads as **not** a rate limit. A false positive costs the user seven seconds of
+ * waiting before an error they were going to get anyway, and tells them to retry when retrying
+ * cannot help.
  */
-export function isRateLimited(error: unknown): boolean {
-  const statuses = [429, 503];
+const RETRY_LATER_STATUSES = [429, 503];
 
-  for (let current: unknown = error, depth = 0; current !== null && depth < 5; depth += 1) {
-    if (typeof current !== 'object') break;
+const RETRY_LATER_MESSAGE =
+  /\b(429|503)\b|rate.?limit|too many requests|overloaded|quota|high demand|try again later|temporarily unavailable/i;
+
+/** Walks an error and everything it wraps, once each, cycles included. */
+function* chainOf(error: unknown): Generator<Record<string, unknown>> {
+  const seen = new Set<unknown>();
+  const queue: unknown[] = [error];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+
+    if (typeof current !== 'object' || current === null || seen.has(current)) continue;
+    seen.add(current);
 
     const record = current as Record<string, unknown>;
-    const status = record.status ?? record.statusCode;
+    yield record;
 
-    if (typeof status === 'number' && statuses.includes(status)) return true;
+    // `cause` is the standard chain; `lastError` and `errors` are how the AI SDK's RetryError wraps.
+    queue.push(record.cause, record.lastError);
+    if (Array.isArray(record.errors)) queue.push(...(record.errors as unknown[]));
+  }
+}
 
-    if (
-      typeof record.message === 'string' &&
-      /\b(429|503)\b|rate.?limit|too many requests|overloaded|quota/i.test(record.message)
-    ) {
-      return true;
-    }
+export function isRateLimited(error: unknown): boolean {
+  for (const record of chainOf(error)) {
+    const status = record.statusCode ?? record.status;
 
-    current = record.cause ?? null;
+    if (typeof status === 'number' && RETRY_LATER_STATUSES.includes(status)) return true;
+    if (typeof record.message === 'string' && RETRY_LATER_MESSAGE.test(record.message)) return true;
   }
 
   return false;
+}
+
+/** `Please retry in 31.550265287s` — the provider stating how long its own bucket needs. */
+const RETRY_HINT = /retry in ([\d.]+)\s*s/i;
+
+/**
+ * How long the provider asked us to wait, in milliseconds, or `null` if it did not say.
+ *
+ * Worth honouring rather than guessing at: the live diagnosis behind Д-5 found Google answering a
+ * free-tier overrun with "limit: 20" per minute and an explicit `Please retry in 31.550265287s`. A
+ * fixed ladder of one, two and four seconds would have retried three times inside a window the
+ * provider had already told us was thirty seconds wide, and then reported failure — busier, slower,
+ * and wrong.
+ *
+ * A `Retry-After` header is checked too, since that is the standard spelling of the same fact.
+ */
+export function retryAfterMs(error: unknown): number | null {
+  for (const record of chainOf(error)) {
+    if (typeof record.message === 'string') {
+      const match = RETRY_HINT.exec(record.message);
+      const seconds = match?.[1];
+
+      if (seconds !== undefined) return Math.ceil(Number(seconds) * 1000);
+    }
+
+    const headers = record.responseHeaders;
+
+    if (typeof headers === 'object' && headers !== null) {
+      const after = (headers as Record<string, unknown>)['retry-after'];
+
+      if (typeof after === 'string' && /^\d+$/.test(after)) return Number(after) * 1000;
+    }
+  }
+
+  return null;
 }

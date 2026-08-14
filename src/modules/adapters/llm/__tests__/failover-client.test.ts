@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { createFailoverClient, type ProviderFailure } from '../failover-client';
+import {
+  createFailoverClient,
+  MAX_RATE_LIMIT_WAIT_MS,
+  type ProviderFailure,
+} from '../failover-client';
 import type { ProviderEntry } from '../provider-registry';
 import {
   AllProvidersFailedError,
   isRateLimited,
+  retryAfterMs,
   type AttemptStart,
   type ProviderId,
 } from '../types';
@@ -477,6 +482,49 @@ describe('isRateLimited (round 2, Д-5)', () => {
   });
 
   /*
+   * The shape production actually throws, captured from a live call during the gate remediation.
+   * Google answers an overloaded model with 503 and the words "high demand" — not "rate limit" — and
+   * the AI SDK wraps it in a RetryError that carries `lastError` and `errors`, never `cause`. A
+   * detector that walked only `cause` and matched only the phrase "rate limit" would have passed
+   * every unit test above and fired on nothing.
+   */
+  describe('the shapes production throws', () => {
+    const apiCallError = {
+      name: 'AI_APICallError',
+      message:
+        'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.',
+      statusCode: 503,
+      isRetryable: true,
+    };
+
+    it('recognises the provider error itself', () => {
+      expect(isRateLimited(apiCallError)).toBe(true);
+    });
+
+    it('recognises it through the SDK RetryError, which uses lastError', () => {
+      expect(
+        isRateLimited({
+          name: 'AI_RetryError',
+          message: 'Failed after 3 attempts.',
+          lastError: apiCallError,
+          errors: [apiCallError],
+        }),
+      ).toBe(true);
+    });
+
+    it('recognises it through the errors array alone', () => {
+      expect(isRateLimited({ name: 'AI_RetryError', errors: [apiCallError] })).toBe(true);
+    });
+
+    it('survives a cycle in the wrapping', () => {
+      const outer: Record<string, unknown> = { name: 'outer', message: 'nope' };
+      outer.cause = outer;
+
+      expect(isRateLimited(outer)).toBe(false);
+    });
+  });
+
+  /*
    * Ambiguity reads as "not a rate limit". A false positive costs the user seven seconds of waiting
    * before an error they were going to get anyway — and, worse, tells them to try again when
    * trying again cannot help.
@@ -487,5 +535,109 @@ describe('isRateLimited (round 2, Д-5)', () => {
     expect(isRateLimited(new Error('ECONNRESET'))).toBe(false);
     expect(isRateLimited(null)).toBe(false);
     expect(isRateLimited(undefined)).toBe(false);
+  });
+});
+
+/**
+ * Round 2, Д-5 — honouring the provider's own number.
+ *
+ * The live diagnosis found Google answering a free-tier overrun with `limit: 20` requests per minute
+ * and `Please retry in 31.550265287s`. A fixed one-second ladder would retry three times inside a
+ * window the provider had already told us was thirty seconds wide, and then report failure.
+ */
+describe('retryAfterMs (round 2, Д-5)', () => {
+  /** The live shape, as an Error — which is what an SDK actually throws. */
+  class QuotaError extends Error {
+    readonly statusCode = 429;
+    constructor(message: string) {
+      super(message);
+      this.name = 'AI_APICallError';
+    }
+  }
+
+  const quotaError = new QuotaError(
+    'You exceeded your current quota, please check your plan and billing details.\n' +
+      '* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.5-flash\n' +
+      'Please retry in 31.550265287s.',
+  );
+
+  it('reads the delay the provider asked for', () => {
+    expect(retryAfterMs(quotaError)).toBe(31_551);
+  });
+
+  it('finds it through the SDK wrapper', () => {
+    expect(retryAfterMs({ name: 'AI_RetryError', lastError: quotaError })).toBe(31_551);
+  });
+
+  it('reads a Retry-After header when that is how it was stated', () => {
+    expect(retryAfterMs({ responseHeaders: { 'retry-after': '20' } })).toBe(20_000);
+  });
+
+  it('is null when the provider said nothing about timing', () => {
+    expect(retryAfterMs({ statusCode: 503, message: 'high demand' })).toBeNull();
+    expect(retryAfterMs(new Error('boom'))).toBeNull();
+  });
+
+  it('still recognises the quota error as a rate limit', () => {
+    expect(isRateLimited(quotaError)).toBe(true);
+  });
+
+  it('waits what the provider asked for, capped', async () => {
+    const waits: number[] = [];
+    let asked = 0;
+
+    const client = createFailoverClient({
+      providers: [
+        {
+          id: 'google',
+          model: 'test',
+          priority: 1,
+          stream: () => {
+            asked += 1;
+            return Promise.reject(asked === 1 ? quotaError : new Error('done differently'));
+          },
+        },
+      ],
+      timeoutMs: TIMEOUT_MS,
+      rateLimitBackoff: [1_000, 2_000, 4_000],
+      sleep: (ms) => {
+        waits.push(ms);
+        return Promise.resolve();
+      },
+    });
+
+    await expect(
+      client.generateStreaming({ messages: [{ role: 'user', content: 'x' }], runId: 'run-1' }),
+    ).rejects.toBeInstanceOf(AllProvidersFailedError);
+
+    // 31.551s beats the 1s rung, and sits under the 35s ceiling.
+    expect(waits).toEqual([31_551]);
+  });
+
+  it('does not wait longer than the ceiling, whatever the provider claims', async () => {
+    const waits: number[] = [];
+
+    const client = createFailoverClient({
+      providers: [
+        {
+          id: 'google',
+          model: 'test',
+          priority: 1,
+          stream: () => Promise.reject(new QuotaError('Please retry in 600s.')),
+        },
+      ],
+      timeoutMs: TIMEOUT_MS,
+      rateLimitBackoff: [1_000],
+      sleep: (ms) => {
+        waits.push(ms);
+        return Promise.resolve();
+      },
+    });
+
+    await expect(
+      client.generateStreaming({ messages: [{ role: 'user', content: 'x' }], runId: 'run-1' }),
+    ).rejects.toBeInstanceOf(AllProvidersFailedError);
+
+    expect(waits).toEqual([MAX_RATE_LIMIT_WAIT_MS]);
   });
 });

@@ -2,6 +2,7 @@ import type { ProviderEntry } from './provider-registry';
 import {
   AllProvidersFailedError,
   isRateLimited,
+  retryAfterMs,
   type GenerateOptions,
   type GenerateResult,
   type LlmAdapter,
@@ -68,6 +69,14 @@ export interface ProviderFailure {
  * per-minute bucket to leak, short enough that nobody watches a spinner wondering.
  */
 export const DEFAULT_RATE_LIMIT_BACKOFF: readonly number[] = [1_000, 2_000, 4_000];
+
+/**
+ * The longest we will wait on a provider's say-so.
+ *
+ * Google's free tier asks for ~31s after a per-minute overrun, which is worth waiting; a provider
+ * asking for five minutes is not, because a wait long enough to look like a hang is its own failure.
+ */
+export const MAX_RATE_LIMIT_WAIT_MS = 35_000;
 
 /** Marks an abort as ours (the per-provider deadline) rather than the caller's. */
 class ProviderTimeout extends Error {
@@ -165,7 +174,19 @@ export function createFailoverClient(options: FailoverClientOptions): LlmAdapter
           const retriesLeft = rateLimitBackoff.length - (index % (rateLimitBackoff.length + 1));
 
           if (rateLimited && retriesLeft > 0) {
-            await sleep(rateLimitBackoff[index % (rateLimitBackoff.length + 1)] ?? 0);
+            /*
+             * The provider's own number beats ours when it gives one. Google answers a free-tier
+             * overrun with "Please retry in 31.55s"; sleeping our 1s and asking again would spend a
+             * retry inside a window it had already told us was thirty seconds wide.
+             *
+             * Capped, because a wait long enough to look like a hang is its own failure — and the
+             * user can now abandon a slow generation anyway (Д-1).
+             */
+            const ladder = rateLimitBackoff[index % (rateLimitBackoff.length + 1)] ?? 0;
+            const asked = retryAfterMs(cause);
+            const wait = Math.min(Math.max(ladder, asked ?? 0), MAX_RATE_LIMIT_WAIT_MS);
+
+            await sleep(wait);
             request.signal?.throwIfAborted();
           } else {
             // Skip this provider's remaining retry slots.

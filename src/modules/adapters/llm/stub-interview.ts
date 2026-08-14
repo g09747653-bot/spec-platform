@@ -124,6 +124,54 @@ function roundThree(stage: string): StubQuestion[] {
   ];
 }
 
+/**
+ * Recognising the interview prompts, so the stub *provider* can answer them (round 2, Д-3).
+ *
+ * These matter because of what they replace. The interview endpoints used to construct a test double
+ * directly — `createTestDoubleAdapter({ document: stubInterviewRoundDocument(...) })` — with a
+ * Milestone 2 comment promising that tasks 42–45 would swap the composition root. Those tasks swapped
+ * generation, review, revision and refinement, and left the interview behind. Every question every
+ * user has ever been asked came from the canned text below, on a deployment paying for a real model.
+ *
+ * Now the endpoints use `createDefaultAdapter()` like everything else, and the stub answers the
+ * prompt it is given — the same arrangement review and refinement have had since M4. The end-to-end
+ * suite still gets deterministic questions, because it points the chain at `stub`; a deployment gets
+ * the model it pays for.
+ *
+ * Keyed off plain strings: an adapter may not import a core module (constitution A1).
+ */
+export function looksLikeInterviewRoundPrompt(prompt: string): boolean {
+  return (
+    prompt.includes('"questions": [{"id", "text"') || prompt.includes('This round should cover')
+  );
+}
+
+export function looksLikeSummaryPrompt(prompt: string): boolean {
+  return prompt.includes('Summarise the interview so far');
+}
+
+export function looksLikeReplyAssessmentPrompt(prompt: string): boolean {
+  return prompt.includes('"satisfiedNeeds"') && prompt.includes('Judge which of the listed');
+}
+
+/** The stage the round is being collected for, read back out of the assembled prompt. */
+export function stageFromInterviewPrompt(prompt: string): string {
+  return /Set "stage" to "([a-z]+)"/.exec(prompt)?.[1] ?? 'interview';
+}
+
+/**
+ * Which round this is, read back out of the prompt.
+ *
+ * The endpoint used to hand the number straight to a double it built itself. Now the stub is a
+ * provider like any other and sees only the prompt — so the prompt carries the number, which a real
+ * model wants anyway: a third round should be narrower than a first.
+ */
+export function roundNumberFromInterviewPrompt(prompt: string): number {
+  const stated = /question round (\d+) for this part/.exec(prompt)?.[1];
+
+  return stated === undefined ? 1 : Number(stated);
+}
+
 /** The stub model's answer to "draft round N for this stage" — JSON matching the question-set shape. */
 export function stubInterviewRoundDocument(stage: string, roundNumber: number): string {
   const questions =

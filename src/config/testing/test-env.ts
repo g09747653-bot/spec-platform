@@ -21,6 +21,17 @@ export const TEST_ENV: Readonly<Record<string, string>> = Object.freeze({
   // Required from task 42 because it is the provider the default chain names (D-46).
   GOOGLE_GENERATIVE_AI_API_KEY: 'test-google-generative-ai-key',
   /*
+   * The chain points at the deterministic double, exactly as the end-to-end suite does (D-48).
+   *
+   * This became load-bearing in round 2, Д-3. Until then the interview endpoints built their own test
+   * double inline, so it did not matter what the chain said; now they use `createDefaultAdapter()`
+   * like every other agent, and a route test that reached this composition root with `google` in the
+   * chain would construct a real vendor client and call it. No automated test may reach a vendor
+   * (IR-001-AC-5; NFR-012 AC-5), and this is the line that keeps that true through the composition
+   * root rather than through each test remembering to mock it.
+   */
+  LLM_PROVIDER_ORDER: 'stub',
+  /*
    * Required from the M6 tail (D-73). `none` is the stated absence: a route test that reaches the
    * storage or research composition root gets the in-process store and the null adapter — the same
    * behaviour these tests had when the variables were optional, now chosen rather than defaulted.

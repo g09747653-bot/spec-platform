@@ -59,8 +59,13 @@ export interface PromptVariables {
     /** What the user asked to change on a re-generation (FR-009 AC-4). Empty string otherwise. */
     changeInstruction: string;
   };
-  'interview.questions.skeleton.v1': {
+  'interview.questions.v2': {
+    /** A label for our records only — the prompt forbids it appearing in a question (Д-3). */
     stage: string;
+    /** Which round this is, so a later round can be narrower than the first. */
+    roundNumber: string;
+    /** What this round is about, in the user's words. Derived from the stage on our side. */
+    topics: string;
     initialPrompt: string;
     summaryBlock: string;
     satisfiedNeeds: string;
@@ -267,31 +272,61 @@ const CHAT_ANSWER: PromptAsset = {
  * interview may end, which needs count as satisfied — all of that is a gate in code (P1). They ask for
  * content in a declared shape, and everything returned is Zod-validated before it is persisted.
  */
+/*
+ * Round 2, Д-3. The stage no longer reaches the model; a topic list does.
+ *
+ * The M6 gate walk produced "What should the constitution document emphasise?" — a question about
+ * our artifact, put to someone who came to describe their product. The constitution names
+ * non-technical founders among the target users, and that question is unanswerable by them.
+ *
+ * Two rules carry the fix, and both are stated to the model as prohibitions because that is the form
+ * it obeys: ask about the product, and never mention the documents. The stage still chooses what a
+ * round is *about* — it just does so on our side of the boundary (`interview-topics.ts`).
+ */
 const INTERVIEW_QUESTIONS: PromptAsset = {
-  id: 'interview.questions.skeleton.v1',
+  id: 'interview.questions.v2',
   system: [
-    'You are conducting a structured product interview. Draft the next round of questions as',
-    'JSON only — no prose, no code fence. Shape:',
+    'You are interviewing someone about a product they want built. They may not be technical.',
+    'Ask about THEIR product, in plain everyday words a friend would understand.',
+    '',
+    'Never ask about documents, specifications, sections, formats, or the process you are part of.',
+    'Never use the words constitution, requirements document, specification, spec, acceptance',
+    'criteria, scope document, milestone or artifact in a question. A question the person could not',
+    'answer without knowing how this tool works is a wrong question.',
+    '',
+    'Prefer concrete over abstract: "who opens this on a Monday morning?" beats "who are the',
+    'stakeholders?". Offer options that are real possibilities, not categories.',
+    '',
+    'Draft the next round as JSON only — no prose, no code fence. Shape:',
     '{"stage": "<stage>", "questions": [{"id", "text", "type": "single"|"multiple",',
     '"options": [{"id", "label", "description?"}], "allowOther": true,',
     '"informationNeeds": ["<need>"]}]}.',
     'Between 2 and 8 options per question; every question carries allowOther: true and names the',
-    'information needs it is meant to satisfy. Return {"stage": "<stage>", "questions": []} when',
-    'nothing further is worth asking.',
+    'information needs it is meant to satisfy. Ask at most three questions in a round.',
+    'Return {"stage": "<stage>", "questions": []} when nothing further is worth asking.',
   ].join(' '),
   user: [
-    'Stage: {{stage}}',
-    '',
-    'Product idea:',
+    'What they want built:',
     '{{initialPrompt}}',
     '{{summaryBlock}}',
     '',
-    'Information needs already satisfied (do not ask about these again): {{satisfiedNeeds}}',
-    'Information needs still outstanding: {{unmetNeeds}}',
+    'This is question round {{roundNumber}} for this part of the interview; a later round should be',
+    'narrower than an earlier one.',
+    '',
+    'This round should cover:',
+    '{{topics}}',
+    '',
+    'Already answered — do not ask again: {{satisfiedNeeds}}',
+    'Still open: {{unmetNeeds}}',
+    '',
+    'Set "stage" to "{{stage}}" in your JSON. It is a label for our records; it must not appear in',
+    'any question you write.',
     '{{replyBlock}}',
   ].join('\n'),
   variables: [
     'stage',
+    'roundNumber',
+    'topics',
     'initialPrompt',
     'summaryBlock',
     'satisfiedNeeds',
@@ -327,7 +362,7 @@ export const promptRegistry: Readonly<Record<PromptId, PromptAsset>> = Object.fr
   'refinement.propose.v1': REFINEMENT_PROPOSE,
   'decision.intent.v1': DECISION_INTENT,
   'chat.answer.v1': CHAT_ANSWER,
-  'interview.questions.skeleton.v1': INTERVIEW_QUESTIONS,
+  'interview.questions.v2': INTERVIEW_QUESTIONS,
   'interview.reply-assessment.skeleton.v1': REPLY_ASSESSMENT,
   'interview.summary.skeleton.v1': SESSION_SUMMARY,
 });

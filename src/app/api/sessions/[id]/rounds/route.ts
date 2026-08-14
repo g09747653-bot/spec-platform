@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { getEnv } from '@/config/env';
 import { getDatabase } from '@/db/client';
-import { createTestDoubleAdapter, stubInterviewRoundDocument } from '@/modules/adapters/llm';
+import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
 import { createInterviewAgent } from '@/modules/agents/interview/interview-agent';
 import { QuestionSetSchema } from '@/modules/agents/schemas/question-set';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
@@ -102,14 +102,21 @@ export async function POST(
   const latest = await interviewRepository.latestRound(session.id, stage);
   const nextRoundNumber = (latest?.roundNumber ?? 0) + 1;
 
-  // The provider is the deterministic stub for this whole milestone (START_HERE M2); the agent
-  // neither knows nor cares (P7) — tasks 42–45 swap the composition root, not the agent.
-  const agent = createInterviewAgent(
-    createTestDoubleAdapter({ document: stubInterviewRoundDocument(stage, nextRoundNumber) }),
-  );
+  /*
+   * The configured provider chain — the same one generation, review and refinement use (round 2, Д-3).
+   *
+   * This line used to construct a test double, with a Milestone 2 comment promising that tasks 42–45
+   * would swap the composition root. Those tasks swapped every other agent and left the interview
+   * behind, so on a deployment paying for a real model **every interview question ever asked came
+   * from a hardcoded fixture** — including the "what should the constitution document emphasise?"
+   * that the M6 gate walk reported. No test caught it: they all point the chain at the stub anyway,
+   * so both worlds looked identical from inside the suite.
+   */
+  const agent = createInterviewAgent(createDefaultAdapter());
 
   const outcome = await agent.draftRound({
     stage,
+    roundNumber: nextRoundNumber,
     initialPrompt: session.initialPrompt,
     summary: session.summary,
     satisfiedNeeds: satisfiedNeedNames(snapshot, stage),

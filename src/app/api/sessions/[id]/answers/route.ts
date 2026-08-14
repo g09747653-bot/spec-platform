@@ -4,12 +4,7 @@ import { z } from 'zod';
 
 import { getEnv } from '@/config/env';
 import { getDatabase } from '@/db/client';
-import {
-  createTestDoubleAdapter,
-  stubInterviewRoundDocument,
-  stubReplyAssessmentDocument,
-  stubSessionSummaryDocument,
-} from '@/modules/adapters/llm';
+import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
 import { createInterviewAgent } from '@/modules/agents/interview/interview-agent';
 import { createReplyAssessor } from '@/modules/agents/interview/reply-assessment';
 import { createSummaryAgent } from '@/modules/agents/interview/summary-agent';
@@ -174,9 +169,7 @@ async function refreshInterviewSummary(
   session: OwnedSession,
   highlights: readonly string[],
 ): Promise<boolean> {
-  const summariser = createSummaryAgent(
-    createTestDoubleAdapter({ document: stubSessionSummaryDocument(session.initialPrompt) }),
-  );
+  const summariser = createSummaryAgent(createDefaultAdapter());
 
   const summary = await summariser.summarise({
     initialPrompt: session.initialPrompt,
@@ -325,9 +318,7 @@ export async function POST(
   if ('reply' in parsed.data) {
     await interviewRepository.addReplyAnswer(round.id, parsed.data.reply);
 
-    const assessor = createReplyAssessor(
-      createTestDoubleAdapter({ document: stubReplyAssessmentDocument() }),
-    );
+    const assessor = createReplyAssessor(createDefaultAdapter());
     const satisfied = await assessor.assess({
       reply: parsed.data.reply,
       declaredNeeds,
@@ -364,11 +355,10 @@ export async function POST(
     }
 
     const nextRoundNumber = round.roundNumber + 1;
-    const agent = createInterviewAgent(
-      createTestDoubleAdapter({ document: stubInterviewRoundDocument(stage, nextRoundNumber) }),
-    );
+    const agent = createInterviewAgent(createDefaultAdapter());
     const outcome = await agent.draftRound({
       stage,
+      roundNumber: nextRoundNumber,
       initialPrompt: session.initialPrompt,
       summary: session.summary,
       satisfiedNeeds: satisfiedNeedNames(assembled.snapshot, stage),

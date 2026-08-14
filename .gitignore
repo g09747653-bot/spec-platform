@@ -41,3 +41,6 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# gate walk artifacts (round 2, Д-6): screenshots from a live exploratory run
+.gate-artifacts/

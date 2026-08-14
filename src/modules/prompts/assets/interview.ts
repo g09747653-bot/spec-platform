@@ -1,4 +1,5 @@
 import { assemblePrompt } from '../assemble-prompt';
+import { topicBlock } from './interview-topics';
 import type { AssembledPrompt } from '../registry';
 
 /**
@@ -12,7 +13,7 @@ import type { AssembledPrompt } from '../registry';
  * None of them contains a control rule: how many rounds may be asked, whether the interview may end,
  * which needs count as satisfied are all gates in code (constitution P1).
  */
-export const INTERVIEW_QUESTIONS_PROMPT_ID = 'interview.questions.skeleton.v1';
+export const INTERVIEW_QUESTIONS_PROMPT_ID = 'interview.questions.v2';
 export const REPLY_ASSESSMENT_PROMPT_ID = 'interview.reply-assessment.skeleton.v1';
 export const SESSION_SUMMARY_PROMPT_ID = 'interview.summary.skeleton.v1';
 
@@ -23,6 +24,13 @@ export interface InterviewQuestionsPromptInput {
    * allowed to know it — passes the name through. Prompt text needs a label, not a type.
    */
   stage: string;
+  /**
+   * Which round this is for the current stage, 1-based.
+   *
+   * Real context, not bookkeeping: a third round should be narrower than a first, and a model with
+   * no idea how far in it is has no way to calibrate that.
+   */
+  roundNumber: number;
   initialPrompt: string;
   summary: string | null;
   satisfiedNeeds: readonly string[];
@@ -32,8 +40,14 @@ export interface InterviewQuestionsPromptInput {
 }
 
 export function interviewQuestionsPrompt(input: InterviewQuestionsPromptInput): AssembledPrompt {
-  return assemblePrompt('interview.questions.skeleton.v1', {
+  return assemblePrompt('interview.questions.v2', {
     stage: input.stage,
+    roundNumber: String(input.roundNumber),
+    /*
+     * The stage picks the topics on this side of the boundary (round 2, Д-3). What crosses is what
+     * the round is about, in the user's terms — never the name of the file it feeds.
+     */
+    topics: topicBlock(input.stage),
     initialPrompt: input.initialPrompt,
     summaryBlock: input.summary === null ? '' : `\nSession summary so far:\n${input.summary}`,
     satisfiedNeeds: input.satisfiedNeeds.length > 0 ? input.satisfiedNeeds.join(', ') : '(none)',
