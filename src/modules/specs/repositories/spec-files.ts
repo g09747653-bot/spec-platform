@@ -94,10 +94,18 @@ export function createSpecFileRepository(db: SchemaDatabase) {
     },
 
     /**
-     * The file this session is working on: the one most recently written to.
+     * The file this session wrote to most recently.
      *
-     * The walking skeleton has one spec card, so "most recently written" is the file whose pointer moved
-     * last. From task 24 the stage decides, and this becomes a lookup by spec type.
+     * **Ordered by when the newest revision was written, not by its number** (task 80). The walking
+     * skeleton had one spec file, so ordering on `current_revision` was indistinguishable from
+     * ordering on time; with four it is wrong in the ordinary case. After the second stage generates,
+     * two files stand at revision 1, the tie breaks on `spec_type` alphabetically, and the session
+     * answers `constitution` while it is working on `requirements` — which is how the critical
+     * journey found this.
+     *
+     * The caller that knows its stage should ask for that stage's file (`findByProjectAndType`); this
+     * answers the question that has no stage attached, such as "which card is pending" on a session
+     * sitting at `complete`.
      */
     async currentFile(scope: OwnerScope, projectId: string): Promise<OwnedSpecFile | null> {
       if (!UUID.test(projectId)) return null;
@@ -112,7 +120,11 @@ export function createSpecFileRepository(db: SchemaDatabase) {
           WHERE ${specFiles}.project_id = ${projectId}::uuid
             AND ${projects}.owner_id = ${scope.userId}::uuid
             AND ${specFiles}.current_revision > 0
-          ORDER BY ${specFiles}.current_revision DESC, ${specFiles}.spec_type ASC
+          ORDER BY (
+            SELECT MAX(${specRevisions}.created_at)
+            FROM ${specRevisions}
+            WHERE ${specRevisions}.spec_file_id = ${specFiles}.id
+          ) DESC, ${specFiles}.spec_type ASC
           LIMIT 1
         `,
         SpecFileRow,

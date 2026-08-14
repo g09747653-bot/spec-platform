@@ -5,6 +5,7 @@ import {
   reachDrafting,
   reauthenticate,
   signIn,
+  startSession,
   type SignedInUser,
 } from './fixtures';
 
@@ -35,16 +36,6 @@ async function signOutAndBackIn(
   await context.clearCookies();
   await signIn(context, await reauthenticate(owner));
   await page.goto(projectUrl);
-}
-
-async function startSession(page: Page, prompt: string): Promise<string> {
-  await page.goto('/projects');
-  await expect(page.getByTestId('create-project')).toBeEnabled();
-  await page.getByTestId('prompt-input').fill(prompt);
-  await page.getByTestId('create-project').click();
-  await expect(page.getByTestId('session')).toBeVisible();
-
-  return page.url();
 }
 
 test.describe('session resume', () => {

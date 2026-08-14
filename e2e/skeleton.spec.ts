@@ -1,7 +1,6 @@
-import { unzipSync, strFromU8 } from 'fflate';
 import { expect, test } from '@playwright/test';
 
-import { createSignedInUser, reachDrafting, signIn } from './fixtures';
+import { createSignedInUser, downloadBundle, reachDrafting, signIn } from './fixtures';
 
 /**
  * The walking skeleton, end to end (task 23; SC-16; constitution — Testing Approaches item 2).
@@ -84,20 +83,10 @@ test.describe('walking skeleton', () => {
     await expect(page.getByTestId('export-included')).toContainText('constitution.md');
 
     // --- The ZIP contains exactly the approved file, named exactly (FR-015 AC-1/AC-5/AC-10) ---
-    const download = await Promise.all([
-      page.waitForEvent('download'),
-      page.getByTestId('download-export').click(),
-    ]).then(([event]) => event);
+    const archive = await downloadBundle(page);
 
-    const path = await download.path();
-    expect(path).not.toBeNull();
-
-    const { readFile } = await import('node:fs/promises');
-    const archive = unzipSync(new Uint8Array(await readFile(path)));
-    const names = Object.keys(archive);
-
-    expect(names).toEqual(['constitution.md']);
-    const exported = strFromU8(archive['constitution.md'] ?? new Uint8Array());
+    expect(archive.names).toEqual(['constitution.md']);
+    const exported = archive.entries['constitution.md'] ?? '';
 
     expect(exported).toContain('Specification');
     // The revision that was approved is the one exported — the second, not the first.

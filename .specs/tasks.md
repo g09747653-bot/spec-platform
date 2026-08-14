@@ -1010,7 +1010,7 @@ Goal: the complete parity product — the full four-file journey, resumable, exp
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 79\. Build the deterministic E2E fixture harness
+- [x] 79\. Build the deterministic E2E fixture harness
   - Build reusable Playwright fixtures: a seeded authenticated user, a per-stage stub provider script, download capture, and helpers for answering MCQ cards and resolving decision cards.
   - Acceptance Criteria:
     - A test can drive a full stage in three helper calls or fewer.
@@ -1022,7 +1022,7 @@ Goal: the complete parity product — the full four-file journey, resumable, exp
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 80\. Write the full critical-journey E2E test
+- [x] 80\. Write the full critical-journey E2E test
   - Playwright: prompt → interview rounds → all four stages with approvals and reviews → ZIP download, asserting the archive contains exactly the four correctly named files.
   - Acceptance Criteria:
     - The journey completes with no dead end and no manual intervention.

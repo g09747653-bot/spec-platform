@@ -1,6 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { createSignedInUser, pendingReviewIdFor, reachDrafting, signIn } from './fixtures';
+import {
+  createSignedInUser,
+  pendingReviewIdFor,
+  reachDrafting,
+  signIn,
+  startSession as startProjectSession,
+} from './fixtures';
 
 /**
  * The review board, end to end (tasks 55 and 56; FR-010).
@@ -40,13 +46,8 @@ async function generateApproveAndEnterReview(page: Page): Promise<void> {
   await expect(page.getByTestId('stage-substage')).toHaveText(/review/);
 }
 
-async function startSession(page: Page): Promise<void> {
-  await page.goto('/projects');
-  await expect(page.getByTestId('create-project')).toBeEnabled();
-  await page.getByTestId('prompt-input').fill('A tool that reviews specifications automatically');
-  await page.getByTestId('create-project').click();
-  await expect(page.getByTestId('session')).toBeVisible();
-}
+const startSession = (page: Page): Promise<string> =>
+  startProjectSession(page, 'A tool that reviews specifications automatically');
 
 test.describe('review board', () => {
   test('entering review produces a review the user must decide (FR-010 AC-1..AC-5)', async ({

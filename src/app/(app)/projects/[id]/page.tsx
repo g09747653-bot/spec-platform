@@ -13,6 +13,7 @@ import {
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
 import { resolveExportMode } from '@/modules/specs/export/resolve-mode';
 import { fileNamesForMode } from '@/modules/specs/model/export';
+import { isSpecType } from '@/modules/specs/model/spec-files';
 import { createProposedChangeService } from '@/modules/specs/proposed-changes/proposed-change-service';
 import { createReviewRepository } from '@/modules/specs/repositories/reviews';
 import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
@@ -175,9 +176,24 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     (name) => !exportFiles.some((file) => file.fileName === name),
   );
 
-  // The card shows the newest revision of the file this session has generated, if any.
+  /*
+   * The card shows **the file the current stage owns**, and falls back to the most recently written
+   * one where the position has no file of its own — the interview, and `complete`.
+   *
+   * Resolving by stage is what makes the journey continue past the first document: at
+   * `requirements/generate` the requirements file does not exist yet, and a card resolved by "most
+   * recently written" would show the approved constitution instead, with no way to generate anything.
+   * That was a dead end, and it is exactly the lookup the M1 stand-in said would become a lookup by
+   * spec type "from task 24".
+   */
   const revisions = createRevisionRepository(db);
-  const currentFile = await specFileRepository.currentFile(scope, project.id);
+  const positionStage = project.substage === null ? null : project.stage;
+
+  const currentFile =
+    positionStage !== null && isSpecType(positionStage)
+      ? await specFileRepository.findByProjectAndType(scope, project.id, positionStage)
+      : await specFileRepository.currentFile(scope, project.id);
+
   const latest = currentFile === null ? null : await revisions.latest(currentFile.id);
 
   /*

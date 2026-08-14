@@ -1,6 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
-import { createSignedInUser, reachDrafting, signIn } from './fixtures';
+import { createSignedInUser, reachDrafting, signIn, startSession } from './fixtures';
 
 /**
  * Rename, duplicate and delete, from the list (tasks 76, 77; FR-002 AC-3..AC-7).
@@ -9,16 +9,6 @@ import { createSignedInUser, reachDrafting, signIn } from './fixtures';
  * *person* being told the action is permanent, and the only place that claim can be checked is the
  * dialog they read.
  */
-async function startSession(page: Page, prompt: string): Promise<string> {
-  await page.goto('/projects');
-  await expect(page.getByTestId('create-project')).toBeEnabled();
-  await page.getByTestId('prompt-input').fill(prompt);
-  await page.getByTestId('create-project').click();
-  await expect(page.getByTestId('session')).toBeVisible();
-
-  return page.url();
-}
-
 test.describe('project lifecycle', () => {
   test('a rename changes the name and nothing else (AC-3)', async ({ page, context }) => {
     await signIn(context, await createSignedInUser('owner'));
