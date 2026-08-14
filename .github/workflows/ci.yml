@@ -30,6 +30,12 @@ env:
   # reaches a vendor — every suite generates through the deterministic stub (IR-001-AC-5) — so this
   # value only has to exist, and must not be real.
   GOOGLE_GENERATIVE_AI_API_KEY: ci-not-a-real-google-generative-ai-key
+  # Required from the M6 tail (D-73). `none` is the stated absence: CI has no Blob store and no
+  # search account, and must reach neither. The end-to-end suite sets the same two values on the
+  # application server it starts (playwright.config.ts), so this is belt and braces for any step
+  # that evaluates the environment loader directly.
+  BLOB_READ_WRITE_TOKEN: none
+  WEB_SEARCH_API_KEY: none
 
 jobs:
   verify:

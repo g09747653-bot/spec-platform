@@ -102,6 +102,25 @@ const DEFAULT_PROVIDER_ORDER = ['google'] as const;
 const required = (description: string) =>
   z.string({ error: `required: ${description}` }).min(1, `required: ${description}`);
 
+/**
+ * The value that says "this integration has no credential in this environment".
+ *
+ * `BLOB_READ_WRITE_TOKEN` and `WEB_SEARCH_API_KEY` are required, so a deployment that forgets one
+ * fails to boot instead of quietly serving an in-process store or a search that finds nothing
+ * (D-73). But the local, no-credential path still has to be reachable, and reachable *deliberately*:
+ * the end-to-end suite must not write to a live Blob store or pay for a search on every generation
+ * (NFR-012 AC-2), and a developer without either account must still be able to run the application.
+ *
+ * So absence is stated rather than implied. This is the same move `LLM_PROVIDER_ORDER=stub` makes
+ * for the model chain (D-48): the substitute is selected by configuration, in one named value, and
+ * the composition roots — `createDefaultStorage`, `createDefaultResearch` — are the only readers.
+ *
+ * What it does *not* buy: a deployment can still choose `none` and get the local behaviour. That is
+ * true of `stub` as well, and it is the honest boundary of a configuration check — it can refuse an
+ * omission, never a decision.
+ */
+export const NO_CREDENTIAL = 'none';
+
 const baseEnvSchema = z.object({
   // --- Required from Milestone 0 ---
   DATABASE_URL: required('the Neon connection string for this environment'),
@@ -151,11 +170,17 @@ const baseEnvSchema = z.object({
       return parsed;
     }),
 
-  // --- Storage — required from Milestone 5 (task 63) ---
-  BLOB_READ_WRITE_TOKEN: z.string().min(1).optional(),
+  /*
+   * --- Storage and research — required from Milestone 5 (tasks 63, 70), tightened at the M6 tail ---
+   *
+   * Held optional through M5 until both were confirmed present in the deployment environment (the
+   * lesson of D-8/M1: a variable made required ahead of its value fails every deploy). Now required,
+   * so the in-process store and the null research adapter are unreachable on a deployment that
+   * simply forgot them. `NO_CREDENTIAL` selects them where they belong (D-73).
+   */
+  BLOB_READ_WRITE_TOKEN: required('the Vercel Blob read-write token'),
 
-  // --- Research — required from Milestone 5 (task 68) ---
-  WEB_SEARCH_API_KEY: z.string().min(1).optional(),
+  WEB_SEARCH_API_KEY: required('the web search API key'),
   WEB_FETCH_MAX_BYTES: positiveInt(1_000_000),
   WEB_FETCH_TIMEOUT_MS: positiveInt(10_000),
 

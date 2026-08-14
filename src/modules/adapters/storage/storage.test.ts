@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
+import { parseEnv } from '@/config/env';
+import { testEnv } from '@/config/testing/test-env';
 import { OwnerScope } from '@/db/owner-scope';
 
+import { createDefaultStorage } from './index';
 import { createMemoryStorage } from './memory-store';
-import { keyBelongsTo, safeKeySegment, StorageNotFoundError } from './types';
+import { keyBelongsTo, safeKeySegment, StorageNotFoundError, type StorageStore } from './types';
 
 /**
  * Task 63 — the storage adapter's ownership rule.
@@ -107,6 +110,45 @@ describe('storage adapter (task 63)', () => {
       expect(blobKey).not.toContain('..');
       expect(keyBelongsTo(owner, blobKey)).toBe(true);
       expect(keyBelongsTo(stranger, blobKey)).toBe(false);
+    });
+  });
+
+  /**
+   * The composition root, after `BLOB_READ_WRITE_TOKEN` became required (D-73).
+   *
+   * The in-process store is now reached by one value and no other. That is the whole point of the
+   * change: before it, *any* environment that failed to supply a token landed here — including a
+   * deployment, where the store lives for one process and an upload that returned 201 is gone by the
+   * next request. `none` says it out loud; anything else is a token and gets Vercel Blob.
+   *
+   * Both directions are asserted, because only the pair is the guarantee. Neither case makes a call:
+   * `createBlobStore` builds a client, it does not contact anything.
+   */
+  describe('createDefaultStorage selects on the credential (D-73)', () => {
+    const isInProcess = (store: StorageStore): boolean => 'keys' in store;
+
+    it('gives the in-process store for the stated absence, and only for it', () => {
+      const local = createDefaultStorage(parseEnv(testEnv({ BLOB_READ_WRITE_TOKEN: 'none' })));
+
+      expect(isInProcess(local)).toBe(true);
+    });
+
+    it('gives the Blob store for a real token', () => {
+      const remote = createDefaultStorage(
+        parseEnv(testEnv({ BLOB_READ_WRITE_TOKEN: 'vercel_blob_rw_notarealtoken' })),
+      );
+
+      expect(isInProcess(remote)).toBe(false);
+    });
+
+    it('keeps one in-process store per process, so a written object survives the next request', async () => {
+      const env = parseEnv(testEnv({ BLOB_READ_WRITE_TOKEN: 'none' }));
+
+      const writer = createDefaultStorage(env);
+      const { blobKey } = await writer.put(owner, upload);
+
+      // A second resolution — what the *next* request does — must see the same objects.
+      await expect(createDefaultStorage(env).read(owner, blobKey)).resolves.toEqual(upload.bytes);
     });
   });
 });

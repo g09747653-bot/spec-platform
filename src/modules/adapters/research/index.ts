@@ -1,4 +1,4 @@
-import { getEnv, type Env } from '@/config/env';
+import { getEnv, NO_CREDENTIAL, type Env } from '@/config/env';
 
 import { createTavilyResearch } from './tavily-client';
 import type { ResearchAdapter } from './types';
@@ -19,10 +19,10 @@ export { createTavilyResearch, type TavilyOptions } from './tavily-client';
 /**
  * The adapter used when research is not configured.
  *
- * Not a stub for tests — a deployment without `WEB_SEARCH_API_KEY` genuinely has no search service,
- * and the honest behaviour is the same as an outage: no hits, no text, generation continues (FR-019
- * AC-4). Callers cannot tell the two apart, which is the point: there is one no-research path, and it
- * is exercised every time the suite runs.
+ * Not a stub for tests — an environment declaring `WEB_SEARCH_API_KEY=none` genuinely has no search
+ * service, and the honest behaviour is the same as an outage: no hits, no text, generation continues
+ * (FR-019 AC-4). Callers cannot tell the two apart, which is the point: there is one no-research
+ * path, and it is exercised every time the suite runs.
  */
 export function createNullResearch(): ResearchAdapter {
   return {
@@ -34,14 +34,15 @@ export function createNullResearch(): ResearchAdapter {
 /**
  * The composition root for research, mirroring `createDefaultAdapter` and `createDefaultStorage`.
  *
- * Configuration decides, as everywhere else: a key means Tavily, no key means the null adapter. No
+ * Configuration decides, as everywhere else: a key means Tavily, `none` means the null adapter. No
  * calling code branches on whether research is available, so no calling code can forget that it might
- * not be.
+ * not be. The variable is required (D-73), so the choice is always a stated one — an environment that
+ * omits it does not boot rather than searching nothing for the rest of its life.
  */
 export function createDefaultResearch(env: Env = getEnv()): ResearchAdapter {
   const apiKey = env.WEB_SEARCH_API_KEY;
 
-  return apiKey === undefined
+  return apiKey === NO_CREDENTIAL
     ? createNullResearch()
     : createTavilyResearch({
         apiKey,

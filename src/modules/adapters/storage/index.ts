@@ -1,4 +1,4 @@
-import { getEnv, type Env } from '@/config/env';
+import { getEnv, NO_CREDENTIAL, type Env } from '@/config/env';
 
 import { createBlobStore } from './blob-store';
 import { createMemoryStorage } from './memory-store';
@@ -23,14 +23,15 @@ export { createMemoryStorage, type MemoryStorage } from './memory-store';
 /**
  * The composition root for storage, mirroring `createDefaultAdapter` (D-23).
  *
- * One place decides what "the store" means for a request. Without a Blob token there is no store to
- * talk to, and the honest response is an in-process one rather than a call that fails at the network:
- * uploads work locally and in CI, and the deployment that has the token gets Vercel Blob. The token is
- * the configuration that switches them, exactly as `LLM_PROVIDER_ORDER` switches the model chain.
+ * One place decides what "the store" means for a request. With `BLOB_READ_WRITE_TOKEN=none` there is
+ * no store to talk to, and the honest response is an in-process one rather than a call that fails at
+ * the network: uploads work locally and in CI, and the deployment that has a token gets Vercel Blob.
+ * The token is the configuration that switches them, exactly as `LLM_PROVIDER_ORDER` switches the
+ * model chain.
  *
- * The fallback is memory-only and therefore not durable across processes — which is precisely why the
- * variable becomes required for the deployments that serve uploads (D-8/D-46), and why this function
- * is the only place that can silently be either.
+ * The variable itself is required (D-73), so *forgetting* it is a boot failure rather than a silent
+ * in-memory store on a deployment. Only the explicit `none` reaches the branch below — which is what
+ * makes this function the one place the substitution can happen, and makes it deliberate when it does.
  */
 /**
  * One in-process store per process, not one per call.
@@ -45,7 +46,7 @@ let inProcessStore: StorageStore | undefined;
 export function createDefaultStorage(env: Env = getEnv()): StorageStore {
   const token = env.BLOB_READ_WRITE_TOKEN;
 
-  if (token !== undefined) return createBlobStore(token);
+  if (token !== NO_CREDENTIAL) return createBlobStore(token);
 
   inProcessStore ??= createMemoryStorage();
 

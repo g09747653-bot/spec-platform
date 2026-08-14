@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
+import { NO_CREDENTIAL } from './src/config/env';
 import { TEST_DATABASE_URL, TEST_DB_PORT } from './e2e/test-database';
 
 /**
@@ -75,25 +76,28 @@ export default defineConfig({
        * reason no end-to-end run can be made to depend on a model having a good day.
        */
       /*
-       * `BLOB_READ_WRITE_TOKEN` is blanked for the same reason, and it matters more than it looks:
-       * without this, a developer whose `.env` holds a real token would have every upload in the
-       * suite written to the project's live Blob store, while CI — which has no `.env` — used the
+       * `BLOB_READ_WRITE_TOKEN` is set to `none` for the same reason, and it matters more than it
+       * looks: without this, a developer whose `.env` holds a real token would have every upload in
+       * the suite written to the project's live Blob store, while CI — which has no `.env` — used the
        * in-memory one. Same suite, two behaviours, one of them touching a real service (NFR-012
-       * AC-2). Blank means absent (D-12), so both run against the in-process store.
+       * AC-2). `none` is the stated absence (D-73), so both run against the in-process store.
+       *
+       * It was a blank until the M6 tail, when the variable became required: blank means absent
+       * (D-12), and absent now stops the server from booting at all. Same intent, stated explicitly.
        */
       /*
-       * `WEB_SEARCH_API_KEY` is blanked for the same reason as the Blob token, and it is the sharper
-       * case: a live search is a paid third-party call made from a test, per generation, at whatever
-       * pace the suite runs. Blank selects the null research adapter, whose behaviour is identical to
-       * an outage — which is exactly the path FR-019 AC-4 requires the stage to survive, so the suite
-       * exercises it on every run rather than never.
+       * `WEB_SEARCH_API_KEY` is set to `none` for the same reason as the Blob token, and it is the
+       * sharper case: a live search is a paid third-party call made from a test, per generation, at
+       * whatever pace the suite runs. `none` selects the null research adapter, whose behaviour is
+       * identical to an outage — which is exactly the path FR-019 AC-4 requires the stage to survive,
+       * so the suite exercises it on every run rather than never.
        */
       env: {
         DATABASE_URL: TEST_DATABASE_URL,
         AUTH_URL: '',
         LLM_PROVIDER_ORDER: 'stub',
-        BLOB_READ_WRITE_TOKEN: '',
-        WEB_SEARCH_API_KEY: '',
+        BLOB_READ_WRITE_TOKEN: NO_CREDENTIAL,
+        WEB_SEARCH_API_KEY: NO_CREDENTIAL,
       },
     },
   ],

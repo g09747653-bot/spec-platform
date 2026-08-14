@@ -1,3 +1,5 @@
+import { NO_CREDENTIAL } from '../env';
+
 /**
  * The environment a route test runs against, declared once.
  *
@@ -18,6 +20,13 @@ export const TEST_ENV: Readonly<Record<string, string>> = Object.freeze({
   AUTH_GITHUB_SECRET: 'test',
   // Required from task 42 because it is the provider the default chain names (D-46).
   GOOGLE_GENERATIVE_AI_API_KEY: 'test-google-generative-ai-key',
+  /*
+   * Required from the M6 tail (D-73). `none` is the stated absence: a route test that reaches the
+   * storage or research composition root gets the in-process store and the null adapter — the same
+   * behaviour these tests had when the variables were optional, now chosen rather than defaulted.
+   */
+  BLOB_READ_WRITE_TOKEN: NO_CREDENTIAL,
+  WEB_SEARCH_API_KEY: NO_CREDENTIAL,
 });
 
 /** `TEST_ENV` with overrides — for a test that needs a different chain or a longer timeout. */

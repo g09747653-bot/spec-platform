@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { EnvironmentConfigurationError, parseEnv } from './env';
+import { EnvironmentConfigurationError, NO_CREDENTIAL, parseEnv } from './env';
 
 /**
  * Environment loader (task 7; IR-X2; NFR-006 AC-1).
@@ -10,9 +10,11 @@ import { EnvironmentConfigurationError, parseEnv } from './env';
  */
 
 /**
- * Everything required as of Milestone 3. The five `AUTH_*` credentials moved from optional to
- * required in task 12, per the milestone-driven rule of D-8; the Google key is required from task 42
- * not because of the milestone but because it is the provider the default chain names (D-46).
+ * Everything required today. The five `AUTH_*` credentials moved from optional to required in
+ * task 12, per the milestone-driven rule of D-8; the Google key is required from task 42 not because
+ * of the milestone but because it is the provider the default chain names (D-46); the storage and
+ * search credentials were tightened at the M6 tail once both were confirmed in the deployment
+ * environment (D-73).
  */
 const MINIMAL = {
   DATABASE_URL: 'postgres://user:pw@host/db',
@@ -22,6 +24,8 @@ const MINIMAL = {
   AUTH_GITHUB_ID: 'github-client-id',
   AUTH_GITHUB_SECRET: 'github-client-secret',
   GOOGLE_GENERATIVE_AI_API_KEY: 'google-generative-ai-key',
+  BLOB_READ_WRITE_TOKEN: 'vercel-blob-token',
+  WEB_SEARCH_API_KEY: 'web-search-key',
 } as const;
 
 const REQUIRED_TODAY = Object.keys(MINIMAL);
@@ -136,8 +140,56 @@ describe('parseEnv', () => {
 
   it('keeps later-milestone variables optional until their milestone', () => {
     const env = parseEnv({ ...MINIMAL });
-    expect(env.BLOB_READ_WRITE_TOKEN).toBeUndefined();
     expect(env.SENTRY_DSN).toBeUndefined();
+  });
+
+  /**
+   * The M6 tail (D-73), and the reason it is more than a schema edit.
+   *
+   * Making the two credentials required closes a specific hole: a deployment that never set the Blob
+   * token booted happily and served an in-process store, so an upload returned 201 and the file
+   * survived exactly one process. The check that closes it must not also close the local path, which
+   * the end-to-end suite and a developer without either account both depend on — so absence became a
+   * value. Both halves are asserted here, because either alone is the wrong behaviour.
+   */
+  describe('storage and search credentials are required, with a stated way to have none', () => {
+    for (const name of ['BLOB_READ_WRITE_TOKEN', 'WEB_SEARCH_API_KEY']) {
+      it(`fails by name when ${name} is omitted entirely`, () => {
+        try {
+          parseEnv(without(name));
+          expect.unreachable(`${name} must be required`);
+        } catch (error) {
+          const { issues } = error as EnvironmentConfigurationError;
+          expect(issues.some((issue) => issue.startsWith(`${name}:`))).toBe(true);
+        }
+      });
+    }
+
+    it('accepts `none` as the explicit "no account in this environment"', () => {
+      const env = parseEnv({
+        ...MINIMAL,
+        BLOB_READ_WRITE_TOKEN: NO_CREDENTIAL,
+        WEB_SEARCH_API_KEY: NO_CREDENTIAL,
+      });
+
+      expect(env.BLOB_READ_WRITE_TOKEN).toBe(NO_CREDENTIAL);
+      expect(env.WEB_SEARCH_API_KEY).toBe(NO_CREDENTIAL);
+    });
+
+    /*
+     * The distinction the whole change rests on: `none` is a decision, blank is an omission, and
+     * they must not read the same. Were blank to normalise into the local path, a deployment that
+     * declared the variable and never filled it — which is exactly what Vercel does for a variable
+     * proposed at import time (D-12) — would be back to the silent in-memory store.
+     */
+    it('does not accept a blank as a way to mean `none`', () => {
+      expect(() => parseEnv({ ...MINIMAL, BLOB_READ_WRITE_TOKEN: '   ' })).toThrow(
+        EnvironmentConfigurationError,
+      );
+      expect(() => parseEnv({ ...MINIMAL, WEB_SEARCH_API_KEY: '' })).toThrow(
+        EnvironmentConfigurationError,
+      );
+    });
   });
 
   /**
@@ -247,8 +299,6 @@ describe('parseEnv treats a blank value as an absent one', () => {
       QUALITY_STAGE_ENABLED: '',
       MAX_ROUNDS_PER_STAGE: '',
       DECISION_INTENT_MIN_CONFIDENCE: '',
-      BLOB_READ_WRITE_TOKEN: '',
-      WEB_SEARCH_API_KEY: '',
       WEB_FETCH_MAX_BYTES: '',
       WEB_FETCH_TIMEOUT_MS: '',
       PARSE_TIMEOUT_MS: '',
