@@ -1,6 +1,11 @@
 import { getEnv, type Env } from '@/config/env';
 
-import { createProviderStream, DEFAULT_MODELS, type ProviderStream } from './providers';
+import {
+  createProviderStream,
+  DEFAULT_MODELS,
+  type ProviderConnection,
+  type ProviderStream,
+} from './providers';
 import { createStubProviderStream } from './test-double';
 import type { ProviderId } from './types';
 
@@ -34,7 +39,18 @@ export class ProviderConfigurationError extends Error {
   }
 }
 
-function apiKeyFor(env: Env, provider: ProviderId): string {
+/**
+ * What this provider needs in order to be called: a key, or an address.
+ *
+ * The local provider is the only one with no credential, and it is deliberately **not** validated
+ * here beyond reading its URL. Whether Ollama is running is not a configuration question — it is the
+ * sort of thing that is true at one moment and false at the next, and a boot-time check would answer
+ * it for the wrong instant. An unreachable local provider is an ordinary provider failure, which is
+ * exactly what the chain already knows how to survive (D-90; constitution A3).
+ */
+function connectionFor(env: Env, provider: ProviderId): ProviderConnection {
+  if (provider === 'ollama') return { baseUrl: env.OLLAMA_BASE_URL };
+
   const key =
     provider === 'anthropic'
       ? env.ANTHROPIC_API_KEY
@@ -44,7 +60,7 @@ function apiKeyFor(env: Env, provider: ProviderId): string {
 
   if (key === undefined || key.trim() === '') throw new ProviderConfigurationError(provider);
 
-  return key;
+  return { apiKey: key };
 }
 
 export function buildProviderRegistry(env: Env = getEnv()): readonly ProviderEntry[] {
@@ -60,7 +76,7 @@ export function buildProviderRegistry(env: Env = getEnv()): readonly ProviderEnt
       stream:
         id === 'stub'
           ? createStubProviderStream()
-          : createProviderStream(id, apiKeyFor(env, id), model),
+          : createProviderStream(id, connectionFor(env, id), model),
     };
   });
 }

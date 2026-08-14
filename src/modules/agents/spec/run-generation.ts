@@ -9,7 +9,11 @@ import {
 import { specGenerationPrompt } from '@/modules/prompts/assets/spec-generation';
 import type { CoreSpecType } from '@/modules/specs/model/spec-files';
 import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
-import { describeViolations, validateStructure } from '@/modules/specs/validate-structure';
+import {
+  describeViolations,
+  parseHeadings,
+  validateStructure,
+} from '@/modules/specs/validate-structure';
 
 /**
  * One generation run, end to end (task 45; solution.md — Generation Sequence).
@@ -140,6 +144,24 @@ export async function runGeneration(input: RunGenerationInput): Promise<Generati
     const structure = validateStructure(specType, result.text);
 
     if (!structure.valid) {
+      /*
+       * What the model *did* write, next to what it was asked for (round 3).
+       *
+       * "Missing section X" names the requirement; it does not say whether the document had the
+       * wrong headings, the right ones inside a code fence, or no headings at all — and those have
+       * different remedies. Diagnosing one live failure without this meant reconstructing it from a
+       * pruned chunk log, because a rejected document is deliberately never persisted. Headings
+       * only, capped: enough to tell those cases apart, and not the document itself.
+       */
+      console.error('generated document rejected on structure', {
+        runId,
+        specType,
+        characters: result.text.length,
+        headings: parseHeadings(result.text)
+          .slice(0, 12)
+          .map((heading) => `${'#'.repeat(heading.level)} ${heading.text}`),
+      });
+
       await recorder.fail();
       await store.markFailed(runId, result.attempts);
 

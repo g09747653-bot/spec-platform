@@ -67,6 +67,30 @@ describe('buildProviderRegistry', () => {
     expect(() => buildProviderRegistry(env)).toThrow(ProviderConfigurationError);
   });
 
+  /**
+   * The local provider (round 3; D-90).
+   *
+   * It is in the registry on the same terms as every other provider — named in the chain, given a
+   * model, reached through `ProviderStream` — and on one different term: it is built from an address
+   * rather than a credential. Stripping the one key this environment does have is the point of the
+   * case, because "no key required" is a claim that only means something when there is no key to find.
+   */
+  it('builds the local provider from an address, with no credential in the environment', () => {
+    const env = { ...envWith('ollama'), GOOGLE_GENERATIVE_AI_API_KEY: undefined };
+    const registry = buildProviderRegistry(env);
+
+    expect(registry.map((entry) => entry.id)).toEqual(['ollama']);
+    expect(registry[0]?.model).toBe(DEFAULT_MODELS.ollama);
+    expect(typeof registry[0]?.stream).toBe('function');
+  });
+
+  it('places the local provider after the funded one when the chain says so', () => {
+    const registry = buildProviderRegistry(envWith('google,ollama'));
+
+    expect(registry.map((entry) => entry.id)).toEqual(['google', 'ollama']);
+    expect(registry.map((entry) => entry.priority)).toEqual([1, 2]);
+  });
+
   it('gives every entry a model and nothing vendor-shaped beyond it', () => {
     const registry = buildProviderRegistry(envWith('google'));
 

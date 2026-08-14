@@ -199,6 +199,24 @@ export async function POST(
           });
         } else {
           /*
+           * The reason, where reasons are allowed to be read (round 3).
+           *
+           * `GenerationOutcome` documents `reason` as being "for the server's eyes… telling them
+           * apart in a log is what makes a systematic prompt problem visible" — and nothing logged
+           * it, so the field was computed and dropped. This round is what that cost: a live walk
+           * failed at generation and the difference between "the chain gave up" and "the document
+           * was missing a required section" had to be reconstructed from a timing and an absent
+           * revision. Server-side only, so nothing here reaches a browser (FR-018 AC-7).
+           */
+          console.error('generation failed', {
+            runId: run.id,
+            stage,
+            reason: outcome.reason,
+            attempts: outcome.attempts,
+            detail: outcome.detail,
+          });
+
+          /*
            * Sanitised on purpose: no provider name, no vendor payload, no stack (FR-018 AC-7).
            *
            * Two messages, though, because they ask for different things from the reader (round 2,

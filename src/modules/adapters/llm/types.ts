@@ -10,14 +10,23 @@
  */
 
 /**
- * The three providers the constitution mandates, plus the deterministic double.
+ * The three providers the constitution mandates, a local one, and the deterministic double.
  *
  * `stub` is a provider in the same sense the others are — it implements the same interface and is
  * chosen the same way, by naming it in `LLM_PROVIDER_ORDER`. It is how IR-001-AC-5's "substitutable
  * with a test double that requires no network" holds for the running application and not merely for a
  * unit test (D-48). No deployment configures it.
+ *
+ * `ollama` is a fourth *adapter*, not a fourth mandated integration (D-90). The constitution's
+ * Integration Points table names Anthropic, OpenAI and Google, and all three remain integrated and
+ * unchanged; this one exists so a development machine and the milestone gate keep working when a
+ * funded provider's daily quota is spent. It is unreachable from a deployment by construction —
+ * `localhost` is not a thing Vercel can dial — so the production chain is unaffected.
+ *
+ * P7 is what makes adding it cheap: nothing above the adapter boundary learns that a fifth name
+ * exists, because no business logic names a provider at all.
  */
-export type ProviderId = 'anthropic' | 'openai' | 'google' | 'stub';
+export type ProviderId = 'anthropic' | 'openai' | 'google' | 'ollama' | 'stub';
 
 /** A conversation turn. Deliberately minimal — the shape every provider can express. */
 export interface ModelMessage {

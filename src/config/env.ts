@@ -69,14 +69,25 @@ const boolish = (fallback: boolean) =>
  * path with no vendor involved, exactly as it points `DATABASE_URL` at a throwaway database (D-18).
  * It needs no key, and no deployment names it (D-48).
  */
-const LLM_PROVIDERS = ['anthropic', 'openai', 'google', 'stub'] as const;
+const LLM_PROVIDERS = ['anthropic', 'openai', 'google', 'ollama', 'stub'] as const;
+
+/**
+ * The address of the local provider, when one is in the chain.
+ *
+ * A default rather than a required variable, because there is exactly one place Ollama listens unless
+ * a developer has moved it. The `/v1` suffix is part of the address, not an implementation detail: it
+ * is the OpenAI-compatible surface, and the adapter speaks that protocol (D-90).
+ */
+const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434/v1';
 
 /**
  * Which variable holds which provider's credential.
  *
  * The chain is what makes a key mandatory (see `requireChainKeys` below), so this map is the join
- * between "which providers are configured" and "which secrets must therefore exist". `stub` is absent
- * on purpose: it has no credential to demand.
+ * between "which providers are configured" and "which secrets must therefore exist". `stub` and
+ * `ollama` are absent on purpose: neither has a credential to demand. For `ollama` that is the whole
+ * of the rule — a local model is reached by address, and its *availability* is not checked here at
+ * all, because a provider that is down is a failover concern rather than a boot failure (D-90).
  */
 const PROVIDER_KEYS: Readonly<Partial<Record<(typeof LLM_PROVIDERS)[number], string>>> =
   Object.freeze({
@@ -150,6 +161,12 @@ const baseEnvSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
   GOOGLE_GENERATIVE_AI_API_KEY: z.string().min(1).optional(),
+  /**
+   * Where the local provider listens. Optional, and carrying its own default, because `ollama` needs
+   * no credential — only an address, and that address is the same on every machine that has not been
+   * reconfigured (D-90).
+   */
+  OLLAMA_BASE_URL: z.url().optional().default(DEFAULT_OLLAMA_BASE_URL),
   /** Ordered failover chain — configuration, never code (IR-001-AC-4). */
   LLM_PROVIDER_ORDER: csv(DEFAULT_PROVIDER_ORDER).pipe(z.array(z.enum(LLM_PROVIDERS)).min(1)),
   LLM_REQUEST_TIMEOUT_MS: positiveInt(60_000),
