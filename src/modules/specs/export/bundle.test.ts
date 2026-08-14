@@ -13,6 +13,7 @@ import { assembleBundle } from './bundle';
  */
 const file = (specType: 'constitution' | 'requirements' | 'solution' | 'tasks', content: string) =>
   ({
+    specFileId: `00000000-0000-4000-8000-${specType.slice(0, 8).padEnd(12, '0')}`,
     specType,
     fileName: `${specType}.md`,
     content,
@@ -123,6 +124,7 @@ describe('bundle assembly (task 22)', () => {
     const withQuality = [
       file('constitution', '# Constitution'),
       {
+        specFileId: '00000000-0000-4000-8000-000000000009',
         specType: 'quality' as const,
         fileName: 'quality.md' as const,
         content: '# Quality',

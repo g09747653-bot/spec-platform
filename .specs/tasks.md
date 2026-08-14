@@ -936,7 +936,7 @@ Goal: the complete parity product — the full four-file journey, resumable, exp
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 73\. Implement the omission manifest and export UI
+- [x] 73\. Implement the omission manifest and export UI
   - Produce the archive even when files lack approved revisions, returning the omitted list; display the manifest and the mode used at download time, in the interface only.
   - Acceptance Criteria:
     - An incomplete bundle downloads successfully rather than being refused.
@@ -949,7 +949,7 @@ Goal: the complete parity product — the full four-file journey, resumable, exp
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 74\. Implement copy-to-clipboard for a single spec file
+- [x] 74\. Implement copy-to-clipboard for a single spec file
   - Implement `GET /api/specs/:specFileId/content?mode=` returning raw markdown; copy on the client with a visual confirmation and a manual-selection fallback.
   - Acceptance Criteria:
     - Copied content is raw markdown with no UI decoration, truncation, or code fences.

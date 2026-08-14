@@ -7,12 +7,14 @@ import { requireOwnerScope } from '@/modules/projects/auth/scope';
 import { createAttachmentRepository } from '@/modules/projects/repositories/attachments';
 import { createInterviewRepository } from '@/modules/projects/repositories/interview';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
-import { CORE_SPEC_FILE_NAMES } from '@/modules/specs/model/spec-files';
+import { resolveExportMode } from '@/modules/specs/export/resolve-mode';
+import { fileNamesForMode } from '@/modules/specs/model/export';
 import { createProposedChangeService } from '@/modules/specs/proposed-changes/proposed-change-service';
 import { createReviewRepository } from '@/modules/specs/repositories/reviews';
 import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
 import { createSpecFileRepository } from '@/modules/specs/repositories/spec-files';
 import { registeredCapabilityIds } from '@/modules/workflow/capabilities';
+import { qualityExportPort } from '@/modules/workflow/quality-port';
 import { canAskAnotherRound, evaluateTransition } from '@/modules/workflow/evaluate-transition';
 import { isAskingStage, type StagePosition } from '@/modules/workflow/model/stages';
 import { pendingRoundId } from '@/modules/workflow/pending-action';
@@ -99,10 +101,23 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const project = await createProjectRepository(db).findById(scope, id);
   if (project === null) notFound();
 
+  /*
+   * The export estimate, resolved through the same mode machinery the endpoint uses (task 73).
+   *
+   * With no Quality capability registered the mode is `default` and the expected set is the parity
+   * four; the panel replaces both lists with the endpoint's own manifest once a download happens, so
+   * this is what the user sees *before* deciding, never what is claimed about a produced archive.
+   */
+  const exportMode = resolveExportMode('default', qualityExportPort());
   const specFileRepository = createSpecFileRepository(db);
-  const exportable = await specFileRepository.approvedForExport(scope, project.id);
-  const includedFiles = exportable.map((file) => file.fileName);
-  const omittedFiles = CORE_SPEC_FILE_NAMES.filter((name) => !includedFiles.includes(name));
+  const exportable = await specFileRepository.approvedForExport(scope, project.id, exportMode);
+  const exportFiles = exportable.map((file) => ({
+    specFileId: file.specFileId,
+    fileName: file.fileName,
+  }));
+  const omittedFiles = fileNamesForMode(exportMode).filter(
+    (name) => !exportFiles.some((file) => file.fileName === name),
+  );
 
   // The card shows the newest revision of the file this session has generated, if any.
   const revisions = createRevisionRepository(db);
@@ -334,7 +349,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
       <ExportPanel
         projectId={project.id}
-        includedFiles={includedFiles}
+        mode={exportMode}
+        files={exportFiles}
         omittedFiles={omittedFiles}
       />
     </section>

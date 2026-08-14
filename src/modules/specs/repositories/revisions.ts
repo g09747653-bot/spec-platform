@@ -5,6 +5,8 @@ import type { SchemaDatabase } from '@/db';
 import { specFiles, specRevisions } from '@/db/schema';
 import { queryOneRow, queryRows } from '@/db/sql';
 
+import { revisionOriginForMode } from '../export/resolve-mode';
+import type { ExportMode } from '../model/export';
 import { type RevisionOrigin, type SpecType, specFileName } from '../model/spec-files';
 
 /**
@@ -202,6 +204,23 @@ export function createRevisionRepository(db: SchemaDatabase) {
 
       const row = rows[0];
       return row === undefined ? null : toRevision(row);
+    },
+
+    /**
+     * The revision a given export mode resolves this file to (task 74; FR-016 AC-5).
+     *
+     * The same rule the bundle uses, applied to one file — expressed by delegating to
+     * `revisionOriginForMode` rather than by restating "default means parity". A clipboard copy that
+     * disagreed with the archive would be the worst kind of wrong: silently, in a single file, in
+     * the direction the user is least likely to check.
+     */
+    async latestApprovedForMode(
+      specFileId: string,
+      mode: ExportMode,
+    ): Promise<SpecRevision | null> {
+      return revisionOriginForMode(mode) === 'parity'
+        ? this.latestApprovedPreEnrichment(specFileId)
+        : this.latestApproved(specFileId);
     },
 
     /** Marks exactly one revision approved (FR-009 AC-3). Returns `false` if there was nothing to mark. */

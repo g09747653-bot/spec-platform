@@ -33,6 +33,7 @@ const SpecFileRow = z.object({
 });
 
 const ExportRow = z.object({
+  id: z.uuid(),
   spec_type: z.string(),
   file_name: z.string(),
   content: z.string(),
@@ -48,6 +49,8 @@ export interface OwnedSpecFile {
 }
 
 export interface ExportableFile {
+  /** The spec file's id — what a per-file action (copy, FR-016) addresses it by. */
+  specFileId: string;
   specType: SpecType;
   fileName: SpecFileName;
   content: string;
@@ -189,7 +192,7 @@ export function createSpecFileRepository(db: SchemaDatabase) {
         db,
         sql`
           SELECT DISTINCT ON (${specFiles}.spec_type)
-                 ${specFiles}.spec_type, ${specFiles}.file_name,
+                 ${specFiles}.id, ${specFiles}.spec_type, ${specFiles}.file_name,
                  ${specRevisions}.content, ${specRevisions}.revision_number
           FROM ${specFiles}
           JOIN ${projects} ON ${projects}.id = ${specFiles}.project_id
@@ -210,6 +213,7 @@ export function createSpecFileRepository(db: SchemaDatabase) {
         }
 
         return {
+          specFileId: row.id,
           specType: row.spec_type,
           fileName: `${row.spec_type}.md`,
           content: row.content,
