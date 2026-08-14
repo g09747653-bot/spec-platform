@@ -140,6 +140,51 @@ export function createProjectRepository(db: SchemaDatabase) {
     },
 
     /**
+     * Renames the project and nothing else (task 76; FR-002 AC-3).
+     *
+     * The statement sets one column. That is the whole of AC-3 — "SHALL leave all spec content,
+     * revisions, and workflow state unchanged" — expressed as the absence of any other write rather
+     * than as a promise: there is no code path here that could touch a second table.
+     *
+     * `updated_at` moves, because the list orders by it and a rename *is* activity on the project.
+     * That is metadata about the project, not content of it.
+     */
+    async rename(scope: OwnerScope, projectId: string, name: string): Promise<boolean> {
+      if (!UUID.test(projectId)) return false;
+
+      const updated = await db
+        .update(projects)
+        .set({ name, updatedAt: new Date() })
+        .where(and(eq(projects.id, projectId), eq(projects.ownerId, scope.userId)))
+        .returning({ id: projects.id });
+
+      return updated.length > 0;
+    },
+
+    /**
+     * Deletes the project permanently (task 76; FR-002 AC-5; DR-6; DR-7).
+     *
+     * One `DELETE`, and the database does the rest: every table below a project carries
+     * `ON DELETE CASCADE` to `projects.id`, so sessions, workflow state, spec files, revisions,
+     * reviews, proposals, rounds, answers, needs, generation runs, export records and attachment rows
+     * all go with it. Deleting them here, one table at a time, would be the same rule written twice —
+     * and the second copy would be the one that forgets a table added later.
+     *
+     * The stored **objects** are not the database's to delete; the caller collects their keys first
+     * and removes them after (IR-005-AC-3).
+     */
+    async remove(scope: OwnerScope, projectId: string): Promise<boolean> {
+      if (!UUID.test(projectId)) return false;
+
+      const deleted = await db
+        .delete(projects)
+        .where(and(eq(projects.id, projectId), eq(projects.ownerId, scope.userId)))
+        .returning({ id: projects.id });
+
+      return deleted.length > 0;
+    },
+
+    /**
      * Moves the project's last-updated time, used by the list (FR-002 AC-1).
      *
      * Returns whether a row was touched, so a caller that has not already resolved ownership cannot

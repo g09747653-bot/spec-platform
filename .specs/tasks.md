@@ -974,7 +974,7 @@ Goal: the complete parity product — the full four-file journey, resumable, exp
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 76\. Implement project rename and cascading permanent delete
+- [x] 76\. Implement project rename and cascading permanent delete
   - Rename leaves content and workflow state untouched; delete requires explicit confirmation stating permanence and cascades through every table plus blob objects.
   - Acceptance Criteria:
     - Rename changes only the name.
@@ -986,7 +986,7 @@ Goal: the complete parity product — the full four-file journey, resumable, exp
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 77\. Implement project duplication
+- [x] 77\. Implement project duplication
   - Copy spec files at their current revisions plus the workflow state, answers, information needs, and attachment references, and explicitly no pending proposed change.
   - Acceptance Criteria:
     - A duplicated mid-session project resumes into a valid state whose gates still pass.

@@ -2,6 +2,8 @@ import Link from 'next/link';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 
+import { ProjectActions } from './project-actions';
+
 /**
  * The project list (FR-002 AC-1): name, current stage, last-updated time.
  *
@@ -45,21 +47,32 @@ export function ProjectList({ projects }: { projects: readonly ProjectListItem[]
     <ul className="flex flex-col gap-3" data-testid="projects-list">
       {projects.map((project) => (
         <li key={project.id}>
-          <Link href={`/projects/${project.id}`} className="block" data-testid="project-row">
-            <Card className="hover:border-border transition-colors">
-              <CardContent className="flex items-center justify-between gap-4 p-4">
-                <span className="truncate font-medium" data-testid="project-name">
-                  {project.name}
-                </span>
+          <Card className="hover:border-border transition-colors">
+            <CardContent className="flex flex-col gap-3 p-4">
+              {/*
+               * The link wraps the name only, not the row. The row now carries buttons, and a link
+               * around a button is a link the button lives inside — one stray click away from
+               * navigating instead of deleting.
+               */}
+              <div className="flex items-center justify-between gap-4">
+                <Link
+                  href={`/projects/${project.id}`}
+                  className="truncate font-medium hover:underline"
+                  data-testid="project-row"
+                >
+                  <span data-testid="project-name">{project.name}</span>
+                </Link>
                 <span className="text-ink-muted flex shrink-0 items-center gap-3 text-xs">
                   <span data-testid="project-stage">{project.stageLabel}</span>
                   <time dateTime={project.updatedAt.toISOString()}>
                     {formatUpdatedAt(project.updatedAt)}
                   </time>
                 </span>
-              </CardContent>
-            </Card>
-          </Link>
+              </div>
+
+              <ProjectActions projectId={project.id} name={project.name} />
+            </CardContent>
+          </Card>
         </li>
       ))}
     </ul>
