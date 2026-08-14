@@ -40,6 +40,28 @@ function streamOf(
   return new Response(body, { status: 200 });
 }
 
+/**
+ * A connection that delivers its events and then stays open, silent, for ever.
+ *
+ * The case the idle deadline exists for, and — since round 4 — the ordinary shape of a slow local
+ * generation: the run is alive and producing nothing yet, so the reader must drop this connection and
+ * find the run again rather than sit on it (Р-2).
+ */
+function stalls(events: readonly GenerationEvent[]): Response {
+  const encoder = new TextEncoder();
+
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      events.forEach((event) => {
+        controller.enqueue(encoder.encode(encodeEvent(event)));
+      });
+      // Never closed and never errored: an open socket carrying nothing.
+    },
+  });
+
+  return new Response(body, { status: 200 });
+}
+
 interface Call {
   url: string;
   method: string;
@@ -246,6 +268,115 @@ describe('following a stream', () => {
 
     expect(final.status).toBe('failed');
     expect(final.error).toMatchObject({ code: 'STREAM_DISCONNECTED', retryable: true });
+  });
+
+  /**
+   * Round 4, Р-2 (D-95). The generation endpoint no longer cancels a run when its reader drops, so a
+   * reconnect finds a producer that is still going. These are the reader's half of that: what it does
+   * with a connection that goes quiet, and how long it is prepared to wait.
+   */
+  describe('a run that outlives its connections', () => {
+    it('drops a silent connection and resumes it, rather than waiting on it for ever', async () => {
+      const { stream, calls } = reader([
+        () => stalls([run(), delta(0, 'the first tokens, ')]),
+        () => streamOf([run(), delta(1, 'then the rest.'), complete()]),
+      ]);
+
+      const final = await stream.start('session-1');
+
+      expect(calls[1]?.url).toBe('/api/generations/run-1/stream?from=0&attempt=1');
+      expect(final.status).toBe('complete');
+      expect(final.text).toBe('the first tokens, then the rest.');
+    });
+
+    /**
+     * The generation this whole round is about: chunks arriving further apart than the reader's idle
+     * deadline. Each connection carries one delta and then goes quiet, so the reader reconnects far
+     * more times than the backoff ladder is long — and still gets its revision, because a connection
+     * that moved the run forward is evidence of a live producer, not of a broken one.
+     */
+    it('keeps waiting while the run keeps producing, however many connections that spans', async () => {
+      const slow = Array.from(
+        { length: 6 },
+        (_unused, index) => () => stalls([run(), delta(index, `chunk ${String(index)}. `)]),
+      );
+
+      const { stream, calls, states } = reader([
+        ...slow,
+        () => streamOf([run(), delta(6, 'done.'), complete()]),
+      ]);
+
+      const final = await stream.start('session-1');
+
+      // Seven connections against a ladder of three: the ladder measures silence, not patience.
+      expect(calls).toHaveLength(7);
+      expect(final.status).toBe('complete');
+      expect(final.text).toBe('chunk 0. chunk 1. chunk 2. chunk 3. chunk 4. chunk 5. done.');
+      // And it never announced a failure on the way — the user sees reconnecting, not "try again".
+      expect(states.some((state) => state.status === 'failed')).toBe(false);
+    });
+
+    it('still gives up when reconnecting finds nothing new — a stale run is not a live one', async () => {
+      const nothingNew = () => stalls([run()]);
+      const { stream, calls } = reader([nothingNew, nothingNew, nothingNew, nothingNew]);
+
+      const final = await stream.start('session-1');
+
+      expect(calls).toHaveLength(4);
+      expect(final.status).toBe('failed');
+      expect(final.error).toMatchObject({ code: 'STREAM_DISCONNECTED', retryable: true });
+    });
+
+    it('takes the revision from a reconnect that finds the run already finished', async () => {
+      const { stream } = reader([
+        () => stalls([run()]),
+        () => streamOf([run(), delta(0, 'the whole document'), complete()]),
+      ]);
+
+      const final = await stream.start('session-1');
+
+      expect(final).toMatchObject({ status: 'complete', specFileId: 'file-1', revisionNumber: 1 });
+    });
+
+    it('shows the failure a reconnect finds, without another reconnect', async () => {
+      const { stream, calls } = reader([
+        () => stalls([run()]),
+        () =>
+          streamOf([
+            run(),
+            {
+              type: 'error',
+              code: 'GENERATION_FAILED',
+              message: 'Generation did not complete.',
+              retryable: true,
+            },
+          ]),
+        () => streamOf([complete()]),
+      ]);
+
+      const final = await stream.start('session-1');
+
+      expect(calls).toHaveLength(2);
+      expect(final.status).toBe('failed');
+      expect(final.error?.code).toBe('GENERATION_FAILED');
+    });
+
+    it('stops on the user’s say-so even while the producer is alive (round 2, Д-1)', async () => {
+      const { stream, calls } = reader([
+        () => {
+          stream.stop();
+          return stalls([run(), delta(0, 'half a document')]);
+        },
+        () => streamOf([complete()]),
+      ]);
+
+      const final = await stream.start('session-1');
+
+      expect(calls).toHaveLength(1);
+      expect(final.status).toBe('idle');
+      // Stopping keeps what was rendered; it is the only evidence of what the run produced.
+      expect(final.text).toBe('half a document');
+    });
   });
 
   it('fails without reconnecting when the first connection never named a run', async () => {

@@ -53,6 +53,8 @@ import { currentOwnerScope } from '@/modules/projects/auth/scope';
 import { fakeChain, type FakeBehaviour } from '@/modules/adapters/llm/__tests__/provider-fakes';
 import type { ProviderId } from '@/modules/adapters/llm';
 
+import { GET as resumeStream } from '@/app/api/generations/[runId]/stream/route';
+
 import { POST } from './route';
 
 /**
@@ -80,6 +82,8 @@ function post(sessionId: string): Promise<Response> {
     params: Promise.resolve({ id: sessionId }),
   });
 }
+
+const tick = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 describe('POST /api/sessions/:id/generate (task 45)', () => {
   let database: TestDatabase;
@@ -348,6 +352,141 @@ describe('POST /api/sessions/:id/generate (task 45)', () => {
       expect(events.at(-1)?.type).toBe('complete');
       expect(await database.db.select().from(generationRuns)).toHaveLength(2);
       expect(await database.db.select().from(specRevisions)).toHaveLength(2);
+    });
+  });
+
+  /**
+   * Round 4, Р-2 (D-95). The reader drops a connection that has gone quiet for its idle deadline —
+   * that is a reconnect, not an abandonment — and until this round the handler answered it by
+   * aborting the provider call. The run then stayed `running` for ever with no producer behind it,
+   * every reconnect found nothing, and a generation the user was still waiting for was reported as
+   * failed. A local model, whose first token can be a minute away, met this on every long run.
+   *
+   * What is asserted here is the fix in its plainest form: **the run does not depend on anyone
+   * reading it.**
+   */
+  describe('a reader that goes away (Р-2)', () => {
+    /** Waits for the run to reach a terminal status — the natural end the client is not waiting on. */
+    async function settledRun(): Promise<{ status: string; completedAt: Date | null }> {
+      for (let attempt = 0; attempt < 200; attempt += 1) {
+        const [run] = await database.db.select().from(generationRuns);
+
+        if (run !== undefined && (run.status === 'complete' || run.status === 'failed')) {
+          return { status: run.status, completedAt: run.completedAt };
+        }
+
+        await tick(25);
+      }
+
+      throw new Error('the run never settled');
+    }
+
+    /** Opens the stream, reads one event, and then goes away for good. */
+    async function disconnectAfterFirstEvent(): Promise<void> {
+      const response = await post(sessionId);
+      const reader = response.body?.getReader();
+      if (reader === undefined) throw new Error('expected a stream body');
+
+      await reader.read();
+      await reader.cancel();
+    }
+
+    it('runs to its natural end and persists the revision, with nobody reading', async () => {
+      await readyToGenerate();
+      // Slow enough that the disconnect lands mid-generation rather than after it.
+      useChain(['google', { followPrompt: true, delayMs: 2 }]);
+
+      await disconnectAfterFirstEvent();
+
+      const run = await settledRun();
+      expect(run.status).toBe('complete');
+      expect(run.completedAt).not.toBeNull();
+
+      // The whole point: the document the user came back for exists (P5; FR-017 AC-4).
+      const revisions = await database.db.select().from(specRevisions);
+      expect(revisions).toHaveLength(1);
+      expect(validateStructure('constitution', revisions[0]?.content ?? '').violations).toEqual([]);
+
+      // And the run is finished business: chunks pruned, exactly as when a client reads to the end.
+      expect(await database.db.select().from(generationChunks)).toEqual([]);
+    });
+
+    it('reaches a verdict on a failing chain too, rather than staying "running" for ever', async () => {
+      await readyToGenerate();
+      useChain(['google', { document: 'a b c d e f g h', failAfterChunks: 2, delayMs: 2 }]);
+
+      await disconnectAfterFirstEvent();
+
+      expect((await settledRun()).status).toBe('failed');
+      expect(await database.db.select().from(specRevisions)).toEqual([]);
+      expect(await database.db.select().from(generationChunks)).toEqual([]);
+    });
+
+    /**
+     * The whole journey of the defect, in one test: a slow generation, a reader that gives up on it,
+     * and the reconnect the browser makes — which now finds a producer still at work and follows it
+     * to the revision. Both real handlers, one database, no mocked stream.
+     */
+    it('is picked up by a reconnect, which follows it to the revision', async () => {
+      await readyToGenerate();
+      useChain(['google', { followPrompt: true, delayMs: 10 }]);
+
+      const response = await post(sessionId);
+      const reader = response.body?.getReader();
+      if (reader === undefined) throw new Error('expected a stream body');
+
+      await reader.read();
+      await reader.cancel();
+
+      const [run] = await database.db.select().from(generationRuns);
+      const runId = run?.id ?? '';
+
+      // Exactly the request the reader makes on reconnect: everything above what it rendered.
+      const resumed = await resumeStream(
+        new Request(`http://test.local/api/generations/${runId}/stream?from=-1&attempt=1`),
+        { params: Promise.resolve({ runId }) },
+      );
+
+      const events = await readEvents(resumed);
+
+      expect(events[0]?.type).toBe('run');
+      expect(events.at(-1)?.type).toBe('complete');
+      expect(events.some((event) => event.type === 'delta')).toBe(true);
+
+      const [revision] = await database.db.select().from(specRevisions);
+      expect(validateStructure('constitution', revision?.content ?? '').valid).toBe(true);
+
+      const complete = events.at(-1);
+      if (complete?.type !== 'complete') throw new Error('expected a complete event');
+      expect(complete.revisionNumber).toBe(revision?.revisionNumber);
+    });
+
+    it('leaves a resumable run behind: the chunk log keeps growing after the disconnect', async () => {
+      await readyToGenerate();
+      // Slow enough that the log is observable mid-run: batches are flushed every 250 ms.
+      useChain(['google', { followPrompt: true, delayMs: 20 }]);
+
+      const response = await post(sessionId);
+      const reader = response.body?.getReader();
+      if (reader === undefined) throw new Error('expected a stream body');
+
+      await reader.read();
+      await reader.cancel();
+
+      /*
+       * A reconnecting reader asks the resume endpoint for everything above what it rendered, and
+       * this log is what it gets — written, after the disconnect, by a run that never stopped
+       * (FR-017; SC-3). Before this round the log ended where the reader did.
+       */
+      let logged = 0;
+
+      for (let attempt = 0; attempt < 100 && logged === 0; attempt += 1) {
+        await tick(20);
+        logged = (await database.db.select().from(generationChunks)).length;
+      }
+
+      expect(logged).toBeGreaterThan(0);
+      expect((await settledRun()).status).toBe('complete');
     });
   });
 

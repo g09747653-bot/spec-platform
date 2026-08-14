@@ -127,9 +127,12 @@ export interface ResumableStreamOptions {
    * reconnects, asks for everything above the last rendered sequence, and — if the server is still
    * silent — runs out of backoff and ends in `failed`, which is a state the user can act from.
    *
-   * The value is deliberately generous. `LLM_REQUEST_TIMEOUT_MS` defaults to 60s per provider, and
-   * a first token is expected within 3s (NFR-001), so 45s cuts nothing legitimate; it only bounds
-   * silence.
+   * **It is a detector of dropped connections, not a budget for the generation** (round 4, Р-2;
+   * D-95). When 45s was chosen, silence that long meant something was wrong: a first token was
+   * expected within 3s (NFR-001). A local model breaks that assumption — it can spend a minute on a
+   * long prompt before the first token — and for one round the deadline was fatal, because dropping
+   * the read aborted the run server-side. It no longer does: the run streams on, and a reconnect
+   * finds a producer that is still going. Firing early now costs one reconnect, not a generation.
    */
   idleTimeoutMs?: number;
 }
@@ -173,6 +176,22 @@ export function createResumableStream(options: ResumableStreamOptions): Resumabl
   const update = (next: StreamState) => {
     state = next;
     options.onState(state);
+  };
+
+  /**
+   * The state a stopped reader leaves behind: never one that says a generation is in flight.
+   *
+   * `stop()` publishes `idle` immediately, but events already decoded from the last read are applied
+   * after it — and `applyEvent` puts the status back to `streaming`. That is the Д-1 dead state
+   * exactly: a card saying "Generating…" with nothing reading for it. So both the control and the
+   * loop's exits settle through here, and the last word belongs to the stop.
+   */
+  const settleStopped = (): StreamState => {
+    if (state.status === 'streaming' || state.status === 'reconnecting') {
+      update({ ...state, status: 'idle', researching: false });
+    }
+
+    return state;
   };
 
   /**
@@ -223,12 +242,25 @@ export function createResumableStream(options: ResumableStreamOptions): Resumabl
     }
   }
 
-  /** Opens a connection, then keeps reopening the resume stream until the run reaches an end. */
+  /**
+   * Opens a connection, then keeps reopening the resume stream until the run reaches an end.
+   *
+   * **What the reader learns on each reconnect is the run's state** (round 4, Р-2; D-95). The resume
+   * endpoint answers a finished run with `complete` (the revision to render) and a failed one with
+   * `error`; anything else means the run is still going, and the reader's job is to keep waiting.
+   *
+   * The backoff is what stops it waiting for ever, and it is spent on *silence*, not on time: a
+   * connection that carried the run forward — text rendered, or a failover moving it to a new
+   * attempt — proves there is a producer at the other end, and resets the ladder. So a generation
+   * that keeps streaming can take as long as it takes, however many dropped connections it spans,
+   * while a run nothing is producing still exhausts the ladder and ends in `failed`.
+   */
   async function follow(open: () => Promise<Response>): Promise<StreamState> {
     let attempt = 0;
 
     for (;;) {
       controller = new AbortController();
+      const before = { attempt: state.attempt, sequence: state.sequence };
 
       try {
         const response = await open();
@@ -241,7 +273,10 @@ export function createResumableStream(options: ResumableStreamOptions): Resumabl
         controller.abort();
       }
 
-      if (isStopped()) return state;
+      if (isStopped()) return settleStopped();
+
+      const advanced = state.attempt > before.attempt || state.sequence > before.sequence;
+      if (advanced) attempt = 0;
 
       // Nothing to resume against: the very first connection failed before the `run` event.
       if (state.runId === null || attempt >= backoff.length) {
@@ -259,7 +294,7 @@ export function createResumableStream(options: ResumableStreamOptions): Resumabl
 
       update({ ...state, status: 'reconnecting' });
       await sleep(backoff[attempt] ?? 0);
-      if (isStopped()) return state;
+      if (isStopped()) return settleStopped();
 
       attempt += 1;
       const runId = state.runId;
@@ -311,14 +346,15 @@ export function createResumableStream(options: ResumableStreamOptions): Resumabl
      *
      * The rendered text is kept: it is what the run produced so far, and throwing it away would
      * lose the only evidence the user has of what happened.
+     *
+     * Since round 4 the run behind it genuinely does carry on to its end and persist its revision —
+     * which is what makes "you can stop and start again; nothing written so far is lost" true rather
+     * than aspirational (D-95).
      */
     stop(): void {
       stopped = true;
       controller?.abort();
-
-      if (state.status === 'streaming' || state.status === 'reconnecting') {
-        update({ ...state, status: 'idle', researching: false });
-      }
+      settleStopped();
     },
 
     get state(): StreamState {

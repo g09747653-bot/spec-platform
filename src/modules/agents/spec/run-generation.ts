@@ -195,7 +195,14 @@ export async function runGeneration(input: RunGenerationInput): Promise<Generati
       attempts: result.attempts,
     };
   } catch (error) {
-    // A caller who disconnected is not a failed run: the run stays open and the client resumes it.
+    /*
+     * An aborted run is not a failed one: it was never allowed to reach a verdict, so it is left as
+     * it stands rather than being recorded as a generation that could not be produced.
+     *
+     * A reader dropping its connection is no longer such a case (round 4, Р-2; D-95): the generation
+     * endpoint stopped aborting on client disconnect, precisely so that a reconnect finds the run
+     * still going. This branch is for a caller that genuinely cancels.
+     */
     if (signal?.aborted === true) throw error;
 
     await recorder.fail();

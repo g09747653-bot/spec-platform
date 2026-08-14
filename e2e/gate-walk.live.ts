@@ -181,11 +181,14 @@ async function answerCard(page: Page): Promise<void> {
 /**
  * Waits for a round to arrive, records what it asked, and answers it.
  *
- * Asks again if the first attempt produced nothing, and says so. A local model returns an
- * unparseable draft often enough to matter (round 3), and the endpoint answers that with
- * `DRAFT_INVALID` rather than a retry — so asking again is exactly what the page offers a person, and
- * a walk that gave up on the first refusal would be measuring less than a user would experience. The
- * retries are counted rather than hidden: how often it takes two goes is the finding.
+ * Asks again if the first attempt produced nothing, and says so — which is exactly what the page
+ * offers a person, so a walk that gave up on the first refusal would measure less than a user would
+ * experience. The retries are counted rather than hidden: how often it takes two goes is the finding.
+ *
+ * Round 4 moved the first retry to the server (Р-1; D-94): a draft that is unusable is re-sampled
+ * once before `DRAFT_INVALID` is issued at all, so a click that needs a second go now means *two*
+ * samples were unusable. The count here is therefore a harsher measure than in round 3, and is meant
+ * to be read that way.
  */
 async function askAndAnswer(page: Page, label: string): Promise<void> {
   const started = Date.now();

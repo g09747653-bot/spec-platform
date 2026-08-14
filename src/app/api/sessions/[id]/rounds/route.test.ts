@@ -5,7 +5,7 @@ import type * as EnvModule from '@/config/env';
 import { OwnerScope } from '@/db/owner-scope';
 import { projects, sessions, users, workflowState } from '@/db/schema';
 import { createMigratedDatabase, type TestDatabase } from '@/db/testing/migrated-database';
-import { AllProvidersFailedError } from '@/modules/adapters/llm';
+import { AllProvidersFailedError, stubInterviewRoundDocument } from '@/modules/adapters/llm';
 import type * as AdapterModule from '@/modules/adapters/llm/default-adapter';
 import { createInterviewRepository } from '@/modules/projects/repositories/interview';
 
@@ -238,6 +238,67 @@ describe('POST /api/sessions/:id/rounds', () => {
 
       await ask(sessionId);
 
+      expect(await createInterviewRepository(database.db).roundsForSession(sessionId)).toEqual([]);
+    });
+  });
+
+  /**
+   * Round 4, Р-1 (D-94) — an unusable draft costs a sample, not a round.
+   *
+   * The M6 walk on a local model lost about a quarter of its question rounds this way, and two of the
+   * three failures seen were a valid document with one character too many after it. Both layers are
+   * asserted from the outside here, where it matters: what the user gets back.
+   */
+  describe('an unusable draft (round 4, Р-1)', () => {
+    /** An adapter that answers each call from a script, and counts the calls. */
+    function scripted(...documents: string[]): { calls: () => number } {
+      let count = 0;
+
+      vi.mocked(createDefaultAdapter).mockReturnValue({
+        generateStreaming: () => {
+          const document = documents[count] ?? '';
+          count += 1;
+
+          return Promise.resolve({ text: document, providerUsed: 'google', attempts: 1 });
+        },
+      });
+
+      return { calls: () => count };
+    }
+
+    it('takes a draft the model ended with one character too many, first time', async () => {
+      const script = scripted(`${stubInterviewRoundDocument('interview', 1)}.`);
+
+      const response = await ask(sessionId);
+
+      expect(response.status).toBe(201);
+      expect((await asJson(response)).kind).toBe('round');
+      // No second sample: the tail was never a reason to throw the round away.
+      expect(script.calls()).toBe(1);
+    });
+
+    it('drafts once more before the user is told anything', async () => {
+      const script = scripted('not json at all', stubInterviewRoundDocument('interview', 1));
+
+      const response = await ask(sessionId);
+
+      expect(response.status).toBe(201);
+      expect((await asJson(response)).kind).toBe('round');
+      expect(script.calls()).toBe(2);
+      expect(await createInterviewRepository(database.db).roundsForSession(sessionId)).toHaveLength(
+        1,
+      );
+    });
+
+    it('surfaces DRAFT_INVALID when the second draft is unusable too, with nothing persisted', async () => {
+      const script = scripted('not json at all', '{"stage": "interview", "questions": "nope"}');
+
+      const response = await ask(sessionId);
+
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({ error: { code: 'DRAFT_INVALID' } });
+      // Exactly one retry — a third sample would only make the wait longer.
+      expect(script.calls()).toBe(2);
       expect(await createInterviewRepository(database.db).roundsForSession(sessionId)).toEqual([]);
     });
   });
