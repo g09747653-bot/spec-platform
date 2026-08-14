@@ -23,6 +23,8 @@ export default tseslint.config(
       'coverage/**',
       'playwright-report/**',
       'test-results/**',
+      // Output of the live gate walk — screenshots, transcripts, and hand-run probes (gitignored).
+      '.gate-artifacts/**',
       'next-env.d.ts',
       'migrations/**',
       // Deliberate violations, linted only by `pnpm test:boundaries`.

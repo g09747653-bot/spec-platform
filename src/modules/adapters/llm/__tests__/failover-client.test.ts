@@ -449,6 +449,31 @@ describe('rate limiting (round 2, Д-5)', () => {
     expect(waits).toEqual([]);
   });
 
+  /**
+   * Round 3 — the case the local provider was added for (D-90).
+   *
+   * A daily quota is a rate limit that does not leak: waiting the ladder out changes nothing, and on a
+   * one-provider chain the walk simply stops, which is what happened to the M6 gate. A second provider
+   * that costs nothing and lives on the same machine turns that into a slower answer instead of no
+   * answer. Note what the chain does *not* do — it does not skip the retries because they look futile.
+   * The provider is asked its full ladder first, because a per-minute limit and a per-day one look
+   * identical from here, and only one of them is worth waiting out.
+   */
+  it('falls over to the local provider once the funded one is out of quota', async () => {
+    waits.length = 0;
+
+    const result = await generate([
+      flaky('google', 99),
+      fakeEntry('ollama', { document: 'local answer' }, 2),
+    ]);
+
+    expect(result.providerUsed).toBe('ollama');
+    expect(result.text).toBe('local answer');
+    // Four refusals from Google — the first plus the ladder — and then the fifth attempt answers.
+    expect(waits).toEqual([1, 2, 4]);
+    expect(result.attempts).toBe(5);
+  });
+
   it('reports the rate limit as its own reason, for the operator', async () => {
     const failures: ProviderFailure[] = [];
 

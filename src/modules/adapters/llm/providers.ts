@@ -77,11 +77,20 @@ export function toSdkTools(tools: readonly ToolDefinition[] | undefined): ToolSe
  *
  * Anthropic's and OpenAI's ids come from their SDK's own model-id union and are **unverified against a
  * live account**, because neither provider is funded.
+ *
+ * The Ollama id was chosen the same way the Google one was — by measuring the installed candidates on
+ * this repository's own `spec.generation.v2` prompt rather than by reputation (D-91). Of the models
+ * present, `qwen2.5:14b-instruct` was the only one that both produced the nine required constitution
+ * headings in order *and* finished inside the per-provider timeout: `qwen3:14b` reasons for 45 seconds
+ * before its first token and takes 97 in total, which `LLM_REQUEST_TIMEOUT_MS` would abort, and
+ * `qwen3.5:9b` spent 114 seconds reasoning without emitting a single content token. A model that
+ * cannot answer inside the budget is not a slower provider, it is a failing one.
  */
 export const DEFAULT_MODELS: Readonly<Record<ProviderId, string>> = Object.freeze({
   anthropic: 'claude-sonnet-5',
   openai: 'gpt-5.2',
   google: 'gemini-3.5-flash',
+  ollama: 'qwen2.5:14b-instruct-q4_K_M',
   stub: 'deterministic-stub',
 });
 
@@ -125,7 +134,42 @@ export function splitMessages(messages: readonly ModelMessage[]): {
   };
 }
 
-function languageModel(provider: ProviderId, apiKey: string, model: string) {
+/**
+ * How a provider is reached: by credential, or by address.
+ *
+ * A union rather than an optional field, because the local provider has no key that happens to be
+ * missing — it has none at all, and what varies for it instead is its endpoint (D-90). Stating that in
+ * the type means the registry cannot build an `ollama` entry by forgetting a secret, and cannot hand a
+ * vendor an address it would silently ignore.
+ */
+export type ProviderConnection = { readonly apiKey: string } | { readonly baseUrl: string };
+
+/**
+ * Ollama accepts an `Authorization` header on its OpenAI-compatible endpoint and ignores it, but the
+ * SDK refuses to build a client without one. A placeholder, not a secret: it authenticates nothing,
+ * and the endpoint it is sent to is on this machine.
+ */
+const LOCAL_PLACEHOLDER_KEY = 'ollama';
+
+function languageModel(provider: ProviderId, model: string, connection: ProviderConnection) {
+  /*
+   * `.chat()` is load-bearing. The callable default of `@ai-sdk/openai` is the **Responses** API,
+   * which Ollama does not implement; pointing it at `/v1` unqualified fails with a 404 that reads like
+   * a bad model id. `.chat()` selects chat completions, which is the surface Ollama actually serves.
+   *
+   * No new dependency: `@ai-sdk/openai` already speaks this protocol to any `baseURL`, so
+   * `@ai-sdk/openai-compatible` would add a package to reach an endpoint we can already reach.
+   */
+  if ('baseUrl' in connection) {
+    return createOpenAI({
+      name: provider,
+      baseURL: connection.baseUrl,
+      apiKey: LOCAL_PLACEHOLDER_KEY,
+    }).chat(model);
+  }
+
+  const { apiKey } = connection;
+
   if (provider === 'anthropic') return createAnthropic({ apiKey })(model);
   if (provider === 'openai') return createOpenAI({ apiKey })(model);
   return createGoogleGenerativeAI({ apiKey })(model);
@@ -146,7 +190,7 @@ function languageModel(provider: ProviderId, apiKey: string, model: string) {
  */
 export function createProviderStream(
   provider: ProviderId,
-  apiKey: string,
+  connection: ProviderConnection,
   model: string,
 ): ProviderStream {
   return async ({ messages, tools, onDelta, signal }) => {
@@ -155,7 +199,7 @@ export function createProviderStream(
 
     try {
       const result = streamText({
-        model: languageModel(provider, apiKey, model),
+        model: languageModel(provider, model, connection),
         ...(system === undefined ? {} : { system }),
         ...(toolSet === undefined ? {} : { tools: toolSet }),
         messages: turns,

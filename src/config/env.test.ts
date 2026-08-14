@@ -247,6 +247,36 @@ describe('parseEnv', () => {
       );
     });
 
+    /**
+     * The local provider is the exception the rule was already written to allow (round 3; D-90).
+     *
+     * `requireChainKeys` demands a key for every provider that *has* one, which is why adding a
+     * provider with none needed no change to the check — only an absence from the key map. What it
+     * deliberately does not do is verify that Ollama is running: that is true at one moment and false
+     * at the next, and a boot-time answer to it would be a wrong answer by request time.
+     */
+    it('demands no key for the local provider, and none for a chain of one', () => {
+      const env = parseEnv(withChain('ollama', { GOOGLE_GENERATIVE_AI_API_KEY: '' }));
+
+      expect(env.LLM_PROVIDER_ORDER).toEqual(['ollama']);
+      expect(env.GOOGLE_GENERATIVE_AI_API_KEY).toBeUndefined();
+    });
+
+    it('still demands the funded provider’s key when the chain names both', () => {
+      const issues = issuesFor(withChain('google,ollama', { GOOGLE_GENERATIVE_AI_API_KEY: '' }));
+
+      expect(issues?.some((issue) => issue.startsWith('GOOGLE_GENERATIVE_AI_API_KEY:'))).toBe(true);
+      expect(issues?.some((issue) => issue.includes('ollama'))).toBe(false);
+    });
+
+    it('defaults the local provider’s address, and lets a machine move it', () => {
+      expect(parseEnv(withChain('ollama')).OLLAMA_BASE_URL).toBe('http://localhost:11434/v1');
+      expect(
+        parseEnv(withChain('ollama', { OLLAMA_BASE_URL: 'http://127.0.0.1:9999/v1' }))
+          .OLLAMA_BASE_URL,
+      ).toBe('http://127.0.0.1:9999/v1');
+    });
+
     it('accepts a full three-provider chain once every key is supplied', () => {
       const env = parseEnv(
         withChain('anthropic,openai,google', {

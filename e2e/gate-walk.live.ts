@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-properties -- a hand-run script, not application code: it takes its
    target from the environment because that is how a person points it at a running server. */
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 
 import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import pg from 'pg';
@@ -22,6 +22,15 @@ import pg from 'pg';
  *   pnpm dev:gate              (another)
  *   node --experimental-strip-types e2e/gate-walk.live.ts
  *
+ * Round 3 additions. The idea, the label and the chain are read from the environment, and
+ * `questions.md` is appended to rather than overwritten, so the same walk can be run for several
+ * ideas on several providers and the results compared side by side — which is what Д-3 asks for and
+ * what one hard-coded idea could not give. The walk also carries on past generation into approval and
+ * the review board, because "the model can write a constitution" and "the model can review one" are
+ * different claims and only the second closes the cycle.
+ *
+ *   GATE_LABEL=family GATE_IDEA="..." GATE_CHAIN=ollama node --experimental-strip-types e2e/...
+ *
  * The auth helper is inlined rather than imported from `fixtures/`: this runs under
  * `--experimental-strip-types`, which needs explicit `.ts` extensions on relative imports, and those
  * are a type error for the rest of the repository. Six duplicated lines beat bending tsconfig for a
@@ -32,12 +41,21 @@ const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? 'postgres://postgres:postgres@127.0.0.1:5497/postgres';
 const OUT = '.gate-artifacts';
 
-const IDEA = 'An app for keeping track of what my family spends each month';
+const IDEA =
+  process.env.GATE_IDEA ?? 'An app for keeping track of what my family spends each month';
+/** Distinguishes one run's artifacts from another's, so two ideas do not overwrite each other. */
+const LABEL = process.env.GATE_LABEL ?? 'walk';
+/** Recorded in the transcript only — the chain itself is set by whoever started the server. */
+const CHAIN = process.env.GATE_CHAIN ?? 'unstated';
 
 const problems: string[] = [];
 const consoleErrors: string[] = [];
 const controlLog: string[] = [];
 const questions: string[] = [];
+/** Wall-clock per model call. A local model is expected to be slower; "how much" is a number. */
+const timings: string[] = [];
+/** Calls that had to be repeated. Not problems — but not nothing, either. */
+const retries: string[] = [];
 
 let step = 0;
 
@@ -81,7 +99,7 @@ async function signIn(context: BrowserContext, user: { sessionToken: string }): 
 /** Every control on the page, with whether it can be used. */
 async function snapshot(page: Page, label: string): Promise<void> {
   step += 1;
-  const name = `${String(step).padStart(2, '0')}-${label.replace(/[^\w]+/g, '-')}`;
+  const name = `${LABEL}-${String(step).padStart(2, '0')}-${label.replace(/[^\w]+/g, '-')}`;
 
   await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
 
@@ -160,20 +178,52 @@ async function answerCard(page: Page): Promise<void> {
   }
 }
 
-/** Waits for a round to arrive, records what it asked, and answers it. */
+/**
+ * Waits for a round to arrive, records what it asked, and answers it.
+ *
+ * Asks again if the first attempt produced nothing, and says so. A local model returns an
+ * unparseable draft often enough to matter (round 3), and the endpoint answers that with
+ * `DRAFT_INVALID` rather than a retry — so asking again is exactly what the page offers a person, and
+ * a walk that gave up on the first refusal would be measuring less than a user would experience. The
+ * retries are counted rather than hidden: how often it takes two goes is the finding.
+ */
 async function askAndAnswer(page: Page, label: string): Promise<void> {
-  await tryClick(page, 'ask-round', `${label} ask`);
+  const started = Date.now();
+  let arrived = false;
 
-  const arrived = await page
-    .getByTestId('mcq-card')
-    .waitFor({ timeout: 180_000 })
-    .then(() => true)
-    .catch(() => false);
+  for (let attempt = 1; attempt <= 3 && !arrived; attempt += 1) {
+    if (attempt > 1) retries.push(`${label} round needed attempt ${String(attempt)}`);
+
+    await tryClick(page, 'ask-round', `${label} ask`);
+
+    arrived = await page
+      .getByTestId('mcq-card')
+      .waitFor({ timeout: 120_000 })
+      .then(() => true)
+      .catch(() => false);
+  }
 
   if (!arrived) {
-    problems.push(`the ${label} round never arrived`);
+    /*
+     * No card is not automatically a fault. A model that answers "nothing further is worth asking"
+     * is exercising FR-005 AC-10's proceed branch, and the page shows that by enabling `proceed`
+     * rather than by rendering a round. Recording the two as one thing would have this walk report
+     * a defect every time the interview finished early.
+     */
+    const canProceed = await page
+      .getByTestId('proceed')
+      .isEnabled()
+      .catch(() => false);
+
+    if (canProceed)
+      retries.push(`${label}: nothing further to ask — the stage is ready to proceed`);
+    else problems.push(`the ${label} round never arrived, after three attempts`);
+
     return;
   }
+
+  const elapsed = Date.now() - started;
+  timings.push(`${label} round: ${String(Math.round(elapsed / 100) / 10)} s`);
 
   await snapshot(page, `${label}-round`);
 
@@ -182,12 +232,66 @@ async function askAndAnswer(page: Page, label: string): Promise<void> {
     .innerText()
     .catch(() => null);
 
-  if (asked !== null) questions.push(`## ${label} round\n\n\`\`\`\n${asked}\n\`\`\`\n`);
+  if (asked !== null) {
+    questions.push(
+      `### ${label} round — ${String(Math.round(elapsed / 100) / 10)} s\n\n\`\`\`\n${asked}\n\`\`\`\n`,
+    );
+  }
 
   await answerCard(page);
   await tryClick(page, 'mcq-submit', `${label} submit`);
   await page.waitForTimeout(5000);
   await snapshot(page, `${label}-answered`);
+}
+
+/**
+ * Approve the draft and read what the review board came back with (round 3).
+ *
+ * The last model call of the cycle, and the one with the strictest output contract: the board is a
+ * JSON artifact that is validated and repaired once before anything is persisted, so a model that can
+ * write prose but cannot hold a schema fails exactly here — which is why the walk goes this far.
+ */
+async function reviewTheDraft(page: Page): Promise<void> {
+  const started = Date.now();
+
+  if (!(await tryClick(page, 'approve-spec', 'approve the draft'))) return;
+
+  // Approving is not entering review: `proceed` stays disabled until a revision is approved, and it
+  // is the click that opens the board (P2 — every stage transition is a decision someone makes).
+  await page.waitForTimeout(2000);
+  if (!(await tryClick(page, 'proceed', 'proceed to review'))) return;
+
+  const arrived = await Promise.race([
+    page
+      .getByTestId('review-board')
+      .waitFor({ timeout: 240_000 })
+      .then(() => 'board'),
+    page
+      .getByTestId('review-error')
+      .waitFor({ timeout: 240_000 })
+      .then(() => 'error'),
+  ]).catch(() => 'nothing');
+
+  timings.push(`review board: ${String(Math.round((Date.now() - started) / 100) / 10)} s`);
+
+  await snapshot(page, 'review-board');
+
+  if (arrived !== 'board') {
+    problems.push(`the review board did not arrive (${arrived})`);
+    return;
+  }
+
+  const board = await page
+    .getByTestId('review-board')
+    .innerText()
+    .catch(() => null);
+
+  if (board !== null) questions.push(`### The review board\n\n\`\`\`\n${board}\n\`\`\`\n`);
+
+  // A decision is required before the stage can advance (P2), so the walk makes one.
+  await tryClick(page, 'review-ignore', 'ignore the first item');
+  await page.waitForTimeout(1500);
+  await snapshot(page, 'review-decided');
 }
 
 async function walk(browser: Browser): Promise<void> {
@@ -210,7 +314,10 @@ async function walk(browser: Browser): Promise<void> {
   await page.getByTestId('session').waitFor({ timeout: 30_000 });
   await snapshot(page, 'session-start');
 
-  await askAndAnswer(page, 'interview');
+  // Two rounds in the interview stage: Д-3 asks for two, and the second is where a model either
+  // narrows on what it just heard or repeats itself — which the first round cannot show.
+  await askAndAnswer(page, 'interview-1');
+  await askAndAnswer(page, 'interview-2');
 
   await tryClick(page, 'proceed', 'leave interview');
   await page.waitForTimeout(4000);
@@ -233,10 +340,16 @@ async function walk(browser: Browser): Promise<void> {
     .then(() => problems.push('Generate was clickable during a generation'))
     .catch(() => undefined);
 
+  const generationStarted = Date.now();
+
   await Promise.race([
-    page.getByTestId('spec-card').waitFor({ timeout: 240_000 }),
-    page.getByTestId('generation-error').waitFor({ timeout: 240_000 }),
-  ]).catch(() => problems.push('generation neither completed nor failed within four minutes'));
+    page.getByTestId('spec-card').waitFor({ timeout: 420_000 }),
+    page.getByTestId('generation-error').waitFor({ timeout: 420_000 }),
+  ]).catch(() => problems.push('generation neither completed nor failed within seven minutes'));
+
+  timings.push(
+    `constitution generation: ${String(Math.round((Date.now() - generationStarted) / 100) / 10)} s`,
+  );
 
   await snapshot(page, 'after-generation');
 
@@ -245,9 +358,19 @@ async function walk(browser: Browser): Promise<void> {
     .innerText()
     .catch(() => null);
 
-  if (drafted !== null) {
-    questions.push(`## The drafted constitution\n\n\`\`\`\n${drafted.slice(0, 3000)}\n\`\`\`\n`);
+  /*
+   * A `spec-card` on screen is the structural check having passed, not a rendering detail: a document
+   * missing or reordering a required section never becomes a revision — `runGeneration` reports
+   * `reason: 'structure'` and the page shows `generation-error` instead (constitution P3). So which of
+   * the two appeared is the section-schema verdict, observed from outside.
+   */
+  if (drafted === null) {
+    problems.push('no constitution was drafted — see the generation-error snapshot');
+  } else {
+    questions.push(`### The drafted constitution\n\n\`\`\`\n${drafted.slice(0, 3000)}\n\`\`\`\n`);
   }
+
+  await reviewTheDraft(page);
 
   await page.reload();
   await page.waitForTimeout(3000);
@@ -282,15 +405,40 @@ try {
   await browser.close();
 }
 
-writeFileSync(`${OUT}/controls.md`, `# Controls at every state\n${controlLog.join('\n')}\n`);
+const list = (lines: readonly string[]) =>
+  lines.length === 0 ? 'None.' : lines.map((line) => `- ${line}`).join('\n');
+
 writeFileSync(
-  `${OUT}/console.md`,
-  `# Console and uncaught errors\n\n${consoleErrors.length === 0 ? 'None.' : consoleErrors.map((line) => `- ${line}`).join('\n')}\n`,
+  `${OUT}/${LABEL}-controls.md`,
+  `# Controls at every state\n${controlLog.join('\n')}\n`,
 );
-writeFileSync(`${OUT}/questions.md`, `# What the live model asked\n\n${questions.join('\n')}\n`);
 writeFileSync(
-  `${OUT}/problems.md`,
-  `# Problems found\n\n${problems.length === 0 ? 'None.' : problems.map((line) => `- ${line}`).join('\n')}\n`,
+  `${OUT}/${LABEL}-console.md`,
+  `# Console and uncaught errors\n\n${list(consoleErrors)}\n`,
+);
+writeFileSync(`${OUT}/${LABEL}-problems.md`, `# Problems found\n\n${list(problems)}\n`);
+
+/*
+ * Appended, not overwritten. The point of Д-3 is comparison — one idea against another, and the local
+ * model against the funded one — and a file that keeps only the last run cannot show it.
+ */
+if (!existsSync(`${OUT}/questions.md`)) {
+  writeFileSync(`${OUT}/questions.md`, '# What the live model asked\n');
+}
+
+appendFileSync(
+  `${OUT}/questions.md`,
+  [
+    `\n## ${LABEL} — chain \`${CHAIN}\``,
+    '',
+    `Idea: ${IDEA}`,
+    '',
+    `Timings: ${timings.join(' · ')}`,
+    `Retries: ${retries.length === 0 ? 'none' : retries.join('; ')}`,
+    `Problems: ${problems.length === 0 ? 'none' : String(problems.length)}`,
+    '',
+    questions.join('\n'),
+  ].join('\n'),
 );
 
 console.log(`\nSteps: ${String(step)}`);
