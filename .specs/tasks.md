@@ -921,7 +921,7 @@ Goal: user documents and live web research ground the generated specs, safely.
 
 Goal: the complete parity product — the full four-file journey, resumable, exportable, completable.
 
-- [ ] 72\. Implement export mode resolution and the export record
+- [x] 72\. Implement export mode resolution and the export record
   - Resolve a declared mode to a concrete revision set: default mode always resolves each core file to its most recent pre-enrichment revision and omits `quality.md`; quality mode resolves to enriched revisions.
   - Accept a `QualityPort`; when null, force default mode and issue no staleness query.
   - Add the `export_records` table and write one row per performed export.
