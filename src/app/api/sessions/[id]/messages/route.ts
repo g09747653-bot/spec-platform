@@ -14,9 +14,13 @@ import { createSessionRepository } from '@/modules/projects/repositories/session
 import {
   describePending,
   findPendingDecision,
+  isDecidable,
+  type DecidableKind,
   type PendingDecision,
 } from '@/modules/specs/pending-decision';
 import { errorResponse, jsonResponse } from '@/modules/web/api/responses';
+import { pendingRoundId } from '@/modules/workflow/pending-action';
+import { createWorkflowStateRepository } from '@/modules/workflow/repositories/workflow-state';
 
 import { POST as decideProposal } from '../../../proposed-changes/[id]/decision/route';
 import { POST as decideReview } from '../../../reviews/[id]/decision/route';
@@ -44,11 +48,35 @@ import { POST as decideSpec } from '../../../specs/[specFileId]/decision/route';
  */
 const ChatMessage = z.object({ text: z.string().trim().min(1).max(8000) });
 
+/**
+ * The session's pending card, resolved the same way the page resolves it (task 75).
+ *
+ * The pending question round comes from `workflow_state`, which `specs` may not read, so it is
+ * fetched here and passed in. One resolver, one precedence, two callers — which is what makes "a
+ * typed decision applies to the card on screen" true rather than usually true.
+ */
+async function currentPending(
+  db: ReturnType<typeof getDatabase>,
+  scope: NonNullable<Awaited<ReturnType<typeof currentOwnerScope>>>,
+  session: { id: string; projectId: string },
+): Promise<PendingDecision> {
+  const state = await createWorkflowStateRepository(db).find(session.id);
+
+  return findPendingDecision(
+    db,
+    scope,
+    session.projectId,
+    state === null ? null : pendingRoundId(state.pendingAction),
+  );
+}
+
 /** The `pendingAction` the client re-renders — the same shape whether or not anything was applied. */
 function pendingActionOf(pending: PendingDecision): Record<string, unknown> | null {
   if (pending === null) return null;
 
   switch (pending.kind) {
+    case 'question-round':
+      return { kind: 'question-round', roundId: pending.roundId };
     case 'diff':
       return { kind: 'diff', proposedChangeId: pending.proposedChangeId };
     case 'review':
@@ -70,7 +98,7 @@ function pendingActionOf(pending: PendingDecision): Record<string, unknown> | nu
  * identical persisted state" would become a promise rather than a consequence.
  */
 async function dispatch(
-  pending: NonNullable<PendingDecision>,
+  pending: Extract<PendingDecision, { kind: DecidableKind }>,
   action: string,
   editPrompt: string | undefined,
   request: Request,
@@ -189,19 +217,25 @@ export async function POST(
     });
   }
 
-  const pending = await findPendingDecision(db, scope, session.projectId);
+  const pending = await currentPending(db, scope, session);
 
-  const resolution =
-    pending === null
-      ? { intent: null, reason: 'no-pending' as const }
-      : await resolveDecisionIntent({
-          message: parsed.data.text,
-          pending: pending.kind,
-          adapter: createDefaultAdapter(),
-          runId: randomUUID(),
-        });
+  /*
+   * A pending question round is answered, not decided: there is no accept/reject to resolve, and the
+   * round endpoint is where a free-text reply belongs (task 36). Treating it as undecidable here is
+   * what stops a typed "approve" from reaching past the questions on screen and approving whichever
+   * spec card happens to be behind them — which is exactly what a file-scoped, round-blind lookup
+   * used to allow.
+   */
+  const resolution = isDecidable(pending)
+    ? await resolveDecisionIntent({
+        message: parsed.data.text,
+        pending: pending.kind,
+        adapter: createDefaultAdapter(),
+        runId: randomUUID(),
+      })
+    : { intent: null, reason: 'no-pending' as const };
 
-  if (pending === null || resolution.intent === null) {
+  if (!isDecidable(pending) || resolution.intent === null) {
     return jsonResponse({
       applied: null,
       reply: await answer(db, scope, session, pending, parsed.data.text),
@@ -233,6 +267,6 @@ export async function POST(
     applied: { kind: pending.kind, action: resolution.intent.action },
     result,
     // Re-derived after the decision, so the client learns what is pending *now* (FR-017 AC-4).
-    pendingAction: pendingActionOf(await findPendingDecision(db, scope, session.projectId)),
+    pendingAction: pendingActionOf(await currentPending(db, scope, session)),
   });
 }

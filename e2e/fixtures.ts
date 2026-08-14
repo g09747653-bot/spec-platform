@@ -65,6 +65,28 @@ export async function createSignedInUser(label: string): Promise<SignedInUser> {
 }
 
 /**
+ * A **new credential for an existing person** — what signing in again actually is.
+ *
+ * `createSignedInUser` creates a person. Resume tests need the other thing: the same owner, a
+ * different session row, after the first was invalidated by signing out. Splicing a new token onto
+ * an old user object does not do it — the row behind the token names whoever it was created for, so
+ * the application authenticates a *different* user and every owned page answers 404.
+ */
+export async function reauthenticate(user: SignedInUser): Promise<SignedInUser> {
+  const sessionToken = randomUUID();
+
+  await withClient(async (client) => {
+    await client.query(
+      `INSERT INTO auth_sessions (session_token, user_id, expires)
+       VALUES ($1, $2, now() + interval '1 day')`,
+      [sessionToken, user.userId],
+    );
+  });
+
+  return { ...user, sessionToken };
+}
+
+/**
  * Walks a fresh session from `interview` to `constitution/generate`, through the real gates.
  *
  * From task 45 the generation endpoint checks the `collect → generate` gate before it calls a model,

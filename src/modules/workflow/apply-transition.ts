@@ -1,4 +1,7 @@
+import { eq, sql } from 'drizzle-orm';
+
 import type { SchemaDatabase } from '@/db';
+import { sessions } from '@/db/schema';
 
 import { evaluateTransition } from './evaluate-transition';
 import type { StagePosition } from './model/stages';
@@ -50,6 +53,21 @@ export async function applyTransition(
     assembled.version,
   );
   if (advanced === null) return { status: 'conflict' };
+
+  /*
+   * Reaching `complete` is counted (task 78; FR-020 AC-10).
+   *
+   * A session may leave for `quality` and come back any number of times, so "is complete" is a
+   * position and "has been completed" is a history — and the two answer different questions. The
+   * increment happens **after** the guarded update, so a transition that lost the version race is
+   * not counted: the row it would have counted was never written.
+   */
+  if (to.stage === 'complete') {
+    await db
+      .update(sessions)
+      .set({ completionCount: sql`${sessions.completionCount} + 1` })
+      .where(eq(sessions.id, sessionId));
+  }
 
   return { status: 'applied', position: advanced };
 }

@@ -961,7 +961,7 @@ Goal: the complete parity product — the full four-file journey, resumable, exp
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 75\. Implement full session resume
+- [x] 75\. Implement full session resume
   - Restore stage, substage, and the pending action on reopen; re-present a pending question set, spec approval, diff decision, or review decision exactly as it was.
   - Acceptance Criteria:
     - Reopening restores all answers, revisions, and attachments.
@@ -998,7 +998,7 @@ Goal: the complete parity product — the full four-file journey, resumable, exp
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 78\. Implement workflow completion and the sealed state
+- [x] 78\. Implement workflow completion and the sealed state
   - Transition to `complete` on the final accepted review; refuse entry if any required spec lacks an approved revision; reject every transition out of `complete` except `complete → quality`, with a reason.
   - Acceptance Criteria:
     - Completion is refused while a required spec is unapproved.

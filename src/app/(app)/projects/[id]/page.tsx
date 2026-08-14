@@ -5,7 +5,11 @@ import { getDatabase } from '@/db/client';
 import { QuestionSetSchema } from '@/modules/agents/schemas/question-set';
 import { requireOwnerScope } from '@/modules/projects/auth/scope';
 import { createAttachmentRepository } from '@/modules/projects/repositories/attachments';
-import { createInterviewRepository } from '@/modules/projects/repositories/interview';
+import {
+  createInterviewRepository,
+  FALLBACK_QUESTION_ID_PREFIX,
+  type AnsweredRound,
+} from '@/modules/projects/repositories/interview';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
 import { resolveExportMode } from '@/modules/specs/export/resolve-mode';
 import { fileNamesForMode } from '@/modules/specs/model/export';
@@ -17,11 +21,17 @@ import { registeredCapabilityIds } from '@/modules/workflow/capabilities';
 import { qualityExportPort } from '@/modules/workflow/quality-port';
 import { canAskAnotherRound, evaluateTransition } from '@/modules/workflow/evaluate-transition';
 import { isAskingStage, type StagePosition } from '@/modules/workflow/model/stages';
+import { nextPosition } from '@/modules/workflow/next-position';
 import { pendingRoundId } from '@/modules/workflow/pending-action';
 import { createWorkflowStateRepository } from '@/modules/workflow/repositories/workflow-state';
 import { assembleWorkflowSnapshot } from '@/modules/workflow/snapshot-assembler';
 import { unmetNeedNames, type WorkflowSnapshot } from '@/modules/workflow/snapshot';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/modules/web';
+import {
+  AnswerHistory,
+  type AnsweredQuestionModel,
+  type AnsweredRoundModel,
+} from '@/modules/web/session/answer-history';
 import { Attachments, type AttachmentModel } from '@/modules/web/session/attachments';
 import { ChatPanel } from '@/modules/web/session/chat-panel';
 import { DiffCard, type PendingProposalModel } from '@/modules/web/session/diff-card';
@@ -45,27 +55,69 @@ import { StageRail } from '@/modules/web/session/stage-rail';
  * gates only to *present* their state; enforcement lives behind the transition endpoint (P1).
  */
 
+/**
+ * How a target position reads to a person.
+ *
+ * The position itself comes from `nextPosition` in `workflow`, which is the same forward map the
+ * engine's table describes; only the wording is decided here, because wording is presentation.
+ */
+function labelFor(from: StagePosition, to: StagePosition): string {
+  if (to.stage === 'complete') return 'Finish and seal the session';
+  if (to.substage === 'generate') return 'Proceed to drafting';
+  // Approval permits this move (FR-009 AC-3) and entering it is what produces the review
+  // (FR-010 AC-1), so the door is offered rather than opened as a side effect of approving.
+  if (to.substage === 'review') return 'Proceed to review';
+  if (from.stage === 'complete') return 'Re-open for the Quality stage';
+
+  return `Proceed to ${to.stage}`;
+}
+
+/**
+ * Turns a stored round and its answer rows into something a person can read (task 75; FR-017 AC-2).
+ *
+ * Option **ids** are what the answer rows hold, so the question set is re-parsed to name them: a
+ * history that showed `q-audience-solo-devs` would restore the answer without restoring the answer.
+ * A direct fallback answer (FR-005 AC-10) carries no question id at all — its `need:<name>` key is
+ * the question — so it is labelled from the need rather than dropped.
+ */
+function toAnsweredRound(round: AnsweredRound): AnsweredRoundModel {
+  const set = QuestionSetSchema.safeParse(round.questions);
+  const questions = set.success ? set.data.questions : [];
+
+  const entries = round.answers.map((answer): AnsweredQuestionModel => {
+    const asked = questions.find((question) => question.id === answer.questionId);
+
+    const labels = answer.selectedOptionIds.map((optionId) => {
+      const option = asked?.options.find((candidate) => candidate.id === optionId);
+      return option?.label ?? optionId;
+    });
+
+    const parts = [...labels, ...(answer.freeText === null ? [] : [answer.freeText])];
+
+    return {
+      question:
+        asked?.text ??
+        (answer.questionId?.startsWith(FALLBACK_QUESTION_ID_PREFIX) === true
+          ? answer.questionId.slice(FALLBACK_QUESTION_ID_PREFIX.length)
+          : 'Your reply'),
+      answer: parts.length === 0 ? '—' : parts.join(', '),
+    };
+  });
+
+  return {
+    roundId: round.id,
+    stage: round.stage,
+    roundNumber: round.roundNumber,
+    entries,
+  };
+}
+
 /** Where "proceed" leads from the current position, for the panel's door button. */
 function nextTarget(snapshot: WorkflowSnapshot): TransitionTargetModel | null {
-  const { position } = snapshot;
-
-  let to: StagePosition | null = null;
-  let label = '';
-
-  if (position.stage === 'interview') {
-    to = { stage: 'constitution', substage: 'collect' };
-    label = 'Proceed to constitution';
-  } else if (position.substage === 'collect') {
-    to = { stage: position.stage, substage: 'generate' };
-    label = 'Proceed to drafting';
-  } else if (position.substage === 'generate') {
-    // Approval permits this move (FR-009 AC-3) and entering it is what produces the review
-    // (FR-010 AC-1), so the door is offered here rather than opened as a side effect of approving.
-    to = { stage: position.stage, substage: 'review' };
-    label = 'Proceed to review';
-  }
-
+  const to = nextPosition(snapshot);
   if (to === null) return null;
+
+  const label = labelFor(snapshot.position, to);
 
   const verdict = evaluateTransition(snapshot, to);
   const unmet: string[] = verdict.allowed
@@ -81,7 +133,11 @@ function nextTarget(snapshot: WorkflowSnapshot): TransitionTargetModel | null {
           ? 'one answered question round for this stage'
           : verdict.reason === 'SPEC_NOT_APPROVED'
             ? 'your approval of the current draft'
-            : verdict.reason,
+            : verdict.reason === 'REVIEW_NOT_DECIDED'
+              ? 'a decision on the review above'
+              : verdict.reason === 'SPEC_MISSING'
+                ? 'an approved revision of every file in the bundle'
+                : verdict.reason,
       ]);
 
   return {
@@ -153,6 +209,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
    */
   const attachments = await createAttachmentRepository(db).listForSession(scope, project.sessionId);
 
+  /* Everything the owner has already answered, restored on reopen (task 75; FR-017 AC-2/AC-5). */
+  const answerHistory = (
+    await createInterviewRepository(db).answeredHistory(project.sessionId)
+  ).map(toAnsweredRound);
+
   // The interview surface renders from the same snapshot the gates evaluate (FR-017).
   const assembled = await assembleWorkflowSnapshot(db, project.sessionId, {
     roundBudget: getEnv().MAX_ROUNDS_PER_STAGE,
@@ -191,11 +252,23 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           removed: proposalDiff.diff.removed,
         };
 
-  /** The door out of `generate`, shown on the spec card rather than in the interview panel. */
-  const draftingTarget =
-    assembled !== null && assembled.snapshot.position.substage === 'generate'
+  /**
+   * The door out of `generate` and out of `review`, shown on the spec card.
+   *
+   * It lives beside the document because the two decisions that open it — approving the draft, and
+   * deciding the review — are taken there. At `tasks.review` the same control is what seals the
+   * session (FR-020 AC-1): completion is a transition like every other, requested explicitly, and
+   * refused by `completionGate` while any file of the bundle lacks an approved revision (AC-2).
+   */
+  const stageTarget =
+    assembled !== null &&
+    (assembled.snapshot.position.substage === 'generate' ||
+      assembled.snapshot.position.substage === 'review')
       ? nextTarget(assembled.snapshot)
       : null;
+
+  /** Whether the session is sealed — the terminal position, with its own surface (FR-020 AC-3). */
+  const isComplete = assembled !== null && assembled.snapshot.position.stage === 'complete';
 
   let interview: {
     stage: string;
@@ -303,6 +376,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         }))}
       />
 
+      <AnswerHistory rounds={answerHistory} />
+
       {interview !== null && (
         <InterviewPanel
           sessionId={project.sessionId}
@@ -317,10 +392,24 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         />
       )}
 
+      {isComplete && (
+        <Card data-testid="session-complete">
+          <CardHeader>
+            <CardTitle>The session is complete</CardTitle>
+            <CardDescription>
+              Every file in the bundle has an approved revision, and the workflow is sealed here: no
+              stage reopens (FR-020 AC-9). The bundle is yours to download or copy below, and you
+              can still refine any file in conversation — a refinement produces a new revision
+              without moving the session (FR-020 AC-4).
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
+
       <SpecCard
         sessionId={project.sessionId}
         generationBlocked={interview !== null && interview.pendingRound !== null}
-        target={draftingTarget}
+        target={stageTarget}
         revision={
           latest === null || currentFile === null
             ? null
