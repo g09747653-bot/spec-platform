@@ -21,7 +21,10 @@
 | Что | Значение |
 |---|---|
 | PR хвост M5 | [#30](https://github.com/g09747653-bot/spec-platform/pull/30) «require the Blob token and the search key, with a stated way to have neither», squash `f61dd5b` |
-| PR 72–80 | [#31](https://github.com/g09747653-bot/spec-platform/pull/31) «Milestone 6 — export, sessions and completion» |
+| PR 72–80 | [#31](https://github.com/g09747653-bot/spec-platform/pull/31) «Milestone 6 — export, sessions and completion», squash `2f9a0ec` |
+| CI | оба обязательных чека success на #30, на #31 и на `main` после мержа; трёхдвижковый E2E — 11 мин 54 с |
+| Vercel | Preview зелёный на обоих PR; **Production зелёный** и на `f61dd5b`, и на `2f9a0ec` |
+| Ветки на remote | только `main` |
 | Миграции | `0009_export_records.sql` |
 | Юнит-тесты | **1279** в 66 файлах (было 1174 в 58) |
 | E2E | **37** сценариев × 3 браузера (было 22): +15 |
@@ -174,7 +177,7 @@ pnpm dev:gate
 
 ### Вариант B — прод
 
-Production-деплой на `main` **зелёный** (проверено на `f61dd5b`; деплой PR #31 подтвердится при мерже). Адрес — тот же, что и в M1/M3: production-URL проекта в Vercel.
+Production-деплой на `main` **зелёный** — проверено и на `f61dd5b` (хвост M5), и на `2f9a0ec` (мерж M6). Адрес — тот же, что и в M1/M3: production-URL проекта в Vercel.
 
 Прод пишет в **боевую** базу Neon, поэтому проекты, созданные при прогоне гейта, останутся. Это не вредно (удаление работает — задача 76), но если хотите чистоты, проходите вариант A и используйте прод только чтобы убедиться, что деплой поднялся и вход работает.
 
