@@ -41,6 +41,15 @@ interface SpecCardProps {
    */
   generationBlocked?: boolean;
   /**
+   * Whether the session's position is one that can generate at all (round 2, Д-4).
+   *
+   * Derived from the workflow, not from a local flag: at the interview, or at `collect`, or on a
+   * completed session, the generate endpoint refuses (constitution P1), and a control whose only
+   * possible outcome is a rejection is worse than no control. The gate is still the authority —
+   * this only stops the interface from inviting a click it knows will fail.
+   */
+  canGenerate?: boolean;
+  /**
    * Where "proceed" leads from `generate` — the door into `review` (task 56).
    *
    * It lives on this card because approval is what opens it (FR-009 AC-3), so the control belongs
@@ -65,6 +74,7 @@ export function SpecCard({
   sessionId,
   revision,
   generationBlocked = false,
+  canGenerate = true,
   target = null,
 }: SpecCardProps) {
   const router = useRouter();
@@ -72,7 +82,7 @@ export function SpecCard({
   const [error, setError] = useState<string | null>(null);
   const [instruction, setInstruction] = useState('');
   const [showInstruction, setShowInstruction] = useState(false);
-  const { state: stream, start } = useResumableStream();
+  const { state: stream, start, stop } = useResumableStream();
 
   const generating = stream.status === 'streaming' || stream.status === 'reconnecting';
 
@@ -188,23 +198,46 @@ export function SpecCard({
             </p>
           )}
 
-          {generationBlocked ? (
-            <p className="text-ink-muted text-sm" data-testid="generation-blocked">
-              A question card is waiting for your answers above — nothing generates until it is
-              submitted.
-            </p>
-          ) : (
-            <Button
-              data-testid="generate-spec"
-              disabled={generating}
-              onClick={() => {
-                void generate();
-              }}
-              className="self-start"
-            >
-              {generating ? 'Generating…' : stream.error !== null ? 'Try again' : 'Generate'}
-            </Button>
+          {/*
+            Round 2, Д-1: **while a generation is in flight there must still be something to do.**
+            The gate walk found the opposite — a stalled provider left the page with the generate
+            control disabled, no cancel, and nothing else that moved the session. "Stop" is that
+            something: it abandons the reader, publishes an `idle` state, and puts the generate
+            control back. The run continues server-side and its chunks stay durable (P5), so
+            stopping costs the user nothing but the wait.
+          */}
+          {generating && (
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" data-testid="stop-generation" onClick={stop}>
+                Stop
+              </Button>
+              <span className="text-ink-muted text-xs">
+                Generating… you can stop and start again; nothing written so far is lost.
+              </span>
+            </div>
           )}
+
+          {!generating &&
+            (generationBlocked ? (
+              <p className="text-ink-muted text-sm" data-testid="generation-blocked">
+                A question card is waiting for your answers above — nothing generates until it is
+                submitted.
+              </p>
+            ) : !canGenerate ? (
+              <p className="text-ink-muted text-sm" data-testid="generation-unavailable">
+                This step does not draft a document. Use the controls above to move the session on.
+              </p>
+            ) : (
+              <Button
+                data-testid="generate-spec"
+                onClick={() => {
+                  void generate();
+                }}
+                className="self-start"
+              >
+                {stream.error !== null ? 'Try again' : 'Generate'}
+              </Button>
+            ))}
         </CardContent>
       </Card>
     );
@@ -245,7 +278,7 @@ export function SpecCard({
             <div className="flex gap-2">
               <Button
                 data-testid="approve-spec"
-                disabled={busy !== null}
+                disabled={busy === 'approve'}
                 onClick={() => {
                   void send('approve', `/api/specs/${revision.specFileId}/decision`, {
                     decision: 'approve',
@@ -258,7 +291,7 @@ export function SpecCard({
               <Button
                 variant="secondary"
                 data-testid="request-changes"
-                disabled={busy !== null}
+                disabled={busy === 'changes'}
                 onClick={() => {
                   setShowInstruction(true);
                 }}
@@ -281,7 +314,7 @@ export function SpecCard({
                 />
                 <Button
                   data-testid="submit-changes"
-                  disabled={busy !== null || instruction.trim() === ''}
+                  disabled={busy === 'changes' || instruction.trim() === ''}
                   onClick={() => {
                     void send('changes', `/api/specs/${revision.specFileId}/decision`, {
                       decision: 'request_changes',
@@ -302,7 +335,7 @@ export function SpecCard({
             <Button
               variant={target.ready ? 'primary' : 'secondary'}
               data-testid="proceed"
-              disabled={busy !== null || !target.ready}
+              disabled={busy === 'proceed' || !target.ready}
               onClick={() => {
                 void proceed(target);
               }}

@@ -194,7 +194,7 @@ export function ReviewBoard({ review }: ReviewBoardProps) {
         <div className="flex flex-wrap gap-2">
           <Button
             data-testid="review-accept"
-            disabled={busy !== null}
+            disabled={busy === 'accept'}
             onClick={() => {
               void decide('accept');
             }}
@@ -204,7 +204,7 @@ export function ReviewBoard({ review }: ReviewBoardProps) {
           <Button
             variant="secondary"
             data-testid="review-ignore"
-            disabled={busy !== null}
+            disabled={busy === 'ignore'}
             onClick={() => {
               void decide('ignore');
             }}
@@ -214,7 +214,7 @@ export function ReviewBoard({ review }: ReviewBoardProps) {
           <Button
             variant="secondary"
             data-testid="review-request-changes"
-            disabled={busy !== null || selected.size === 0}
+            disabled={busy === 'request_changes' || selected.size === 0}
             onClick={() => {
               void decide('request_changes');
             }}

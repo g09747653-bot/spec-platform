@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { createFailoverClient, type ProviderFailure } from '../failover-client';
-import { AllProvidersFailedError, type AttemptStart, type ProviderId } from '../types';
+import type { ProviderEntry } from '../provider-registry';
+import {
+  AllProvidersFailedError,
+  isRateLimited,
+  type AttemptStart,
+  type ProviderId,
+} from '../types';
 
 import { fakeChain, fakeEntry } from './provider-fakes';
 
@@ -336,5 +342,150 @@ describe('the entries the client consumes', () => {
 
     expect(Object.keys(entry).sort()).toEqual(['id', 'model', 'priority', 'stream']);
     expect(typeof entry.stream).toBe('function');
+  });
+});
+
+/**
+ * Round 2, Д-5 — a rate limit is not a broken provider.
+ *
+ * The M6 gate walk failed here. The interview, the review and the generation went out in a tight
+ * burst, the free tier pushed back with a 429, and a single-provider chain treated that as "every
+ * provider failed" and gave up on the first refusal. Waiting a second and asking again is what the
+ * situation actually calls for — and it is the only failure where the *same* provider is the right
+ * next thing to try.
+ */
+describe('rate limiting (round 2, Д-5)', () => {
+  class RateLimited extends Error {
+    readonly status = 429;
+    constructor() {
+      super('429 Too Many Requests');
+      this.name = 'RateLimited';
+    }
+  }
+
+  /** A provider that refuses with 429 the first `times` times, then succeeds. */
+  function flaky(id: ProviderId, times: number): ProviderEntry {
+    let seen = 0;
+
+    return {
+      id,
+      model: `${id}-test-model`,
+      priority: 1,
+      stream: ({ onDelta }) => {
+        seen += 1;
+        if (seen <= times) return Promise.reject(new RateLimited());
+        onDelta('done');
+        return Promise.resolve('done');
+      },
+    };
+  }
+
+  const waits: number[] = [];
+
+  const client = (providers: readonly ProviderEntry[]) =>
+    createFailoverClient({
+      providers,
+      timeoutMs: TIMEOUT_MS,
+      rateLimitBackoff: [1, 2, 4],
+      sleep: (ms) => {
+        waits.push(ms);
+        return Promise.resolve();
+      },
+    });
+
+  const generate = (providers: readonly ProviderEntry[]) =>
+    client(providers).generateStreaming({
+      messages: [{ role: 'user', content: 'write something' }],
+      runId: 'run-1',
+    });
+
+  it('re-asks the same provider after a wait, and succeeds (the gate case)', async () => {
+    waits.length = 0;
+
+    const result = await generate([flaky('google', 2)]);
+
+    expect(result.text).toBe('done');
+    // Two refusals, two waits, then the answer — on a one-provider chain.
+    expect(waits).toEqual([1, 2]);
+    expect(result.attempts).toBe(3);
+  });
+
+  it('gives up after the retries are spent, and says the service is busy — not that it broke', async () => {
+    waits.length = 0;
+
+    await expect(generate([flaky('google', 99)])).rejects.toMatchObject({
+      name: 'AllProvidersFailedError',
+      overloaded: true,
+    });
+
+    // Three waits: the backoff ladder, exactly once through.
+    expect(waits).toEqual([1, 2, 4]);
+  });
+
+  /*
+   * The distinction that keeps the message honest: one genuine fault anywhere and the exhaustion is
+   * not "busy". Telling a user to wait a minute for a bad key would be worse than saying nothing.
+   */
+  it('does not claim overload when any failure was a real fault', async () => {
+    const log = recorder();
+    const chain = fakeChain(['google', { failAfterChunks: 0 }], ['openai', { failAfterChunks: 0 }]);
+
+    await expect(run(chain, log)).rejects.toMatchObject({ overloaded: false });
+  });
+
+  it('does not burn the backoff on an ordinary failure', async () => {
+    waits.length = 0;
+
+    await expect(generate(fakeChain(['google', { failAfterChunks: 0 }]))).rejects.toBeInstanceOf(
+      AllProvidersFailedError,
+    );
+
+    // No waits at all: a broken provider is not worth re-asking three times.
+    expect(waits).toEqual([]);
+  });
+
+  it('reports the rate limit as its own reason, for the operator', async () => {
+    const failures: ProviderFailure[] = [];
+
+    const limited = createFailoverClient({
+      providers: [flaky('google', 99)],
+      timeoutMs: TIMEOUT_MS,
+      rateLimitBackoff: [1],
+      sleep: () => Promise.resolve(),
+      onProviderFailure: (failure) => failures.push(failure),
+    });
+
+    await expect(
+      limited.generateStreaming({ messages: [{ role: 'user', content: 'x' }], runId: 'run-1' }),
+    ).rejects.toBeInstanceOf(AllProvidersFailedError);
+
+    expect(failures.map((failure) => failure.reason)).toEqual(['rate-limited', 'rate-limited']);
+  });
+});
+
+describe('isRateLimited (round 2, Д-5)', () => {
+  it('recognises the two statuses that mean "try later"', () => {
+    expect(isRateLimited({ status: 429 })).toBe(true);
+    expect(isRateLimited({ statusCode: 503 })).toBe(true);
+    expect(isRateLimited(new Error('429 Too Many Requests'))).toBe(true);
+    expect(isRateLimited(new Error('model is overloaded'))).toBe(true);
+    expect(isRateLimited(new Error('quota exceeded for this project'))).toBe(true);
+  });
+
+  it('follows the cause chain, because SDKs wrap', () => {
+    expect(isRateLimited(new Error('call failed', { cause: { status: 429 } }))).toBe(true);
+  });
+
+  /*
+   * Ambiguity reads as "not a rate limit". A false positive costs the user seven seconds of waiting
+   * before an error they were going to get anyway — and, worse, tells them to try again when
+   * trying again cannot help.
+   */
+  it('is not fooled by ordinary faults', () => {
+    expect(isRateLimited({ status: 401 })).toBe(false);
+    expect(isRateLimited(new Error('invalid api key'))).toBe(false);
+    expect(isRateLimited(new Error('ECONNRESET'))).toBe(false);
+    expect(isRateLimited(null)).toBe(false);
+    expect(isRateLimited(undefined)).toBe(false);
   });
 });

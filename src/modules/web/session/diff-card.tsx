@@ -195,7 +195,7 @@ export function DiffCard({ specFileId, proposal }: DiffCardProps) {
           <div className="flex gap-2">
             <Button
               data-testid="accept-diff"
-              disabled={busy !== null}
+              disabled={busy === 'accept'}
               onClick={() => {
                 void decide('accept');
               }}
@@ -205,7 +205,7 @@ export function DiffCard({ specFileId, proposal }: DiffCardProps) {
             <Button
               variant="secondary"
               data-testid="reject-diff"
-              disabled={busy !== null}
+              disabled={busy === 'reject'}
               onClick={() => {
                 void decide('reject');
               }}
@@ -252,7 +252,7 @@ export function DiffCard({ specFileId, proposal }: DiffCardProps) {
 
         <Button
           data-testid="submit-refinement"
-          disabled={busy !== null || instruction.trim() === ''}
+          disabled={busy === 'submit' || instruction.trim() === ''}
           onClick={() => {
             void submit();
           }}
