@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { parseEnv } from '@/config/env';
+import { testEnv } from '@/config/testing/test-env';
+
 import { truncateToBytes } from './content-budget';
 import { createTavilyResearch } from './tavily-client';
-import { createNullResearch } from './index';
+import { createDefaultResearch, createNullResearch } from './index';
 
 /**
  * Task 70 — the research adapter, and the one property that matters most: **it cannot fail**.
@@ -133,6 +136,62 @@ describe('research adapter (task 70)', () => {
 
     it('handles a zero budget without producing a replacement character', () => {
       expect(truncateToBytes('日本語', 0)).toEqual({ text: '', truncated: true });
+    });
+  });
+
+  /**
+   * The composition root, after `WEB_SEARCH_API_KEY` became required (D-73).
+   *
+   * The sharper of the two cases: a key that is present but wrong would make a paid third-party call
+   * on every generation and get nothing for it, and the adapter's own no-failure rule would hide
+   * that behind an empty result. So "no search here" is a value, not an omission — and an omission
+   * is a boot failure rather than a search that quietly never happens.
+   *
+   * The Tavily side is asserted without a call: the adapter is built with a transport that would
+   * record one, and the assertion is that resolution alone does not reach for it.
+   */
+  describe('createDefaultResearch selects on the credential (D-73)', () => {
+    it('gives the null adapter for the stated absence', async () => {
+      const research = createDefaultResearch(parseEnv(testEnv({ WEB_SEARCH_API_KEY: 'none' })));
+
+      await expect(research.search('anything')).resolves.toEqual([]);
+      await expect(research.fetch('https://example.test')).resolves.toEqual({
+        text: '',
+        truncated: false,
+      });
+    });
+
+    it('gives the live adapter for a real key', async () => {
+      /*
+       * The two adapters are told apart by what a search *does*, not by what it returns: the null
+       * one answers `[]` without reaching for a transport, so a recorded call is the evidence that
+       * the live one was selected.
+       *
+       * The stub goes in **before** the adapter is built, not before the call: `createTavilyResearch`
+       * captures `globalThis.fetch` once, at construction. Stubbing afterwards left the adapter
+       * holding the real one — and the run went to api.tavily.com, got a 401, and passed anyway,
+       * because a failed search is an empty result by design (FR-019 AC-4). A live call from a test
+       * is invisible here unless the transport is taken away first (NFR-012 AC-2).
+       */
+      const seen: string[] = [];
+      const original = globalThis.fetch;
+      globalThis.fetch = ((url: string) => {
+        seen.push(url);
+        return Promise.resolve(json({ results: [] }));
+      }) as unknown as typeof globalThis.fetch;
+
+      try {
+        const research = createDefaultResearch(
+          parseEnv(testEnv({ WEB_SEARCH_API_KEY: 'tvly-key' })),
+        );
+
+        await research.search('drizzle orm');
+      } finally {
+        globalThis.fetch = original;
+      }
+
+      expect(seen).toHaveLength(1);
+      expect(seen[0]).toContain('tavily.com');
     });
   });
 });
