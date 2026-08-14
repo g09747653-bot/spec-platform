@@ -5,6 +5,7 @@ import {
   stubInterviewRoundDocument,
   stubReplyAssessmentDocument,
   stubSessionSummaryDocument,
+  type LlmAdapter,
 } from '@/modules/adapters/llm';
 
 import { createInterviewAgent, parseJsonDocument, repairQuestionSetDraft } from './interview-agent';
@@ -140,6 +141,100 @@ describe('InterviewAgent (task 33)', () => {
     expect(parseJsonDocument('```json\n{"a": 1}\n```')).toEqual({ a: 1 });
     expect(parseJsonDocument('{"a": 1}')).toEqual({ a: 1 });
     expect(parseJsonDocument('not json')).toBeNull();
+  });
+
+  /**
+   * Round 4, Р-1 (D-94). Both tails are transcribed from live local-model output; the third case is
+   * the one the tolerance must *not* rescue — a bracket broken inside the object is a document nobody
+   * can reconstruct without inventing content.
+   */
+  describe('a trailing character does not cost a round (Р-1)', () => {
+    const draft = JSON.stringify({
+      stage: 'interview',
+      questions: [{ id: 'q1', informationNeeds: ['what is painful about it'] }],
+    });
+
+    it('parses a draft followed by a stray quote', () => {
+      expect(parseJsonDocument(`${draft}"`)).toEqual(JSON.parse(draft));
+    });
+
+    it('parses a draft followed by a full stop', () => {
+      expect(parseJsonDocument(`${draft}.`)).toEqual(JSON.parse(draft));
+    });
+
+    it('parses a draft the model introduced in prose, and inside a fence', () => {
+      expect(parseJsonDocument(`Here is the round:\n${draft}\nHope that helps!`)).toEqual(
+        JSON.parse(draft),
+      );
+      expect(parseJsonDocument('```json\n{"a": 1}\n```.')).toEqual({ a: 1 });
+    });
+
+    it('refuses a draft broken inside the object — internals are never repaired', () => {
+      expect(parseJsonDocument('{"stage": "interview", "questions": [{"id": "q1"]}')).toBeNull();
+      // Unbalanced from the start: nothing closes it, so there is no object to extract.
+      expect(parseJsonDocument('{"stage": "interview", "questions": [')).toBeNull();
+    });
+
+    it('does not mistake a brace inside a string for structure', () => {
+      expect(parseJsonDocument('{"text": "a } and a \\" quote"}!')).toEqual({
+        text: 'a } and a " quote',
+      });
+    });
+  });
+
+  /**
+   * Round 4, Р-1 layer two (D-94). The parser handles a stray character; a sample that is unusable
+   * for any other reason gets exactly one more attempt before the user is shown an error.
+   */
+  describe('one automatic re-draft (Р-1)', () => {
+    /** An adapter that answers each call from a script, and counts the calls. */
+    function scripted(...documents: string[]) {
+      const calls = { count: 0 };
+
+      const adapter: LlmAdapter = {
+        generateStreaming: () => {
+          const document = documents[calls.count] ?? '';
+          calls.count += 1;
+
+          return Promise.resolve({ text: document, providerUsed: 'google', attempts: 1 });
+        },
+      };
+
+      return { adapter, calls };
+    }
+
+    it('re-drafts once when the first sample is unusable, and the user never sees the error', async () => {
+      const { adapter, calls } = scripted(
+        '{"stage": "interview", "questions": "nope"}',
+        stubInterviewRoundDocument('interview', 1),
+      );
+
+      const outcome = await createInterviewAgent(adapter).draftRound(baseInput);
+
+      expect(calls.count).toBe(2);
+      expect(outcome.kind).toBe('round');
+    });
+
+    it('gives up after the second, surfacing DRAFT_INVALID exactly as before', async () => {
+      const { adapter, calls } = scripted('not json at all', 'still not json');
+
+      const outcome = await createInterviewAgent(adapter).draftRound(baseInput);
+
+      expect(calls.count).toBe(2);
+      expect(outcome.kind).toBe('draft-invalid');
+    });
+
+    it('does not re-draft a usable round, nor an explicit "nothing to ask"', async () => {
+      const good = scripted(stubInterviewRoundDocument('interview', 1));
+      expect((await createInterviewAgent(good.adapter).draftRound(baseInput)).kind).toBe('round');
+      expect(good.calls.count).toBe(1);
+
+      const empty = scripted(stubInterviewRoundDocument('interview', 4));
+      expect((await createInterviewAgent(empty.adapter).draftRound(baseInput)).kind).toBe(
+        'nothing-to-ask',
+      );
+      expect(empty.calls.count).toBe(1);
+    });
   });
 
   it('repair drops what it cannot fix and invents nothing', () => {

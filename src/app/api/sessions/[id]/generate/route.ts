@@ -120,7 +120,6 @@ export async function POST(
   const adapter = createDefaultAdapter();
 
   const encoder = new TextEncoder();
-  const abort = new AbortController();
 
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -131,7 +130,7 @@ export async function POST(
         try {
           controller.enqueue(encoder.encode(encodeEvent(event)));
         } catch {
-          // The client is gone. Stop writing; the run keeps going only as long as its own signal.
+          // The client is gone. Stop writing — and keep generating (see `cancel` below).
           open = false;
         }
       };
@@ -178,7 +177,6 @@ export async function POST(
           // What the prompt was built from, recorded on the revision this run writes (DR-12).
           contextAttachmentIds: collected.contextAttachmentIds,
           ...(applied.length === 0 ? {} : { changeInstruction: reviseInstruction(applied.length) }),
-          signal: abort.signal,
           progress: {
             delta: (sequence, text) => {
               send({ type: 'delta', sequence, text });
@@ -243,14 +241,33 @@ export async function POST(
         });
       } finally {
         open = false;
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // Already cancelled by a client that went away. Closing a closed stream is not an event.
+        }
       }
     },
 
+    /**
+     * The browser went away mid-generation — and the run carries on regardless (round 4, Р-2; D-95).
+     *
+     * It used to abort the provider call here, on the reasoning that nobody should pay for output
+     * nobody will read. That reasoning had a hole the M6 gate fell into: the reader drops a
+     * connection that has been silent for its idle deadline, which is a *reconnect*, not an
+     * abandonment — so the abort killed the generation the client was still waiting for, the run
+     * stayed `running` for ever with no producer behind it, and every reconnect found nothing.
+     * Local models, whose first token can be a minute away, hit it on every long generation.
+     *
+     * So a dropped read is now what it always claimed to be: the run streams to its natural end,
+     * validates, persists its revision and marks itself `complete` or `failed`. A reconnecting
+     * reader finds a live producer; a tab closed for good still leaves the revision on the page it
+     * comes back to (P5). Nothing runs unbounded — the chain's own budget
+     * (`LLM_REQUEST_TIMEOUT_MS` per provider, times the chain) ends it either way, which is why
+     * this needs no timer of its own.
+     */
     cancel() {
-      // The browser went away mid-generation. Stop the provider call rather than paying for output
-      // nobody will read; the run row and its chunks stay, and the client resumes against them.
-      abort.abort(new Error('client disconnected'));
+      // Deliberately empty: `send` stops writing on its own once the stream is gone.
     },
   });
 

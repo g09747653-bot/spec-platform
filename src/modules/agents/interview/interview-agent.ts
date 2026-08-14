@@ -18,8 +18,14 @@ import {
  * asked at all is `roundBudgetGate`'s decision at the calling edge, and whether the stage may
  * advance is the transition table's. The pipeline here is fixed:
  *
- *   model text → JSON → schema validation (repair once, then `DRAFT_INVALID`)
- *              → drop needs already satisfied (FR-005 AC-9) → round, or nothing left to ask.
+ *   model text → JSON → schema validation (repair once) → draft once more if it is still
+ *              unusable, then `DRAFT_INVALID` → drop needs already satisfied (FR-005 AC-9)
+ *              → round, or nothing left to ask.
+ *
+ * Three distinct layers, and they are not interchangeable (round 4, Р-1; D-94). `parseJsonDocument`
+ * tolerates what surrounds the object (a fence, a stray trailing character); the M2 repair pass fixes
+ * the *structure* of a draft that already parsed; and a second full draft is what answers a sample
+ * that neither could rescue. None of them edits the inside of a document a model wrote.
  *
  * A draft that re-declares a satisfied need is not an error — models repeat themselves — but the
  * re-declared need is removed, a question left with no needs is dropped, and a set left with no
@@ -44,7 +50,57 @@ export type InterviewAgentOutcome =
   | { kind: 'nothing-to-ask'; promptId: string }
   | { kind: 'draft-invalid'; promptId: string; issues: readonly string[] };
 
-/** Strips an accidental markdown fence and parses JSON; `null` when it is not JSON at all. */
+/**
+ * The span of the outermost balanced JSON object, or `null` if the text never balances.
+ *
+ * Depth counting, with strings honoured — a `}` inside a quoted value closes nothing, and a `\"`
+ * inside a string does not end it. Anything before the opening brace and after its match is outside
+ * the object and is not this function's business.
+ */
+function outermostObject(text: string): string | null {
+  const start = text.indexOf('{');
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < text.length; index += 1) {
+    const character = text[index];
+
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+
+    if (character === '"') inString = true;
+    else if (character === '{') depth += 1;
+    else if (character === '}') {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, index + 1);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Strips an accidental markdown fence and parses JSON; `null` when it is not JSON at all.
+ *
+ * **Tolerant of what surrounds the object, never of what is inside it (round 4, Р-1).** A local model
+ * ends about a quarter of its interview drafts with one character too many — `…}]}"` and `…}]}.` were
+ * both observed live — and a whole round of questions was being thrown away over a stray quote. So the
+ * outermost balanced object is extracted and the tail after its closing brace is discarded.
+ *
+ * The line is drawn deliberately: this repairs *nothing* within the object. A draft with a broken
+ * bracket inside an array stays invalid and takes the `DRAFT_INVALID` path, because guessing where a
+ * missing bracket belongs is inventing content, and the schema layer above exists to reject invention.
+ *
+ * Well-formed text takes the first branch untouched, so the tolerance costs nothing when it is not
+ * needed and cannot change how a valid draft is read.
+ */
 export function parseJsonDocument(text: string): unknown {
   const unfenced = text
     .trim()
@@ -54,7 +110,14 @@ export function parseJsonDocument(text: string): unknown {
   try {
     return JSON.parse(unfenced) as unknown;
   } catch {
-    return null;
+    const object = outermostObject(unfenced);
+    if (object === null) return null;
+
+    try {
+      return JSON.parse(object) as unknown;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -110,53 +173,81 @@ function withoutSatisfiedNeeds(set: QuestionSet, satisfied: readonly string[]): 
 }
 
 export function createInterviewAgent(adapter: LlmAdapter) {
-  return {
-    async draftRound(input: InterviewAgentInput): Promise<InterviewAgentOutcome> {
-      const prompt = interviewQuestionsPrompt(input);
+  /** One full draft: prompt, model call, parse, validate. */
+  async function attemptDraft(input: InterviewAgentInput): Promise<InterviewAgentOutcome> {
+    const prompt = interviewQuestionsPrompt(input);
 
-      const result = await adapter.generateStreaming({
-        messages: [
-          { role: 'system', content: prompt.system },
-          { role: 'user', content: prompt.user },
-        ],
-        runId: input.runId,
-        signal: input.signal,
+    const result = await adapter.generateStreaming({
+      messages: [
+        { role: 'system', content: prompt.system },
+        { role: 'user', content: prompt.user },
+      ],
+      runId: input.runId,
+      signal: input.signal,
+    });
+
+    const draft = parseJsonDocument(result.text);
+    if (draft === null) {
+      return {
+        kind: 'draft-invalid',
+        promptId: prompt.id,
+        issues: ['the draft is not parseable JSON'],
+      };
+    }
+
+    // An explicitly empty set is the model saying "nothing further is worth asking" — a valid
+    // outcome, not a defect (FR-005 AC-10's proceed branch).
+    if (isRecord(draft) && Array.isArray(draft.questions) && draft.questions.length === 0) {
+      return { kind: 'nothing-to-ask', promptId: prompt.id };
+    }
+
+    const validation = validateQuestionSetDraft(draft, repairQuestionSetDraft(input.stage));
+    if (!validation.ok) {
+      return { kind: 'draft-invalid', promptId: prompt.id, issues: validation.issues };
+    }
+
+    const set = withoutSatisfiedNeeds(validation.set, input.satisfiedNeeds);
+    if (set === null) return { kind: 'nothing-to-ask', promptId: prompt.id };
+
+    const declaredNeeds = [
+      ...new Set(set.questions.flatMap((question) => question.informationNeeds)),
+    ];
+
+    return {
+      kind: 'round',
+      set,
+      declaredNeeds,
+      promptId: prompt.id,
+      repaired: validation.repaired,
+    };
+  }
+
+  return {
+    /**
+     * A draft, with **one** automatic second try (round 4, Р-1).
+     *
+     * Drafting is the one model call in this system whose output is machine-read rather than shown:
+     * a round is either a usable question set or nothing at all. An unusable one is therefore worth
+     * exactly one more sample before it becomes an error the user has to act on — sampling again is
+     * the cheapest repair there is, and unlike editing the draft it invents nothing.
+     *
+     * Exactly one. A second failure is a signal (a prompt or a model that cannot hold the contract),
+     * and burning provider budget on a third sample would hide it behind a longer wait.
+     */
+    async draftRound(input: InterviewAgentInput): Promise<InterviewAgentOutcome> {
+      const first = await attemptDraft(input);
+      if (first.kind !== 'draft-invalid') return first;
+
+      // Server-side only, and the reason the retry is not silent: a chain of these in a log is what
+      // tells "one bad sample" apart from "this model never gets the contract right" (D-93).
+      console.warn('interview draft unusable, drafting once more', {
+        stage: input.stage,
+        roundNumber: input.roundNumber,
+        promptId: first.promptId,
+        issues: first.issues,
       });
 
-      const draft = parseJsonDocument(result.text);
-      if (draft === null) {
-        return {
-          kind: 'draft-invalid',
-          promptId: prompt.id,
-          issues: ['the draft is not parseable JSON'],
-        };
-      }
-
-      // An explicitly empty set is the model saying "nothing further is worth asking" — a valid
-      // outcome, not a defect (FR-005 AC-10's proceed branch).
-      if (isRecord(draft) && Array.isArray(draft.questions) && draft.questions.length === 0) {
-        return { kind: 'nothing-to-ask', promptId: prompt.id };
-      }
-
-      const validation = validateQuestionSetDraft(draft, repairQuestionSetDraft(input.stage));
-      if (!validation.ok) {
-        return { kind: 'draft-invalid', promptId: prompt.id, issues: validation.issues };
-      }
-
-      const set = withoutSatisfiedNeeds(validation.set, input.satisfiedNeeds);
-      if (set === null) return { kind: 'nothing-to-ask', promptId: prompt.id };
-
-      const declaredNeeds = [
-        ...new Set(set.questions.flatMap((question) => question.informationNeeds)),
-      ];
-
-      return {
-        kind: 'round',
-        set,
-        declaredNeeds,
-        promptId: prompt.id,
-        repaired: validation.repaired,
-      };
+      return attemptDraft(input);
     },
   };
 }
