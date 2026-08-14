@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { getEnv } from '@/config/env';
 import { getDatabase } from '@/db/client';
+import { AllProvidersFailedError } from '@/modules/adapters/llm';
 import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
 import { createInterviewAgent } from '@/modules/agents/interview/interview-agent';
 import { createReplyAssessor } from '@/modules/agents/interview/reply-assessment';
@@ -171,11 +172,28 @@ async function refreshInterviewSummary(
 ): Promise<boolean> {
   const summariser = createSummaryAgent(createDefaultAdapter());
 
-  const summary = await summariser.summarise({
-    initialPrompt: session.initialPrompt,
-    answeredHighlights: highlights,
-    runId: randomUUID(),
-  });
+  /*
+   * An exhausted chain means "no summary yet", not "the submission failed" (round 2, Д-6).
+   *
+   * The answers are already durable by the time this runs (NFR-003 AC-1), so letting the error
+   * escape would turn a successful, persisted submission into a 500 — the user would be told their
+   * answers were lost while looking at a database that had kept them. The live gate walk found
+   * exactly that. `false` is the honest report: the summary is the third condition of the interview
+   * exit gate, and it is simply not met yet; the next submission tries again.
+   */
+  let summary: string | null;
+
+  try {
+    summary = await summariser.summarise({
+      initialPrompt: session.initialPrompt,
+      answeredHighlights: highlights,
+      runId: randomUUID(),
+    });
+  } catch (error) {
+    if (!(error instanceof AllProvidersFailedError)) throw error;
+    return false;
+  }
+
   if (summary === null) return false;
 
   return createSessionRepository(db).updateSummary(scope, session.id, summary);
@@ -319,11 +337,23 @@ export async function POST(
     await interviewRepository.addReplyAnswer(round.id, parsed.data.reply);
 
     const assessor = createReplyAssessor(createDefaultAdapter());
-    const satisfied = await assessor.assess({
-      reply: parsed.data.reply,
-      declaredNeeds,
-      runId: randomUUID(),
-    });
+    /*
+     * The assessor is already documented as conservative — when in doubt it satisfies nothing. An
+     * exhausted chain is the deepest possible doubt, so it takes the same branch rather than
+     * escaping as a 500 over an answer that is already stored (round 2, Д-6).
+     */
+    let satisfied: readonly string[];
+
+    try {
+      satisfied = await assessor.assess({
+        reply: parsed.data.reply,
+        declaredNeeds,
+        runId: randomUUID(),
+      });
+    } catch (error) {
+      if (!(error instanceof AllProvidersFailedError)) throw error;
+      satisfied = [];
+    }
     await interviewRepository.markNeedsSatisfied(session.id, stage, satisfied, round.id);
 
     let summaryPersisted = session.summary !== null;
@@ -356,16 +386,29 @@ export async function POST(
 
     const nextRoundNumber = round.roundNumber + 1;
     const agent = createInterviewAgent(createDefaultAdapter());
-    const outcome = await agent.draftRound({
-      stage,
-      roundNumber: nextRoundNumber,
-      initialPrompt: session.initialPrompt,
-      summary: session.summary,
-      satisfiedNeeds: satisfiedNeedNames(assembled.snapshot, stage),
-      unmetNeeds: unmetNow,
-      freeTextReply: parsed.data.reply,
-      runId: randomUUID(),
-    });
+
+    /*
+     * A follow-up that could not be drafted is "nothing narrower to ask" — the branch immediately
+     * below, which already exists for an unusable draft. The reply is answered and stored either
+     * way, and the user can ask again from the panel (round 2, Д-6).
+     */
+    let outcome;
+
+    try {
+      outcome = await agent.draftRound({
+        stage,
+        roundNumber: nextRoundNumber,
+        initialPrompt: session.initialPrompt,
+        summary: session.summary,
+        satisfiedNeeds: satisfiedNeedNames(assembled.snapshot, stage),
+        unmetNeeds: unmetNow,
+        freeTextReply: parsed.data.reply,
+        runId: randomUUID(),
+      });
+    } catch (error) {
+      if (!(error instanceof AllProvidersFailedError)) throw error;
+      outcome = { kind: 'nothing-to-ask' } as const;
+    }
 
     if (outcome.kind !== 'round') {
       // Nothing narrower to ask (or the draft was unusable — retriable via the ask button):
