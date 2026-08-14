@@ -97,6 +97,7 @@ describe('parity: a default-mode export is exactly the four files', () => {
   it('contains the four parity names and nothing else', async () => {
     const files = await Promise.all(
       CORE_SPEC_TYPES.map(async (specType) => ({
+        specFileId: `00000000-0000-4000-8000-00000000000${String(CORE_SPEC_TYPES.indexOf(specType))}`,
         specType,
         fileName: specFileName(specType),
         content: await generate(specType),
@@ -116,6 +117,7 @@ describe('parity: a default-mode export is exactly the four files', () => {
     const files = [
       ...(await Promise.all(
         CORE_SPEC_TYPES.map(async (specType) => ({
+          specFileId: `00000000-0000-4000-8000-00000000000${String(CORE_SPEC_TYPES.indexOf(specType))}`,
           specType,
           fileName: specFileName(specType),
           content: await generate(specType),
@@ -123,6 +125,7 @@ describe('parity: a default-mode export is exactly the four files', () => {
         })),
       )),
       {
+        specFileId: '00000000-0000-4000-8000-000000000009',
         specType: 'quality' as const,
         fileName: specFileName('quality'),
         content: '# Quality\n\n## Traceability Matrix\n',

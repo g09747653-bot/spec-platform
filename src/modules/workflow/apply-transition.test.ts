@@ -1,7 +1,15 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { projects, sessions, specFiles, specRevisions, users, workflowState } from '@/db/schema';
+import {
+  projects,
+  reviewFeedback,
+  sessions,
+  specFiles,
+  specRevisions,
+  users,
+  workflowState,
+} from '@/db/schema';
 import { createMigratedDatabase, type TestDatabase } from '@/db/testing/migrated-database';
 
 import { applyTransition } from './apply-transition';
@@ -198,5 +206,192 @@ describe('applyTransition (task 28)', () => {
     );
 
     expect(outcome).toEqual({ status: 'not-found' });
+  });
+
+  /**
+   * Task 78 — completion, and what it costs to reach it (FR-020 AC-1/AC-2/AC-9/AC-10).
+   *
+   * The gates themselves are covered exhaustively by the matrix suite, from literals. What can only
+   * be asserted here is what a real transition *writes*: the position, the count, and — for a
+   * refusal — nothing at all.
+   */
+  describe('completion and the seal', () => {
+    /** Approves one revision of `specType`, which is what `completionGate` counts (AC-2). */
+    async function approveFile(specType: string): Promise<void> {
+      const [file] = await database.db
+        .insert(specFiles)
+        .values({ projectId, specType, fileName: `${specType}.md` })
+        .returning({ id: specFiles.id });
+      const [revision] = await database.db
+        .insert(specRevisions)
+        .values({ specFileId: file?.id ?? '', revisionNumber: 1, content: `# ${specType}` })
+        .returning({ id: specRevisions.id });
+      await database.db
+        .update(specRevisions)
+        .set({ approved: true })
+        .where(eq(specRevisions.id, revision?.id ?? ''));
+      await database.db.insert(reviewFeedback).values({
+        specRevisionId: revision?.id ?? '',
+        outcome: 'pass',
+        items: [],
+        decision: 'accept',
+        decidedAt: new Date(),
+      });
+    }
+
+    const completionCount = async (): Promise<number> => {
+      const [row] = await database.db
+        .select({ count: sessions.completionCount })
+        .from(sessions)
+        .where(eq(sessions.id, sessionId));
+
+      return row?.count ?? -1;
+    };
+
+    /*
+     * The tasks review is decided and `solution` is not approved: `tasksToComplete` checks the
+     * review first, so leaving that undecided too would produce `REVIEW_NOT_DECIDED` and this test
+     * would pass without ever reaching the completion gate. Its first draft did exactly that.
+     */
+    it('refuses completion while a required file has no approved revision (AC-2)', async () => {
+      await moveTo('tasks', 'review');
+      await approveFile('constitution');
+      await approveFile('requirements');
+      await approveFile('tasks');
+
+      const outcome = await applyTransition(
+        database.db,
+        sessionId,
+        { stage: 'complete', substage: null },
+        OPTIONS,
+      );
+
+      expect(outcome).toMatchObject({ status: 'rejected', reason: 'SPEC_MISSING' });
+      expect(await currentState()).toMatchObject({ stage: 'tasks', substage: 'review' });
+      expect(await completionCount()).toBe(0);
+    });
+
+    it('completes when every file of the bundle is approved and the review is decided (AC-1)', async () => {
+      await moveTo('tasks', 'review');
+      for (const specType of ['constitution', 'requirements', 'solution', 'tasks']) {
+        await approveFile(specType);
+      }
+
+      const outcome = await applyTransition(
+        database.db,
+        sessionId,
+        { stage: 'complete', substage: null },
+        OPTIONS,
+      );
+
+      expect(outcome.status).toBe('applied');
+      expect(await currentState()).toMatchObject({ stage: 'complete', substage: null });
+      expect(await completionCount()).toBe(1);
+    });
+
+    it('seals: every movement out of complete is refused and writes nothing (AC-9)', async () => {
+      await moveTo('complete', null);
+
+      for (const target of [
+        { stage: 'interview', substage: null },
+        { stage: 'tasks', substage: 'review' },
+        { stage: 'constitution', substage: 'collect' },
+      ] as const) {
+        const outcome = await applyTransition(database.db, sessionId, target, OPTIONS);
+
+        expect(outcome, `${target.stage} must be refused`).toMatchObject({
+          status: 'rejected',
+          reason: 'SESSION_SEALED',
+        });
+      }
+
+      /*
+       * The one tabled exit is refused too, and its reason is the more specific one: with no module
+       * installed there is no Quality stage to re-enter at all, so `CAPABILITY_NOT_REGISTERED`
+       * outranks the seal. AC-9 asks for "a reason identifying the rejected transition", and this is
+       * the truer of the two — the session is sealed *and* the destination does not exist.
+       */
+      expect(
+        await applyTransition(
+          database.db,
+          sessionId,
+          { stage: 'quality', substage: 'collect' },
+          OPTIONS,
+        ),
+      ).toMatchObject({ status: 'rejected', reason: 'CAPABILITY_NOT_REGISTERED' });
+
+      expect(await currentState()).toEqual({ stage: 'complete', substage: null, version: 1 });
+      expect(await completionCount()).toBe(0);
+    });
+
+    /*
+     * AC-10: a session may complete more than once. The count is history, not position — which is
+     * exactly why it is a counter rather than a boolean, and why the increment sits after the
+     * version-guarded update rather than before it.
+     */
+    it('counts each arrival at complete, and a refused arrival not at all', async () => {
+      await moveTo('tasks', 'review');
+      for (const specType of ['constitution', 'requirements', 'solution', 'tasks']) {
+        await approveFile(specType);
+      }
+
+      await applyTransition(database.db, sessionId, { stage: 'complete', substage: null }, OPTIONS);
+      expect(await completionCount()).toBe(1);
+
+      // A second, refused attempt from the sealed position must not move the count.
+      await applyTransition(database.db, sessionId, { stage: 'complete', substage: null }, OPTIONS);
+      expect(await completionCount()).toBe(1);
+
+      // Re-entry and return, the way FR-020 AC-5/AC-7 describe it.
+      await database.db
+        .update(sessions)
+        .set({ qualityEnabled: true })
+        .where(eq(sessions.id, sessionId));
+      const withQuality: SnapshotAssemblyOptions = { roundBudget: 3, capabilities: ['quality'] };
+
+      await applyTransition(
+        database.db,
+        sessionId,
+        { stage: 'quality', substage: 'collect' },
+        withQuality,
+      );
+      expect((await currentState()).stage).toBe('quality');
+
+      await moveTo('quality', 'review', (await currentState()).version);
+      await approveFile('quality');
+
+      await applyTransition(
+        database.db,
+        sessionId,
+        { stage: 'complete', substage: null },
+        withQuality,
+      );
+
+      expect((await currentState()).stage).toBe('complete');
+      expect(await completionCount()).toBe(2);
+    });
+
+    it('leaves every prior revision intact across a re-entry (AC-10)', async () => {
+      await moveTo('tasks', 'review');
+      for (const specType of ['constitution', 'requirements', 'solution', 'tasks']) {
+        await approveFile(specType);
+      }
+
+      const before = await database.db.select().from(specRevisions);
+
+      await applyTransition(database.db, sessionId, { stage: 'complete', substage: null }, OPTIONS);
+      await database.db
+        .update(sessions)
+        .set({ qualityEnabled: true })
+        .where(eq(sessions.id, sessionId));
+      await applyTransition(
+        database.db,
+        sessionId,
+        { stage: 'quality', substage: 'collect' },
+        { roundBudget: 3, capabilities: ['quality'] },
+      );
+
+      expect(await database.db.select().from(specRevisions)).toEqual(before);
+    });
   });
 });

@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
-import { expect, type BrowserContext, type Page } from '@playwright/test';
+import type { BrowserContext } from '@playwright/test';
 import { Client } from 'pg';
 
-import { TEST_DATABASE_URL } from './test-database';
+import { TEST_DATABASE_URL } from '../test-database';
 
 /**
  * End-to-end fixtures: a signed-in identity, without an OAuth round-trip.
@@ -65,36 +65,25 @@ export async function createSignedInUser(label: string): Promise<SignedInUser> {
 }
 
 /**
- * Walks a fresh session from `interview` to `constitution/generate`, through the real gates.
+ * A **new credential for an existing person** — what signing in again actually is.
  *
- * From task 45 the generation endpoint checks the `collect → generate` gate before it calls a model,
- * so drafting is reachable only by answering a round in the interview and a round in the stage. That
- * is not an obstacle the tests route around — it is the behaviour constitution P1 requires — so the
- * walk lives here and every journey that needs a draft performs it.
+ * `createSignedInUser` creates a person. Resume tests need the other thing: the same owner, a
+ * different session row, after the first was invalidated by signing out. Splicing a new token onto
+ * an old user object does not do it — the row behind the token names whoever it was created for, so
+ * the application authenticates a *different* user and every owned page answers 404.
  */
-export async function reachDrafting(page: Page): Promise<void> {
-  await expect(page.getByTestId('interview-panel')).toBeVisible();
+export async function reauthenticate(user: SignedInUser): Promise<SignedInUser> {
+  const sessionToken = randomUUID();
 
-  // The grounding interview: one answered round plus the persisted summary opens the exit gate.
-  await page.getByTestId('ask-round').click();
-  await expect(page.getByTestId('mcq-card')).toBeVisible();
-  await page.getByTestId('mcq-option-q-audience-solo-devs').check();
-  await page.getByTestId('mcq-option-q-problem-context').check();
-  await page.getByTestId('mcq-submit').click();
+  await withClient(async (client) => {
+    await client.query(
+      `INSERT INTO auth_sessions (session_token, user_id, expires)
+       VALUES ($1, $2, now() + interval '1 day')`,
+      [sessionToken, user.userId],
+    );
+  });
 
-  await expect(page.getByTestId('interview-panel')).toContainText('summary saved');
-  await page.getByTestId('proceed').click();
-  await expect(page.getByTestId('stage-current')).toHaveText(/Constitution/);
-
-  // The stage collects for itself before it drafts (FR-007 AC-2).
-  await page.getByTestId('ask-round').click();
-  await expect(page.getByTestId('mcq-card')).toBeVisible();
-  await page.getByTestId('mcq-option-q-constitution-scope-strict').check();
-  await page.getByTestId('mcq-submit').click();
-
-  await expect(page.getByTestId('interview-panel')).toBeVisible();
-  await page.getByTestId('proceed').click();
-  await expect(page.getByTestId('stage-substage')).toHaveText(/generate/);
+  return { ...user, sessionToken };
 }
 
 /**

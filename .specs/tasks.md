@@ -921,7 +921,7 @@ Goal: user documents and live web research ground the generated specs, safely.
 
 Goal: the complete parity product — the full four-file journey, resumable, exportable, completable.
 
-- [ ] 72\. Implement export mode resolution and the export record
+- [x] 72\. Implement export mode resolution and the export record
   - Resolve a declared mode to a concrete revision set: default mode always resolves each core file to its most recent pre-enrichment revision and omits `quality.md`; quality mode resolves to enriched revisions.
   - Accept a `QualityPort`; when null, force default mode and issue no staleness query.
   - Add the `export_records` table and write one row per performed export.
@@ -936,7 +936,7 @@ Goal: the complete parity product — the full four-file journey, resumable, exp
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 73\. Implement the omission manifest and export UI
+- [x] 73\. Implement the omission manifest and export UI
   - Produce the archive even when files lack approved revisions, returning the omitted list; display the manifest and the mode used at download time, in the interface only.
   - Acceptance Criteria:
     - An incomplete bundle downloads successfully rather than being refused.
@@ -949,7 +949,7 @@ Goal: the complete parity product — the full four-file journey, resumable, exp
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 74\. Implement copy-to-clipboard for a single spec file
+- [x] 74\. Implement copy-to-clipboard for a single spec file
   - Implement `GET /api/specs/:specFileId/content?mode=` returning raw markdown; copy on the client with a visual confirmation and a manual-selection fallback.
   - Acceptance Criteria:
     - Copied content is raw markdown with no UI decoration, truncation, or code fences.
@@ -961,7 +961,7 @@ Goal: the complete parity product — the full four-file journey, resumable, exp
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 75\. Implement full session resume
+- [x] 75\. Implement full session resume
   - Restore stage, substage, and the pending action on reopen; re-present a pending question set, spec approval, diff decision, or review decision exactly as it was.
   - Acceptance Criteria:
     - Reopening restores all answers, revisions, and attachments.
@@ -974,7 +974,7 @@ Goal: the complete parity product — the full four-file journey, resumable, exp
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 76\. Implement project rename and cascading permanent delete
+- [x] 76\. Implement project rename and cascading permanent delete
   - Rename leaves content and workflow state untouched; delete requires explicit confirmation stating permanence and cascades through every table plus blob objects.
   - Acceptance Criteria:
     - Rename changes only the name.
@@ -986,7 +986,7 @@ Goal: the complete parity product — the full four-file journey, resumable, exp
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 77\. Implement project duplication
+- [x] 77\. Implement project duplication
   - Copy spec files at their current revisions plus the workflow state, answers, information needs, and attachment references, and explicitly no pending proposed change.
   - Acceptance Criteria:
     - A duplicated mid-session project resumes into a valid state whose gates still pass.
@@ -998,7 +998,7 @@ Goal: the complete parity product — the full four-file journey, resumable, exp
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 78\. Implement workflow completion and the sealed state
+- [x] 78\. Implement workflow completion and the sealed state
   - Transition to `complete` on the final accepted review; refuse entry if any required spec lacks an approved revision; reject every transition out of `complete` except `complete → quality`, with a reason.
   - Acceptance Criteria:
     - Completion is refused while a required spec is unapproved.
@@ -1010,7 +1010,7 @@ Goal: the complete parity product — the full four-file journey, resumable, exp
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-- [ ] 79\. Build the deterministic E2E fixture harness
+- [x] 79\. Build the deterministic E2E fixture harness
   - Build reusable Playwright fixtures: a seeded authenticated user, a per-stage stub provider script, download capture, and helpers for answering MCQ cards and resolving decision cards.
   - Acceptance Criteria:
     - A test can drive a full stage in three helper calls or fewer.
@@ -1022,7 +1022,7 @@ Goal: the complete parity product — the full four-file journey, resumable, exp
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 80\. Write the full critical-journey E2E test
+- [x] 80\. Write the full critical-journey E2E test
   - Playwright: prompt → interview rounds → all four stages with approvals and reviews → ZIP download, asserting the archive contains exactly the four correctly named files.
   - Acceptance Criteria:
     - The journey completes with no dead end and no manual intervention.

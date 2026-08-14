@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   boolean,
   check,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -13,6 +14,7 @@ import {
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
+import { EXPORT_MODES } from '@/modules/specs/model/export';
 import { PROPOSAL_STATUSES, REVIEW_DECISIONS, REVIEW_OUTCOMES } from '@/modules/specs/model/review';
 import { REVISION_ORIGINS, SPEC_FILE_NAMES, SPEC_TYPES } from '@/modules/specs/model/spec-files';
 
@@ -275,7 +277,47 @@ export const proposedChanges = pgTable(
   ],
 );
 
+/**
+ * One performed export (task 72; solution.md — Data Model `EXPORT_RECORDS`).
+ *
+ * The row exists so that "which bundle did I hand to the agent, and what was missing from it?" is
+ * answerable after the fact. FR-015 AC-4 and AC-7 state the mode and the omissions *at the moment of
+ * download*; the interface is gone the moment the tab is closed, and the archive itself may not carry
+ * a manifest (AC-8) — so the record is the only durable account of what left the system.
+ *
+ * `mode` is stored rather than derived. A default-mode export taken from an enriched session and a
+ * quality-mode export of the same project resolve to different revisions of the same file names, so
+ * the file lists alone do not say which happened (A6).
+ *
+ * Both lists are written, including the empty one. "Nothing was omitted" and "omissions were not
+ * recorded" are different facts, and only the first is worth anything later.
+ */
+export const exportRecords = pgTable(
+  'export_records',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    mode: text('mode').notNull(),
+    includedFiles: jsonb('included_files')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    omittedFiles: jsonb('omitted_files')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    check('export_records_mode_valid', sql`${table.mode} IN (${list(EXPORT_MODES)})`),
+    check('export_records_included_is_array', sql`jsonb_typeof(${table.includedFiles}) = 'array'`),
+    check('export_records_omitted_is_array', sql`jsonb_typeof(${table.omittedFiles}) = 'array'`),
+    index('export_records_project_id_idx').on(table.projectId),
+  ],
+);
+
 export type SpecFileRow = typeof specFiles.$inferSelect;
 export type SpecRevisionRow = typeof specRevisions.$inferSelect;
 export type ReviewFeedbackRow = typeof reviewFeedback.$inferSelect;
 export type ProposedChangeRow = typeof proposedChanges.$inferSelect;
+export type ExportRecordRow = typeof exportRecords.$inferSelect;

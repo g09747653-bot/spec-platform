@@ -6,7 +6,9 @@ import type { OwnerScope } from '@/db/owner-scope';
 import { projects, specFiles, specRevisions } from '@/db/schema';
 import { queryRows } from '@/db/sql';
 
+import { fileNamesForMode, type ExportMode } from '../model/export';
 import { isSpecType, type SpecFileName, type SpecType } from '../model/spec-files';
+import { revisionOriginForMode } from '../export/resolve-mode';
 
 /**
  * Owner-scoped access to spec files and their exportable content (NFR-005; AR-2).
@@ -31,6 +33,7 @@ const SpecFileRow = z.object({
 });
 
 const ExportRow = z.object({
+  id: z.uuid(),
   spec_type: z.string(),
   file_name: z.string(),
   content: z.string(),
@@ -46,6 +49,8 @@ export interface OwnedSpecFile {
 }
 
 export interface ExportableFile {
+  /** The spec file's id — what a per-file action (copy, FR-016) addresses it by. */
+  specFileId: string;
   specType: SpecType;
   fileName: SpecFileName;
   content: string;
@@ -89,10 +94,18 @@ export function createSpecFileRepository(db: SchemaDatabase) {
     },
 
     /**
-     * The file this session is working on: the one most recently written to.
+     * The file this session wrote to most recently.
      *
-     * The walking skeleton has one spec card, so "most recently written" is the file whose pointer moved
-     * last. From task 24 the stage decides, and this becomes a lookup by spec type.
+     * **Ordered by when the newest revision was written, not by its number** (task 80). The walking
+     * skeleton had one spec file, so ordering on `current_revision` was indistinguishable from
+     * ordering on time; with four it is wrong in the ordinary case. After the second stage generates,
+     * two files stand at revision 1, the tie breaks on `spec_type` alphabetically, and the session
+     * answers `constitution` while it is working on `requirements` — which is how the critical
+     * journey found this.
+     *
+     * The caller that knows its stage should ask for that stage's file (`findByProjectAndType`); this
+     * answers the question that has no stage attached, such as "which card is pending" on a session
+     * sitting at `complete`.
      */
     async currentFile(scope: OwnerScope, projectId: string): Promise<OwnedSpecFile | null> {
       if (!UUID.test(projectId)) return null;
@@ -107,7 +120,11 @@ export function createSpecFileRepository(db: SchemaDatabase) {
           WHERE ${specFiles}.project_id = ${projectId}::uuid
             AND ${projects}.owner_id = ${scope.userId}::uuid
             AND ${specFiles}.current_revision > 0
-          ORDER BY ${specFiles}.current_revision DESC, ${specFiles}.spec_type ASC
+          ORDER BY (
+            SELECT MAX(${specRevisions}.created_at)
+            FROM ${specRevisions}
+            WHERE ${specRevisions}.spec_file_id = ${specFiles}.id
+          ) DESC, ${specFiles}.spec_type ASC
           LIMIT 1
         `,
         SpecFileRow,
@@ -149,32 +166,54 @@ export function createSpecFileRepository(db: SchemaDatabase) {
     },
 
     /**
-     * What a default-mode export contains: for each file of this project, its latest **approved,
-     * pre-enrichment** revision (FR-015 AC-2; A6).
+     * What an export of `mode` contains: for each file of this project, the revision that mode
+     * resolves to (FR-015 AC-2/AC-3; A6).
      *
      * `DISTINCT ON` does the resolution in the database — one row per spec type, the highest revision
-     * number first. `origin = 'parity'` is what makes it *pre-enrichment* by definition rather than by
-     * a date comparison, which is the point of marking revisions in the first place (A4).
+     * number first. The origin filter is what the mode decides, and it is the whole difference between
+     * the two bundles: `parity` makes a default-mode export *pre-enrichment* by definition rather than
+     * by a date comparison, which is the point of marking revisions in the first place (A4), and it
+     * holds even on a session where enrichment has already run. Quality mode drops the filter, so the
+     * enriched revision — always the newer one — answers wherever enrichment has run.
+     *
+     * The **file** filter is separate and equally load-bearing: a default-mode export does not select
+     * `quality.md` at all, so the fifth file cannot reach the archive even as a row the assembler then
+     * has to remember to drop (constitution P3).
      *
      * Files with no approved revision simply do not appear: the omission list is computed by the caller
      * from what is missing, so nothing empty can be emitted (FR-015 AC-6/AC-9).
      */
-    async approvedForExport(scope: OwnerScope, projectId: string): Promise<ExportableFile[]> {
+    async approvedForExport(
+      scope: OwnerScope,
+      projectId: string,
+      mode: ExportMode = 'default',
+    ): Promise<ExportableFile[]> {
       if (!UUID.test(projectId)) return [];
+
+      const origin = revisionOriginForMode(mode);
+      const originFilter =
+        origin === 'any' ? sql`TRUE` : sql`${specRevisions}.origin = ${origin}::text`;
+
+      const names = fileNamesForMode(mode);
+      const nameList = sql.join(
+        names.map((name) => sql`${name}`),
+        sql`, `,
+      );
 
       const rows = await queryRows(
         db,
         sql`
           SELECT DISTINCT ON (${specFiles}.spec_type)
-                 ${specFiles}.spec_type, ${specFiles}.file_name,
+                 ${specFiles}.id, ${specFiles}.spec_type, ${specFiles}.file_name,
                  ${specRevisions}.content, ${specRevisions}.revision_number
           FROM ${specFiles}
           JOIN ${projects} ON ${projects}.id = ${specFiles}.project_id
           JOIN ${specRevisions} ON ${specRevisions}.spec_file_id = ${specFiles}.id
           WHERE ${specFiles}.project_id = ${projectId}::uuid
             AND ${projects}.owner_id = ${scope.userId}::uuid
+            AND ${specFiles}.file_name IN (${nameList})
             AND ${specRevisions}.approved = true
-            AND ${specRevisions}.origin = 'parity'
+            AND ${originFilter}
           ORDER BY ${specFiles}.spec_type, ${specRevisions}.revision_number DESC
         `,
         ExportRow,
@@ -186,6 +225,7 @@ export function createSpecFileRepository(db: SchemaDatabase) {
         }
 
         return {
+          specFileId: row.id,
           specType: row.spec_type,
           fileName: `${row.spec_type}.md`,
           content: row.content,

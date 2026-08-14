@@ -50,6 +50,30 @@ const toRound = (row: z.infer<typeof RoundRow>): StoredRound => ({
   answered: row.answered,
 });
 
+/** One recorded answer, as the resume history reads it back (task 75). */
+const StoredAnswer = z.object({
+  questionId: z.string().nullable(),
+  selectedOptionIds: z.array(z.string()).catch([]),
+  freeText: z.string().nullable(),
+});
+
+const AnsweredRoundRow = z.object({
+  id: z.uuid(),
+  stage: z.string(),
+  round_number: z.number().int().positive(),
+  questions: z.unknown(),
+  answers: z.array(StoredAnswer),
+});
+
+export interface AnsweredRound {
+  id: string;
+  stage: string;
+  roundNumber: number;
+  /** The persisted `QuestionSetSchema` payload; the caller re-parses it to name the options. */
+  questions: unknown;
+  answers: z.infer<typeof StoredAnswer>[];
+}
+
 export interface CardAnswerItem {
   questionId: string;
   selectedOptionIds: readonly string[];
@@ -229,6 +253,59 @@ export function createInterviewRepository(db: SchemaDatabase) {
       );
 
       return rows.map(toRound);
+    },
+
+    /**
+     * Every answered round with its answers, oldest first (task 75; FR-017 AC-2).
+     *
+     * What a resumed session shows the owner back: *this is what you told it*. Without it, reopening
+     * proves the answers were kept only indirectly — the door is open, the needs are satisfied — and
+     * "restore all prior answers" becomes a claim about the database rather than something the user
+     * can see.
+     *
+     * One statement, not a round trip per round: the answers are aggregated in SQL. A resumed
+     * session can hold a dozen rounds across five stages, and N+1 queries on the page's critical
+     * path is exactly the kind of cost that turns a reload into a wait (NFR-002).
+     */
+    async answeredHistory(sessionId: string): Promise<AnsweredRound[]> {
+      const rows = await queryRows(
+        db,
+        sql`
+          SELECT
+            qr.id,
+            qr.stage,
+            qr.round_number,
+            qr.questions,
+            COALESCE(
+              (
+                SELECT jsonb_agg(
+                         jsonb_build_object(
+                           'questionId', a.question_id,
+                           'selectedOptionIds', a.selected_option_ids,
+                           'freeText', a.free_text
+                         )
+                         ORDER BY a.answered_at
+                       )
+                FROM ${answers} a
+                WHERE a.round_id = qr.id
+              ),
+              '[]'::jsonb
+            ) AS answers
+          FROM ${questionRounds} qr
+          WHERE qr.session_id = ${sessionId}::uuid
+            AND EXISTS (SELECT 1 FROM ${answers} a WHERE a.round_id = qr.id)
+          ORDER BY qr.presented_at ASC
+        `,
+        AnsweredRoundRow,
+      );
+
+      return rows.map((row) => ({
+        id: row.id,
+        stage: row.stage,
+        roundNumber: row.round_number,
+        questions: row.questions,
+        answers: row.answers,
+      }));
     },
 
     /** Drops a round that never became pending (its claim on the state lost a race). */

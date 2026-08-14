@@ -320,6 +320,42 @@ export function createAttachmentRepository(db: SchemaDatabase) {
       return rows.map((row) => ({ specFileId: row.spec_file_id, fileName: row.file_name }));
     },
 
+    /**
+     * What a duplication has to copy in the store: every attachment of the project, with the
+     * metadata `put` needs to write it again under a new session (task 77).
+     *
+     * Separate from `blobKeysForProject`, which answers a narrower question — deletion needs keys and
+     * nothing else, and widening it would hand the delete path fields it has no business reading.
+     */
+    async copySourcesForProject(
+      scope: OwnerScope,
+      projectId: string,
+    ): Promise<{ blobKey: string; fileName: string; mimeType: string }[]> {
+      if (!UUID.test(projectId)) return [];
+
+      const rows = await queryRows(
+        db,
+        sql`
+          SELECT ${attachments.blobKey} AS blob_key,
+                 ${attachments.fileName} AS file_name,
+                 ${attachments.mimeType} AS mime_type
+          FROM ${attachments}
+          JOIN ${sessions} ON ${sessions.id} = ${attachments.sessionId}
+          JOIN ${projects} ON ${projects.id} = ${sessions.projectId}
+          WHERE ${projects.id} = ${projectId}::uuid
+            AND ${projects.ownerId} = ${scope.userId}
+          ORDER BY ${attachments.uploadedAt}
+        `,
+        z.object({ blob_key: z.string(), file_name: z.string(), mime_type: z.string() }),
+      );
+
+      return rows.map((row) => ({
+        blobKey: row.blob_key,
+        fileName: row.file_name,
+        mimeType: row.mime_type,
+      }));
+    },
+
     /** Every stored object under a project — what DR-6's cascade must also delete from the store. */
     async blobKeysForProject(scope: OwnerScope, projectId: string): Promise<string[]> {
       if (!UUID.test(projectId)) return [];

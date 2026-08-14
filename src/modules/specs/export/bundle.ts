@@ -1,6 +1,7 @@
 import { zipSync, strToU8 } from 'fflate';
 
-import { CORE_SPEC_FILE_NAMES, CORE_SPEC_TYPES, type SpecFileName } from '../model/spec-files';
+import { fileNamesForMode, type ExportMode } from '../model/export';
+import { CORE_SPEC_TYPES, type SpecFileName } from '../model/spec-files';
 import type { ExportableFile } from '../repositories/spec-files';
 
 /**
@@ -17,23 +18,13 @@ import type { ExportableFile } from '../repositories/spec-files';
  * Ordering follows the bundle order of the parity baseline rather than the order rows came back in, so
  * two exports of the same content produce the same archive.
  */
-export type ExportMode = 'default' | 'quality';
+export type { ExportMode } from '../model/export';
 
 export interface ExportResult {
   zip: Uint8Array;
   included: SpecFileName[];
   omitted: SpecFileName[];
   mode: ExportMode;
-}
-
-/**
- * Which files a mode may contain.
- *
- * Milestone 1 assembles the parity four; `quality` mode — the fifth file and enriched revisions —
- * arrives with the Quality stage (M7) and resolves through the same function then.
- */
-function expectedFiles(mode: ExportMode): readonly SpecFileName[] {
-  return mode === 'default' ? CORE_SPEC_FILE_NAMES : [...CORE_SPEC_FILE_NAMES, 'quality.md'];
 }
 
 export function assembleBundle(files: readonly ExportableFile[], mode: ExportMode): ExportResult {
@@ -43,7 +34,12 @@ export function assembleBundle(files: readonly ExportableFile[], mode: ExportMod
   const omitted: SpecFileName[] = [];
   const entries: Record<string, Uint8Array> = {};
 
-  for (const fileName of expectedFiles(mode)) {
+  /*
+   * The expected set comes from `fileNamesForMode`, which the repository query also keys off. One
+   * answer to "what belongs in this bundle" serves the resolution, the assembly and the manifest —
+   * so a fifth file cannot appear in one of them and be omitted from another.
+   */
+  for (const fileName of fileNamesForMode(mode)) {
     const file = byName.get(fileName);
 
     if (file === undefined) {
