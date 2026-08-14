@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import { getEnv } from '@/config/env';
 import { getDatabase } from '@/db/client';
-import { createTestDoubleAdapter, stubInterviewRoundDocument } from '@/modules/adapters/llm';
+import { AllProvidersFailedError } from '@/modules/adapters/llm';
+import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
 import { createInterviewAgent } from '@/modules/agents/interview/interview-agent';
 import { QuestionSetSchema } from '@/modules/agents/schemas/question-set';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
@@ -102,20 +103,49 @@ export async function POST(
   const latest = await interviewRepository.latestRound(session.id, stage);
   const nextRoundNumber = (latest?.roundNumber ?? 0) + 1;
 
-  // The provider is the deterministic stub for this whole milestone (START_HERE M2); the agent
-  // neither knows nor cares (P7) — tasks 42–45 swap the composition root, not the agent.
-  const agent = createInterviewAgent(
-    createTestDoubleAdapter({ document: stubInterviewRoundDocument(stage, nextRoundNumber) }),
-  );
+  /*
+   * The configured provider chain — the same one generation, review and refinement use (round 2, Д-3).
+   *
+   * This line used to construct a test double, with a Milestone 2 comment promising that tasks 42–45
+   * would swap the composition root. Those tasks swapped every other agent and left the interview
+   * behind, so on a deployment paying for a real model **every interview question ever asked came
+   * from a hardcoded fixture** — including the "what should the constitution document emphasise?"
+   * that the M6 gate walk reported. No test caught it: they all point the chain at the stub anyway,
+   * so both worlds looked identical from inside the suite.
+   */
+  const agent = createInterviewAgent(createDefaultAdapter());
 
-  const outcome = await agent.draftRound({
-    stage,
-    initialPrompt: session.initialPrompt,
-    summary: session.summary,
-    satisfiedNeeds: satisfiedNeedNames(snapshot, stage),
-    unmetNeeds: unmetNeedNames(snapshot, stage),
-    runId: randomUUID(),
-  });
+  /*
+   * An exhausted provider chain is an answer, not a crash (round 2, Д-6).
+   *
+   * The live gate walk found this endpoint returning **500** when the chain ran out: the error
+   * escaped, Next turned it into an unhandled failure, and the client got a bare status with no code
+   * to branch on and no message worth showing. A generation that could not happen is a normal event
+   * in the life of a session (FR-018), and the session must survive it — the transition route has
+   * caught the same error since M4; the interview was simply never given the same treatment.
+   */
+  let outcome;
+
+  try {
+    outcome = await agent.draftRound({
+      stage,
+      roundNumber: nextRoundNumber,
+      initialPrompt: session.initialPrompt,
+      summary: session.summary,
+      satisfiedNeeds: satisfiedNeedNames(snapshot, stage),
+      unmetNeeds: unmetNeedNames(snapshot, stage),
+      runId: randomUUID(),
+    });
+  } catch (error) {
+    if (!(error instanceof AllProvidersFailedError)) throw error;
+
+    return errorResponse('GENERATION_FAILED', {
+      reason: error.overloaded ? 'overloaded' : 'providers',
+      message: error.overloaded
+        ? 'The service is busy right now. Nothing has been lost — try again in a minute.'
+        : 'The questions could not be drafted just now. Nothing has been lost — try again.',
+    });
+  }
 
   if (outcome.kind === 'draft-invalid') {
     return errorResponse('DRAFT_INVALID', { issues: outcome.issues });

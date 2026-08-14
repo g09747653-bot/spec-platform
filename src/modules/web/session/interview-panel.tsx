@@ -145,7 +145,7 @@ export function InterviewPanel({
               variant="secondary"
               data-testid="fallback-submit"
               disabled={
-                busy !== null ||
+                busy === 'fallback' ||
                 !unmetNeeds.some((need) => (fallbackText[need] ?? '').trim() !== '')
               }
               onClick={() => {
@@ -163,10 +163,18 @@ export function InterviewPanel({
         )}
 
         <div className="flex flex-wrap items-center gap-2">
+          {/*
+            Round 2, Д-4: each control waits for **its own** request, not for any request.
+
+            `disabled={busy !== null}` meant a slow "proceed" also greyed out "Ask questions", and a
+            slow ask greyed out the door — two independent actions sharing one flag, so a stall in
+            either looked like the page had seized. Button state is a function of the workflow
+            (`canAskMore`, `target`) plus the one request that button started.
+          */}
           {canAskMore && (
             <Button
               data-testid="ask-round"
-              disabled={busy !== null}
+              disabled={busy === 'ask'}
               onClick={() => {
                 void post(`/api/sessions/${sessionId}/rounds`, undefined, 'ask');
               }}
@@ -179,7 +187,7 @@ export function InterviewPanel({
             <Button
               variant={target.ready ? 'primary' : 'secondary'}
               data-testid="proceed"
-              disabled={busy !== null}
+              disabled={busy === 'proceed'}
               onClick={() => {
                 void post(
                   `/api/sessions/${sessionId}/transition`,

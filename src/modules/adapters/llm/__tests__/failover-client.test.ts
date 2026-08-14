@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { createFailoverClient, type ProviderFailure } from '../failover-client';
-import { AllProvidersFailedError, type AttemptStart, type ProviderId } from '../types';
+import {
+  createFailoverClient,
+  MAX_RATE_LIMIT_WAIT_MS,
+  type ProviderFailure,
+} from '../failover-client';
+import type { ProviderEntry } from '../provider-registry';
+import {
+  AllProvidersFailedError,
+  isRateLimited,
+  retryAfterMs,
+  type AttemptStart,
+  type ProviderId,
+} from '../types';
 
 import { fakeChain, fakeEntry } from './provider-fakes';
 
@@ -336,5 +347,297 @@ describe('the entries the client consumes', () => {
 
     expect(Object.keys(entry).sort()).toEqual(['id', 'model', 'priority', 'stream']);
     expect(typeof entry.stream).toBe('function');
+  });
+});
+
+/**
+ * Round 2, Д-5 — a rate limit is not a broken provider.
+ *
+ * The M6 gate walk failed here. The interview, the review and the generation went out in a tight
+ * burst, the free tier pushed back with a 429, and a single-provider chain treated that as "every
+ * provider failed" and gave up on the first refusal. Waiting a second and asking again is what the
+ * situation actually calls for — and it is the only failure where the *same* provider is the right
+ * next thing to try.
+ */
+describe('rate limiting (round 2, Д-5)', () => {
+  class RateLimited extends Error {
+    readonly status = 429;
+    constructor() {
+      super('429 Too Many Requests');
+      this.name = 'RateLimited';
+    }
+  }
+
+  /** A provider that refuses with 429 the first `times` times, then succeeds. */
+  function flaky(id: ProviderId, times: number): ProviderEntry {
+    let seen = 0;
+
+    return {
+      id,
+      model: `${id}-test-model`,
+      priority: 1,
+      stream: ({ onDelta }) => {
+        seen += 1;
+        if (seen <= times) return Promise.reject(new RateLimited());
+        onDelta('done');
+        return Promise.resolve('done');
+      },
+    };
+  }
+
+  const waits: number[] = [];
+
+  const client = (providers: readonly ProviderEntry[]) =>
+    createFailoverClient({
+      providers,
+      timeoutMs: TIMEOUT_MS,
+      rateLimitBackoff: [1, 2, 4],
+      sleep: (ms) => {
+        waits.push(ms);
+        return Promise.resolve();
+      },
+    });
+
+  const generate = (providers: readonly ProviderEntry[]) =>
+    client(providers).generateStreaming({
+      messages: [{ role: 'user', content: 'write something' }],
+      runId: 'run-1',
+    });
+
+  it('re-asks the same provider after a wait, and succeeds (the gate case)', async () => {
+    waits.length = 0;
+
+    const result = await generate([flaky('google', 2)]);
+
+    expect(result.text).toBe('done');
+    // Two refusals, two waits, then the answer — on a one-provider chain.
+    expect(waits).toEqual([1, 2]);
+    expect(result.attempts).toBe(3);
+  });
+
+  it('gives up after the retries are spent, and says the service is busy — not that it broke', async () => {
+    waits.length = 0;
+
+    await expect(generate([flaky('google', 99)])).rejects.toMatchObject({
+      name: 'AllProvidersFailedError',
+      overloaded: true,
+    });
+
+    // Three waits: the backoff ladder, exactly once through.
+    expect(waits).toEqual([1, 2, 4]);
+  });
+
+  /*
+   * The distinction that keeps the message honest: one genuine fault anywhere and the exhaustion is
+   * not "busy". Telling a user to wait a minute for a bad key would be worse than saying nothing.
+   */
+  it('does not claim overload when any failure was a real fault', async () => {
+    const log = recorder();
+    const chain = fakeChain(['google', { failAfterChunks: 0 }], ['openai', { failAfterChunks: 0 }]);
+
+    await expect(run(chain, log)).rejects.toMatchObject({ overloaded: false });
+  });
+
+  it('does not burn the backoff on an ordinary failure', async () => {
+    waits.length = 0;
+
+    await expect(generate(fakeChain(['google', { failAfterChunks: 0 }]))).rejects.toBeInstanceOf(
+      AllProvidersFailedError,
+    );
+
+    // No waits at all: a broken provider is not worth re-asking three times.
+    expect(waits).toEqual([]);
+  });
+
+  it('reports the rate limit as its own reason, for the operator', async () => {
+    const failures: ProviderFailure[] = [];
+
+    const limited = createFailoverClient({
+      providers: [flaky('google', 99)],
+      timeoutMs: TIMEOUT_MS,
+      rateLimitBackoff: [1],
+      sleep: () => Promise.resolve(),
+      onProviderFailure: (failure) => failures.push(failure),
+    });
+
+    await expect(
+      limited.generateStreaming({ messages: [{ role: 'user', content: 'x' }], runId: 'run-1' }),
+    ).rejects.toBeInstanceOf(AllProvidersFailedError);
+
+    expect(failures.map((failure) => failure.reason)).toEqual(['rate-limited', 'rate-limited']);
+  });
+});
+
+describe('isRateLimited (round 2, Д-5)', () => {
+  it('recognises the two statuses that mean "try later"', () => {
+    expect(isRateLimited({ status: 429 })).toBe(true);
+    expect(isRateLimited({ statusCode: 503 })).toBe(true);
+    expect(isRateLimited(new Error('429 Too Many Requests'))).toBe(true);
+    expect(isRateLimited(new Error('model is overloaded'))).toBe(true);
+    expect(isRateLimited(new Error('quota exceeded for this project'))).toBe(true);
+  });
+
+  it('follows the cause chain, because SDKs wrap', () => {
+    expect(isRateLimited(new Error('call failed', { cause: { status: 429 } }))).toBe(true);
+  });
+
+  /*
+   * The shape production actually throws, captured from a live call during the gate remediation.
+   * Google answers an overloaded model with 503 and the words "high demand" — not "rate limit" — and
+   * the AI SDK wraps it in a RetryError that carries `lastError` and `errors`, never `cause`. A
+   * detector that walked only `cause` and matched only the phrase "rate limit" would have passed
+   * every unit test above and fired on nothing.
+   */
+  describe('the shapes production throws', () => {
+    const apiCallError = {
+      name: 'AI_APICallError',
+      message:
+        'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.',
+      statusCode: 503,
+      isRetryable: true,
+    };
+
+    it('recognises the provider error itself', () => {
+      expect(isRateLimited(apiCallError)).toBe(true);
+    });
+
+    it('recognises it through the SDK RetryError, which uses lastError', () => {
+      expect(
+        isRateLimited({
+          name: 'AI_RetryError',
+          message: 'Failed after 3 attempts.',
+          lastError: apiCallError,
+          errors: [apiCallError],
+        }),
+      ).toBe(true);
+    });
+
+    it('recognises it through the errors array alone', () => {
+      expect(isRateLimited({ name: 'AI_RetryError', errors: [apiCallError] })).toBe(true);
+    });
+
+    it('survives a cycle in the wrapping', () => {
+      const outer: Record<string, unknown> = { name: 'outer', message: 'nope' };
+      outer.cause = outer;
+
+      expect(isRateLimited(outer)).toBe(false);
+    });
+  });
+
+  /*
+   * Ambiguity reads as "not a rate limit". A false positive costs the user seven seconds of waiting
+   * before an error they were going to get anyway — and, worse, tells them to try again when
+   * trying again cannot help.
+   */
+  it('is not fooled by ordinary faults', () => {
+    expect(isRateLimited({ status: 401 })).toBe(false);
+    expect(isRateLimited(new Error('invalid api key'))).toBe(false);
+    expect(isRateLimited(new Error('ECONNRESET'))).toBe(false);
+    expect(isRateLimited(null)).toBe(false);
+    expect(isRateLimited(undefined)).toBe(false);
+  });
+});
+
+/**
+ * Round 2, Д-5 — honouring the provider's own number.
+ *
+ * The live diagnosis found Google answering a free-tier overrun with `limit: 20` requests per minute
+ * and `Please retry in 31.550265287s`. A fixed one-second ladder would retry three times inside a
+ * window the provider had already told us was thirty seconds wide, and then report failure.
+ */
+describe('retryAfterMs (round 2, Д-5)', () => {
+  /** The live shape, as an Error — which is what an SDK actually throws. */
+  class QuotaError extends Error {
+    readonly statusCode = 429;
+    constructor(message: string) {
+      super(message);
+      this.name = 'AI_APICallError';
+    }
+  }
+
+  const quotaError = new QuotaError(
+    'You exceeded your current quota, please check your plan and billing details.\n' +
+      '* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.5-flash\n' +
+      'Please retry in 31.550265287s.',
+  );
+
+  it('reads the delay the provider asked for', () => {
+    expect(retryAfterMs(quotaError)).toBe(31_551);
+  });
+
+  it('finds it through the SDK wrapper', () => {
+    expect(retryAfterMs({ name: 'AI_RetryError', lastError: quotaError })).toBe(31_551);
+  });
+
+  it('reads a Retry-After header when that is how it was stated', () => {
+    expect(retryAfterMs({ responseHeaders: { 'retry-after': '20' } })).toBe(20_000);
+  });
+
+  it('is null when the provider said nothing about timing', () => {
+    expect(retryAfterMs({ statusCode: 503, message: 'high demand' })).toBeNull();
+    expect(retryAfterMs(new Error('boom'))).toBeNull();
+  });
+
+  it('still recognises the quota error as a rate limit', () => {
+    expect(isRateLimited(quotaError)).toBe(true);
+  });
+
+  it('waits what the provider asked for, capped', async () => {
+    const waits: number[] = [];
+    let asked = 0;
+
+    const client = createFailoverClient({
+      providers: [
+        {
+          id: 'google',
+          model: 'test',
+          priority: 1,
+          stream: () => {
+            asked += 1;
+            return Promise.reject(asked === 1 ? quotaError : new Error('done differently'));
+          },
+        },
+      ],
+      timeoutMs: TIMEOUT_MS,
+      rateLimitBackoff: [1_000, 2_000, 4_000],
+      sleep: (ms) => {
+        waits.push(ms);
+        return Promise.resolve();
+      },
+    });
+
+    await expect(
+      client.generateStreaming({ messages: [{ role: 'user', content: 'x' }], runId: 'run-1' }),
+    ).rejects.toBeInstanceOf(AllProvidersFailedError);
+
+    // 31.551s beats the 1s rung, and sits under the 35s ceiling.
+    expect(waits).toEqual([31_551]);
+  });
+
+  it('does not wait longer than the ceiling, whatever the provider claims', async () => {
+    const waits: number[] = [];
+
+    const client = createFailoverClient({
+      providers: [
+        {
+          id: 'google',
+          model: 'test',
+          priority: 1,
+          stream: () => Promise.reject(new QuotaError('Please retry in 600s.')),
+        },
+      ],
+      timeoutMs: TIMEOUT_MS,
+      rateLimitBackoff: [1_000],
+      sleep: (ms) => {
+        waits.push(ms);
+        return Promise.resolve();
+      },
+    });
+
+    await expect(
+      client.generateStreaming({ messages: [{ role: 'user', content: 'x' }], runId: 'run-1' }),
+    ).rejects.toBeInstanceOf(AllProvidersFailedError);
+
+    expect(waits).toEqual([MAX_RATE_LIMIT_WAIT_MS]);
   });
 });

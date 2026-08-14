@@ -30,21 +30,30 @@ export function StageRail({ currentStage, currentSubstage, qualityEnabled }: Sta
 
           return (
             <li key={stage} className="flex items-center gap-2">
+              {/*
+                Round 2, Д-2: the substage is a **sibling**, not a child.
+
+                Nested, `stage-current` read as "Constitution· generate" — the stage name and the
+                substage fused into one string, so anything asking the rail "which stage?" got an
+                answer it had to parse, and a dump reader looking for the name found something that
+                did not look like one. One element, one fact.
+              */}
               <span
                 aria-current={isCurrent ? 'step' : undefined}
-                data-testid={isCurrent ? 'stage-current' : undefined}
                 data-stage={stage}
                 data-state={isCurrent ? 'current' : isDone ? 'done' : 'upcoming'}
                 className={cn(
-                  'rounded-full border px-2.5 py-1',
+                  'inline-flex items-center gap-1 rounded-full border px-2.5 py-1',
                   isCurrent && 'border-accent bg-accent text-accent-ink font-medium',
                   isDone && 'border-border-subtle text-ink-muted',
                   !isCurrent && !isDone && 'border-border-subtle text-ink-muted opacity-60',
                 )}
               >
-                {stageLabel(stage)}
-                {isCurrent && currentSubstage !== null && (
-                  <span className="ml-1 opacity-80" data-testid="stage-substage">
+                <span data-testid={isCurrent ? 'stage-current' : undefined}>
+                  {stageLabel(stage)}
+                </span>
+                {isCurrent && currentSubstage !== null && currentSubstage !== '' && (
+                  <span className="opacity-80" data-testid="stage-substage">
                     · {currentSubstage}
                   </span>
                 )}

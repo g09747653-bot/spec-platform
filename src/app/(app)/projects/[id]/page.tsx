@@ -425,6 +425,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       <SpecCard
         sessionId={project.sessionId}
         generationBlocked={interview !== null && interview.pendingRound !== null}
+        /*
+         * Only `generate` drafts (round 2, Д-4). Anywhere else the endpoint refuses on the
+         * `collect → generate` gate, so the control is not offered — button state follows the
+         * workflow, never a local request flag.
+         */
+        canGenerate={assembled !== null && assembled.snapshot.position.substage === 'generate'}
         target={stageTarget}
         revision={
           latest === null || currentFile === null

@@ -74,6 +74,8 @@ export type GenerationOutcome =
        * prompt problem visible (FR-008 AC-7; FR-018 AC-2).
        */
       reason: 'providers' | 'structure';
+      /** The chain was exhausted by rate limiting, not by faults (round 2, Д-5). */
+      overloaded?: boolean;
       /** Structural violations, in the machine-readable form; never rendered to the user. */
       detail?: string;
     };
@@ -183,6 +185,7 @@ export async function runGeneration(input: RunGenerationInput): Promise<Generati
         code: 'GENERATION_FAILED',
         attempts: error.attempts,
         reason: 'providers',
+        overloaded: error.overloaded,
       };
     }
 

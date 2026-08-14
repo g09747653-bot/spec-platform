@@ -198,11 +198,21 @@ export async function POST(
             revisionNumber: outcome.revisionNumber,
           });
         } else {
-          // Sanitised on purpose: no provider name, no vendor payload, no stack (FR-018 AC-7).
+          /*
+           * Sanitised on purpose: no provider name, no vendor payload, no stack (FR-018 AC-7).
+           *
+           * Two messages, though, because they ask for different things from the reader (round 2,
+           * Д-5). "Something went wrong" invites a retry that will fail the same way; "the service
+           * is busy" invites the one thing that actually helps — waiting a moment. The M6 gate walk
+           * was told the first while living the second.
+           */
           send({
             type: 'error',
             code: outcome.code,
-            message: 'Generation did not complete. Your answers and approved specs are safe.',
+            message:
+              outcome.overloaded === true
+                ? 'The service is busy right now. Nothing has been lost — try again in a minute.'
+                : 'Generation did not complete. Your answers and approved specs are safe.',
             retryable: true,
           });
         }

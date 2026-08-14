@@ -5,6 +5,8 @@ import type * as EnvModule from '@/config/env';
 import { OwnerScope } from '@/db/owner-scope';
 import { projects, sessions, users, workflowState } from '@/db/schema';
 import { createMigratedDatabase, type TestDatabase } from '@/db/testing/migrated-database';
+import { AllProvidersFailedError } from '@/modules/adapters/llm';
+import type * as AdapterModule from '@/modules/adapters/llm/default-adapter';
 import { createInterviewRepository } from '@/modules/projects/repositories/interview';
 
 vi.mock('@/modules/projects/auth/scope', () => ({
@@ -13,6 +15,11 @@ vi.mock('@/modules/projects/auth/scope', () => ({
 }));
 
 vi.mock('@/db/client', () => ({ getDatabase: vi.fn() }));
+
+vi.mock('@/modules/adapters/llm/default-adapter', async (importOriginal) => {
+  const actual = await importOriginal<typeof AdapterModule>();
+  return { ...actual, createDefaultAdapter: vi.fn(actual.createDefaultAdapter) };
+});
 
 import { TEST_ENV } from '@/config/testing/test-env';
 
@@ -26,6 +33,7 @@ vi.mock('@/config/env', async (importOriginal) => {
 });
 
 import { getDatabase } from '@/db/client';
+import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
 
 import { POST } from './route';
@@ -189,5 +197,48 @@ describe('POST /api/sessions/:id/rounds', () => {
       OwnerScope.forAuthenticatedUser(stranger?.id ?? ''),
     );
     expect((await ask(sessionId)).status).toBe(404);
+  });
+
+  /**
+   * Round 2, Д-6 — an exhausted provider chain is an answer, not a crash.
+   *
+   * Found by the live gate walk: with the provider out of quota this endpoint returned **500**. The
+   * error escaped, Next turned it into an unhandled failure, and the client got a bare status with no
+   * code to branch on. A generation that could not happen is an ordinary event in the life of a
+   * session (FR-018) — the transition route has caught the same error since M4, and the interview was
+   * simply never given the same treatment.
+   */
+  describe('when every provider fails (round 2, Д-6)', () => {
+    it('answers GENERATION_FAILED rather than throwing a 500', async () => {
+      vi.mocked(createDefaultAdapter).mockReturnValue({
+        generateStreaming: () => Promise.reject(new AllProvidersFailedError(1)),
+      });
+
+      const response = await ask(sessionId);
+
+      expect(response.status).toBe(502);
+      expect(await response.json()).toMatchObject({ error: { code: 'GENERATION_FAILED' } });
+    });
+
+    it('says the service is busy when the chain was exhausted by rate limiting', async () => {
+      vi.mocked(createDefaultAdapter).mockReturnValue({
+        generateStreaming: () => Promise.reject(new AllProvidersFailedError(4, true)),
+      });
+
+      const response = await ask(sessionId);
+      const body = (await response.json()) as { error: { details: { reason: string } } };
+
+      expect(body.error.details.reason).toBe('overloaded');
+    });
+
+    it('persists no round when the draft never arrived', async () => {
+      vi.mocked(createDefaultAdapter).mockReturnValue({
+        generateStreaming: () => Promise.reject(new AllProvidersFailedError(1)),
+      });
+
+      await ask(sessionId);
+
+      expect(await createInterviewRepository(database.db).roundsForSession(sessionId)).toEqual([]);
+    });
   });
 });

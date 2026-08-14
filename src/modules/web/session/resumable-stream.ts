@@ -115,11 +115,33 @@ export interface ResumableStreamOptions {
   sleep?: (ms: number) => Promise<void>;
   /** Reconnect delays in milliseconds. Running out of them ends the stream in `failed`. */
   backoff?: readonly number[];
+  /**
+   * How long a connection may deliver nothing before it is treated as dropped.
+   *
+   * Without this the reader waits on `reader.read()` forever: a server holding the response open —
+   * a provider stalled inside its own timeout, a proxy that keeps the socket but forwards nothing —
+   * is indistinguishable from a slow first token, and the page sits in `streaming` with its
+   * generate control disabled and no way out. That is the state the M6 gate walked into.
+   *
+   * A deadline turns "hung" into "dropped", which this reader already knows how to survive: it
+   * reconnects, asks for everything above the last rendered sequence, and — if the server is still
+   * silent — runs out of backoff and ends in `failed`, which is a state the user can act from.
+   *
+   * The value is deliberately generous. `LLM_REQUEST_TIMEOUT_MS` defaults to 60s per provider, and
+   * a first token is expected within 3s (NFR-001), so 45s cuts nothing legitimate; it only bounds
+   * silence.
+   */
+  idleTimeoutMs?: number;
 }
 
 export const DEFAULT_BACKOFF: readonly number[] = [250, 500, 1000, 2000, 4000, 8000];
 
+export const DEFAULT_IDLE_TIMEOUT_MS = 45_000;
+
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Marker for a connection that delivered nothing for the whole idle deadline. */
+const IDLE = Symbol('stream-idle');
 
 export interface ResumableStream {
   /** Opens the generation stream for a session and follows it to a terminal event. */
@@ -135,6 +157,7 @@ export function createResumableStream(options: ResumableStreamOptions): Resumabl
   const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
   const sleep = options.sleep ?? defaultSleep;
   const backoff = options.backoff ?? DEFAULT_BACKOFF;
+  const idleTimeoutMs = options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
 
   let state: StreamState = initialStreamState;
   let controller: AbortController | null = null;
@@ -152,6 +175,22 @@ export function createResumableStream(options: ResumableStreamOptions): Resumabl
     options.onState(state);
   };
 
+  /**
+   * One read, bounded.
+   *
+   * The race leaves the losing `read()` pending, which is harmless: `follow` aborts the controller
+   * before it opens the next connection, and an aborted reader settles on its own.
+   */
+  async function readBounded(
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+  ): Promise<ReadableStreamReadResult<Uint8Array> | typeof IDLE> {
+    if (idleTimeoutMs <= 0) return reader.read();
+
+    const idle: Promise<typeof IDLE> = sleep(idleTimeoutMs).then(() => IDLE);
+
+    return Promise.race([reader.read(), idle]);
+  }
+
   /** Reads one connection to its end. Returns false when it ended without a terminal event. */
   async function consume(response: Response): Promise<boolean> {
     if (response.body === null) return false;
@@ -161,7 +200,13 @@ export function createResumableStream(options: ResumableStreamOptions): Resumabl
     let buffer = '';
 
     for (;;) {
-      const { done, value } = await reader.read();
+      const result = await readBounded(reader);
+
+      // Silence for the whole deadline. Treated as a dropped connection, which is recoverable —
+      // rather than as a slow one, which would wait forever.
+      if (result === IDLE) throw new Error('stream idle');
+
+      const { done, value } = result;
 
       if (value !== undefined) {
         buffer += decoder.decode(value, { stream: true });
@@ -193,6 +238,7 @@ export function createResumableStream(options: ResumableStreamOptions): Resumabl
       } catch {
         // A dropped connection is not a failed generation: the run is still going server-side, and
         // everything already rendered is already persisted. Reconnect and ask for the rest.
+        controller.abort();
       }
 
       if (isStopped()) return state;
@@ -255,9 +301,24 @@ export function createResumableStream(options: ResumableStreamOptions): Resumabl
       return follow(() => resumeRequest(runId, from, attempt));
     },
 
+    /**
+     * Gives up on reading. The server-side run is untouched and its chunks stay durable.
+     *
+     * **It publishes a state, and that is the point.** Before this, `stop()` aborted the reader and
+     * returned without calling `onState`, so a component keyed on `status === 'streaming'` stayed
+     * "Generating…" for ever — a stop control built on it would have made the dead state worse
+     * rather than better. Returning to `idle` is what puts the generate control back.
+     *
+     * The rendered text is kept: it is what the run produced so far, and throwing it away would
+     * lose the only evidence the user has of what happened.
+     */
     stop(): void {
       stopped = true;
       controller?.abort();
+
+      if (state.status === 'streaming' || state.status === 'reconnecting') {
+        update({ ...state, status: 'idle', researching: false });
+      }
     },
 
     get state(): StreamState {

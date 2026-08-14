@@ -172,7 +172,7 @@ export function McqCard({ sessionId, round }: McqCardProps) {
         <div className="flex flex-col gap-3">
           <Button
             data-testid="mcq-submit"
-            disabled={busy !== null || !complete}
+            disabled={busy === 'submit' || !complete}
             onClick={() => {
               void post(
                 {
@@ -222,7 +222,7 @@ export function McqCard({ sessionId, round }: McqCardProps) {
               <Button
                 variant="secondary"
                 data-testid="mcq-reply-send"
-                disabled={busy !== null || reply.trim() === ''}
+                disabled={busy === 'reply' || reply.trim() === ''}
                 onClick={() => {
                   void post({ roundId: round.roundId, reply: reply.trim() }, 'reply');
                 }}
