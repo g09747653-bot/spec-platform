@@ -32,6 +32,19 @@ export function registeredCapabilityIds(): readonly CapabilityId[] {
   return [...registry.keys()];
 }
 
+/**
+ * The registered capability itself, for the one caller that needs to *ask it something* rather than
+ * know it exists: the export boundary, which resolves a `QualityPort` from it (task 72).
+ *
+ * Deliberately not used by the engine. Gates read `snapshot.capabilities` — a list of ids — so gate
+ * evaluation stays pure and testable from literals (NFR-012 AC-1/AC-2). Handing the engine a live
+ * object would put a `Promise`-returning method inside a synchronous pure function's reach, which is
+ * how "the gate asked the module" starts.
+ */
+export function registeredCapability(id: CapabilityId): StageCapability | null {
+  return registry.get(id) ?? null;
+}
+
 /** Test seam: the registry is module-level state, and tests must not leak registrations. */
 export function clearStageCapabilities(): void {
   registry.clear();

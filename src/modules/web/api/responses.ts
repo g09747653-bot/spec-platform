@@ -35,6 +35,14 @@ export const ERROR_STATUS = {
    * handler still does not choose a status; the rejection reason does.
    */
   UPLOAD_REJECTED: 413,
+  /**
+   * A quality-mode export whose enriched artifacts are stale (constitution A6; FR-014 AC-6).
+   *
+   * The export boundary refuses rather than quietly handing back the parity bundle: a traceability
+   * matrix referencing requirements that no longer exist is a correctness defect, and downgrading the
+   * mode without saying so is the "silent reuse" A6 forbids. The offer to re-run enrichment is task 87.
+   */
+  EXPORT_STALE: 409,
   /** Providers exhausted, or output that failed the section schema (FR-018 AC-2; FR-008 AC-7). */
   GENERATION_FAILED: 502,
 } as const;
@@ -55,6 +63,8 @@ const DEFAULT_MESSAGE: Record<ErrorCode, string> = {
   CAPABILITY_NOT_REGISTERED: 'That option is not available.',
   CONFLICT: 'The session moved on; refresh and try again.',
   DRAFT_INVALID: 'The drafted questions were not usable. Try asking again.',
+  EXPORT_STALE:
+    'The enriched files are out of date with the specs they were built from. Re-run the Quality pass, or export the default bundle.',
   // Deliberately says nothing about which provider, or why beyond "not complete" (FR-018 AC-7).
   GENERATION_FAILED: 'Generation did not complete. Your answers and approved specs are safe.',
   // Replaced in every real rejection by a message naming the limit or the supported types.

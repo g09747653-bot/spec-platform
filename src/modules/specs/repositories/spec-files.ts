@@ -6,7 +6,9 @@ import type { OwnerScope } from '@/db/owner-scope';
 import { projects, specFiles, specRevisions } from '@/db/schema';
 import { queryRows } from '@/db/sql';
 
+import { fileNamesForMode, type ExportMode } from '../model/export';
 import { isSpecType, type SpecFileName, type SpecType } from '../model/spec-files';
+import { revisionOriginForMode } from '../export/resolve-mode';
 
 /**
  * Owner-scoped access to spec files and their exportable content (NFR-005; AR-2).
@@ -149,18 +151,39 @@ export function createSpecFileRepository(db: SchemaDatabase) {
     },
 
     /**
-     * What a default-mode export contains: for each file of this project, its latest **approved,
-     * pre-enrichment** revision (FR-015 AC-2; A6).
+     * What an export of `mode` contains: for each file of this project, the revision that mode
+     * resolves to (FR-015 AC-2/AC-3; A6).
      *
      * `DISTINCT ON` does the resolution in the database — one row per spec type, the highest revision
-     * number first. `origin = 'parity'` is what makes it *pre-enrichment* by definition rather than by
-     * a date comparison, which is the point of marking revisions in the first place (A4).
+     * number first. The origin filter is what the mode decides, and it is the whole difference between
+     * the two bundles: `parity` makes a default-mode export *pre-enrichment* by definition rather than
+     * by a date comparison, which is the point of marking revisions in the first place (A4), and it
+     * holds even on a session where enrichment has already run. Quality mode drops the filter, so the
+     * enriched revision — always the newer one — answers wherever enrichment has run.
+     *
+     * The **file** filter is separate and equally load-bearing: a default-mode export does not select
+     * `quality.md` at all, so the fifth file cannot reach the archive even as a row the assembler then
+     * has to remember to drop (constitution P3).
      *
      * Files with no approved revision simply do not appear: the omission list is computed by the caller
      * from what is missing, so nothing empty can be emitted (FR-015 AC-6/AC-9).
      */
-    async approvedForExport(scope: OwnerScope, projectId: string): Promise<ExportableFile[]> {
+    async approvedForExport(
+      scope: OwnerScope,
+      projectId: string,
+      mode: ExportMode = 'default',
+    ): Promise<ExportableFile[]> {
       if (!UUID.test(projectId)) return [];
+
+      const origin = revisionOriginForMode(mode);
+      const originFilter =
+        origin === 'any' ? sql`TRUE` : sql`${specRevisions}.origin = ${origin}::text`;
+
+      const names = fileNamesForMode(mode);
+      const nameList = sql.join(
+        names.map((name) => sql`${name}`),
+        sql`, `,
+      );
 
       const rows = await queryRows(
         db,
@@ -173,8 +196,9 @@ export function createSpecFileRepository(db: SchemaDatabase) {
           JOIN ${specRevisions} ON ${specRevisions}.spec_file_id = ${specFiles}.id
           WHERE ${specFiles}.project_id = ${projectId}::uuid
             AND ${projects}.owner_id = ${scope.userId}::uuid
+            AND ${specFiles}.file_name IN (${nameList})
             AND ${specRevisions}.approved = true
-            AND ${specRevisions}.origin = 'parity'
+            AND ${originFilter}
           ORDER BY ${specFiles}.spec_type, ${specRevisions}.revision_number DESC
         `,
         ExportRow,
