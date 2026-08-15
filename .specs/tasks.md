@@ -1401,7 +1401,7 @@ Goal: the whole session lives in one conversation feed — messages, question-ro
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 110\. M7п gate — feed-first walk (self-run, А-2.1)
+- [x] 110\. M7п gate — feed-first walk (self-run, А-2.1)
   - Extend the live gate script to the feed surface; artifacts to `artifacts/gate-M7/` (screenshot per feed state, RESULT.md, TRANSCRIPT.md, light trace); liveness counted on every snapshot.
   - Acceptance Criteria:
     - Full prompt → ZIP walked in the feed on the `google,ollama` chain; verdict GREEN, or defects fixed and the walk repeated.

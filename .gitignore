@@ -51,3 +51,6 @@ Thumbs.db
 # The gate trace can run to a hundred megabytes; the committed evidence is the screenshots
 # and RESULT.md beside it (see e2e/gate-M6.live.ts).
 artifacts/**/trace.zip
+# …except a light one. M7п's trace carries the action and network log with per-action screenshots
+# and DOM snapshots off, which is 88 KB rather than 107 MB — and task 110 asks for it to be kept.
+!artifacts/gate-M7/trace.zip

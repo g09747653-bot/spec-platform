@@ -190,7 +190,12 @@ export function SessionFeed({
         )}
 
         <li className="flex w-full">
-          <StageActions sessionId={sessionId} actions={actions} deadlineMs={deadlineMs} />
+          <StageActions
+            sessionId={sessionId}
+            actions={actions}
+            awaitingRound={blocked}
+            deadlineMs={deadlineMs}
+          />
         </li>
 
         {refineFileId !== null && proposal === null && (

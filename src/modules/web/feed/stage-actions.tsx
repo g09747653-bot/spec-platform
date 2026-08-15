@@ -48,10 +48,21 @@ const WAITING_FOR: Record<string, string> = {
 export function StageActions({
   sessionId,
   actions,
+  awaitingRound,
   deadlineMs,
 }: {
   sessionId: string;
   actions: StageActionsModel;
+  /**
+   * Whether a question card is waiting for the user (the feed's `pending-round` tail).
+   *
+   * **Nothing else is offered while it is.** The panel this replaced could not get this wrong: a
+   * pending round *was* the panel, so there was no Ask and no door beside it. In a feed the card and
+   * this bar are on screen together, and offering "Ask questions" over an unanswered round invites a
+   * click whose only outcome is the same round handed back (FR-017 AC-3) — which the M7п gate walk
+   * duly took, and then spent a stage believing it had been given a new one.
+   */
+  awaitingRound: boolean;
   deadlineMs: number;
 }) {
   const { state, elapsedSeconds, send, abandon } = useSessionRequest(deadlineMs);
@@ -60,13 +71,21 @@ export function StageActions({
   const busy = state.running;
   const notice = state.notice;
   const asking = actions.askingStage !== null;
-  const showFallback = asking && !actions.canAskMore && actions.unmetNeeds.length > 0;
+  const showFallback =
+    asking && !awaitingRound && !actions.canAskMore && actions.unmetNeeds.length > 0;
 
   return (
     <div
       className="border-border-subtle bg-surface flex w-full max-w-[46rem] flex-col gap-3 rounded-xl border p-4"
       data-testid="interview-panel"
     >
+      {awaitingRound && (
+        <p className="text-ink-muted text-sm" data-testid="awaiting-round">
+          The questions above are waiting for your answers — nothing else moves until they are
+          submitted.
+        </p>
+      )}
+
       {asking && (
         <p className="text-ink-muted text-xs">
           {actions.answeredRounds} of {actions.roundBudget} question rounds answered
@@ -86,7 +105,7 @@ export function StageActions({
         vanished and nothing replaced it, so the only account the user got of why questions had
         stopped was a rejection reading "That step is not available yet".
       */}
-      {asking && !actions.canAskMore && (
+      {asking && !awaitingRound && !actions.canAskMore && (
         <p className="text-ink-muted text-sm" data-testid="rounds-exhausted">
           {`All ${String(actions.roundBudget)} question rounds for this stage have been used, so nothing further will be asked here. `}
           {actions.unmetNeeds.length > 0
@@ -139,7 +158,7 @@ export function StageActions({
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        {asking && actions.canAskMore && (
+        {asking && !awaitingRound && actions.canAskMore && (
           <Button
             data-testid="ask-round"
             disabled={busy === 'ask'}
@@ -161,7 +180,7 @@ export function StageActions({
           quietly become a second gate whose verdict nobody checks. Round 5 spent itself on making
           refusals legible; a control that cannot be clicked produces no refusal to read.
         */}
-        {actions.target !== null && (
+        {actions.target !== null && !awaitingRound && (
           <Button
             variant={actions.target.ready ? 'primary' : 'secondary'}
             data-testid="proceed"
@@ -180,11 +199,14 @@ export function StageActions({
           </Button>
         )}
 
-        {actions.target !== null && !actions.target.ready && actions.target.unmet.length > 0 && (
-          <span className="text-ink-muted text-xs" data-testid="gate-unmet">
-            still needed: {actions.target.unmet.join(', ')}
-          </span>
-        )}
+        {actions.target !== null &&
+          !awaitingRound &&
+          !actions.target.ready &&
+          actions.target.unmet.length > 0 && (
+            <span className="text-ink-muted text-xs" data-testid="gate-unmet">
+              still needed: {actions.target.unmet.join(', ')}
+            </span>
+          )}
       </div>
 
       {/*
