@@ -105,7 +105,15 @@ describe('completeness (AC-2)', () => {
     const withFeedback = assembleContext({
       ...sources,
       feedback: {
-        items: [{ id: 'f1', description: 'Scope is vague', suggestion: 'Name a non-goal' }],
+        items: [
+          {
+            id: 'f1',
+            sectionPath: 'Scope',
+            title: 'No non-goals',
+            body: 'Scope is vague',
+            suggestion: 'Name a non-goal',
+          },
+        ],
         selectedIds: ['f1'],
       },
     }).text;

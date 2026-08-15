@@ -3,7 +3,15 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import type * as EnvModule from '@/config/env';
 import { OwnerScope } from '@/db/owner-scope';
-import { projects, sessions, specFiles, specRevisions, users, workflowState } from '@/db/schema';
+import {
+  projects,
+  reviewFeedback,
+  sessions,
+  specFiles,
+  specRevisions,
+  users,
+  workflowState,
+} from '@/db/schema';
 import { createMigratedDatabase, type TestDatabase } from '@/db/testing/migrated-database';
 
 /**
@@ -37,7 +45,7 @@ vi.mock('@/config/env', async (importOriginal) => {
 });
 
 import { getDatabase } from '@/db/client';
-import { stubReviewDocument } from '@/modules/adapters/llm';
+import { AllProvidersFailedError, stubReviewDocument } from '@/modules/adapters/llm';
 import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
 
@@ -223,6 +231,92 @@ describe('POST /api/sessions/:id/transition (task 29)', () => {
     expect(after[0]?.updatedAt.getTime() ?? 0).toBeGreaterThanOrEqual(
       before[0]?.updatedAt.getTime() ?? Number.POSITIVE_INFINITY,
     );
+  });
+
+  /**
+   * Task 114 — the deterministic half of the board, through the real route.
+   *
+   * The unit suite proves the rules; what is proved here is that they reach the card: a document
+   * with a broken cross-reference produces a machine item on the same board as the model's
+   * findings, marked as a measurement, and it is there even when the chain gives nothing at all.
+   */
+  describe('the linters put machine findings on the board (task 114)', () => {
+    const approvedDocument = async (content: string) => {
+      await database.db
+        .update(workflowState)
+        .set({ stage: 'constitution', substage: 'generate' })
+        .where(eq(workflowState.sessionId, sessionId));
+
+      const [file] = await database.db
+        .insert(specFiles)
+        .values({ projectId, specType: 'constitution', fileName: 'constitution.md' })
+        .returning({ id: specFiles.id });
+      const [revision] = await database.db
+        .insert(specRevisions)
+        .values({ specFileId: file?.id ?? '', revisionNumber: 1, content })
+        .returning({ id: specRevisions.id });
+      await database.db
+        .update(specRevisions)
+        .set({ approved: true })
+        .where(eq(specRevisions.id, revision?.id ?? ''));
+    };
+
+    const board = async () => {
+      const rows = await database.db.select().from(reviewFeedback);
+      return rows[0];
+    };
+
+    it('catches a broken cross-reference and marks it as an automated check', async () => {
+      await approvedDocument('# Constitution\n\n## Purpose\n\nThis document implements FR-042.\n');
+
+      expect(
+        (await post(sessionId, { toStage: 'constitution', toSubstage: 'review' })).status,
+      ).toBe(200);
+
+      const items = (await board())?.items as { id: string; source: string; confidence: number }[];
+      const machine = items.filter((item) => item.source === 'linter');
+
+      expect(machine).toHaveLength(1);
+      expect(machine[0]).toMatchObject({
+        id: 'linter-cross-reference-FR-42',
+        source: 'linter',
+        confidence: 10,
+        severity: 'blocking',
+      });
+
+      // Beside the model's own findings, not instead of them.
+      expect(items.filter((item) => item.source === 'model').length).toBeGreaterThan(0);
+      expect((await board())?.outcome).toBe('needs_revision');
+    });
+
+    it('leaves a clean document with no machine findings at all', async () => {
+      await approvedDocument('# Constitution\n\n## Purpose\n\nNothing is referenced here.\n');
+
+      await post(sessionId, { toStage: 'constitution', toSubstage: 'review' });
+
+      const items = (await board())?.items as { source: string }[];
+      expect(items.filter((item) => item.source === 'linter')).toHaveLength(0);
+    });
+
+    it('still produces a board when the provider chain is exhausted — a measurement costs no call', async () => {
+      vi.mocked(createDefaultAdapter).mockReturnValueOnce({
+        generateStreaming: () => Promise.reject(new AllProvidersFailedError(3)),
+      });
+
+      await approvedDocument('# Constitution\n\n## Purpose\n\nThis document implements FR-042.\n');
+
+      const response = await post(sessionId, { toStage: 'constitution', toSubstage: 'review' });
+
+      expect(response.status).toBe(200);
+      expect(await asJson(response)).toMatchObject({ reviewId: expect.any(String) as unknown });
+
+      const stored = await board();
+      const items = stored?.items as { source: string }[];
+
+      expect(items.every((item) => item.source === 'linter')).toBe(true);
+      expect(items).toHaveLength(1);
+      expect(stored?.summary).toContain('could not be reached');
+    });
   });
 
   it('surfaces a version race as 409 CONFLICT', async () => {

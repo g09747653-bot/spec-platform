@@ -1,17 +1,27 @@
 import { getEnv } from '@/config/env';
 import { getDatabase } from '@/db/client';
-import { createGenerationStore } from '@/modules/adapters/llm';
+import type { OwnerScope } from '@/db/owner-scope';
+import { createGenerationStore, type LlmAdapter } from '@/modules/adapters/llm';
 import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
 import { createDefaultResearch } from '@/modules/adapters/research';
-import { assembleContext, selectedFeedback } from '@/modules/agents/context-assembler';
+import {
+  assembleContext,
+  selectedFeedback,
+  type ContextFeedback,
+} from '@/modules/agents/context-assembler';
 import { performResearch } from '@/modules/agents/spec/research-step';
 import { reviseInstruction } from '@/modules/agents/revision/revision-agent';
+import { createRevisionNoteAgent } from '@/modules/agents/revision/revision-note';
 import { collectContextSources } from '@/modules/agents/spec/collect-context';
 import { runGeneration } from '@/modules/agents/spec/run-generation';
 import { targetSpecType } from '@/modules/agents/spec/target-spec-type';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
 import { createSessionRepository } from '@/modules/projects/repositories/sessions';
+import type { SpecType } from '@/modules/specs/model/spec-files';
+import { createReviewRepository } from '@/modules/specs/repositories/reviews';
+import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
+import { createSpecFileRepository } from '@/modules/specs/repositories/spec-files';
 import { applyTransition } from '@/modules/workflow/apply-transition';
 import { registeredCapabilityIds } from '@/modules/workflow/capabilities';
 import { isSpecStage } from '@/modules/workflow/model/stages';
@@ -47,6 +57,55 @@ const STANDALONE_REASONS: Partial<Record<ReasonCode, ErrorCode>> = {
   CAPABILITY_NOT_REGISTERED: 'CAPABILITY_NOT_REGISTERED',
   ROUND_LIMIT_REACHED: 'ROUND_LIMIT_REACHED',
 };
+
+/**
+ * Writes the writer's paragraph onto the board whose decision it explains (task 113).
+ *
+ * Everything it needs is already resolved by the caller except the board itself, which it finds the
+ * same way the context did: the request-changes review standing on this file's latest revision. The
+ * whole function is best-effort by construction — every failure path returns rather than throws, so
+ * a revision is never lost to a paragraph about it.
+ */
+async function writeRevisionNote(input: {
+  db: ReturnType<typeof getDatabase>;
+  scope: OwnerScope;
+  adapter: LlmAdapter;
+  projectId: string;
+  specType: SpecType;
+  contentLanguage: string | null;
+  points: readonly ContextFeedback[];
+  runId: string;
+}): Promise<void> {
+  try {
+    const file = await createSpecFileRepository(input.db).findByProjectAndType(
+      input.scope,
+      input.projectId,
+      input.specType,
+    );
+    if (file === null) return;
+
+    const reviews = createReviewRepository(input.db);
+    const board = await reviews.requestedChangesForFile(input.scope, file.id);
+    if (board?.revisionNote !== null) return;
+
+    const current = await createRevisionRepository(input.db).latestApproved(file.id);
+    if (current === null) return;
+
+    const note = await createRevisionNoteAgent(input.adapter).note({
+      specType: input.specType,
+      points: input.points,
+      specContent: current.content,
+      contentLanguage: input.contentLanguage,
+      runId: input.runId,
+    });
+
+    if (note !== '') await reviews.noteRevision(board.id, note);
+  } catch (error) {
+    // Server-side only, and never fatal: the revision is the work, the paragraph is the account
+    // of it (FR-018 AC-7 — nothing here reaches the browser).
+    console.warn('revision note not produced', { specType: input.specType, error });
+  }
+}
 
 export async function POST(
   _request: Request,
@@ -167,6 +226,36 @@ export async function POST(
       send({ type: 'run', runId: run.id, stage, attempt: 1 });
 
       try {
+        /*
+         * The paragraph that precedes Rev N+1 (task 113; Эталон §1.3).
+         *
+         * **Inside the stream, after the `run` event**, and both halves of that placement are
+         * deliberate. Not in `POST /api/reviews/:id/decision`, because a model call there would put
+         * minutes of waiting behind a card with no counter and no way out — the Р-3 wall, rebuilt
+         * (D-96). Not before the stream opens either, because a client waiting on headers has no
+         * run id yet and therefore nothing to reconnect to; after the `run` event the durable path
+         * is armed and a dropped read is a reconnect rather than a loss (Р-2; D-95).
+         *
+         * Persisted on the **board**, not on the revision: it explains which points were ticked and
+         * what the writer settled about them, and at the moment it is written the revision does not
+         * exist. The feed renders it at the decision it explains, above the document it precedes.
+         *
+         * A note that cannot be produced is not a failed generation. It is prose about work that
+         * happens anyway — the same trade `ensureStageReview` makes for a board it could not draw.
+         */
+        if (applied.length > 0) {
+          await writeRevisionNote({
+            db,
+            scope,
+            adapter,
+            projectId: session.projectId,
+            specType,
+            contentLanguage: session.contentLanguage,
+            points: applied,
+            runId: run.id,
+          });
+        }
+
         /*
          * Live research (task 70; FR-019).
          *

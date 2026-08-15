@@ -184,7 +184,17 @@ async function snapshot(page: Page, label: string): Promise<void> {
   step += 1;
   const name = `${String(step).padStart(2, '0')}-${label.replace(/[^\w]+/g, '-')}`;
 
-  await page.screenshot({ path: `${OUT}/screens/${name}.png`, fullPage: true });
+  /*
+   * `caret: 'initial'` — the instrument must not edit the page it is judging (M8п entry finding).
+   *
+   * Playwright's default is `caret: 'hide'`, and it hides the caret by writing an inline
+   * `caret-color: transparent !important` onto every input, textarea and contenteditable before the
+   * capture, restoring it afterwards. Taken while the page is still hydrating, that is a `style`
+   * attribute React finds in the DOM and does not produce itself — which is exactly the hydration
+   * warning this walk recorded on 5 of its 57 states, all of them pages carrying a question round.
+   * The page was never wrong; the screenshot was.
+   */
+  await page.screenshot({ path: `${OUT}/screens/${name}.png`, fullPage: true, caret: 'initial' });
 
   const observed = await page.evaluate((ids: string[]) => {
     const rows: { id: string; text: string; disabled: boolean; moves: boolean }[] = [];

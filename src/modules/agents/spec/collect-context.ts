@@ -88,7 +88,9 @@ export async function collectContextSources(
       feedback = {
         items: review.items.map((item) => ({
           id: item.id,
-          description: item.description,
+          sectionPath: item.sectionPath,
+          title: item.title,
+          body: item.body,
           suggestion: item.suggestion,
         })),
         selectedIds: review.selectedItemIds ?? [],

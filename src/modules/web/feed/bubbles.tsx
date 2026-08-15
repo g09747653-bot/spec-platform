@@ -47,11 +47,23 @@ export function MessageBubble({ block }: { block: MessageBlock }) {
     );
   }
 
+  /*
+   * A revision note is prose like any other assistant turn, and reads as one on purpose (task 113;
+   * Эталон §1.3): the writer saying what it is folding in and what it decided for itself is a turn
+   * of the conversation, not a system notice. Only its test id differs, so a walk can find it.
+   */
+  const testId =
+    block.origin === 'chat'
+      ? 'chat-turn-assistant'
+      : block.origin === 'revision-note'
+        ? 'revision-note'
+        : 'session-summary';
+
   return (
     <FeedItem block={block}>
       <div
         className="max-w-[46rem] text-sm leading-relaxed whitespace-pre-wrap"
-        data-testid={block.origin === 'chat' ? 'chat-turn-assistant' : 'session-summary'}
+        data-testid={testId}
       >
         {block.text}
         {block.streaming && <span className="text-ink-muted"> ▌</span>}

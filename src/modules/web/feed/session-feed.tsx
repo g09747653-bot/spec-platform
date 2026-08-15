@@ -43,8 +43,6 @@ export interface SessionFeedProps {
   refineFileId: string | null;
   /** Whether the position drafts a document (round 2, Д-4). */
   canGenerate: boolean;
-  /** Whether the stage the session is on already has a revision. */
-  hasDraft: boolean;
   /** A run the server reported in flight when this page rendered (round 5, Р-3). */
   activeRun: { runId: string; attempt: number } | null;
   /** How many files the bundle currently holds, for the completion panel. */
@@ -61,7 +59,6 @@ export function SessionFeed({
   proposal,
   refineFileId,
   canGenerate,
-  hasDraft,
   activeRun,
   bundleFileCount,
 }: SessionFeedProps) {
@@ -81,9 +78,16 @@ export function SessionFeed({
   /*
    * Where the drafting surface belongs. It replaces the run block while a run is in flight — the
    * same card, with Stop on it rather than Generate (task 107) — and otherwise sits at the tail
-   * while the position can still produce a first draft.
+   * whenever the position can draft and nothing is waiting to be approved.
+   *
+   * It used to ask "does this stage already have a revision?", and that question has a wrong answer
+   * in exactly one place: a stage the **review board sent back** has a revision and owes another one
+   * (task 113). The session then sat at `generate` with an approved document, a decided board, and
+   * nothing to press — the M8п cycle walk is what found it. The right question is whether a draft is
+   * waiting for a decision, which is what `pending-approval` means.
    */
-  const generationAtTail = tail.kind !== 'generating' && !hasDraft && (canGenerate || blocked);
+  const generationAtTail =
+    tail.kind !== 'generating' && tail.kind !== 'pending-approval' && (canGenerate || blocked);
 
   function renderBlock(block: FeedBlock) {
     const isTail = tail.kind !== 'open' && tail.blockId === block.id;
@@ -120,6 +124,7 @@ export function SessionFeed({
                 activeRun={activeRun}
                 canGenerate={canGenerate}
                 blocked={blocked}
+                revisionOwed={feed.revisionOwed}
               />
             </FeedItem>
           );
@@ -185,6 +190,7 @@ export function SessionFeed({
               activeRun={null}
               canGenerate={canGenerate}
               blocked={blocked}
+              revisionOwed={feed.revisionOwed}
             />
           </li>
         )}

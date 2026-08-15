@@ -174,6 +174,14 @@ const baseEnvSchema = z.object({
   // --- Workflow tuning (constitution A2; FR-005 AC-10; D-4) ---
   QUALITY_STAGE_ENABLED: boolish(false),
   MAX_ROUNDS_PER_STAGE: positiveInt(3),
+  /**
+   * How many times one stage may be sent back for changes (task 113; Эталон §1.3).
+   *
+   * Five, because that is the depth the reference session actually reached — its constitution took
+   * six revisions, which is five request-changes cycles. Configuration rather than a constant so the
+   * bound can be widened without a code change, exactly like the round budget.
+   */
+  MAX_REVISION_CYCLES_PER_STAGE: positiveInt(5),
   DECISION_INTENT_MIN_CONFIDENCE: z
     .string()
     .optional()

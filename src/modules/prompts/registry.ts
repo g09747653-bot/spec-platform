@@ -77,15 +77,29 @@ export interface PromptVariables {
     unmetNeeds: string;
     replyBlock: string;
   };
-  'review.board.v1': {
+  'review.board.v2': {
     /** Named in the instruction only — the review does not derive a section list (see below). */
     specType: string;
     specContent: string;
+    /**
+     * What a re-review is verifying (task 113; Эталон §1.3).
+     *
+     * Rendered by the caller from the points the user ticked on the previous board, and empty on a
+     * first review. The points the user did **not** tick are absent from it, deliberately — see the
+     * asset's note.
+     */
+    verification: string;
   };
   'refinement.propose.v1': {
     specType: string;
     specContent: string;
     instruction: string;
+  };
+  'revision.note.v1': {
+    specType: string;
+    /** The ticked points, rendered by the caller — the only ones this paragraph may mention. */
+    selectedPoints: string;
+    specContent: string;
   };
   'decision.intent.v1': {
     message: string;
@@ -137,35 +151,51 @@ const SPEC_GENERATION: PromptAsset = {
 };
 
 /**
- * The review board asset (task 54; FR-010 AC-1..AC-3).
+ * The review board asset (task 54, rewritten as **v2** by tasks 111/113; FR-010 AC-1..AC-3;
+ * Эталон §1.3).
  *
  * Note what it does **not** carry: `requiredSections`. Structural conformance is `validateStructure`'s
  * verdict, not an opinion to be re-derived by a second model call, and listing the headings here would
  * put structural truth in a third place (constitution P3, and the lint of task 39 would reject it).
  * The reviewer judges substance; structure is already decided by the time a spec is approved.
  *
- * It states the outcome vocabulary but no rule about *what* to do next: `accept`/`ignore`/
+ * It states the verdict vocabulary but no rule about *what* to do next: `accept`/`ignore`/
  * `request_changes` is the user's alphabet (P2), and a prompt that offered it to the model would be
  * inviting it to decide.
+ *
+ * **What `{{verification}}` is, and what it deliberately is not.** On a re-review it lists the points
+ * the user ticked on the previous board and asks whether the new revision actually applied them —
+ * Эталон's «Verifying the revision against the four items you selected». The points the user did
+ * *not* tick are not in it and are not mentioned at all. Naming them, even as "the user declined
+ * these, do not raise them again", is still telling the model about them, and models act on what
+ * they read — the same reasoning task 57 wrote into the context assembler's feedback filter, where
+ * an unselected item is absent rather than marked optional. A finding the reviewer raises anew about
+ * the rewritten text is a fresh judgement on new bytes, which is legitimate; re-litigating a
+ * declined point is not, and the only reliable way to prevent it is to not carry it forward.
  */
 const REVIEW_BOARD: PromptAsset = {
-  id: 'review.board.v1',
+  id: 'review.board.v2',
   system: [
     'You are reviewing one file of a software specification bundle for the coding agent that will',
     'build from it. Report only defects you can point at: a vague requirement, an untestable',
     'acceptance criterion, a contradiction, a gap that would leave the agent guessing.',
     'Return JSON only — no prose, no code fence. Shape:',
-    '{"outcome": "pass"|"needs_revision", "mustfix": [item], "recommendations": [item]}, where item',
-    'is {"id", "section", "line", "confidenceScore", "description", "suggestion"}.',
-    'Put a finding in "mustfix" when the document is unusable without it and in "recommendations"',
-    'otherwise. "id" is a short stable slug, unique across both lists; "section" names the heading',
-    'the finding is in; "line" is a positive line number; "confidenceScore" is an integer from 5 to',
-    '10; "description" states the problem and "suggestion" states a concrete change.',
-    'Use "pass" only when "mustfix" is empty. Report nothing you are not at least moderately',
+    '{"verdict": "pass"|"needs_revision", "summary": "one paragraph", "mustFix": [item],',
+    '"recommendations": [item]}, where item is',
+    '{"id", "sectionPath", "title", "body", "suggestion", "confidence"}.',
+    'Put a finding in "mustFix" when the document is unusable without it and in "recommendations"',
+    'otherwise. "id" is a short stable slug, unique across both lists; "sectionPath" names the',
+    'heading the finding is in, as "Section — subsection"; "title" is a short name for the problem;',
+    '"body" states the problem in full and "suggestion" states a concrete change; "confidence" is an',
+    'integer from 1 to 10 saying how sure you are that the finding is accurate.',
+    '"summary" is one paragraph on the document as a whole, in prose, not a list.',
+    'Use "pass" only when "mustFix" is empty. Report nothing you are not at least moderately',
     'confident about: an empty review is a valid answer.',
   ].join(' '),
-  user: ['Review the {{specType}} document below.', '', '{{specContent}}'].join('\n'),
-  variables: ['specType', 'specContent'],
+  user: ['Review the {{specType}} document below.', '{{verification}}', '', '{{specContent}}'].join(
+    '\n',
+  ),
+  variables: ['specType', 'specContent', 'verification'],
 };
 
 /**
@@ -206,6 +236,49 @@ const REFINEMENT_PROPOSE: PromptAsset = {
     'REQUEST',
   ].join('\n'),
   variables: ['specType', 'specContent', 'instruction'],
+};
+
+/**
+ * The paragraph the writer says before it rewrites (task 113; Эталон §1.3).
+ *
+ * The reference product answers Request changes with one paragraph saying what it folded in and,
+ * crucially, **what it decided for itself**: «On voice-cloning you didn't specify — I've made the
+ * call that…». That second half is the whole value of it. A revision applies a set of tick-marks,
+ * and applying them always requires settling something the ticks did not say; a writer that makes
+ * those calls silently leaves the user to discover them by reading a diff of a document they have
+ * already approved once.
+ *
+ * Prose, not JSON, and the only prompt in the registry that returns prose on purpose: this is a turn
+ * in the conversation, shown verbatim. So the instruction is about *shape* — first person, one
+ * paragraph, no lists, no headings — and about honesty: it may name only the points it was handed,
+ * and if it settled nothing it must say so rather than invent a decision to sound thorough.
+ *
+ * It sees the document because the calls it is announcing are calls about that text. It does **not**
+ * see the unticked points, for the reason the review asset spells out: what a prompt is told, it
+ * acts on.
+ */
+const REVISION_NOTE: PromptAsset = {
+  id: 'revision.note.v1',
+  system: [
+    'You are about to rewrite one file of a specification bundle to apply review points the user',
+    'ticked. Before you write it, say in ONE short paragraph, in the first person, what you are',
+    'folding in and which open questions you are settling yourself and how.',
+    'Prose only: no headings, no bullet list, no JSON, no preamble like "Sure" — just the paragraph.',
+    'Mention only the points you were given. If applying them settles nothing that was left open,',
+    'say plainly that the changes are mechanical and you are deciding nothing on the user’s behalf.',
+    'Do not restate the document, do not write the revision, and do not promise anything beyond the',
+    'points listed.',
+  ].join(' '),
+  user: [
+    'The points the user ticked on the review of the {{specType}} document:',
+    '',
+    '{{selectedPoints}}',
+    '',
+    'The document as it stands:',
+    '',
+    '{{specContent}}',
+  ].join('\n'),
+  variables: ['specType', 'selectedPoints', 'specContent'],
 };
 
 /**
@@ -364,8 +437,9 @@ const SESSION_SUMMARY: PromptAsset = {
 
 export const promptRegistry: Readonly<Record<PromptId, PromptAsset>> = Object.freeze({
   'spec.generation.v2': SPEC_GENERATION,
-  'review.board.v1': REVIEW_BOARD,
+  'review.board.v2': REVIEW_BOARD,
   'refinement.propose.v1': REFINEMENT_PROPOSE,
+  'revision.note.v1': REVISION_NOTE,
   'decision.intent.v1': DECISION_INTENT,
   'chat.answer.v1': CHAT_ANSWER,
   'interview.questions.v3': INTERVIEW_QUESTIONS,

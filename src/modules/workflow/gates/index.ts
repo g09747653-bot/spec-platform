@@ -107,4 +107,5 @@ export { collectGate } from './collect';
 export { completionGate } from './completion';
 export { interviewGate } from './interview';
 export { reviewGate } from './review';
+export { revisionBudgetGate } from './revision-budget';
 export { roundBudgetGate } from './round-budget';

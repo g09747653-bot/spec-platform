@@ -20,11 +20,41 @@ import { createRevisionAgent } from './revision-agent';
  * prompt, by description, by suggestion and by id.
  */
 const FIVE_ITEMS: ContextFeedbackSelection['items'] = [
-  { id: 'mf-1', description: 'Scope is vague', suggestion: 'Name a non-goal' },
-  { id: 'mf-2', description: 'No owner for the gate', suggestion: 'Name the module' },
-  { id: 'rec-1', description: 'Add a worked example', suggestion: 'Show one request' },
-  { id: 'rec-2', description: 'Reorder the risks', suggestion: 'Put likelihood first' },
-  { id: 'rec-3', description: 'Define the acronym', suggestion: 'Expand EARS on first use' },
+  {
+    id: 'mf-1',
+    sectionPath: 'Scope',
+    title: 'No boundary',
+    body: 'Scope is vague',
+    suggestion: 'Name a non-goal',
+  },
+  {
+    id: 'mf-2',
+    sectionPath: 'Gates',
+    title: 'Ownerless gate',
+    body: 'No owner for the gate',
+    suggestion: 'Name the module',
+  },
+  {
+    id: 'rec-1',
+    sectionPath: 'API',
+    title: 'No example',
+    body: 'Add a worked example',
+    suggestion: 'Show one request',
+  },
+  {
+    id: 'rec-2',
+    sectionPath: 'Risks',
+    title: 'Order of risks',
+    body: 'Reorder the risks',
+    suggestion: 'Put likelihood first',
+  },
+  {
+    id: 'rec-3',
+    sectionPath: 'Glossary',
+    title: 'Unexpanded acronym',
+    body: 'Define the acronym',
+    suggestion: 'Expand EARS on first use',
+  },
 ];
 
 const sources = (selectedIds: readonly string[]): ContextSources => ({

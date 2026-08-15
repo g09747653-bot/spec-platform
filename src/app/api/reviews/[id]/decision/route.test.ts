@@ -376,6 +376,115 @@ describe('POST /api/reviews/:id/decision (task 56)', () => {
   });
 
   /**
+   * Task 113 — the loop is bounded, and the bound is honest.
+   *
+   * The budget is spent by seeding decided boards on earlier revisions of the same file, because
+   * that is exactly what a session that has been round the loop looks like. What is asserted is the
+   * fork: the machine refuses to rewrite again, with a reason code the page has words for, and the
+   * two decisions that end the cycle keep working.
+   */
+  describe('the revision cycle is bounded (task 113)', () => {
+    /**
+     * Walks the file through `count` cycles and returns the board the user is now looking at.
+     *
+     * Each cycle is a revision and a decided board, exactly as a real loop leaves them, and the last
+     * revision carries a fresh **undecided** board — because after N request-changes decisions that
+     * is what is on screen. Deciding the seeded fixture's first board instead would be deciding a
+     * review of content the file has long since moved past.
+     */
+    const afterCycles = async (count: number): Promise<string> => {
+      let pending = reviewId;
+
+      for (let index = 0; index < count; index += 1) {
+        await database.db
+          .update(reviewFeedback)
+          .set({
+            decision: 'request_changes',
+            selectedItemIds: ['mf-1'],
+            decidedAt: new Date(),
+          })
+          .where(eq(reviewFeedback.id, pending));
+
+        const [revision] = await database.db
+          .insert(specRevisions)
+          .values({
+            specFileId,
+            revisionNumber: index + 2,
+            content: `# Constitution\n\n## Purpose\n\nRevision ${String(index + 2)}.`,
+            approved: true,
+          })
+          .returning({ id: specRevisions.id });
+
+        const [board] = await database.db
+          .insert(reviewFeedback)
+          .values({
+            specRevisionId: revision?.id ?? '',
+            outcome: 'needs_revision',
+            summary: 'Still one point open.',
+            items: [
+              {
+                id: 'mf-1',
+                sectionPath: 'Purpose',
+                title: 'Untestable',
+                body: 'Untestable.',
+                suggestion: 'Restate it.',
+                confidence: 9,
+                severity: 'blocking',
+                source: 'model',
+              },
+            ],
+          })
+          .returning({ id: reviewFeedback.id });
+
+        pending = board?.id ?? '';
+      }
+
+      return pending;
+    };
+
+    it('refuses another rewrite once the budget is spent, and says which rule refused', async () => {
+      const board = await afterCycles(5);
+
+      const response = await post(board, {
+        decision: 'request_changes',
+        selectedItemIds: ['mf-1'],
+      });
+
+      expect(response.status).toBe(409);
+      expect(await asJson(response)).toMatchObject({
+        error: { code: 'GATE_REJECTED', details: { reason: 'REVISION_LIMIT_REACHED' } },
+      });
+
+      // And nothing was decided: the board is exactly as it was.
+      const [row] = await database.db
+        .select()
+        .from(reviewFeedback)
+        .where(eq(reviewFeedback.id, board));
+      expect(row?.decision).toBeNull();
+    });
+
+    it('still allows the decisions that end the cycle — exhausted is a fork, not a dead end', async () => {
+      const board = await afterCycles(5);
+
+      const response = await post(board, { decision: 'accept' });
+
+      expect(response.status).toBe(200);
+      expect((await snapshot())?.snapshot.reviewDecided.constitution).toBe(true);
+    });
+
+    it('permits the last cycle inside the budget', async () => {
+      const board = await afterCycles(4);
+
+      const response = await post(board, {
+        decision: 'request_changes',
+        selectedItemIds: ['mf-1'],
+      });
+
+      expect(response.status).toBe(200);
+    });
+  });
+
+  /**
    * Task 57, where it actually bites: the ticked subset has to survive the round trip from the
    * board, through storage, into the next generation's context. The agent-level tests prove the
    * filter; this proves the plumbing that feeds it, which is the half that would fail silently.

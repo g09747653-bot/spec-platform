@@ -70,31 +70,62 @@ test.describe('review board', () => {
     await expect(page.getByTestId('review-mustfix').getByRole('checkbox')).toHaveCount(2);
     await expect(page.getByTestId('review-recommendations').getByRole('checkbox')).toHaveCount(1);
 
-    // --- An overall outcome is stated (AC-3) ---
-    await expect(page.getByTestId('review-outcome')).toHaveText('needs revision');
+    // --- An overall verdict and a summary are stated (AC-3; task 112) ---
+    await expect(page.getByTestId('review-outcome')).toHaveText('Needs Revision');
+    await expect(page.getByTestId('review-summary')).toBeVisible();
+
+    // --- Every item carries its confidence and its suggestion (Эталон §1.3) ---
+    await expect(page.getByTestId('review-item-confidence-mf-untestable-criterion')).toHaveText(
+      'Confidence score 9/10',
+    );
+    await expect(page.getByTestId('review-item-suggestion-mf-untestable-criterion')).toContainText(
+      'Suggestion:',
+    );
 
     // --- All three actions are offered, and the board waits for one of them (AC-4) ---
     await expect(page.getByTestId('review-accept')).toBeEnabled();
     await expect(page.getByTestId('review-ignore')).toBeEnabled();
 
-    // --- Request-changes is disabled with nothing ticked (task 55 AC-3) ---
+    /*
+     * --- The defaults are the parity behaviour (task 112) ---
+     *
+     * Must Fix arrives ticked and Recommendations does not, so Request changes is live from the
+     * first paint. Until M8п the card arrived entirely unticked, which made the control something
+     * the user had to earn before they could see what it did.
+     */
+    await expect(page.getByTestId('review-item-checkbox-mf-untestable-criterion')).toBeChecked();
+    await expect(page.getByTestId('review-item-checkbox-mf-unnamed-actor')).toBeChecked();
+    await expect(page.getByTestId('review-item-checkbox-rec-example')).not.toBeChecked();
+    await expect(page.getByTestId('review-request-changes')).toBeEnabled();
+
+    // --- Unticking everything disables it again, and says why (task 55 AC-3) ---
+    await page.getByTestId('review-item-checkbox-mf-untestable-criterion').uncheck();
+    await page.getByTestId('review-item-checkbox-mf-unnamed-actor').uncheck();
     await expect(page.getByTestId('review-request-changes')).toBeDisabled();
     await expect(page.getByTestId('review-selection-hint')).toBeVisible();
 
-    // --- Ticking one item enables it, unticking disables it again ---
-    await page.getByTestId('review-item-checkbox-mf-untestable-criterion').check();
-    await expect(page.getByTestId('review-request-changes')).toBeEnabled();
-    await page.getByTestId('review-item-checkbox-mf-untestable-criterion').uncheck();
-    await expect(page.getByTestId('review-request-changes')).toBeDisabled();
-
-    // --- The pending board survives a reload (FR-017 AC-4) ---
+    // --- The pending board survives a reload, defaults and all (FR-017 AC-4) ---
     await page.reload();
     await expect(page.getByTestId('review-board')).toBeVisible();
-    await expect(page.getByTestId('review-request-changes')).toBeDisabled();
+    await expect(page.getByTestId('review-item-checkbox-mf-untestable-criterion')).toBeChecked();
 
     // --- Accepting records the decision and clears the pending board (AC-5) ---
     await page.getByTestId('review-accept').click();
     await expect(page.getByTestId('review-board')).toHaveCount(0);
+
+    /*
+     * --- And the decided board stays in the feed as history (task 112) ---
+     *
+     * Accept applies nothing, so it records no selection — the table stores `NULL` for it by
+     * constraint — and the card says what was decided rather than showing tick marks nobody kept.
+     */
+    await expect(page.getByTestId('review-board-decided')).toBeVisible();
+    await expect(page.getByTestId('review-decision')).toContainText('accepted');
+    await expect(page.getByTestId('review-mustfix').getByRole('checkbox')).toHaveCount(0);
+
+    await page.reload();
+    await expect(page.getByTestId('review-board-decided')).toBeVisible();
+    await expect(page.getByTestId('review-decision')).toContainText('accepted');
   });
 
   test('request-changes submits only the ticked items and returns the stage to generate (AC-6/AC-7)', async ({
@@ -108,13 +139,30 @@ test.describe('review board', () => {
     await expect(page.getByTestId('review-board')).toBeVisible();
     await expect(page.getByTestId('stage-substage')).toHaveText(/review/);
 
-    // Tick one of the three — the subset is what the endpoint must record (AC-7).
+    // One of the three, and not the two that arrive ticked — the subset is what the endpoint must
+    // record (AC-7), and a subset that happened to be the default would prove nothing.
+    await page.getByTestId('review-item-checkbox-mf-untestable-criterion').uncheck();
+    await page.getByTestId('review-item-checkbox-mf-unnamed-actor').uncheck();
     await page.getByTestId('review-item-checkbox-rec-example').check();
     await page.getByTestId('review-request-changes').click();
 
     // The stage goes back to drafting (AC-6), and the decided board is no longer pending.
     await expect(page.getByTestId('stage-substage')).toHaveText(/generate/);
     await expect(page.getByTestId('review-board')).toHaveCount(0);
+
+    /*
+     * --- The ticks travel with the decision and are frozen in history (task 112) ---
+     *
+     * Exactly the one that was ticked, still ticked, still disabled, after a reload. This is the
+     * only decision that carries a selection, so it is the only one with a tick state to keep.
+     */
+    await page.reload();
+    await expect(page.getByTestId('review-board-decided')).toBeVisible();
+    await expect(page.getByTestId('review-item-checkbox-rec-example')).toBeChecked();
+    await expect(page.getByTestId('review-item-checkbox-rec-example')).toBeDisabled();
+    await expect(
+      page.getByTestId('review-item-checkbox-mf-untestable-criterion'),
+    ).not.toBeChecked();
   });
 
   test('ignoring is a decision too, and it is not the same as accepting (AC-4/AC-5)', async ({
@@ -131,6 +179,75 @@ test.describe('review board', () => {
     await expect(page.getByTestId('review-board')).toHaveCount(0);
     // The stage stays where it was: a decision opens the gate, it does not walk through it.
     await expect(page.getByTestId('stage-substage')).toHaveText(/review/);
+  });
+
+  /**
+   * Task 113 — the whole loop, driven through the interface.
+   *
+   * needs-revision board → request changes with a subset → the writer's paragraph → Rev 2 → a
+   * re-review of the new bytes → accept. Every step is a click a person makes, so a step that stops
+   * working is the product breaking rather than a fixture falling behind.
+   */
+  test('the targeted revision cycle runs to a second board and an acceptance (task 113)', async ({
+    page,
+    context,
+  }) => {
+    test.slow();
+
+    await signIn(context, await createSignedInUser('cycler'));
+    await startSession(page);
+    await generateApproveAndEnterReview(page);
+
+    await expect(page.getByTestId('review-board')).toBeVisible();
+    await expect(page.getByTestId('review-outcome')).toHaveText('Needs Revision');
+
+    // --- Request changes, with a subset that is not the default ---
+    await page.getByTestId('review-item-checkbox-mf-unnamed-actor').uncheck();
+    await page.getByTestId('review-request-changes').click();
+    await expect(page.getByTestId('stage-substage')).toHaveText(/generate/);
+
+    // --- Rev 2, and the paragraph that precedes it (Эталон §1.3) ---
+    await page.getByTestId('generate-spec').click();
+    await expect(page.getByTestId('spec-card')).toBeVisible({ timeout: 30_000 });
+
+    await expect(page.getByTestId('revision-note')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('revision-note')).toContainText('folding in the 1 point');
+
+    // It is history, not a toast: it is still there after a reload, above the document it precedes.
+    await page.reload();
+    await expect(page.getByTestId('revision-note')).toBeVisible();
+
+    const order = await page.evaluate(() =>
+      [...document.querySelectorAll('[data-msg-id]')].map((element) =>
+        element.getAttribute('data-msg-id'),
+      ),
+    );
+    const noteAt = order.findIndex((id) => id?.startsWith('revision-note:') === true);
+    const boardAt = order.findIndex((id) => id?.startsWith('review:') === true);
+    expect(noteAt).toBeGreaterThan(boardAt);
+
+    // --- Approve Rev 2 and re-enter review: a second board, on the new bytes ---
+    await page.getByTestId('approve-spec').click();
+    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await page.getByTestId('proceed').click();
+
+    await expect(page.getByTestId('review-board')).toBeVisible({ timeout: 30_000 });
+
+    /*
+     * The first board is still in the feed, decided, with the tick it carried — appended, never
+     * rewritten (task 111). Scoped to the decided card on purpose: the new board carries findings
+     * with the same ids, which is precisely what "a second review of new bytes" looks like against
+     * a deterministic stub.
+     */
+    const decided = page.getByTestId('review-board-decided');
+    await expect(decided).toBeVisible();
+    await expect(decided.getByTestId('review-item-checkbox-mf-untestable-criterion')).toBeChecked();
+    await expect(decided.getByTestId('review-item-checkbox-mf-unnamed-actor')).not.toBeChecked();
+
+    // --- And the cycle ends where the reference product's does: an acceptance ---
+    await page.getByTestId('review-accept').click();
+    await expect(page.getByTestId('review-board')).toHaveCount(0);
+    await expect(page.getByTestId('proceed')).toBeEnabled();
   });
 
   test("another user cannot decide someone else's review (AR-2)", async ({ page, context }) => {

@@ -6,7 +6,13 @@ import type { OwnerScope } from '@/db/owner-scope';
 import { projects, reviewFeedback, specFiles, specRevisions } from '@/db/schema';
 import { queryOneRow, queryRows } from '@/db/sql';
 
-import { isReviewDecision, type ReviewDecisionName, type ReviewOutcome } from '../model/review';
+import {
+  FEEDBACK_SEVERITIES,
+  FEEDBACK_SOURCES,
+  isReviewDecision,
+  type ReviewDecisionName,
+  type ReviewOutcome,
+} from '../model/review';
 
 /**
  * Owner-scoped review storage (tasks 54, 56; FR-010).
@@ -30,18 +36,56 @@ import { isReviewDecision, type ReviewDecisionName, type ReviewOutcome } from '.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** The shape stored in `review_feedback.items`; validated on the way out as well as in. */
-const StoredItem = z.object({
+/** The shape stored in `review_feedback.items` since review.v2 (task 111). */
+const StoredItemV2 = z.object({
   id: z.string().min(1),
-  section: z.string().min(1),
-  line: z.number().int().positive(),
-  confidenceScore: z.number().int().min(5).max(10),
-  description: z.string().min(1),
+  sectionPath: z.string().min(1),
+  title: z.string().min(1),
+  body: z.string().min(1),
   suggestion: z.string().min(1),
-  severity: z.enum(['blocking', 'advisory']),
+  confidence: z.number().int().min(1).max(10),
+  severity: z.enum(FEEDBACK_SEVERITIES),
+  source: z.enum(FEEDBACK_SOURCES).default('model'),
 });
 
-export type StoredReviewItem = z.infer<typeof StoredItem>;
+export type StoredReviewItem = z.infer<typeof StoredItemV2>;
+
+/**
+ * A row written before review.v2, read forward (task 111).
+ *
+ * Every board in an existing session is one of these, and a board is history: it was decided by a
+ * person on the words it showed them, and it is never rewritten (A4's reasoning, applied to the
+ * review rather than to the document). So the shape change is absorbed on the way **out** rather
+ * than by a data migration — the same compatibility contract task 106 wrote for v2 question sets
+ * (D-104), and the same reason: the alternative is a session whose earlier stages stop rendering.
+ *
+ * The mapping invents nothing. `section` and `description` are the fields v2 renamed; a v1 item has
+ * no separate heading, so its section path serves as the title, exactly as the card used to render
+ * it; `line` is dropped, because v2 does not show one. Confidence carries over unchanged — the
+ * widened band contains the old one.
+ */
+const StoredItemV1 = z
+  .object({
+    id: z.string().min(1),
+    section: z.string().min(1),
+    line: z.number().int().optional(),
+    confidenceScore: z.number().int().min(1).max(10),
+    description: z.string().min(1),
+    suggestion: z.string().min(1),
+    severity: z.enum(FEEDBACK_SEVERITIES),
+  })
+  .transform((item): StoredReviewItem => ({
+    id: item.id,
+    sectionPath: item.section,
+    title: item.section,
+    body: item.description,
+    suggestion: item.suggestion,
+    confidence: item.confidenceScore,
+    severity: item.severity,
+    source: 'model',
+  }));
+
+const StoredItem = z.union([StoredItemV2, StoredItemV1]);
 
 const ReviewRow = z.object({
   id: z.uuid(),
@@ -51,9 +95,11 @@ const ReviewRow = z.object({
   spec_type: z.string(),
   revision_number: z.number().int().positive(),
   outcome: z.enum(['pass', 'needs_revision']),
+  summary: z.string().nullable(),
   items: z.array(StoredItem),
   decision: z.string().nullable(),
   selected_item_ids: z.array(z.string()).nullable(),
+  revision_note: z.string().nullable(),
 });
 
 export interface StoredReview {
@@ -64,9 +110,13 @@ export interface StoredReview {
   specType: string;
   revisionNumber: number;
   outcome: ReviewOutcome;
+  /** `null` on a board written before review.v2, which had no summary to write. */
+  summary: string | null;
   items: StoredReviewItem[];
   decision: ReviewDecisionName | null;
   selectedItemIds: string[] | null;
+  /** What the writer said it was folding in; `null` until a request-changes decision writes it. */
+  revisionNote: string | null;
 }
 
 function toReview(row: z.infer<typeof ReviewRow>): StoredReview {
@@ -82,9 +132,11 @@ function toReview(row: z.infer<typeof ReviewRow>): StoredReview {
     specType: row.spec_type,
     revisionNumber: row.revision_number,
     outcome: row.outcome,
+    summary: row.summary,
     items: row.items,
     decision: row.decision,
     selectedItemIds: row.selected_item_ids,
+    revisionNote: row.revision_note,
   };
 }
 
@@ -97,9 +149,11 @@ const REVIEW_COLUMNS = sql`
   ${specFiles}.spec_type,
   ${specRevisions}.revision_number,
   ${reviewFeedback}.outcome,
+  ${reviewFeedback}.summary,
   ${reviewFeedback}.items,
   ${reviewFeedback}.decision,
-  ${reviewFeedback}.selected_item_ids
+  ${reviewFeedback}.selected_item_ids,
+  ${reviewFeedback}.revision_note
 `;
 
 const OWNED_REVIEW = sql`
@@ -123,6 +177,7 @@ export interface ProjectReview extends StoredReview {
 export interface CreateReviewInput {
   specRevisionId: string;
   outcome: ReviewOutcome;
+  summary: string;
   items: readonly StoredReviewItem[];
 }
 
@@ -141,7 +196,12 @@ export function createReviewRepository(db: SchemaDatabase) {
 
       await db
         .insert(reviewFeedback)
-        .values({ specRevisionId: input.specRevisionId, outcome: input.outcome, items })
+        .values({
+          specRevisionId: input.specRevisionId,
+          outcome: input.outcome,
+          summary: input.summary,
+          items,
+        })
         .onConflictDoNothing();
 
       return toReview(
@@ -266,6 +326,88 @@ export function createReviewRepository(db: SchemaDatabase) {
 
       const row = rows[0];
       return row === undefined ? null : toReview(row);
+    },
+
+    /**
+     * The most recent request-changes decision on this file, whatever revision it read (task 113).
+     *
+     * The sibling of `requestedChangesForFile`, and the difference is the whole reason it exists:
+     * that one answers "what must the *next* generation apply?" and therefore stops answering the
+     * moment the revision lands. This one answers "what was the last revision asked to fix?", which
+     * is the question a **re-review** asks — by then the revision exists, so the other query has
+     * gone quiet. Эталон's «Verifying the revision against the four items you selected» is exactly
+     * this lookup.
+     */
+    async lastRequestedChangesForFile(
+      scope: OwnerScope,
+      specFileId: string,
+    ): Promise<StoredReview | null> {
+      if (!UUID.test(specFileId)) return null;
+
+      const rows = await queryRows(
+        db,
+        sql`
+          SELECT ${REVIEW_COLUMNS} ${OWNED_REVIEW}
+          WHERE ${specFiles}.id = ${specFileId}::uuid
+            AND ${projects}.owner_id = ${scope.userId}::uuid
+            AND ${reviewFeedback}.decision = 'request_changes'
+          ORDER BY ${reviewFeedback}.decided_at DESC
+          LIMIT 1
+        `,
+        ReviewRow,
+      );
+
+      const row = rows[0];
+      return row === undefined ? null : toReview(row);
+    },
+
+    /**
+     * How many times this file has been sent back for changes (task 113).
+     *
+     * The count the revision budget is measured against. Decisions, not revisions: a regeneration
+     * the user asked for on the spec card is not a review cycle, and counting revisions would spend
+     * the loop's budget on work the loop never ordered.
+     */
+    async countRequestedChanges(scope: OwnerScope, specFileId: string): Promise<number> {
+      if (!UUID.test(specFileId)) return 0;
+
+      const rows = await queryRows(
+        db,
+        sql`
+          SELECT COUNT(*)::int AS cycles ${OWNED_REVIEW}
+          WHERE ${specFiles}.id = ${specFileId}::uuid
+            AND ${projects}.owner_id = ${scope.userId}::uuid
+            AND ${reviewFeedback}.decision = 'request_changes'
+        `,
+        z.object({ cycles: z.number().int().nonnegative() }),
+      );
+
+      return rows[0]?.cycles ?? 0;
+    },
+
+    /**
+     * Records what the writer said it was folding in, once (task 113; Эталон §1.3).
+     *
+     * `revision_note IS NULL` in the predicate for the same reason `decide` carries
+     * `decision IS NULL`: the paragraph explains a decision that has already been taken, so a second
+     * one would be a second account of the same event. A retried generation therefore keeps the note
+     * the first attempt wrote rather than replacing it — the board is history (task 111).
+     */
+    async noteRevision(reviewId: string, note: string): Promise<boolean> {
+      if (!UUID.test(reviewId)) return false;
+
+      const updated = await queryRows(
+        db,
+        sql`
+          UPDATE ${reviewFeedback}
+          SET revision_note = ${note}
+          WHERE id = ${reviewId}::uuid AND revision_note IS NULL
+          RETURNING id
+        `,
+        z.object({ id: z.uuid() }),
+      );
+
+      return updated.length > 0;
     },
 
     /**

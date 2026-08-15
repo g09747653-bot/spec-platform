@@ -31,6 +31,7 @@ export const STILL_NEEDED: Record<ReasonCode, string> = {
   SESSION_SEALED: 'nothing — the session is sealed and does not reopen',
   ROUND_LIMIT_REACHED: 'nothing further from this stage — its question rounds are used up',
   CAPABILITY_NOT_REGISTERED: 'an optional stage that is not installed',
+  REVISION_LIMIT_REACHED: 'a decision on this review — its revision cycles are used up',
 };
 
 /** Full sentences: what was refused, and what to do about it. */
@@ -53,6 +54,11 @@ export const REASON_EXPLANATION: Record<ReasonCode, string> = {
     'Anything still open can be answered directly in the fields above; otherwise move on to the next step.',
   CAPABILITY_NOT_REGISTERED:
     'That stage is optional and is not installed on this deployment, so it cannot be entered.',
+  REVISION_LIMIT_REACHED:
+    'This document has been sent back for changes as many times as the session allows, so it will ' +
+    'not be rewritten again automatically. Accept the review or ignore it to move on — the ' +
+    'remaining points are still listed above, and you can edit the document by asking for a change ' +
+    'in the chat.',
 };
 
 const isReasonCode = (value: string): value is ReasonCode => value in REASON_EXPLANATION;

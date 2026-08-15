@@ -28,6 +28,14 @@ export interface FeedSourceSession {
   /** Where the session is now — read, never inferred. */
   position: StagePosition;
   completionCount: number;
+  /**
+   * How many times one stage may be sent back for changes (task 113).
+   *
+   * Configuration, so it arrives with the source rather than being read inside a pure projection —
+   * the same route `deadlineMs` takes to the page, and the same reason: `buildFeed` reads no
+   * environment, so two sessions with identical rows produce identical feeds.
+   */
+  revisionCycleBudget: number;
 }
 
 export interface FeedSourceAnswer {
@@ -73,9 +81,13 @@ export interface FeedSourceReview {
   /** The revision this review read. A review of anything but the latest is history (FR-010 AC-8). */
   revisionNumber: number;
   outcome: 'pass' | 'needs_revision';
+  /** `null` on a board written before review.v2, which had no summary to write (task 111). */
+  summary: string | null;
   items: readonly FeedReviewItem[];
   decision: 'accept' | 'ignore' | 'request_changes' | null;
   selectedItemIds: readonly string[] | null;
+  /** The writer's paragraph before Rev N+1, once a request-changes decision produced one (113). */
+  revisionNote: string | null;
   createdAt: string;
   decidedAt: string | null;
 }
