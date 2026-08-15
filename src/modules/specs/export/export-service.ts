@@ -1,6 +1,7 @@
 import type { SchemaDatabase } from '@/db';
 import type { OwnerScope } from '@/db/owner-scope';
 import { exportRecords } from '@/db/schema';
+import { bundlePlan, methodologyConfig } from '@/modules/methodologies';
 
 import type { ExportMode } from '../model/export';
 import { createSpecFileRepository } from '../repositories/spec-files';
@@ -43,14 +44,27 @@ export function createExportService(db: SchemaDatabase) {
       projectId: string,
       requested: ExportMode,
       quality: QualityPort,
+      /**
+       * The session's methodology (task 117). Absent means the parity bundle, which is what every
+       * caller written before methodologies existed means — and what keeps the M6 export contract
+       * literally the same code path rather than a preserved special case.
+       */
+      methodologyId?: string | null,
     ): Promise<ExportOutcome> {
       const mode = resolveExportMode(requested, quality);
 
       const refusal = await refuseIfStale(mode, projectId, quality);
       if (refusal !== null) return { ok: false, reason: refusal };
 
-      const files = await createSpecFileRepository(db).approvedForExport(scope, projectId, mode);
-      const result = assembleBundle(files, mode);
+      const plan = bundlePlan(methodologyConfig(methodologyId), mode);
+
+      const files = await createSpecFileRepository(db).approvedForExport(
+        scope,
+        projectId,
+        mode,
+        plan.map((entry) => entry.specType),
+      );
+      const result = assembleBundle(files, mode, plan);
 
       await db.insert(exportRecords).values({
         projectId,

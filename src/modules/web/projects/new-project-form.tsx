@@ -3,11 +3,13 @@
 import { useRouter } from 'next/navigation';
 import { useState, useSyncExternalStore, type SubmitEvent } from 'react';
 
+import { methodologiesForChatClass } from '@/modules/methodologies';
 import {
   AUDIENCE_PROFILES,
   DEFAULT_AUDIENCE_PROFILE,
   type AudienceProfile,
 } from '@/modules/projects/audience';
+import { AUTO_METHODOLOGY } from '@/modules/projects/create-project';
 
 import { Button } from '../ui/button';
 import { Label, Textarea } from '../ui/field';
@@ -43,6 +45,16 @@ const AUDIENCE_COPY: Record<AudienceProfile, { label: string; description: strin
   },
 };
 
+/**
+ * The workflows on offer, read from the registry (task 117; Эталон §1.4).
+ *
+ * `Auto` leads and is selected by default: the reference product recommends a workflow rather than
+ * making the user learn four of them, and a person who has just typed one sentence about an idea has
+ * no basis for choosing between SpecKit and OpenSpec. Each option shows its badge and its step list,
+ * so choosing deliberately is possible for the person who does have a basis.
+ */
+const GENERATE_METHODOLOGIES = methodologiesForChatClass('generate');
+
 interface CreatedProject {
   projectId: string;
 }
@@ -60,6 +72,7 @@ export function NewProjectForm() {
   const router = useRouter();
   const [prompt, setPrompt] = useState('');
   const [audience, setAudience] = useState<AudienceProfile>(DEFAULT_AUDIENCE_PROFILE);
+  const [methodology, setMethodology] = useState<string>(AUTO_METHODOLOGY);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   /*
@@ -92,7 +105,7 @@ export function NewProjectForm() {
       const response = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, audience }),
+        body: JSON.stringify({ prompt, audience, methodology }),
       });
       const payload: unknown = await response.json().catch(() => null);
 
@@ -172,6 +185,65 @@ export function NewProjectForm() {
               <span className="font-medium">{AUDIENCE_COPY[profile].label}</span>
               <span className="text-ink-muted block text-xs">
                 {AUDIENCE_COPY[profile].description}
+              </span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+
+      {/*
+        The workflow picker (task 117). `Auto` is a real value the API understands, not the absence
+        of a choice: the server classifies the description once and falls back to the default
+        workflow on any failure, silently — the user asked for a recommendation, not a report.
+      */}
+      <fieldset className="flex flex-col gap-2" data-testid="methodology-picker">
+        <legend className="text-sm font-medium">Which workflow?</legend>
+
+        <label className="border-border-subtle hover:bg-canvas flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm">
+          <input
+            type="radio"
+            name="methodology"
+            value={AUTO_METHODOLOGY}
+            checked={methodology === AUTO_METHODOLOGY}
+            onChange={() => {
+              setMethodology(AUTO_METHODOLOGY);
+            }}
+            data-testid="methodology-auto"
+            disabled={submitting}
+            className="mt-0.5"
+          />
+          <span>
+            <span className="font-medium">Auto</span>
+            <span className="text-ink-muted block text-xs">
+              Pick the workflow that fits the description.
+            </span>
+          </span>
+        </label>
+
+        {GENERATE_METHODOLOGIES.map((config) => (
+          <label
+            key={config.id}
+            className="border-border-subtle hover:bg-canvas flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm"
+          >
+            <input
+              type="radio"
+              name="methodology"
+              value={config.id}
+              checked={methodology === config.id}
+              onChange={() => {
+                setMethodology(config.id);
+              }}
+              data-testid={`methodology-${config.id}`}
+              disabled={submitting}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium">
+                {config.badge.vendor} · {config.badge.flavour} · {config.badge.version}
+              </span>
+              <span className="text-ink-muted block text-xs">{config.summary}</span>
+              <span className="text-ink-muted mt-1 block font-mono text-[11px]">
+                {config.steps.map((step) => step.label).join(' → ')}
               </span>
             </span>
           </label>

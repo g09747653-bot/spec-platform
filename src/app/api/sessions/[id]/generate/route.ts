@@ -15,6 +15,7 @@ import { createRevisionNoteAgent } from '@/modules/agents/revision/revision-note
 import { collectContextSources } from '@/modules/agents/spec/collect-context';
 import { runGeneration } from '@/modules/agents/spec/run-generation';
 import { targetSpecType } from '@/modules/agents/spec/target-spec-type';
+import { methodologyConfig, stageOf } from '@/modules/methodologies';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
 import { createSessionRepository } from '@/modules/projects/repositories/sessions';
@@ -157,6 +158,20 @@ export async function POST(
   }
 
   const specType = targetSpecType(stage);
+
+  /*
+   * Which document this stage writes, according to the session's methodology (task 117).
+   *
+   * `null` for the parity workflow — its documents declare `parity` structure, so the prompt and the
+   * structural check are literally the paths M3 built. For a foreign methodology it carries the
+   * template, the label and the section list together, so the writer is shown the shape it will be
+   * judged against.
+   */
+  const methodology = methodologyConfig(session.methodologyId);
+  const stageEntry = stageOf(methodology, stage);
+  const document = stageEntry?.document ?? null;
+  const documentLabel = methodology.steps.find((step) => step.stage === stage)?.label ?? specType;
+
   const store = createGenerationStore(db);
 
   /*
@@ -289,6 +304,8 @@ export async function POST(
           runId: run.id,
           projectId: session.projectId,
           specType,
+          document,
+          documentLabel,
           initialPrompt: session.initialPrompt,
           // У-1: documents are written in the language the user described the product in (task 108).
           contentLanguage: session.contentLanguage,

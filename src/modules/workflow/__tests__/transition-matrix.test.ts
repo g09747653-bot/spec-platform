@@ -1,5 +1,11 @@
 import { afterAll, describe, expect, it } from 'vitest';
 
+import {
+  requiredDocumentStages,
+  DEFAULT_METHODOLOGY_ID,
+  METHODOLOGY_CONFIGS,
+} from '@/modules/methodologies';
+
 import { canAskAnotherRound, canRequestChanges, evaluateTransition } from '../evaluate-transition';
 import { GATES } from '../gates';
 import {
@@ -17,7 +23,12 @@ import {
   type TransitionResult,
 } from '../reason-codes';
 import type { WorkflowSnapshot } from '../snapshot';
-import { findTransition, TRANSITION_TABLE, type TransitionEdge } from '../transition-table';
+import {
+  findTransition,
+  transitionTable,
+  TRANSITION_TABLE,
+  type TransitionEdge,
+} from '../transition-table';
 
 import { makeSnapshot, maximalSnapshotAt, type SnapshotOverrides } from './snapshot-fixtures';
 
@@ -208,6 +219,49 @@ const GATE_CASES: Record<
     // all — must pass. The refusing case is the wrong-position attempt added for every row.
     passes: () => [{ label: 'minimal snapshot — backward is unconditional', overrides: {} }],
     fails: () => [],
+  },
+
+  /**
+   * The plain terminal row of a methodology with no Quality stage (task 116).
+   *
+   * Its cases are written against `myspec-brownfield-v1`, whose required documents are the proposal
+   * and the requirements — so "the bundle exists" means those two, not the four of the parity graph.
+   * That is the whole behavioural difference between this gate and `tasks-to-complete`, and stating
+   * it as a `SPEC_MISSING` case is what proves the completion gate reads the configuration rather
+   * than a constant.
+   */
+  'stage-to-complete': {
+    passes: (stage) => [
+      {
+        label: 'review decided and every core document approved',
+        overrides: {
+          reviewDecided: { [stage ?? 'requirements']: true },
+          approvedRevisionExists: {
+            constitution: true,
+            requirements: true,
+            solution: true,
+            tasks: true,
+          },
+        },
+      },
+    ],
+    // Only the review condition is universal here. Whether an unapproved document refuses the row
+    // depends on which documents the *methodology* requires, and that is asserted per config below,
+    // where the answer can be stated rather than guessed.
+    fails: () => [
+      {
+        label: 'review undecided',
+        overrides: {
+          approvedRevisionExists: {
+            constitution: true,
+            requirements: true,
+            solution: true,
+            tasks: true,
+          },
+        },
+        reason: 'REVIEW_NOT_DECIDED',
+      },
+    ],
   },
 
   'tasks-to-complete': {
@@ -724,6 +778,116 @@ describe('engine purity (NFR-012 AC-1)', () => {
       expect(result).not.toBeInstanceOf(Promise);
       expect(typeof result.allowed).toBe('boolean');
     }
+  });
+});
+
+/**
+ * The same enumeration, over every other methodology's graph (task 116).
+ *
+ * The M2 rule is "100% of the edges are tested", and M9п turned one table into five. So the driver
+ * runs again per configuration: every row passes under a satisfying snapshot and is refused under
+ * each unsatisfying one, and every pair the configuration does *not* define is refused from that
+ * position under a maximally satisfied snapshot — including pairs that are perfectly legal in
+ * another methodology, which is the property that keeps a graph a graph rather than a suggestion.
+ */
+describe.each(
+  METHODOLOGY_CONFIGS.filter((config) => config.id !== DEFAULT_METHODOLOGY_ID).map(
+    (config) => [config.id, config] as const,
+  ),
+)('methodology %s (task 116)', (id, config) => {
+  const table = transitionTable(id);
+
+  it('derives a non-empty graph whose rows are unique and reference real positions', () => {
+    expect(table.length).toBeGreaterThan(0);
+    expect(new Set(table.map((row) => row.id)).size).toBe(table.length);
+
+    for (const row of table) {
+      expect(ALL_POSITIONS.some((position) => samePosition(position, row.from))).toBe(true);
+      expect(ALL_POSITIONS.some((position) => samePosition(position, row.to))).toBe(true);
+      expect(GATES[row.gate]).toBeTypeOf('function');
+    }
+  });
+
+  it.each(table.map((row) => [row.id, row] as const))('row %s', (_rowId, row) => {
+    const stage = specStageOf(row.from);
+    const cases = GATE_CASES[row.gate];
+
+    for (const pass of cases.passes(stage)) {
+      expectAllowed(
+        makeSnapshot({ ...pass.overrides, methodologyId: id, position: row.from }),
+        row.to,
+      );
+    }
+
+    for (const fail of cases.fails(stage)) {
+      // The Quality fork's cases are written against the parity graph; a configuration without a
+      // Quality stage has no row for them to be about, and none of these methodologies has one.
+      expectRejected(
+        makeSnapshot({ ...fail.overrides, methodologyId: id, position: row.from }),
+        row.to,
+        fail.reason,
+        fail.unmet,
+      );
+    }
+  });
+
+  it('refuses every pair its own graph does not define, however satisfied the state', () => {
+    for (const from of ALL_POSITIONS) {
+      for (const to of ALL_POSITIONS) {
+        if (findTransition(from, to, id) !== undefined) continue;
+
+        expectRejected(
+          maximalSnapshotAt(from, { enabled: true, registered: true }, id),
+          to,
+          from.stage === 'complete' ? 'SESSION_SEALED' : 'TRANSITION_NOT_IN_TABLE',
+        );
+      }
+    }
+  });
+
+  it('lets its terminal depend on its own required documents, and on no others', () => {
+    const required = requiredDocumentStages(config).filter((stage): stage is SpecStage =>
+      SPEC_STAGES.some((candidate) => candidate === stage),
+    );
+    const terminalRow = table.find((row) => row.to.stage === 'complete');
+    if (terminalRow === undefined) throw new Error(`${id} has no terminal row`);
+
+    const decided = { [terminalRow.from.stage]: true };
+
+    // Nothing approved: refused when this methodology requires a document, allowed when it requires
+    // none — which is the Edit workflow, whose stage writes no document of its own.
+    const bare = makeSnapshot({
+      methodologyId: id,
+      position: terminalRow.from,
+      reviewDecided: decided,
+    });
+
+    if (required.length === 0) expectAllowed(bare, terminalRow.to);
+    else expectRejected(bare, terminalRow.to, 'SPEC_MISSING');
+
+    // Exactly its own documents approved, and nothing else: allowed. A methodology asking for a
+    // document it does not produce would fail here rather than in a live walk.
+    expectAllowed(
+      makeSnapshot({
+        methodologyId: id,
+        position: terminalRow.from,
+        reviewDecided: decided,
+        approvedRevisionExists: Object.fromEntries(required.map((stage) => [stage, true])),
+      }),
+      terminalRow.to,
+    );
+  });
+
+  it('reaches its terminal and visits every step its header promises', () => {
+    const stepStages = new Set(config.steps.map((step) => step.stage));
+    const reachable = new Set<string>([config.stages[0]?.position ?? 'interview']);
+
+    for (const row of table.filter((candidate) => candidate.gate !== 'backward')) {
+      if (reachable.has(row.from.stage)) reachable.add(row.to.stage);
+    }
+
+    for (const stage of stepStages) expect([...reachable]).toContain(stage);
+    expect([...reachable]).toContain('complete');
   });
 });
 

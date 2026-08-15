@@ -1,8 +1,7 @@
 import { cn } from '../lib/cn';
-import { stageLabel } from '../session/stage-display';
 
 import { substageLabel } from './labels';
-import { stageSequence } from './stage-sequence';
+import { steps } from './stage-sequence';
 
 /**
  * The numbered step pills in the session header (task 105; Эталон §1.4).
@@ -20,25 +19,32 @@ export interface StepPillsProps {
   currentStage: string;
   currentSubstage: string | null;
   qualityEnabled: boolean;
+  /** The session's methodology (task 117); absent means the parity workflow. */
+  methodologyId?: string | null;
 }
 
-export function StepPills({ currentStage, currentSubstage, qualityEnabled }: StepPillsProps) {
-  const stages = stageSequence(qualityEnabled);
-  const currentIndex = stages.findIndex((stage) => stage === currentStage);
+export function StepPills({
+  currentStage,
+  currentSubstage,
+  qualityEnabled,
+  methodologyId,
+}: StepPillsProps) {
+  const stages = steps(methodologyId, currentStage, currentSubstage, qualityEnabled);
+  const currentIndex = stages.findIndex((step) => step.current);
   const substage = substageLabel(currentSubstage);
 
   return (
     <nav aria-label="Workflow stages" data-testid="stage-rail">
       <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" data-testid="step-pills">
-        {stages.map((stage, index) => {
-          const isCurrent = stage === currentStage;
+        {stages.map((step, index) => {
+          const isCurrent = step.current;
           const isDone = currentIndex >= 0 && index < currentIndex;
 
           return (
-            <li key={stage} className="flex items-center gap-2">
+            <li key={`${step.stage}-${step.label}`} className="flex items-center gap-2">
               <span
                 aria-current={isCurrent ? 'step' : undefined}
-                data-stage={stage}
+                data-stage={step.stage}
                 data-step={index + 1}
                 data-state={isCurrent ? 'current' : isDone ? 'done' : 'upcoming'}
                 className={cn(
@@ -57,9 +63,7 @@ export function StepPills({ currentStage, currentSubstage, qualityEnabled }: Ste
                 >
                   {index + 1}
                 </span>
-                <span data-testid={isCurrent ? 'stage-current' : undefined}>
-                  {stageLabel(stage)}
-                </span>
+                <span data-testid={isCurrent ? 'stage-current' : undefined}>{step.label}</span>
                 {isCurrent && substage !== null && (
                   <span className="opacity-80" data-testid="stage-substage">
                     · {currentSubstage}

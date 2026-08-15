@@ -72,6 +72,7 @@ const SessionStateRow = z.object({
   grounding_recorded: z.boolean(),
   summary_persisted: z.boolean(),
   quality_enabled: z.boolean(),
+  methodology_id: z.string(),
   stage: z.string(),
   substage: z.string().nullable(),
   version: z.number().int().positive(),
@@ -141,6 +142,7 @@ export async function assembleWorkflowSnapshot(
         (${sessions.initialPrompt} ~ '[^[:space:]]') AS grounding_recorded,
         (${sessions.summary} IS NOT NULL AND ${sessions.summary} ~ '[^[:space:]]') AS summary_persisted,
         ${sessions.qualityEnabled} AS quality_enabled,
+        ${sessions.methodologyId} AS methodology_id,
         ${workflowState.stage} AS stage,
         ${workflowState.substage} AS substage,
         ${workflowState.version} AS version
@@ -262,6 +264,7 @@ export async function assembleWorkflowSnapshot(
 
   const snapshot: WorkflowSnapshot = {
     position: toPosition(state.stage, state.substage),
+    methodologyId: state.methodology_id,
     groundingInputRecorded: state.grounding_recorded,
     summaryPersisted: state.summary_persisted,
     roundBudget: options.roundBudget,

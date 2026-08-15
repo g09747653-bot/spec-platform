@@ -1441,16 +1441,125 @@ Goal: the reviewer that makes the product feel intelligent — structured findin
   - Live cycle: needs-revision board → request changes with a subset selected → Rev N+1 → re-review → pass → accept; text-phrase decision parity checked live; artifacts to `artifacts/gate-M8/`.
   - _Dependencies: 111–114_ · _Requirements: А-2.1_ · _Complexity: Medium_ · _Parallel-safe: no_
 
-### Milestone 9п — Methodologies & IA (А-2 · M9) — to be refined at the M8п gate
+### Milestone 9п — Methodologies & IA (А-2 · M9) — refined at the M8п gate (Architect, 2026-08-15)
 
-- [ ] 116\. Methodology configurations: stage graphs as data (MySpec greenfield/brownfield, SpecKit greenfield, OpenSpec brownfield, Edit workflow Reference→Describe→Review); stage templates vendored from `github/spec-kit` and `Fission-AI/OpenSpec` with licence files; the transition table consumes a config, existing default = current graph byte-for-byte.
-- [ ] 117\. Step pills, bundle file sets, and per-stage prompts derived from the methodology config; methodology badge («MySpec · Greenfield · V1») on sessions.
-- [ ] 118\. Edit workflow: reference existing bundle files, describe the change, review AI-proposed cross-file edits with diff cards; approve applies revisions atomically, request-changes loops.
-- [ ] 119\. Sidebar: Specs (bundle files + status), Attachments (with sizes), Local Workspace section as an honest stub («Mount folder» explains what is coming); resizable.
-- [ ] 120\. Project page: Generate | Edit chat tabs, search, Active/Archived/All filters, chat rows with methodology/bundle badges and last-message age; MCP Servers placeholder card (per-project vs user profile, Add server disabled with honest copy).
-- [ ] 121\. Composer upgrades: @-file references into prompt context, slash commands, per-chat model picker over the provider registry (Auto = failover chain; selection persisted per chat).
-- [ ] 122\. Document viewer: Outline / Preview / Raw / Diff views over revisions.
-- [ ] 123\. M9п gate — five methodologies walked seed→Complete with their own pills; an Edit session changes an existing bundle with diff and Rev; model switch provably changes the call (self-run, artifacts `artifacts/gate-M9/`).
+Goal: methodologies become data, the surface becomes the product's information architecture — sidebar, project page, composer, viewer. Templates for foreign methodologies are vendored from their open-source homes, not reverse-engineered. Likely two sessions; the natural seam is after task 119 — if context runs low there, stop with a report and continue in a fresh session (still one milestone).
+
+- [x] 116\. Methodology configurations: stage graphs as data
+  - Define `MethodologyConfig`: id, display name + badge parts («MySpec · Greenfield · V1»), chat class (`generate` | `edit`), ordered stage graph (positions, edges, gate references, round/revision budgets), per-stage document file set, per-stage prompt template references, optional stages.
+  - The transition table consumes a config; the existing hard-coded graph becomes `myspec-greenfield-v1` and must reproduce today's behaviour exactly. Ship five configs per Эталон §1.4: `myspec-greenfield-v1`, `myspec-brownfield-v1`, `speckit-greenfield-v1`, `openspec-brownfield-v1`, `myspec-edit-v1`.
+  - Vendor stage templates and prompt scaffolds from `github/spec-kit` and `Fission-AI/OpenSpec` under `src/modules/methodologies/templates/**` with their LICENSE files; template text reaches models only through the single prompt-assembly point (У-1 applies to every methodology).
+  - Structural validation of configs: terminal position reachable from start, no unreachable stages, backward edges only within a stage, budgets positive; a malformed config is a build-time error, not a runtime surprise.
+  - Acceptance Criteria:
+    - The default config reproduces the current 33-edge matrix byte-for-byte (snapshot assertion against the existing table export).
+    - Config validation rejects each seeded malformation (unreachable stage, missing terminal, cross-stage backward edge) with a named error.
+    - All five configs pass validation; their stage lists match Эталон §1.4 exactly.
+    - LICENSE files for vendored material are present and referenced from a NOTICE section in the repo README.
+  - _Dependencies: 115_
+  - _Requirements: Эталон §1.4, §5.2; А-2_
+  - _Touches: `src/modules/methodologies/**` (new), `src/modules/workflow/transition-table.ts` (consume config)_
+  - _Complexity: Large_
+  - _Parallel-safe: no_
+
+- [x] 117\. Methodology selection and config-driven surface
+  - New Generate chat offers the methodology picker (badge, step-list preview) with **Auto** as default: a cheap single-shot classification of the seed description over the existing adapter chain; on any failure or ambiguity it falls back to `myspec-greenfield-v1` silently.
+  - Session stores the methodology id; step pills, stage prompts, round budgets, document cards, and the ZIP file set all derive from the config. The methodology badge renders in the session header.
+  - Export: the default methodology keeps the M6 contract — exactly 4 files with exact names; other methodologies export their config's file set; the omission manifest logic is config-driven.
+  - Acceptance Criteria:
+    - Each of the four generate configs walks seed → Complete on stub e2e with its own pills and produces its own file set in the ZIP.
+    - Auto returns a valid config id for three seeded descriptions (greenfield idea, change to existing system, ambiguous) and falls back safely on adapter failure.
+    - The default methodology's export is byte-contract-identical to M6 (existing export e2e untouched and green).
+    - The badge renders from config parts, not hard-coded strings.
+  - _Dependencies: 116_
+  - _Requirements: Эталон §1.4; FR-015 (export contract preserved)_
+  - _Touches: `src/modules/web/projects/**`, `src/modules/specs/export/**`, `src/modules/web/feed/**`_
+  - _Complexity: Large_
+  - _Parallel-safe: no_
+
+- [ ] 118\. Edit workflow (Reference → Describe → Review)
+  - Edit chat class over `myspec-edit-v1`: Reference (pick bundle files from a completed session), Describe (prefilled «I want to update spec {bundle} to …»), Review (the model proposes cross-file edits rendered as diff cards; approve applies all touched files atomically in one transaction as new revisions; request-changes loops through the M8п cycle machinery).
+  - Reuses M4 proposed-changes/diff plumbing and M8п review loop; no new decision endpoints.
+  - Acceptance Criteria:
+    - An edit session on a completed bundle produces new revisions only on approve; reject leaves every file byte-identical (M4 contract re-asserted here).
+    - A multi-file edit applies atomically: either every touched file gains a revision or none does (induced mid-transaction failure test).
+    - Three-step pills render from the edit config; the prefill matches the Эталон wording.
+    - Revision history on each touched file shows the edit session as its source.
+  - _Dependencies: 116, 117_
+  - _Requirements: Эталон §1.4 (Edit), §5.1 (Vibe Specify'ing); FR-013/FR-014 contracts_
+  - _Touches: `src/modules/web/feed/**`, `src/modules/specs/**`, edit config_
+  - _Complexity: Large_
+  - _Parallel-safe: no_
+
+- [x] 119\. Sidebar: Specs / Local Workspace / Attachments
+  - Resizable sidebar on the session page: Specs (bundle files with status badges, click opens the viewer of task 122 once it exists — until then the existing preview), Attachments (names + sizes from the M5 store), Local Workspace as an honest stub: «Mount folder» control that plainly says the capability is coming and does nothing else.
+  - Acceptance Criteria:
+    - Sidebar width persists across reloads (client-side); collapse/expand works.
+    - Specs section reflects live revision state (new revision → updated badge without full reload).
+    - Attachment rows show human-readable sizes; clicking downloads/opens as today.
+    - The stub performs no network call and its copy makes no false promise.
+  - _Dependencies: 110_
+  - _Requirements: Эталон §1.5 (сайдбар)_
+  - _Touches: `src/modules/web/session/**` (layout), `src/modules/web/feed/**`_
+  - _Complexity: Medium_
+  - _Parallel-safe: yes_
+
+- [ ] 120\. Project page: chats, filters, MCP placeholder
+  - Generate | Edit tabs listing that project's chats; search by name; Active / Archived / All filters (archive = new boolean on sessions with archive/restore actions; archived sessions excluded from Active everywhere); rows carry methodology badge, bundle badge, completion status, and «Last message Nd ago» derived from the feed's newest block.
+  - MCP Servers placeholder card: per-project vs User Profile split, «0 servers», Add server disabled with honest copy (per А-2 Backlog: real MCP runtime is out of scope).
+  - Acceptance Criteria:
+    - Filters and search compose (searching within Archived works); archiving is reversible and never deletes.
+    - Row badges come from the session's config; the age label derives from persisted rows, not client clocks.
+    - The placeholder card performs no network call.
+    - e2e covers tab switch, search, archive → restore.
+  - _Dependencies: 117_
+  - _Requirements: Эталон §1.5 (проектная страница)_
+  - _Touches: `src/modules/web/projects/**`, `src/modules/projects/**`, one migration (archive flag)_
+  - _Complexity: Large_
+  - _Parallel-safe: yes_
+
+- [ ] 121\. Composer upgrades: @-references, slash commands, model picker
+  - @-references: typing `@` offers bundle files and attachments; a chosen reference travels with the message and the handler injects that file's current content into the agent context (existing context-assembly path; no new write path).
+  - Slash commands: `/` opens a menu whose entries map 1:1 onto existing actions (ask round, proceed, approve, request changes, export…) and dispatch to the same endpoints as the buttons — a command the current position's gate refuses shows the gate-copy reason.
+  - Per-chat model picker: registry derived from configured providers (Auto + each available model; models whose keys are absent are hidden); selection persists on the session; every agent call for that session honours it; Auto = the failover chain exactly as today.
+  - Acceptance Criteria:
+    - Picking a concrete model provably changes the adapter invocation (route-level unit with a spy), and Auto restores chain behaviour.
+    - An @-referenced file's content reaches the prompt (assembly-point test), and a dangling reference (file deleted) degrades with a visible notice, not a silent drop.
+    - Slash dispatches are byte-equivalent to button dispatches at the DB level (same-state test, M4 pattern).
+    - Composer remains fully keyboard-operable; the picker renders in the composer as in Эталон §1.5.
+  - _Dependencies: 110_
+  - _Requirements: Эталон §1.5 (композер); А-3 (Auto = failover)_
+  - _Touches: `src/modules/web/session/**` (composer), `src/modules/adapters/llm/**` (per-session model override), session column_
+  - _Complexity: Large_
+  - _Parallel-safe: yes_
+
+- [ ] 122\. Document viewer: Outline / Preview / Raw / Diff
+  - Viewer over a spec file's revisions, opened from the sidebar or a document card: Outline (heading tree parsed from markdown; clicking scrolls Preview to the section), Preview (rendered markdown), Raw (exact bytes), Diff (against the previous revision, reusing the M4 diff renderer; green added / red removed).
+  - Read-only; revision switcher lists all revisions with their review verdicts.
+  - Acceptance Criteria:
+    - All four views work on a file with ≥2 revisions; Diff of Rev 1 states there is no predecessor rather than erroring.
+    - Outline navigation lands on the right section for duplicated heading names (anchor disambiguation).
+    - Raw is byte-identical to the stored revision (copy path reuses the task 74 endpoint).
+    - Viewer state (view, revision) survives a reload via URL params.
+  - _Dependencies: 119_
+  - _Requirements: Эталон §5.1 (Outline/Preview/Raw/Diff)_
+  - _Touches: `src/modules/web/viewer/**` (new)_
+  - _Complexity: Medium_
+  - _Parallel-safe: yes_
+
+- [ ] 123\. M9п gate — methodologies walked live (self-run, А-2.1)
+  - Live set, bounded deliberately (default config is already covered by the M7п gate): one **full** live journey on `speckit-greenfield-v1` (the longest foreign graph) and one on `myspec-brownfield-v1` (the shortest); one live **Edit** session over the bundle the SpecKit walk produced; a live model-picker check (explicitly select the local model; verify the call and the badge). All five configs green on stub e2e.
+  - Closes the M8п open question: the RESULT records, for every requirements/tasks board the walks produce, that linters ran and how many machine items each board carried (zero is a valid count on a clean document — the record is the evidence).
+  - Artifacts to `artifacts/gate-M9/` (RESULT.md with per-state controls, TRANSCRIPT.md, screens, light trace).
+  - Acceptance Criteria:
+    - Both live journeys and the live Edit session end GREEN, or defects are fixed and the affected walk repeated.
+    - Liveness invariant on every snapshot; zero available session-moving controls = red.
+    - Linter run counts recorded per board; at least one board is a requirements or tasks document.
+    - The M6 resume checks hold on at least one non-default methodology.
+  - _Dependencies: 116–122_
+  - _Requirements: А-2.1_
+  - _Touches: `e2e/gate-M9.live.ts`, `artifacts/gate-M9/**`_
+  - _Complexity: Large_
+  - _Parallel-safe: no_
 
 ### Milestone 10п — Visual layer & finish (А-2 · M10) — to be refined at the M9п gate
 

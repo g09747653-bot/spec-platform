@@ -22,16 +22,33 @@ export const PARITY_STAGES = ['constitution', 'requirements', 'solution', 'tasks
 
 export type ParityStage = (typeof PARITY_STAGES)[number];
 
-/** How long a stub generation may take before the test gives up. Streaming, not instant. */
-const GENERATION_TIMEOUT = 20_000;
+/**
+ * How long a stub generation may take before the test gives up. Streaming, not instant.
+ *
+ * Raised from 20s in M9п round 1: the CI run walks 180 tests on one worker, and a generation that
+ * takes four seconds on an idle machine took longer than twenty on a runner that had been going for
+ * twenty minutes. A wait that fails a correct product because the machine is busy is a wait that is
+ * too short — the test timeout (60s, `playwright.config.ts`) is the real bound.
+ */
+const GENERATION_TIMEOUT = 40_000;
 
-/** Creates a project from a prompt and lands on its session page. Returns the session URL. */
-export async function startSession(page: Page, prompt: string): Promise<string> {
+/**
+ * Creates a project from a prompt and lands on its session page. Returns the session URL.
+ *
+ * `methodology` picks a workflow explicitly (task 117). Omitted, the form's own default — `Auto` —
+ * is left alone, which is what an ordinary user gets and what every test written before M9п meant.
+ */
+export async function startSession(
+  page: Page,
+  prompt: string,
+  methodology?: string,
+): Promise<string> {
   await page.goto('/projects');
   // The submit control is disabled until hydration, so this is the point from which a click is real.
   await expect(page.getByTestId('create-project')).toBeEnabled();
 
   await page.getByTestId('prompt-input').fill(prompt);
+  if (methodology !== undefined) await page.getByTestId(`methodology-${methodology}`).check();
   await page.getByTestId('create-project').click();
 
   await expect(page.getByTestId('session')).toBeVisible();
@@ -56,7 +73,15 @@ export async function completeInterview(page: Page): Promise<void> {
 
   await expect(page.getByTestId('interview-panel')).toContainText('summary saved');
   await page.getByTestId('proceed').click();
-  await expect(page.getByTestId('stage-current')).toHaveText(/Constitution/i);
+
+  /*
+   * Asserted on the **canonical** stage, not on the label (task 117).
+   *
+   * The pill after the interview reads «Constitution» in MySpec greenfield, «Proposal» in brownfield
+   * and «Proposal» again in OpenSpec — the label belongs to the methodology, while the position the
+   * session moved into is the machine's, and the position is what this helper is claiming.
+   */
+  await expect(page.locator('[data-state="current"][data-stage="constitution"]')).toBeVisible();
 }
 
 /**

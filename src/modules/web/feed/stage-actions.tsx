@@ -37,6 +37,14 @@ export interface StageActionsModel {
   unmetNeeds: readonly string[];
   summaryPersisted: boolean;
   target: TransitionTargetModel | null;
+  /**
+   * The other doors out of this position, when the graph forks (task 117).
+   *
+   * A methodology whose next stage is optional offers two: on to it, or straight to the terminal.
+   * `target` is the one the primary button takes; these are the rest, and they exist so that
+   * "optional" is a choice the user can make rather than a property only the table knows about (P2).
+   */
+  alternates: readonly TransitionTargetModel[];
 }
 
 const WAITING_FOR: Record<string, string> = {
@@ -180,6 +188,24 @@ export function StageActions({
           quietly become a second gate whose verdict nobody checks. Round 5 spent itself on making
           refusals legible; a control that cannot be clicked produces no refusal to read.
         */}
+        {!awaitingRound &&
+          actions.alternates.map((alternate) => (
+            <Button
+              key={`${alternate.toStage}:${alternate.toSubstage ?? ''}`}
+              variant="secondary"
+              data-testid={`proceed-alternate-${alternate.toStage}`}
+              disabled={busy === 'proceed'}
+              onClick={() => {
+                void send('proceed', `/api/sessions/${sessionId}/transition`, {
+                  toStage: alternate.toStage,
+                  ...(alternate.toSubstage === null ? {} : { toSubstage: alternate.toSubstage }),
+                });
+              }}
+            >
+              {alternate.label}
+            </Button>
+          ))}
+
         {actions.target !== null && !awaitingRound && (
           <Button
             variant={actions.target.ready ? 'primary' : 'secondary'}

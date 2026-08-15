@@ -17,6 +17,8 @@ import type { InformationNeedState, WorkflowSnapshot } from '../snapshot';
  */
 export interface SnapshotOverrides {
   position?: StagePosition;
+  /** The session's methodology; absent means the parity graph (task 116). */
+  methodologyId?: string | null;
   groundingInputRecorded?: boolean;
   summaryPersisted?: boolean;
   roundBudget?: number;
@@ -48,6 +50,7 @@ function deepFreeze<T>(value: T): T {
 export function makeSnapshot(overrides: SnapshotOverrides = {}): WorkflowSnapshot {
   return deepFreeze({
     position: overrides.position ?? { stage: 'interview', substage: null },
+    methodologyId: overrides.methodologyId ?? null,
     groundingInputRecorded: overrides.groundingInputRecorded ?? false,
     summaryPersisted: overrides.summaryPersisted ?? false,
     roundBudget: overrides.roundBudget ?? 3,
@@ -71,9 +74,11 @@ export function makeSnapshot(overrides: SnapshotOverrides = {}): WorkflowSnapsho
 export function maximalSnapshotAt(
   position: StagePosition,
   quality: { enabled: boolean; registered: boolean },
+  methodologyId: string | null = null,
 ): WorkflowSnapshot {
   return deepFreeze({
     position,
+    methodologyId,
     groundingInputRecorded: true,
     summaryPersisted: true,
     roundBudget: 3,

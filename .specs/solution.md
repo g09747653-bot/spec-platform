@@ -235,7 +235,8 @@ sequenceDiagram
 type ReasonCode =
   | 'INTERVIEW_INCOMPLETE' | 'NO_ANSWERED_ROUND'  | 'SPEC_NOT_APPROVED'
   | 'REVIEW_NOT_DECIDED'   | 'SPEC_MISSING'       | 'TRANSITION_NOT_IN_TABLE'
-  | 'SESSION_SEALED'       | 'ROUND_LIMIT_REACHED'| 'CAPABILITY_NOT_REGISTERED';
+  | 'SESSION_SEALED'       | 'ROUND_LIMIT_REACHED'| 'CAPABILITY_NOT_REGISTERED'
+  | 'REVISION_LIMIT_REACHED'; // амендмент А-5: бюджет revision-циклов стадии (задача 113); висит на решении request_changes, обратное ребро review→generate остаётся безусловным (FR-007 AC-5)
 
 interface TransitionResult { allowed: boolean; reason?: ReasonCode; }
 
@@ -280,7 +281,7 @@ Rejections are values, not exceptions. `applyTransition` is transactional with a
 |---|---|
 | `InterviewAgent` | Produces question rounds with declared information needs; output must satisfy `QuestionSetSchema`. |
 | `SpecAgent` | Produces markdown for the current stage; validates against the section schema before returning. |
-| `ReviewAgent` | Produces `{ outcome, mustfix[], recommendations[] }` with a stable `id` on every feedback item. |
+| `ReviewAgent` | Produces `{ verdict, summary, mustFix[], recommendations[] }` (review.v2, А-5) with a stable `id` on every feedback item; parsing follows Р-1 (outermost JSON → repair once → one full re-sample). |
 | `RevisionAgent` | Revises an approved spec from a **filtered** feedback set — only the items the user selected. |
 | `DecisionIntentResolver` | Maps a chat-typed message onto a pending decision (FR-009 AC-7): deterministic pattern match first, single-shot model classification only if that is inconclusive. |
 | `ContextAssembler` | Builds the context window from persisted state, with deterministic ordering and size budgeting. |
@@ -947,18 +948,26 @@ const AnswerSubmission = z.object({
   })).min(1),
 });
 
+// review.v2 (амендмент А-5; задача 111, Эталон §1.3). Прежняя форма v1 (section/line/
+// confidenceScore 5..10/description, ReviewArtifact{outcome, mustfix}) заменена: карточке нужны
+// сводка и раздельные заголовок/проблема; `line` исключён сознательно — эталон называет секцию,
+// а номер строки от модели, не считающей строк, — украшение правдоподобной формы. Строки, записанные
+// до v2, читаются вперёд union-схемой репозитория и не мигрируются (D-111).
 const FeedbackItem = z.object({
   id: z.string().min(1),                 // stable; referenced by selectedItemIds
-  section: z.string(),
-  line: z.number().int().positive(),
-  confidenceScore: z.number().int().min(5).max(10),
-  description: z.string(),
+  sectionPath: z.string(),               // «Секция — подсекция», как в эталоне
+  title: z.string().min(1),
+  body: z.string().min(1),
   suggestion: z.string(),
+  confidence: z.number().int().min(1).max(10),
 });
+// При персистенции к пункту добавляются `severity` ('must_fix' | 'recommendation') и
+// `source` ('model' | 'linter') — их называет система, не модель (задачи 111/114).
 
 const ReviewArtifact = z.object({
-  outcome: z.enum(['pass','needs_revision']),
-  mustfix: z.array(FeedbackItem),
+  verdict: z.enum(['pass','needs_revision']),
+  summary: z.string().min(1),            // абзац-сводка карточки
+  mustFix: z.array(FeedbackItem),
   recommendations: z.array(FeedbackItem),
 });
 
@@ -982,6 +991,7 @@ const ChatMessage = z.object({ text: z.string().min(1).max(8000) });
 | `NOT_FOUND` | 404 | Missing **or** not owned | Generic not-found view |
 | `GATE_REJECTED` | 409 | Transition or action blocked; body carries `ReasonCode` | Show unmet gate, stay put |
 | `ROUND_LIMIT_REACHED` | 409 | Stage question-round budget exhausted | Show unmet information needs with free-text entry |
+| `REVISION_LIMIT_REACHED` | 409 | Stage revision-cycle budget exhausted (`MAX_REVISION_CYCLES_PER_STAGE`, амендмент А-5) | Remove Request changes; Accept/Ignore remain — a fork, not a dead end |
 | `CAPABILITY_NOT_REGISTERED` | 409 | Quality module not installed | Hide Quality affordances |
 | `CONFLICT` | 409 | Optimistic version mismatch | Refetch state and retry |
 | `PENDING_DECISION` | 409 | A decision is already pending for this file | Re-present the pending card |

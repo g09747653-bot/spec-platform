@@ -1,6 +1,8 @@
 import { unzipSync, strFromU8 } from 'fflate';
 import { describe, expect, it } from 'vitest';
 
+import { bundlePlan, methodologyConfig, DEFAULT_METHODOLOGY_ID } from '@/modules/methodologies';
+
 import type { ExportableFile } from '../repositories/spec-files';
 
 import { assembleBundle } from './bundle';
@@ -136,5 +138,75 @@ describe('bundle assembly (task 22)', () => {
 
     expect(Object.keys(entries(result.zip))).toEqual(['constitution.md']);
     expect(result.included).not.toContain('quality.md');
+  });
+});
+
+/**
+ * Config-driven bundles (task 117 AC-1/AC-3).
+ *
+ * The first assertion is the contract that must not move: `myspec-greenfield-v1`'s plan and the
+ * parity default produce the **same archive bytes**, so the M6 export is not "preserved" by care —
+ * it is the same computation reached two ways.
+ */
+describe('bundles of other methodologies (task 117)', () => {
+  const four = [
+    file('constitution', '# Constitution'),
+    file('requirements', '# Requirements'),
+    file('solution', '# Solution'),
+    file('tasks', '# Tasks'),
+  ];
+
+  it('produces byte-identical output for the default methodology and for no methodology at all', () => {
+    const implicit = assembleBundle(four, 'default');
+    const explicit = assembleBundle(
+      four,
+      'default',
+      bundlePlan(methodologyConfig(DEFAULT_METHODOLOGY_ID), 'default'),
+    );
+
+    expect(explicit.included).toEqual(implicit.included);
+    expect(explicit.omitted).toEqual(implicit.omitted);
+    expect([...explicit.zip]).toEqual([...implicit.zip]);
+  });
+
+  it('names SpecKit’s files as SpecKit names them, from the same stored rows', () => {
+    const result = assembleBundle(
+      four,
+      'default',
+      bundlePlan(methodologyConfig('speckit-greenfield-v1'), 'default'),
+    );
+
+    // Same four rows in the database; four different names in the download. `spec.md` holds what the
+    // `requirements` row holds, and `plan.md` what the `solution` row holds — the storage slot is an
+    // internal address, and the user never sees it.
+    expect(Object.keys(entries(result.zip))).toEqual([
+      'constitution.md',
+      'spec.md',
+      'plan.md',
+      'tasks.md',
+    ]);
+    expect(entries(result.zip)['plan.md']).toBe('# Solution');
+    expect(result.included).toEqual(['constitution.md', 'spec.md', 'plan.md', 'tasks.md']);
+  });
+
+  it('exports the brownfield set, and omits by the name the user would look for', () => {
+    const result = assembleBundle(
+      [file('constitution', '# Proposal')],
+      'default',
+      bundlePlan(methodologyConfig('myspec-brownfield-v1'), 'default'),
+    );
+
+    expect(Object.keys(entries(result.zip))).toEqual(['proposal.md']);
+    expect(result.included).toEqual(['proposal.md']);
+    expect(result.omitted).toEqual(['requirements.md', 'tasks.md']);
+  });
+
+  it('drops the Quality stage from a default-mode export and restores it in quality mode', () => {
+    const config = methodologyConfig(DEFAULT_METHODOLOGY_ID);
+
+    expect(bundlePlan(config, 'default').map((entry) => entry.fileName)).not.toContain(
+      'quality.md',
+    );
+    expect(bundlePlan(config, 'quality').map((entry) => entry.fileName)).toContain('quality.md');
   });
 });

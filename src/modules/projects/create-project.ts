@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
+import { isMethodologyId } from '@/modules/methodologies';
+
 import { AUDIENCE_PROFILES, DEFAULT_AUDIENCE_PROFILE } from './audience';
+
+/** The picker's default: let the classification choose (task 117). */
+export const AUTO_METHODOLOGY = 'auto';
 
 /**
  * Starting a session from a prompt (FR-003; task 15).
@@ -30,6 +35,21 @@ export const CreateProjectRequest = z.object({
    * older page still open in a tab, a direct call — gets the plain register, which is the safe one.
    */
   audience: z.enum(AUDIENCE_PROFILES).default(DEFAULT_AUDIENCE_PROFILE),
+  /**
+   * The workflow to walk, or `auto` to have it chosen (task 117; Эталон §1.4).
+   *
+   * `auto` is the default for the same reason the audience profile has one: a client that omits the
+   * field gets the behaviour a user who did not choose would want. Validation is against the
+   * registry rather than a literal union, so adding a configuration does not mean editing a schema
+   * — and an id this build does not ship is a rejected request rather than a session that walks a
+   * graph nobody can name.
+   */
+  methodology: z
+    .string()
+    .default(AUTO_METHODOLOGY)
+    .refine((value) => value === AUTO_METHODOLOGY || isMethodologyId(value), {
+      message: 'Unknown workflow.',
+    }),
 });
 
 export type CreateProjectInput = z.infer<typeof CreateProjectRequest>;

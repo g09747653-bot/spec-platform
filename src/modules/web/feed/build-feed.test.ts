@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { DEFAULT_METHODOLOGY_ID } from '@/modules/methodologies';
+
 import { buildFeed } from './build-feed';
 import { appendChatTurns } from './chat-turns';
 import type { FeedBlock, FeedQuestion } from './model';
@@ -58,6 +60,7 @@ function source(overrides: Partial<FeedSource> = {}): FeedSource {
       summary: null,
       createdAt: T.created,
       position: { stage: 'interview', substage: null },
+      methodologyId: DEFAULT_METHODOLOGY_ID,
       revisionCycleBudget: 5,
       completionCount: 0,
       ...overrides.session,
@@ -152,6 +155,7 @@ function walkedToReview(): FeedSource {
       summary: 'The user wants an offline assistant.',
       createdAt: T.created,
       position: { stage: 'constitution', substage: 'review' },
+      methodologyId: DEFAULT_METHODOLOGY_ID,
       completionCount: 0,
       revisionCycleBudget: 5,
     },

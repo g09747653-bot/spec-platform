@@ -187,6 +187,13 @@ export function createSpecFileRepository(db: SchemaDatabase) {
       scope: OwnerScope,
       projectId: string,
       mode: ExportMode = 'default',
+      /**
+       * The storage slots the bundle may draw from (task 117). Defaults to the parity set, which is
+       * what every caller meant before methodologies existed.
+       */
+      specTypes: readonly string[] = fileNamesForMode(mode).map((name) =>
+        name.replace(/\.md$/, ''),
+      ),
     ): Promise<ExportableFile[]> {
       if (!UUID.test(projectId)) return [];
 
@@ -194,9 +201,10 @@ export function createSpecFileRepository(db: SchemaDatabase) {
       const originFilter =
         origin === 'any' ? sql`TRUE` : sql`${specRevisions}.origin = ${origin}::text`;
 
-      const names = fileNamesForMode(mode);
-      const nameList = sql.join(
-        names.map((name) => sql`${name}`),
+      if (specTypes.length === 0) return [];
+
+      const typeList = sql.join(
+        specTypes.map((specType) => sql`${specType}`),
         sql`, `,
       );
 
@@ -211,7 +219,7 @@ export function createSpecFileRepository(db: SchemaDatabase) {
           JOIN ${specRevisions} ON ${specRevisions}.spec_file_id = ${specFiles}.id
           WHERE ${specFiles}.project_id = ${projectId}::uuid
             AND ${projects}.owner_id = ${scope.userId}::uuid
-            AND ${specFiles}.file_name IN (${nameList})
+            AND ${specFiles}.spec_type IN (${typeList})
             AND ${specRevisions}.approved = true
             AND ${originFilter}
           ORDER BY ${specFiles}.spec_type, ${specRevisions}.revision_number DESC

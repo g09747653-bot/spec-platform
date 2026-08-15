@@ -43,6 +43,7 @@ export async function GET(
     projectId,
     mode,
     qualityExportPort(),
+    project.methodologyId,
   );
 
   if (!outcome.ok) return errorResponse(outcome.reason);

@@ -6,8 +6,8 @@ import { createGenerationStore } from '@/modules/adapters/llm/generation-store';
 import { requireOwnerScope } from '@/modules/projects/auth/scope';
 import { createAttachmentRepository } from '@/modules/projects/repositories/attachments';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
+import { bundlePlan, methodologyConfig } from '@/modules/methodologies';
 import { resolveExportMode } from '@/modules/specs/export/resolve-mode';
-import { fileNamesForMode } from '@/modules/specs/model/export';
 import { isSpecType } from '@/modules/specs/model/spec-files';
 import { createProposedChangeService } from '@/modules/specs/proposed-changes/proposed-change-service';
 import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
@@ -16,18 +16,21 @@ import { registeredCapabilityIds } from '@/modules/workflow/capabilities';
 import { qualityExportPort } from '@/modules/workflow/quality-port';
 import { canAskAnotherRound, evaluateTransition } from '@/modules/workflow/evaluate-transition';
 import { isAskingStage, type StagePosition } from '@/modules/workflow/model/stages';
-import { nextPosition } from '@/modules/workflow/next-position';
+import { forwardDoors, nextPosition } from '@/modules/workflow/next-position';
 import { assembleWorkflowSnapshot } from '@/modules/workflow/snapshot-assembler';
 import { unmetNeedNames, type WorkflowSnapshot } from '@/modules/workflow/snapshot';
 import { buildFeed } from '@/modules/web/feed/build-feed';
 import { SessionFeed } from '@/modules/web/feed/session-feed';
 import type { StageActionsModel, TransitionTargetModel } from '@/modules/web/feed/stage-actions';
+import { MethodologyBadge } from '@/modules/web/feed/methodology-badge';
 import { StepPills } from '@/modules/web/feed/step-pills';
 import type { PendingProposalModel } from '@/modules/web/feed/proposal-block';
 import { Attachments, type AttachmentModel } from '@/modules/web/session/attachments';
 import { CONDITION_COPY, STILL_NEEDED } from '@/modules/web/session/gate-copy';
 import { stageLabel } from '@/modules/web/session/stage-display';
 import { ExportPanel } from '@/modules/web/session/export-panel';
+import { LocalWorkspace, SessionSidebar } from '@/modules/web/session/sidebar';
+import { SpecsPanel, type SpecFileModel } from '@/modules/web/session/specs-panel';
 
 import { assembleFeedSource } from './feed-source';
 
@@ -78,6 +81,15 @@ function nextTarget(snapshot: WorkflowSnapshot): TransitionTargetModel | null {
   const to = nextPosition(snapshot);
   if (to === null) return null;
 
+  return targetModel(snapshot, to, labelFor(snapshot.position, to));
+}
+
+/** One door, with the gate's current verdict on it. Presentation only — the server re-decides. */
+function targetModel(
+  snapshot: WorkflowSnapshot,
+  to: StagePosition,
+  label: string,
+): TransitionTargetModel {
   const verdict = evaluateTransition(snapshot, to);
   const unmet: string[] = verdict.allowed
     ? []
@@ -86,7 +98,7 @@ function nextTarget(snapshot: WorkflowSnapshot): TransitionTargetModel | null {
       ]);
 
   return {
-    label: labelFor(snapshot.position, to),
+    label,
     toStage: to.stage,
     toSubstage: to.substage,
     ready: verdict.allowed,
@@ -108,6 +120,36 @@ function requestDeadlineMs(): number {
   return env.LLM_REQUEST_TIMEOUT_MS * env.LLM_PROVIDER_ORDER.length + 15_000;
 }
 
+/**
+ * The sidebar's Specs rows, derived from the revisions the feed already read (task 119).
+ *
+ * No extra query: the feed source carries every revision of the project, and "how many, and is the
+ * newest approved" is a fold over rows already in hand. That is also what makes the section live —
+ * a new revision changes the feed and this list in the same render, from the same data (AC-2).
+ */
+function specsPanelFiles(
+  revisions: readonly { specType: string; revisionNumber: number; approved: boolean }[],
+): SpecFileModel[] {
+  const byType = new Map<string, SpecFileModel>();
+
+  for (const revision of revisions) {
+    const current = byType.get(revision.specType);
+
+    // "Approved" is a property of the newest revision, not of any of them: a file whose latest
+    // revision awaits a decision is not approved, however many approved ones precede it (FR-009).
+    if (current === undefined || revision.revisionNumber >= current.revisionCount) {
+      byType.set(revision.specType, {
+        specFileId: null,
+        specType: revision.specType,
+        revisionCount: revision.revisionNumber,
+        approved: revision.approved,
+      });
+    }
+  }
+
+  return [...byType.values()];
+}
+
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const scope = await requireOwnerScope();
@@ -123,14 +165,26 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
    */
   const exportMode = resolveExportMode('default', qualityExportPort());
   const specFileRepository = createSpecFileRepository(db);
-  const exportable = await specFileRepository.approvedForExport(scope, project.id, exportMode);
-  const exportFiles = exportable.map((file) => ({
-    specFileId: file.specFileId,
-    fileName: file.fileName,
-  }));
-  const omittedFiles = fileNamesForMode(exportMode).filter(
-    (name) => !exportFiles.some((file) => file.fileName === name),
+
+  /*
+   * The bundle the *session's methodology* promises (task 117). Names come from the plan, so the
+   * panel, the sidebar and the archive cannot disagree about what belongs in the bundle or about
+   * what a missing file is called.
+   */
+  const plan = bundlePlan(methodologyConfig(project.methodologyId), exportMode);
+  const exportable = await specFileRepository.approvedForExport(
+    scope,
+    project.id,
+    exportMode,
+    plan.map((entry) => entry.specType),
   );
+  const exportFiles = plan.flatMap((entry) => {
+    const file = exportable.find((candidate) => candidate.specType === entry.specType);
+    return file === undefined ? [] : [{ specFileId: file.specFileId, fileName: entry.fileName }];
+  });
+  const omittedFiles = plan
+    .filter((entry) => !exportFiles.some((file) => file.fileName === entry.fileName))
+    .map((entry) => entry.fileName);
 
   const [source, attachments, snapshotResult, activeRun] = await Promise.all([
     assembleFeedSource(db, scope, project),
@@ -196,6 +250,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       ? position.stage
       : null;
 
+  const actionsTarget = snapshot === null ? null : nextTarget(snapshot);
+
   const actions: StageActionsModel = {
     askingStage,
     canAskMore:
@@ -208,19 +264,40 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     unmetNeeds:
       snapshot !== null && askingStage !== null ? unmetNeedNames(snapshot, askingStage) : [],
     summaryPersisted: snapshot?.summaryPersisted ?? false,
-    target: snapshot === null ? null : nextTarget(snapshot),
+    target: actionsTarget,
+    /*
+     * Every other forward door (task 117). The primary one is filtered out by position, not by
+     * label, so a methodology with no fork simply has none — and the parity graph never does,
+     * because its one fork is the Quality selection, which the session has already made.
+     */
+    alternates:
+      snapshot === null
+        ? []
+        : forwardDoors(snapshot)
+            .filter(
+              (door) =>
+                door.to.stage !== actionsTarget?.toStage ||
+                door.to.substage !== actionsTarget.toSubstage,
+            )
+            .flatMap((door) => {
+              return [targetModel(snapshot, door.to, door.label)];
+            }),
   };
 
   return (
     <section className="flex min-h-0 flex-col gap-4" data-testid="session">
       <header className="flex flex-col gap-2">
-        <h1 className="text-xl font-semibold tracking-tight" data-testid="session-project-name">
-          {project.name}
-        </h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-xl font-semibold tracking-tight" data-testid="session-project-name">
+            {project.name}
+          </h1>
+          <MethodologyBadge methodologyId={project.methodologyId} />
+        </div>
         <StepPills
           currentStage={project.stage}
           currentSubstage={project.substage}
           qualityEnabled={project.qualityEnabled}
+          methodologyId={project.methodologyId}
         />
       </header>
 
@@ -241,7 +318,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           bundleFileCount={exportFiles.length}
         />
 
-        <aside className="flex flex-col gap-4">
+        <SessionSidebar>
+          <SpecsPanel plan={plan} files={specsPanelFiles(source.revisions)} />
+
+          <LocalWorkspace />
+
           <Attachments
             sessionId={project.sessionId}
             attachments={attachments.map((attachment): AttachmentModel => ({
@@ -261,7 +342,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             files={exportFiles}
             omittedFiles={omittedFiles}
           />
-        </aside>
+        </SessionSidebar>
       </div>
     </section>
   );

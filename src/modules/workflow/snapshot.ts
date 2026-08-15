@@ -25,6 +25,16 @@ export interface WorkflowSnapshot {
   /** Where the session is now. The `from` side of every evaluated transition. */
   position: StagePosition;
 
+  /**
+   * The session's methodology (task 116; `sessions.methodology_id`).
+   *
+   * Optional, and absent means the parity graph — which is the honest reading of a session row
+   * written before methodologies existed, and of every literal snapshot in a test that predates
+   * them. It is the one field that selects *which table* the engine reads; everything else in this
+   * shape is a fact about the session's progress through it.
+   */
+  methodologyId?: string | null;
+
   /** FR-006 AC-1(a): a non-empty initial prompt is recorded on the session. */
   groundingInputRecorded: boolean;
 

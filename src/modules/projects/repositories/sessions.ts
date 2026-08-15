@@ -19,6 +19,8 @@ export interface OwnedSession {
   audienceProfile: string;
   /** The language every generated word answers in (У-1; task 108); `null` when undetermined. */
   contentLanguage: string | null;
+  /** The methodology whose graph this session walks (task 117). A plain string, for the same reason. */
+  methodologyId: string;
   /** Plain strings: `projects` may not import `workflow` (see the note on `ProjectSummary`). */
   stage: string;
   substage: string | null;
@@ -51,6 +53,7 @@ export function createSessionRepository(db: SchemaDatabase) {
           qualityEnabled: sessions.qualityEnabled,
           audienceProfile: sessions.audienceProfile,
           contentLanguage: sessions.contentLanguage,
+          methodologyId: sessions.methodologyId,
           stage: workflowState.stage,
           substage: workflowState.substage,
           version: workflowState.version,

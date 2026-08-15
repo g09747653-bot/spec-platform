@@ -151,6 +151,7 @@ export async function assembleFeedSource(
       createdAt: iso(project.createdAt),
       position: toPosition(project.stage, project.substage),
       completionCount: project.completionCount,
+      methodologyId: project.methodologyId,
       // Configuration in, so the projection itself reads no environment (task 113).
       revisionCycleBudget: getEnv().MAX_REVISION_CYCLES_PER_STAGE,
     },

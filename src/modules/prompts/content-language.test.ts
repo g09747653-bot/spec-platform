@@ -21,6 +21,14 @@ const VARIABLES: { [Id in PromptId]: PromptVariables[Id] } = {
     context: '',
     changeInstruction: '',
   },
+  'spec.generation.methodology.v1': {
+    documentLabel: 'Plan',
+    template: '# Implementation Plan\n\n## Summary\n',
+    requiredSections: '1. ## Summary',
+    initialPrompt: 'A tool for writing specs.',
+    context: '',
+    changeInstruction: '',
+  },
   'interview.questions.v3': {
     stage: 'interview',
     audienceRules: 'They are not technical.',
@@ -49,6 +57,10 @@ const VARIABLES: { [Id in PromptId]: PromptVariables[Id] } = {
     offeredActions: 'approve, reject',
   },
   'chat.answer.v1': { message: 'what is this?', pendingDescription: 'nothing', context: '' },
+  'methodology.classify.v1': {
+    options: '- myspec-greenfield-v1: the full bundle for something new',
+    description: 'A tool for writing specs.',
+  },
   'interview.reply-assessment.skeleton.v1': { declaredNeeds: 'audience', reply: 'solo devs' },
   'interview.summary.skeleton.v1': {
     initialPrompt: 'A tool for writing specs.',

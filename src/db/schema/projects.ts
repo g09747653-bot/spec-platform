@@ -78,6 +78,17 @@ export const sessions = pgTable(
      * than guessing. No CHECK — the codes come from our own detector, not from a request.
      */
     contentLanguage: text('content_language'),
+    /**
+     * The methodology whose graph this session walks (task 117; Эталон §1.4).
+     *
+     * Defaulted to the parity methodology, so every row written before M9п — and every caller that
+     * does not care — means the workflow the first six milestones built. No CHECK constraint: the
+     * set of configurations is a property of the *build*, not of the data, and a row naming a
+     * methodology a later build stopped shipping must still open (the registry degrades it to the
+     * default rather than refusing to read the session). What a request may *write* is checked at
+     * the boundary against the registry.
+     */
+    methodologyId: text('methodology_id').notNull().default('myspec-greenfield-v1'),
     /** Number of times the session has reached `complete` (FR-020). */
     completionCount: integer('completion_count').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
