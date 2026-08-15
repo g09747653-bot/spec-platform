@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
@@ -123,12 +123,14 @@ export function SpecCard({
    * `from: -1` because a fresh page has rendered nothing: the durable chunk log replays from the
    * start, and the reader's own de-duplication by sequence is what makes that safe.
    *
-   * **The condition is the reader's own state, not a "done it once" ref.** A ref looked right and was
-   * wrong: React's strict mode mounts, unmounts and mounts again, the unmount stops the reader, and
-   * the second mount then sees the ref already set and attaches to nothing — a page permanently
-   * showing Generate over a run that was still going, which is the very defect this exists to fix.
-   * Keying on `idle` re-attaches after that cleanup, and cannot start a second reader because the
-   * first attach leaves the state `streaming`.
+   * **The condition is the reader's own state, plus a latch that the cleanup clears.** A plain
+   * "done it once" ref is wrong on its own: React's strict mode mounts, unmounts and mounts again,
+   * the unmount stops the reader, and the second mount then finds the ref set and attaches to
+   * nothing. Keying on `idle` alone is wrong the other way: two setups can observe the same `idle`
+   * render, and a second `resume` on one reader **resets what the first had already drawn** — CI
+   * caught exactly that, as a replay that had lost its second batch. So: `idle` decides *whether*
+   * there is anything to attach to, the latch guarantees *one* attach per run, and clearing it in
+   * the cleanup is what lets the strict-mode remount attach again.
    *
    * `detached` is what keeps Stop meaningful: stopping publishes `idle`, and without it this would
    * immediately re-attach to the run the user just walked away from.
@@ -141,12 +143,10 @@ export function SpecCard({
    * A run the **server** says is in flight — known before a line of this component's JavaScript has
    * run, and that is the point.
    *
-   * Reattaching happens in an effect, and the live gate walk found one circumstance, on a machine
-   * saturated by a local model, where that effect did not fire at all (no resume request was ever
-   * made; five isolated reproductions of the same navigation could not repeat it). Whatever the
-   * cause, the page must not be *dishonest* while it waits for its own JavaScript: offering
-   * "Generate" over a run already in flight is the one thing it must never do, and this makes that
-   * a property of the server's render rather than of an effect's timing.
+   * Reattaching happens in an effect, so until the page's own JavaScript has run there is nothing to
+   * attach with — and offering "Generate" over a run already in flight is the one thing this card
+   * must never do. Stating it from the server makes that a property of the render rather than of an
+   * effect's timing.
    *
    * It is a **snapshot**, so it must yield to anything more recent: once the reader following that
    * run has seen it end, this claim is stale and holding on to it would hide the retry behind a run
@@ -156,13 +156,22 @@ export function SpecCard({
   const runSettled = stream.status === 'complete' || stream.status === 'failed';
   const runInFlight = runId !== null && !detached && !runSettled;
 
+  const attachedTo = useRef<string | null>(null);
+
   useEffect(() => {
     if (runId === null || detached || stream.status !== 'idle') return;
+    if (attachedTo.current === runId) return;
+
+    attachedTo.current = runId;
 
     void resume(runId, -1, attempt).then((outcome) => {
       // Same reason as `generate()`: the revision is persisted before `complete` is sent.
       if (outcome.status === 'complete') router.refresh();
     });
+
+    return () => {
+      attachedTo.current = null;
+    };
   }, [runId, attempt, detached, stream.status, resume, router]);
 
   /** Stop reading. The run carries on server-side (D-95); this page simply stops following it. */

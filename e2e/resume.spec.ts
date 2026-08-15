@@ -265,7 +265,11 @@ test.describe('session resume', () => {
     await expect(page.getByTestId('spec-stream')).toContainText('# Constitution', {
       timeout: 20_000,
     });
-    await expect(page.getByTestId('spec-stream')).toContainText('Project Vision');
+    // Both batches, and patiently: a reattach that lands twice replays from the start, so the second
+    // batch can arrive after the first has been drawn once already.
+    await expect(page.getByTestId('spec-stream')).toContainText('Project Vision', {
+      timeout: 20_000,
+    });
 
     expect(generationsStarted, 'landing on a running generation must not start another').toBe(0);
 
