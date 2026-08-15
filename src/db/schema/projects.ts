@@ -116,6 +116,16 @@ export const sessions = pgTable(
      * the boundary against the registry.
      */
     methodologyId: text('methodology_id').notNull().default('myspec-greenfield-v1'),
+    /**
+     * The model this chat's agent calls use (task 121; Эталон §1.5 — the composer's picker).
+     *
+     * `null` is Auto and is the default: the configured failover chain, exactly as А-3 requires Auto
+     * to mean. A provider id pins the chain to that one provider. No CHECK, for the same reason
+     * `methodology_id` has none — the set of providers is a property of the deployment's
+     * configuration, not of the data, and a row naming a provider whose key was later removed must
+     * still open (it degrades to Auto).
+     */
+    modelId: text('model_id'),
     /** Number of times the session has reached `complete` (FR-020). */
     completionCount: integer('completion_count').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),

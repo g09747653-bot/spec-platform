@@ -57,6 +57,8 @@ export interface ProjectDetail extends ProjectSummary {
   qualityEnabled: boolean;
   /** The methodology whose graph this session walks (task 117). */
   methodologyId: string;
+  /** The primary chat's model choice (task 121); `null` is Auto — the failover chain (А-3). */
+  modelId: string | null;
   /** How many times the session has reached `complete` (FR-020) — the feed's sealing count. */
   completionCount: number;
   /** The language every generated word answers in (У-1; task 108); `null` when undetermined. */
@@ -81,7 +83,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PRIMARY_SESSION = sql`
   JOIN LATERAL (
     SELECT ${sessions}.id, ${sessions}.initial_prompt, ${sessions}.summary,
-           ${sessions}.quality_enabled, ${sessions}.methodology_id,
+           ${sessions}.quality_enabled, ${sessions}.methodology_id, ${sessions}.model_id,
            ${sessions}.completion_count, ${sessions}.content_language
     FROM ${sessions}
     WHERE ${sessions}.project_id = ${projects}.id
@@ -106,6 +108,7 @@ const ProjectDetailRow = ProjectSummaryRow.extend({
   summary: z.string().nullable(),
   quality_enabled: z.boolean(),
   methodology_id: z.string(),
+  model_id: z.string().nullable(),
   completion_count: z.number().int(),
   content_language: z.string().nullable(),
   version: z.number().int(),
@@ -242,6 +245,7 @@ export function createProjectRepository(db: SchemaDatabase) {
             primary_session.summary,
             primary_session.quality_enabled,
             primary_session.methodology_id,
+            primary_session.model_id,
             primary_session.completion_count,
             primary_session.content_language,
             ${workflowState}.stage,
@@ -272,6 +276,7 @@ export function createProjectRepository(db: SchemaDatabase) {
         summary: row.summary,
         qualityEnabled: row.quality_enabled,
         methodologyId: row.methodology_id,
+        modelId: row.model_id,
         completionCount: row.completion_count,
         contentLanguage: row.content_language,
         stage: row.stage,

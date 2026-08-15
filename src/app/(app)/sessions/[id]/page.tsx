@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { getEnv } from '@/config/env';
 import { getDatabase } from '@/db/client';
+import { AUTO_MODEL, modelRegistry } from '@/modules/adapters/llm';
 import { createGenerationStore } from '@/modules/adapters/llm/generation-store';
 import { requireOwnerScope } from '@/modules/projects/auth/scope';
 import { createAttachmentRepository } from '@/modules/projects/repositories/attachments';
@@ -130,7 +131,12 @@ function requestDeadlineMs(): number {
  * a new revision changes the feed and this list in the same render, from the same data (AC-2).
  */
 function specsPanelFiles(
-  revisions: readonly { specType: string; revisionNumber: number; approved: boolean }[],
+  revisions: readonly {
+    specFileId: string;
+    specType: string;
+    revisionNumber: number;
+    approved: boolean;
+  }[],
 ): SpecFileModel[] {
   const byType = new Map<string, SpecFileModel>();
 
@@ -141,7 +147,8 @@ function specsPanelFiles(
     // revision awaits a decision is not approved, however many approved ones precede it (FR-009).
     if (current === undefined || revision.revisionNumber >= current.revisionCount) {
       byType.set(revision.specType, {
-        specFileId: null,
+        // Carried, so the row can link into the viewer (task 122).
+        specFileId: revision.specFileId,
         specType: revision.specType,
         revisionCount: revision.revisionNumber,
         approved: revision.approved,
@@ -269,6 +276,16 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
   ]);
 
   const feed = buildFeed(source);
+
+  /** The bundle's files as rows, so a reference can name one by the id the endpoint reads. */
+  const bundleFiles = [
+    ...new Map(
+      bundleRevisions.map((revision) => [
+        revision.specType,
+        { specType: revision.specType, specFileId: revision.specFileId },
+      ]),
+    ).values(),
+  ];
 
   /*
    * The document the session is working on: the newest revision of the file most recently written.
@@ -399,6 +416,31 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
           refineFileId={latest === null ? null : (currentFile?.id ?? null)}
           canGenerate={position.substage === 'generate'}
           describePrefill={editChat ? session.initialPrompt : null}
+          /*
+           * What an `@` may name (task 121): the bundle's promised files and this chat's documents.
+           * The plan rather than the written files, so a document that does not exist yet is
+           * offered and honestly labelled — the alternative is a menu that changes shape as the
+           * session goes on, where the absence of a name reads as "there is no such document".
+           */
+          references={[
+            ...plan.map((entry) => {
+              const file = bundleFiles.find((candidate) => candidate.specType === entry.specType);
+
+              return {
+                id: `spec:${file?.specFileId ?? entry.specType}`,
+                name: entry.fileName,
+                kind: 'spec' as const,
+                ...(file === undefined ? { empty: true } : {}),
+              };
+            }),
+            ...attachments.map((attachment) => ({
+              id: `attachment:${attachment.id}`,
+              name: attachment.fileName,
+              kind: 'attachment' as const,
+            })),
+          ]}
+          models={modelRegistry()}
+          selectedModel={session.modelId ?? AUTO_MODEL}
           activeRun={
             activeRun === null ? null : { runId: activeRun.runId, attempt: activeRun.attempt }
           }

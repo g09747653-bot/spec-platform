@@ -179,7 +179,7 @@ async function editReview(
         const outcome = await runEdit({
           db,
           scope,
-          adapter: createDefaultAdapter(),
+          adapter: createDefaultAdapter(undefined, { modelId: session.modelId }),
           store,
           runId: run.id,
           documents: referenced,
@@ -431,7 +431,7 @@ export async function POST(
 
   const run = await store.createRun(session.id, stage);
 
-  const adapter = createDefaultAdapter();
+  const adapter = createDefaultAdapter(undefined, { modelId: session.modelId });
 
   const encoder = new TextEncoder();
 

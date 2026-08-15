@@ -111,27 +111,6 @@ async function lintApprovedRevision(
 }
 
 /**
- * Produces the review of a stage's approved spec on entry to `review` (task 56; FR-010 AC-1;
- * task 114 for the deterministic half).
- *
- * Returns the review's id, or `null` when this transition is not an entry into `review`, when the
- * stage has no approved revision, or when there is nothing at all to show.
- *
- * **A review that cannot be produced is not a failed transition.** The session has legitimately
- * moved, the approved revision is durable, and the board simply has nothing to show yet. Undoing a
- * gated, permitted move to protect an advisory artifact would trade the user's progress for a
- * second opinion, which is the wrong way round (P5).
- *
- * **The two halves of a board are not equally fragile.** The linters read the document and answer;
- * the reviewer asks a model and may get nothing. So the linters run first and their findings are
- * kept whatever happens next: an exhausted provider chain now costs the *opinions*, not the
- * measurements, and a session on a bad day still gets told that FR-042 resolves to nothing.
- *
- * `create` is idempotent per revision, so re-entering `review` after a backward step re-presents the
- * same review rather than replacing it — the content is immutable, so a second review of the same
- * bytes could only ever disagree with the one the user is already looking at.
- */
-/**
  * The Describe card of an Edit chat, created once per stage entry (task 118).
  *
  * The Edit workflow's second step is a sentence the user finishes, and the reference product opens
@@ -165,6 +144,27 @@ async function ensureDescribeRound(
   });
 }
 
+/**
+ * Produces the review of a stage's approved spec on entry to `review` (task 56; FR-010 AC-1;
+ * task 114 for the deterministic half).
+ *
+ * Returns the review's id, or `null` when this transition is not an entry into `review`, when the
+ * stage has no approved revision, or when there is nothing at all to show.
+ *
+ * **A review that cannot be produced is not a failed transition.** The session has legitimately
+ * moved, the approved revision is durable, and the board simply has nothing to show yet. Undoing a
+ * gated, permitted move to protect an advisory artifact would trade the user's progress for a
+ * second opinion, which is the wrong way round (P5).
+ *
+ * **The two halves of a board are not equally fragile.** The linters read the document and answer;
+ * the reviewer asks a model and may get nothing. So the linters run first and their findings are
+ * kept whatever happens next: an exhausted provider chain now costs the *opinions*, not the
+ * measurements, and a session on a bad day still gets told that FR-042 resolves to nothing.
+ *
+ * `create` is idempotent per revision, so re-entering `review` after a backward step re-presents the
+ * same review rather than replacing it — the content is immutable, so a second review of the same
+ * bytes could only ever disagree with the one the user is already looking at.
+ */
 async function ensureStageReview(
   db: SchemaDatabase,
   scope: OwnerScope,
@@ -172,6 +172,8 @@ async function ensureStageReview(
   position: WorkflowPosition,
   /** The session's content language (У-1; task 108) — findings are prose the user has to read. */
   contentLanguage: string | null,
+  /** The chat's model choice (task 121): a board is an agent call like any other. */
+  modelId: string | null,
 ): Promise<string | null> {
   if (position.substage !== 'review' || !isCoreSpecType(position.stage)) return null;
 
@@ -215,7 +217,7 @@ async function ensureStageReview(
 
   // The configured chain, with failover, exactly as generation uses it: the review agent needs no
   // provider of its own and no configuration of its own (A3; P7).
-  const agent = createReviewAgent(createDefaultAdapter());
+  const agent = createReviewAgent(createDefaultAdapter(undefined, { modelId }));
 
   /*
    * The exhausted-chain case is caught here rather than allowed to propagate, and that is the whole
@@ -352,6 +354,7 @@ export async function POST(
         session.projectId,
         outcome.position,
         session.contentLanguage,
+        session.modelId,
       );
 
       /*

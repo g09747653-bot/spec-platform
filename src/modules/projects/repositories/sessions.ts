@@ -21,6 +21,8 @@ export interface OwnedSession {
   contentLanguage: string | null;
   /** The methodology whose graph this session walks (task 117). A plain string, for the same reason. */
   methodologyId: string;
+  /** The model this chat's agent calls use (task 121); `null` is Auto — the failover chain (А-3). */
+  modelId: string | null;
   /** Plain strings: `projects` may not import `workflow` (see the note on `ProjectSummary`). */
   stage: string;
   substage: string | null;
@@ -109,6 +111,7 @@ const SessionDetailRow = z.object({
   audience_profile: z.string(),
   content_language: z.string().nullable(),
   methodology_id: z.string(),
+  model_id: z.string().nullable(),
   completion_count: z.number().int(),
   stage: z.string(),
   substage: z.string().nullable(),
@@ -154,6 +157,7 @@ export function createSessionRepository(db: SchemaDatabase) {
           audienceProfile: sessions.audienceProfile,
           contentLanguage: sessions.contentLanguage,
           methodologyId: sessions.methodologyId,
+          modelId: sessions.modelId,
           stage: workflowState.stage,
           substage: workflowState.substage,
           version: workflowState.version,
@@ -192,6 +196,7 @@ export function createSessionRepository(db: SchemaDatabase) {
             ${sessions}.audience_profile,
             ${sessions}.content_language,
             ${sessions}.methodology_id,
+            ${sessions}.model_id,
             ${sessions}.completion_count,
             ${workflowState}.stage,
             ${workflowState}.substage,
@@ -227,6 +232,7 @@ export function createSessionRepository(db: SchemaDatabase) {
         audienceProfile: row.audience_profile,
         contentLanguage: row.content_language,
         methodologyId: row.methodology_id,
+        modelId: row.model_id,
         completionCount: row.completion_count,
         stage: row.stage,
         substage: row.substage,
@@ -366,6 +372,32 @@ export function createSessionRepository(db: SchemaDatabase) {
      * deletes": there is no path here that could remove a row, and restoring is the same call with
      * the other value.
      */
+    /**
+     * Records which model this chat's agent calls use (task 121).
+     *
+     * `null` is Auto and is a real value, so the column is set rather than cleared-by-omission: a
+     * user who picks Auto after picking a model is making a choice, and it is the same choice the
+     * session started with.
+     */
+    async setModel(scope: OwnerScope, sessionId: string, modelId: string | null): Promise<boolean> {
+      if (!UUID.test(sessionId)) return false;
+
+      const rows = await queryRows(
+        db,
+        sql`
+          UPDATE ${sessions} SET model_id = ${modelId}
+          FROM ${projects}
+          WHERE ${sessions}.id = ${sessionId}::uuid
+            AND ${projects}.id = ${sessions}.project_id
+            AND ${projects}.owner_id = ${scope.userId}::uuid
+          RETURNING ${sessions}.id AS id
+        `,
+        z.object({ id: z.uuid() }),
+      );
+
+      return rows.length > 0;
+    },
+
     async setArchived(scope: OwnerScope, sessionId: string, archived: boolean): Promise<boolean> {
       if (!UUID.test(sessionId)) return false;
 

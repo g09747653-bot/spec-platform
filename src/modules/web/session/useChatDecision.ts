@@ -73,7 +73,14 @@ export function useChatDecision(sessionId: string) {
     });
   }
 
-  async function send(text: string): Promise<void> {
+  /**
+   * @param referenceIds Documents the message named with `@` (task 121).
+   *
+   * Ids rather than names, and resolved by the composer against what the session actually has, so
+   * the server receives something it can check ownership on. It reads the referenced file's current
+   * content into the same context the chat already assembles — an existing read path, no new write.
+   */
+  async function send(text: string, referenceIds: readonly string[] = []): Promise<void> {
     const trimmed = text.trim();
     if (trimmed === '' || busy) return;
 
@@ -85,7 +92,7 @@ export function useChatDecision(sessionId: string) {
       const response = await fetch(`/api/sessions/${sessionId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: trimmed }),
+        body: JSON.stringify({ text: trimmed, referenceIds: [...referenceIds] }),
       });
 
       if (!response.ok || response.body === null) {

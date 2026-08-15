@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { getDatabase } from '@/db/client';
+import { AUTO_MODEL } from '@/modules/adapters/llm';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
 import { createSessionRepository } from '@/modules/projects/repositories/sessions';
 import { errorResponse, jsonResponse } from '@/modules/web/api/responses';
@@ -16,7 +17,19 @@ import { errorResponse, jsonResponse } from '@/modules/web/api/responses';
  * Nothing below a session reads the flag. The bundle a chat produced stays exportable, its revisions
  * stay in history, and restoring returns the chat to the Active list exactly as it was.
  */
-const ArchiveRequest = z.object({ archived: z.boolean() });
+const PatchRequest = z
+  .object({
+    archived: z.boolean().optional(),
+    /**
+     * The model this chat's agent calls use (task 121). `auto` is a value, not an absence: it means
+     * the failover chain, which is what the session started with and what А-3 requires Auto to mean.
+     */
+    modelId: z.string().min(1).max(64).optional(),
+  })
+  .refine(
+    (body) => body.archived !== undefined || body.modelId !== undefined,
+    'Say what to change: archived, or modelId.',
+  );
 
 export async function PATCH(
   request: Request,
@@ -28,7 +41,7 @@ export async function PATCH(
   const { id: sessionId } = await params;
 
   const body: unknown = await request.json().catch(() => null);
-  const parsed = ArchiveRequest.safeParse(body);
+  const parsed = PatchRequest.safeParse(body);
 
   if (!parsed.success) {
     return errorResponse('VALIDATION_FAILED', {
@@ -39,15 +52,29 @@ export async function PATCH(
     });
   }
 
-  // The owner predicate rides in the UPDATE, so another user's session id changes nothing and is
+  // The owner predicate rides in each UPDATE, so another user's session id changes nothing and is
   // reported as not found (AR-2).
-  const updated = await createSessionRepository(getDatabase()).setArchived(
-    scope,
-    sessionId,
-    parsed.data.archived,
-  );
+  const sessions = createSessionRepository(getDatabase());
+  let updated = false;
+
+  if (parsed.data.archived !== undefined) {
+    updated = await sessions.setArchived(scope, sessionId, parsed.data.archived);
+  }
+
+  if (parsed.data.modelId !== undefined) {
+    /*
+     * `auto` is stored as `null`, so the column has one representation of "no choice" rather than
+     * two — otherwise `pinnedProvider` would have to know about a magic string as well as about
+     * null, and one of the two would eventually be handled somewhere the other is not.
+     */
+    updated = await sessions.setModel(
+      scope,
+      sessionId,
+      parsed.data.modelId === AUTO_MODEL ? null : parsed.data.modelId,
+    );
+  }
 
   if (!updated) return errorResponse('NOT_FOUND');
 
-  return jsonResponse({ sessionId, archived: parsed.data.archived });
+  return jsonResponse({ sessionId, ...parsed.data });
 }

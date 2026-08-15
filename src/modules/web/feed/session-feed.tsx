@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { useChatDecision } from '../session/useChatDecision';
@@ -7,6 +8,7 @@ import { useChatDecision } from '../session/useChatDecision';
 import { CompletionPanel, MessageBubble, SeedBubble, StageChip } from './bubbles';
 import { appendChatTurns } from './chat-turns';
 import { Composer } from './composer';
+import type { ReferenceTarget, SlashCommand } from './composer-menus';
 import { DocumentBlock } from './document-block';
 import { FeedItem } from './feed-item';
 import { GenerationSurface } from './generation-surface';
@@ -54,6 +56,12 @@ export interface SessionFeedProps {
   activeRun: { runId: string; attempt: number } | null;
   /** How many files the bundle currently holds, for the completion panel. */
   bundleFileCount: number;
+  /** What an `@` may name in this chat: the bundle's files and the session's documents (task 121). */
+  references: readonly ReferenceTarget[];
+  /** Auto plus each configured model. A model whose key is absent is not in this list. */
+  models: readonly { id: string; label: string }[];
+  /** The chat's stored choice, `auto` when it has made none. */
+  selectedModel: string;
 }
 
 export function SessionFeed({
@@ -69,9 +77,47 @@ export function SessionFeed({
   describePrefill,
   activeRun,
   bundleFileCount,
+  references,
+  models,
+  selectedModel,
 }: SessionFeedProps) {
+  const router = useRouter();
   const { state: chat, send } = useChatDecision(sessionId);
   const [draft, setDraft] = useState('');
+
+  /**
+   * A slash command presses **the control itself** (task 121).
+   *
+   * Not "calls the same endpoint" — the same button, found by the test id the page already puts on
+   * it. That makes the acceptance criterion structural rather than a promise kept in two places: a
+   * command cannot dispatch a different body from the button, cannot skip a confirmation the button
+   * shows, and a gate that refuses answers in the gate's own words because it is the same refusal.
+   *
+   * `false` means the control is not on the page — which is exactly what "this command is not
+   * available at this point" means, stated by the page's own rendering rather than by a second list
+   * of which commands apply where.
+   */
+  function pressControl(command: SlashCommand): boolean {
+    const node = document.querySelector<HTMLElement>(`[data-testid="${command.control}"]`);
+    if (node === null) return false;
+
+    node.scrollIntoView({ block: 'center' });
+    node.click();
+
+    return true;
+  }
+
+  async function selectModel(modelId: string): Promise<void> {
+    await fetch(`/api/sessions/${sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modelId }),
+    });
+
+    // The choice is persisted on the session, so the page re-reads it rather than remembering it:
+    // a reload must show the same model, and so must the next request's adapter.
+    router.refresh();
+  }
 
   /*
    * The persisted feed with this visit's chat turns on the end. A reply still arriving is an
@@ -223,14 +269,21 @@ export function SessionFeed({
       <Composer
         value={draft}
         onChange={setDraft}
-        onSend={() => {
+        onSend={(referenceIds) => {
           const outgoing = draft;
           setDraft('');
-          void send(outgoing);
+          void send(outgoing, referenceIds);
         }}
         busy={chat.busy}
         error={chat.error}
         hasPendingDecision={tail.kind !== 'open'}
+        references={references}
+        models={models}
+        selectedModel={selectedModel}
+        onSelectModel={(modelId) => {
+          void selectModel(modelId);
+        }}
+        onCommand={pressControl}
       />
     </div>
   );

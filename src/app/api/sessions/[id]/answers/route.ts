@@ -170,7 +170,9 @@ async function refreshInterviewSummary(
   session: OwnedSession,
   highlights: readonly string[],
 ): Promise<boolean> {
-  const summariser = createSummaryAgent(createDefaultAdapter());
+  const summariser = createSummaryAgent(
+    createDefaultAdapter(undefined, { modelId: session.modelId }),
+  );
 
   /*
    * An exhausted chain means "no summary yet", not "the submission failed" (round 2, Д-6).
@@ -337,7 +339,9 @@ export async function POST(
   if ('reply' in parsed.data) {
     await interviewRepository.addReplyAnswer(round.id, parsed.data.reply);
 
-    const assessor = createReplyAssessor(createDefaultAdapter());
+    const assessor = createReplyAssessor(
+      createDefaultAdapter(undefined, { modelId: session.modelId }),
+    );
     /*
      * The assessor is already documented as conservative — when in doubt it satisfies nothing. An
      * exhausted chain is the deepest possible doubt, so it takes the same branch rather than
@@ -387,7 +391,9 @@ export async function POST(
     }
 
     const nextRoundNumber = round.roundNumber + 1;
-    const agent = createInterviewAgent(createDefaultAdapter());
+    const agent = createInterviewAgent(
+      createDefaultAdapter(undefined, { modelId: session.modelId }),
+    );
 
     /*
      * A follow-up that could not be drafted is "nothing narrower to ask" — the branch immediately

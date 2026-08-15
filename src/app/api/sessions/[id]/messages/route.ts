@@ -5,12 +5,15 @@ import { z } from 'zod';
 import { getDatabase } from '@/db/client';
 import { AllProvidersFailedError } from '@/modules/adapters/llm';
 import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
-import { assembleContext } from '@/modules/agents/context-assembler';
+import { assembleContext, type ContextReference } from '@/modules/agents/context-assembler';
 import { resolveDecisionIntent } from '@/modules/agents/decision-intent/resolve';
 import { collectContextSources } from '@/modules/agents/spec/collect-context';
 import { assemblePrompt } from '@/modules/prompts';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
+import { createAttachmentRepository } from '@/modules/projects/repositories/attachments';
 import { createSessionRepository } from '@/modules/projects/repositories/sessions';
+import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
+import { createSpecFileRepository } from '@/modules/specs/repositories/spec-files';
 import {
   describePending,
   findPendingDecision,
@@ -51,7 +54,17 @@ import { POST as decideSpec } from '../../../specs/[specFileId]/decision/route';
  * Everything hard about this lives in `resolveDecisionIntent`, which abstains by default and is the
  * only thing standing between a typed sentence and the human approval gate of P2.
  */
-const ChatMessage = z.object({ text: z.string().trim().min(1).max(8000) });
+const ChatMessage = z.object({
+  text: z.string().trim().min(1).max(8000),
+  /**
+   * Documents the message named with an `@` reference (task 121), as ids the composer resolved.
+   *
+   * Ids rather than names because a name is ambiguous and unverifiable; every id below is checked
+   * against **this session's** project before it is read, so a reference to another owner's file
+   * resolves to nothing rather than to their content.
+   */
+  referenceIds: z.array(z.string().min(1)).max(10).default([]),
+});
 
 /**
  * The session's pending card, resolved the same way the page resolves it (task 75).
@@ -157,6 +170,61 @@ async function dispatch(
 }
 
 /**
+ * The documents an `@` reference names, read through the same owner-scoped repositories as
+ * everything else (task 121).
+ *
+ * Two id namespaces, because there are two kinds of thing to point at: `spec:<specFileId>` is a
+ * bundle file at its **newest** revision — what the user is looking at, approved or not — and
+ * `attachment:<id>` is a document they uploaded. An id that resolves to nothing is dropped here and
+ * reported by the composer, which is what makes a dangling reference a visible notice rather than a
+ * silently thinner prompt (AC-2).
+ *
+ * Ownership is not re-implemented: every lookup carries the scope, and the spec file is additionally
+ * required to belong to *this session's project*, so a valid id from another project of the same
+ * owner is refused too.
+ */
+async function resolveReferences(
+  db: ReturnType<typeof getDatabase>,
+  scope: NonNullable<Awaited<ReturnType<typeof currentOwnerScope>>>,
+  session: { id: string; projectId: string },
+  referenceIds: readonly string[],
+): Promise<ContextReference[]> {
+  if (referenceIds.length === 0) return [];
+
+  const specFiles = createSpecFileRepository(db);
+  const revisions = createRevisionRepository(db);
+  const attachments = await createAttachmentRepository(db).listForSession(scope, session.id);
+
+  const resolved: ContextReference[] = [];
+
+  for (const reference of referenceIds) {
+    const separator = reference.indexOf(':');
+    const kind = reference.slice(0, separator);
+    const id = reference.slice(separator + 1);
+
+    if (kind === 'spec') {
+      const file = await specFiles.findById(scope, id);
+      if (file?.projectId !== session.projectId) continue;
+
+      const latest = await revisions.latest(file.id);
+      if (latest === null) continue;
+
+      resolved.push({ name: file.fileName, content: latest.content });
+      continue;
+    }
+
+    if (kind === 'attachment') {
+      const attachment = attachments.find((candidate) => candidate.id === id);
+      if (attachment?.extractedText == null || attachment.extractedText === '') continue;
+
+      resolved.push({ name: attachment.fileName, content: attachment.extractedText });
+    }
+  }
+
+  return resolved;
+}
+
+/**
  * The assistant's reply when the message was not a decision (FR-009 AC-6; task 109).
  *
  * `onDelta` is what turns a reply that appears into one that arrives: the adapter already streams,
@@ -166,9 +234,17 @@ async function dispatch(
 async function answer(
   db: ReturnType<typeof getDatabase>,
   scope: NonNullable<Awaited<ReturnType<typeof currentOwnerScope>>>,
-  session: { id: string; projectId: string; initialPrompt: string; contentLanguage: string | null },
+  session: {
+    id: string;
+    projectId: string;
+    initialPrompt: string;
+    contentLanguage: string | null;
+    /** The chat's model choice (task 121) — `null` is Auto, the failover chain. */
+    modelId: string | null;
+  },
   pending: PendingDecision,
   text: string,
+  referenceIds: readonly string[],
   onDelta: (piece: string) => void,
 ): Promise<string> {
   const collected = await collectContextSources(db, scope, {
@@ -177,7 +253,10 @@ async function answer(
     initialPrompt: session.initialPrompt,
   });
   // Answering a question writes no revision, so the context set is not recorded anywhere here.
-  const context = assembleContext(collected.sources);
+  const references = await resolveReferences(db, scope, session, referenceIds);
+  const context = assembleContext(
+    references.length === 0 ? collected.sources : { ...collected.sources, references },
+  );
 
   const prompt = assemblePrompt(
     'chat.answer.v1',
@@ -191,7 +270,9 @@ async function answer(
   );
 
   try {
-    const result = await createDefaultAdapter().generateStreaming({
+    const result = await createDefaultAdapter(undefined, {
+      modelId: session.modelId,
+    }).generateStreaming({
       messages: [
         { role: 'system', content: prompt.system },
         { role: 'user', content: prompt.user },
@@ -293,7 +374,7 @@ export async function POST(
     ? await resolveDecisionIntent({
         message: parsed.data.text,
         pending: pending.kind,
-        adapter: createDefaultAdapter(),
+        adapter: createDefaultAdapter(undefined, { modelId: session.modelId }),
         runId: randomUUID(),
       })
     : { intent: null, reason: 'no-pending' as const };
@@ -334,9 +415,17 @@ export async function POST(
   return chatStream([], async (send) => ({
     type: 'result',
     applied: null,
-    reply: await answer(db, scope, session, pending, parsed.data.text, (piece) => {
-      send({ type: 'delta', text: piece });
-    }),
+    reply: await answer(
+      db,
+      scope,
+      session,
+      pending,
+      parsed.data.text,
+      parsed.data.referenceIds,
+      (piece) => {
+        send({ type: 'delta', text: piece });
+      },
+    ),
     // Unchanged, and stated so the client re-renders exactly what it had (AC-2).
     pendingAction: pendingActionOf(pending),
   }));
