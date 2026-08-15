@@ -1437,7 +1437,7 @@ Goal: the reviewer that makes the product feel intelligent — structured findin
   - Acceptance Criteria: seeded broken cross-reference, renumbered identifier, and non-EARS requirement are each caught; a clean document yields zero linter items; linter items cost no model call.
   - _Dependencies: 111_ · _Requirements: А-3 У-3; Эталон §6_ · _Touches: `src/modules/specs/lint/**` (new)_ · _Complexity: Large_ · _Parallel-safe: yes_
 
-- [ ] 115\. M8п gate — review-cycle walk (self-run, А-2.1)
+- [x] 115\. M8п gate — review-cycle walk (self-run, А-2.1)
   - Live cycle: needs-revision board → request changes with a subset selected → Rev N+1 → re-review → pass → accept; text-phrase decision parity checked live; artifacts to `artifacts/gate-M8/`.
   - _Dependencies: 111–114_ · _Requirements: А-2.1_ · _Complexity: Medium_ · _Parallel-safe: no_
 
