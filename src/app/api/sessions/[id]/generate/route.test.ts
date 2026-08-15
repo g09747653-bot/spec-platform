@@ -434,7 +434,9 @@ describe('POST /api/sessions/:id/generate (task 45)', () => {
       async (status) => {
         await readyToGenerate();
 
-        await database.db.insert(generationRuns).values({ sessionId, stage: 'constitution', status });
+        await database.db
+          .insert(generationRuns)
+          .values({ sessionId, stage: 'constitution', status });
 
         const events = await readEvents(await post(sessionId));
 
@@ -454,9 +456,7 @@ describe('POST /api/sessions/:id/generate (task 45)', () => {
           sessionId,
           stage: 'constitution',
           status,
-          ...(status === 'complete'
-            ? { providerUsed: 'google', completedAt: new Date() }
-            : {}),
+          ...(status === 'complete' ? { providerUsed: 'google', completedAt: new Date() } : {}),
         });
 
         const events = await readEvents(await post(sessionId));

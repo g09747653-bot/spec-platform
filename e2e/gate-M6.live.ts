@@ -196,7 +196,12 @@ async function snapshot(page: Page, label: string): Promise<void> {
   if (observed.stage !== null && observed.stage.trim() === '') problem(`empty stage at ${name}`);
 }
 
-async function click(page: Page, testId: string, where: string, timeout = 30_000): Promise<boolean> {
+async function click(
+  page: Page,
+  testId: string,
+  where: string,
+  timeout = 30_000,
+): Promise<boolean> {
   try {
     await page.getByTestId(testId).click({ timeout });
     return true;
@@ -249,7 +254,8 @@ async function askAndAnswer(page: Page, stage: string): Promise<'answered' | 'no
   let arrived = false;
 
   for (let attempt = 1; attempt <= 3 && !arrived; attempt += 1) {
-    if (attempt > 1) retries.push(`${stage}: the ask produced nothing; asking again (${String(attempt)} of 3)`);
+    if (attempt > 1)
+      retries.push(`${stage}: the ask produced nothing; asking again (${String(attempt)} of 3)`);
 
     if (!(await click(page, 'ask-round', `${stage}: ask`))) break;
 
@@ -272,7 +278,8 @@ async function askAndAnswer(page: Page, stage: string): Promise<'answered' | 'no
     .getByTestId('mcq-card')
     .innerText()
     .catch(() => null);
-  if (asked !== null) transcript.push(`### ${stage} — the round asked\n\n\`\`\`\n${asked}\n\`\`\`\n`);
+  if (asked !== null)
+    transcript.push(`### ${stage} — the round asked\n\n\`\`\`\n${asked}\n\`\`\`\n`);
 
   // Resume check: a pending question card is a pending decision, and a reload must bring it back.
   await page.reload();
@@ -282,7 +289,8 @@ async function askAndAnswer(page: Page, stage: string): Promise<'answered' | 'no
     .then(() => true)
     .catch(() => false);
 
-  if (!cameBack) problem(`${stage}: the pending question card did not survive a reload (FR-017 AC-3)`);
+  if (!cameBack)
+    problem(`${stage}: the pending question card did not survive a reload (FR-017 AC-3)`);
   else say(`${stage}: pending question card survived a reload`);
 
   await snapshot(page, `${stage}-round-after-reload`);
@@ -357,7 +365,9 @@ async function walkStage(page: Page, stage: string, isFirst: boolean): Promise<v
       .catch(() => false);
 
     if (!producing) {
-      say(`${stage}: no text appeared within ten minutes — leaving anyway, to see what returning does`);
+      say(
+        `${stage}: no text appeared within ten minutes — leaving anyway, to see what returning does`,
+      );
     }
 
     say(`${stage}: leaving the page mid-generation, on purpose`);
@@ -394,7 +404,9 @@ async function walkStage(page: Page, stage: string, isFirst: boolean): Promise<v
       .catch(() => false);
 
     if (stillGenerating) {
-      say(`${stage}: the returning page reattached to the run in flight — Stop offered, not Generate`);
+      say(
+        `${stage}: the returning page reattached to the run in flight — Stop offered, not Generate`,
+      );
     } else if (offersGenerate) {
       /*
        * Recorded, not failed. What the milestone requires of a disconnect is "no losses and no
@@ -413,7 +425,9 @@ async function walkStage(page: Page, stage: string, isFirst: boolean): Promise<v
     // The requirement itself: whatever the page showed, the stage has exactly one run.
     const runs = await countRuns(stage);
     if (runs > 1) {
-      problem(`${stage}: ${String(runs)} runs for one stage — the disconnect duplicated a generation`);
+      problem(
+        `${stage}: ${String(runs)} runs for one stage — the disconnect duplicated a generation`,
+      );
     } else {
       say(`${stage}: exactly one generation run for the stage — no duplicate (M3 resume rule)`);
     }
@@ -495,7 +509,9 @@ async function walkStage(page: Page, stage: string, isFirst: boolean): Promise<v
     return;
   }
 
-  say(`${stage}: revision written and structurally valid (a spec card is the section schema passing)`);
+  say(
+    `${stage}: revision written and structurally valid (a spec card is the section schema passing)`,
+  );
   await snapshot(page, `${stage}-drafted`);
 
   const drafted = await page
@@ -503,7 +519,9 @@ async function walkStage(page: Page, stage: string, isFirst: boolean): Promise<v
     .innerText()
     .catch(() => null);
   if (drafted !== null) {
-    transcript.push(`### ${stage} — the drafted document\n\n\`\`\`\n${drafted.slice(0, 2500)}\n\`\`\`\n`);
+    transcript.push(
+      `### ${stage} — the drafted document\n\n\`\`\`\n${drafted.slice(0, 2500)}\n\`\`\`\n`,
+    );
   }
 
   // Resume check: a pending spec approval must survive a reload.
@@ -565,7 +583,8 @@ async function walkStage(page: Page, stage: string, isFirst: boolean): Promise<v
       .getByTestId('review-board')
       .innerText()
       .catch(() => null);
-    if (text !== null) transcript.push(`### ${stage} — the review board\n\n\`\`\`\n${text}\n\`\`\`\n`);
+    if (text !== null)
+      transcript.push(`### ${stage} — the review board\n\n\`\`\`\n${text}\n\`\`\`\n`);
 
     // Resume check: a pending review board must survive a reload.
     await page.reload();
@@ -728,9 +747,12 @@ async function walk(browser: Browser): Promise<void> {
       .first()
       .click({ timeout: 30_000 })
       .catch(() => undefined);
-    await page.getByTestId('session').waitFor({ timeout: 60_000 }).catch(() => {
-      problem('the completed session could not be reopened from the project list');
-    });
+    await page
+      .getByTestId('session')
+      .waitFor({ timeout: 60_000 })
+      .catch(() => {
+        problem('the completed session could not be reopened from the project list');
+      });
     await page.waitForTimeout(2000);
     await snapshot(page, 'session-reopened');
   } finally {

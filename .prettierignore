@@ -17,3 +17,8 @@ migrations/
 # source of truth; a formatter must never rewrite them.
 .specs/
 CLAUDE.md
+
+# Gate artifacts are evidence, not source: the bundle files are what the models actually
+# wrote and the report is what the walk actually recorded. A formatter must not rewrite
+# either — a reformatted artifact is no longer the artifact.
+artifacts/

@@ -281,7 +281,9 @@ test.describe('the page always offers a way forward', () => {
 
     // And the session is exactly where the server says it is — the click can simply be made again.
     await page.getByTestId('proceed').click();
-    await expect(page.getByTestId('stage-current')).toHaveText(/Constitution/i, { timeout: 20_000 });
+    await expect(page.getByTestId('stage-current')).toHaveText(/Constitution/i, {
+      timeout: 20_000,
+    });
   });
 
   /*
