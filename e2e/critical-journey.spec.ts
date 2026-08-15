@@ -33,6 +33,14 @@ test.describe('critical journey', () => {
     page,
     context,
   }) => {
+    /*
+     * The default 30 s is a budget for one interaction, and this is a journey: four generations,
+     * four approvals, four reviews and an export, each a real round trip through the real handlers.
+     * It fits comfortably on a developer machine and does not always fit on a loaded CI runner —
+     * which is a fact about the runner, so it is stated as one rather than left to chance.
+     */
+    test.slow();
+
     const owner = await createSignedInUser('journey');
     await signIn(context, owner);
 

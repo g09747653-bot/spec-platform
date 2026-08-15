@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 
 import { getEnv } from '@/config/env';
 import { getDatabase } from '@/db/client';
+import { createGenerationStore } from '@/modules/adapters/llm/generation-store';
 import { QuestionSetSchema } from '@/modules/agents/schemas/question-set';
 import { requireOwnerScope } from '@/modules/projects/auth/scope';
 import { createAttachmentRepository } from '@/modules/projects/repositories/attachments';
@@ -35,6 +36,7 @@ import {
 } from '@/modules/web/session/answer-history';
 import { Attachments, type AttachmentModel } from '@/modules/web/session/attachments';
 import { ChatPanel } from '@/modules/web/session/chat-panel';
+import { CONDITION_COPY, STILL_NEEDED } from '@/modules/web/session/gate-copy';
 import { DiffCard, type PendingProposalModel } from '@/modules/web/session/diff-card';
 import { ExportPanel } from '@/modules/web/session/export-panel';
 import { InterviewPanel, type TransitionTargetModel } from '@/modules/web/session/interview-panel';
@@ -113,7 +115,14 @@ function toAnsweredRound(round: AnsweredRound): AnsweredRoundModel {
   };
 }
 
-/** Where "proceed" leads from the current position, for the panel's door button. */
+/**
+ * Where "proceed" leads from the current position, for the panel's door button.
+ *
+ * Round 5, Р-3 item 4: the wording of a refusal comes from `gate-copy`, which is keyed by the whole
+ * `ReasonCode` union. The chain of ternaries this replaced covered four reasons and fell through to
+ * the **raw code** for the other five, so an exhausted question budget told its owner
+ * `still needed: ROUND_LIMIT_REACHED`.
+ */
 function nextTarget(snapshot: WorkflowSnapshot): TransitionTargetModel | null {
   const to = nextPosition(snapshot);
   if (to === null) return null;
@@ -123,22 +132,8 @@ function nextTarget(snapshot: WorkflowSnapshot): TransitionTargetModel | null {
   const verdict = evaluateTransition(snapshot, to);
   const unmet: string[] = verdict.allowed
     ? []
-    : (verdict.unmet?.map((condition) =>
-        condition === 'grounding-input'
-          ? 'the initial prompt'
-          : condition === 'answered-round'
-            ? 'one answered question round'
-            : 'a session summary',
-      ) ?? [
-        verdict.reason === 'NO_ANSWERED_ROUND'
-          ? 'one answered question round for this stage'
-          : verdict.reason === 'SPEC_NOT_APPROVED'
-            ? 'your approval of the current draft'
-            : verdict.reason === 'REVIEW_NOT_DECIDED'
-              ? 'a decision on the review above'
-              : verdict.reason === 'SPEC_MISSING'
-                ? 'an approved revision of every file in the bundle'
-                : verdict.reason,
+    : (verdict.unmet?.map((condition) => CONDITION_COPY[condition]) ?? [
+        STILL_NEEDED[verdict.reason],
       ]);
 
   return {
@@ -148,6 +143,23 @@ function nextTarget(snapshot: WorkflowSnapshot): TransitionTargetModel | null {
     ready: verdict.allowed,
     unmet,
   };
+}
+
+/**
+ * How long the page keeps believing the server is still working on a request (round 5, Р-3).
+ *
+ * Derived from the server's own worst case rather than guessed: entering `review` runs the review
+ * agent inside the transition request, and that agent is bounded by `LLM_REQUEST_TIMEOUT_MS` for
+ * each provider it tries in turn. Past that sum plus a margin the server cannot still be working,
+ * so a request still in flight is a request that will never answer.
+ *
+ * It is a backstop, not a waiting time: `stop-waiting` is on screen from the first second, so the
+ * user decides how long to wait and this only decides when the page stops pretending.
+ */
+function requestDeadlineMs(): number {
+  const env = getEnv();
+
+  return env.LLM_REQUEST_TIMEOUT_MS * env.LLM_PROVIDER_ORDER.length + 15_000;
 }
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
@@ -286,6 +298,19 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   /** Whether the session is sealed — the terminal position, with its own surface (FR-020 AC-3). */
   const isComplete = assembled !== null && assembled.snapshot.position.stage === 'complete';
 
+  /** The client's patience with a request, read off the server's own provider chain (round 5, Р-3). */
+  const deadlineMs = requestDeadlineMs();
+
+  /*
+   * A generation still in flight when this page renders (round 5, Р-3).
+   *
+   * Round 4 made the run outlive its reader; without this the *page* still did not. Landing on a
+   * session mid-generation showed an empty card with a Generate button, and taking it started a
+   * second run over the same stage — the "no duplicates" half of the M3 resume rule, broken by a
+   * page that simply did not know. The card reattaches to the durable chunk log instead.
+   */
+  const activeRun = await createGenerationStore(db).activeRunForSession(project.sessionId);
+
   let interview: {
     stage: string;
     pendingRound: QuestionRoundModel | null;
@@ -405,6 +430,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           unmetNeeds={interview.unmetNeeds}
           summaryPersisted={interview.summaryPersisted}
           target={interview.target}
+          deadlineMs={deadlineMs}
         />
       )}
 
@@ -432,6 +458,13 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
          */
         canGenerate={assembled !== null && assembled.snapshot.position.substage === 'generate'}
         target={stageTarget}
+        deadlineMs={deadlineMs}
+        /* Only the run this stage owns: a stale run from a stage already left is not this card's. */
+        activeRun={
+          activeRun !== null && activeRun.stage === positionStage
+            ? { runId: activeRun.runId, attempt: activeRun.attempt }
+            : null
+        }
         revision={
           latest === null || currentFile === null
             ? null

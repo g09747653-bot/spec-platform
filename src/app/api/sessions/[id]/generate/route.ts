@@ -100,6 +100,34 @@ export async function POST(
   const specType = targetSpecType(stage);
   const store = createGenerationStore(db);
 
+  /*
+   * One generation per session at a time (round 5, Р-3; the M6 resume rule's "no duplicates").
+   *
+   * Since round 4 a run outlives the client that started it, so "nobody is reading it" stopped
+   * meaning "it is not happening" — and this endpoint had no other idea of whether it was. A page
+   * that offered Generate over a run already in flight therefore started a **second** run of the
+   * same stage, and two generations racing to write the same file is a correctness defect, not a
+   * wasted call. The page now reattaches instead of offering the button (D-99), but the guard
+   * belongs here regardless: the invariant must not depend on every client knowing better.
+   *
+   * Answered as a stream error rather than a status code, because that is what this endpoint's
+   * client reads: `retryable` is true, and the retry works the moment the run in flight ends.
+   */
+  const inFlight = await store.activeRunForSession(session.id);
+
+  if (inFlight !== null) {
+    return new Response(
+      encodeEvent({
+        type: 'error',
+        code: 'GENERATION_IN_FLIGHT',
+        message:
+          'A generation for this stage is already running. Reload the page to follow it — nothing is lost.',
+        retryable: true,
+      }),
+      { status: 200, headers: { 'content-type': GENERATION_STREAM_CONTENT_TYPE } },
+    );
+  }
+
   // Assembled before the stream opens, so a context that cannot be read is an error the client gets
   // as a status code rather than as a half-written document (FR-008 AC-6).
   //

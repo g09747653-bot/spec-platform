@@ -184,6 +184,51 @@ export function createGenerationStore(db: SchemaDatabase) {
     },
 
     /**
+     * The session's generation that is still in flight, if there is one (round 5, Р-3).
+     *
+     * A page loaded while a run is going had no way to know it: nothing resolved the run, so the
+     * card offered **Generate** — and clicking it started a *second* run over the same stage, which
+     * is exactly the "no duplicates" half of the M3 resume rule. The page now reattaches to this run
+     * instead of inviting a duplicate of it.
+     *
+     * Scoped by session, not by owner, because the caller already resolved the session through an
+     * owner-scoped repository — the same contract `assembleWorkflowSnapshot` carries.
+     *
+     * **"In flight" is the complement of the two terminal statuses, not `running` alone.** A run that
+     * has failed over carries `restarted` until the next provider produces something, and on the
+     * gate's chain — where the funded provider was refusing every call — *every* run spent most of
+     * its life in exactly that state. Asking for `running` therefore answered "nothing is happening"
+     * about a generation that was very much happening, which is how a page kept offering Generate
+     * over a live run through several gate walks. Terminal is the property worth naming: a run is in
+     * flight until it is `complete` or `failed`.
+     */
+    async activeRunForSession(
+      sessionId: string,
+    ): Promise<{ runId: string; stage: string; attempt: number } | null> {
+      if (!UUID.test(sessionId)) return null;
+
+      const rows = await queryRows(
+        db,
+        sql`
+          SELECT id, stage, attempt
+          FROM ${generationRuns}
+          WHERE session_id = ${sessionId}::uuid
+            AND status NOT IN ('complete', 'failed')
+          ORDER BY created_at DESC
+          LIMIT 1
+        `,
+        z.object({
+          id: z.uuid(),
+          stage: z.string(),
+          attempt: z.number().int().positive(),
+        }),
+      );
+
+      const row = rows[0];
+      return row === undefined ? null : { runId: row.id, stage: row.stage, attempt: row.attempt };
+    },
+
+    /**
      * The run's liveness, without the ownership join.
      *
      * The resume stream polls this while it follows a run in flight (D-15: one long-running function

@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { Button } from '../ui/button';
@@ -8,6 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Input, Label, Textarea } from '../ui/field';
 
 import type { QuestionRoundModel, RoundQuestionModel } from './question-round';
+import { useSessionRequest } from './useSessionRequest';
+import { WaitingOn } from './waiting-on';
 
 /**
  * The MCQ card (task 34; FR-005 AC-1..AC-6).
@@ -23,7 +24,22 @@ import type { QuestionRoundModel, RoundQuestionModel } from './question-round';
 interface McqCardProps {
   sessionId: string;
   round: QuestionRoundModel;
+  /**
+   * How long to keep believing the server is still working (round 5, Р-3).
+   *
+   * Submitting a card is not a stage transition, but it has the same shape and the same teeth:
+   * during the grounding interview the handler refreshes the session summary with a live model call
+   * *after* persisting the answers, so a submitted card can sit there for the length of a provider
+   * chain. The customer's own gate session shows a ten-and-a-half minute gap at exactly that point.
+   */
+  deadlineMs: number;
 }
+
+/** What each action is waiting for, in the words the status line reads out. */
+const WAITING_FOR: Record<string, string> = {
+  submit: 'your answers to be recorded',
+  reply: 'your reply to be read',
+};
 
 interface QuestionState {
   selected: string[];
@@ -33,15 +49,16 @@ interface QuestionState {
 const emptyState = (questions: readonly RoundQuestionModel[]): Record<string, QuestionState> =>
   Object.fromEntries(questions.map((question) => [question.id, { selected: [], other: '' }]));
 
-export function McqCard({ sessionId, round }: McqCardProps) {
-  const router = useRouter();
+export function McqCard({ sessionId, round, deadlineMs }: McqCardProps) {
   const [state, setState] = useState<Record<string, QuestionState>>(() =>
     emptyState(round.questions),
   );
   const [replyMode, setReplyMode] = useState(false);
   const [reply, setReply] = useState('');
-  const [busy, setBusy] = useState<'submit' | 'reply' | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { state: request, elapsedSeconds, send, abandon } = useSessionRequest(deadlineMs);
+
+  const busy = request.running;
+  const error = request.notice;
 
   const questionState = (id: string): QuestionState => state[id] ?? { selected: [], other: '' };
 
@@ -65,27 +82,7 @@ export function McqCard({ sessionId, round }: McqCardProps) {
   });
 
   async function post(body: unknown, action: 'submit' | 'reply') {
-    setBusy(action);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/sessions/${sessionId}/answers`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        setError('That did not go through. Please try again.');
-        return;
-      }
-
-      router.refresh();
-    } catch {
-      setError('That did not go through. Please try again.');
-    } finally {
-      setBusy(null);
-    }
+    await send(action, `/api/sessions/${sessionId}/answers`, body);
   }
 
   return (
@@ -231,6 +228,20 @@ export function McqCard({ sessionId, round }: McqCardProps) {
                 {busy === 'reply' ? 'Sending…' : 'Send reply'}
               </Button>
             </div>
+          )}
+
+          {/*
+            Round 5, Р-3. The card replaces the whole interview panel while it is pending, so a
+            submission that hangs takes every other control with it: before this, the only things
+            left on screen were the reply toggle — which would have started a *second* long request
+            — and the export button. Stopping is the honest option, and it is now on screen.
+          */}
+          {busy !== null && (
+            <WaitingOn
+              what={WAITING_FOR[busy] ?? 'the server'}
+              elapsedSeconds={elapsedSeconds}
+              onStop={abandon}
+            />
           )}
         </div>
       </CardContent>

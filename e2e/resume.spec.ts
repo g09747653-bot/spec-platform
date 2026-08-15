@@ -1,4 +1,5 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { Client } from 'pg';
 
 import {
   createSignedInUser,
@@ -8,6 +9,7 @@ import {
   startSession,
   type SignedInUser,
 } from './fixtures';
+import { TEST_DATABASE_URL } from './test-database';
 
 /**
  * Session resume, for each of the four pending kinds (task 75; FR-017).
@@ -20,6 +22,61 @@ import {
  * "Sign out and back in" is the sharpest of the three: it takes a new document, a new session cookie
  * and a new render from scratch, so nothing client-side can be carrying the answer.
  */
+
+async function withDatabase<T>(body: (client: Client) => Promise<T>): Promise<T> {
+  const client = new Client({ connectionString: TEST_DATABASE_URL });
+  await client.connect();
+
+  try {
+    return await body(client);
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * A generation left in flight, written exactly as the handler would have left it (round 5, Р-3).
+ *
+ * Seeded rather than clicked because the stub provider finishes a generation instantly: there is no
+ * honest click that holds a run open long enough for a page load to land inside one, and the state
+ * under test is precisely "a page loads while a run is going".
+ */
+async function seedRunningGeneration(
+  projectUrl: string,
+  stage: string,
+  deltas: readonly string[],
+): Promise<string> {
+  const projectId = projectUrl.split('/').at(-1) ?? '';
+
+  return withDatabase(async (client) => {
+    const session = await client.query<{ id: string }>(
+      'SELECT id FROM sessions WHERE project_id = $1',
+      [projectId],
+    );
+
+    const run = await client.query<{ id: string }>(
+      "INSERT INTO generation_runs (session_id, stage, status, attempt) VALUES ($1, $2, 'running', 1) RETURNING id",
+      [session.rows[0]?.id ?? '', stage],
+    );
+    const runId = run.rows[0]?.id ?? '';
+
+    for (const [sequence, delta] of deltas.entries()) {
+      await client.query(
+        'INSERT INTO generation_chunks (run_id, sequence, delta) VALUES ($1, $2, $3)',
+        [runId, sequence, delta],
+      );
+    }
+
+    return runId;
+  });
+}
+
+/** Ends the seeded run the way an exhausted provider chain would. */
+async function failRun(runId: string): Promise<void> {
+  await withDatabase(async (client) => {
+    await client.query("UPDATE generation_runs SET status = 'failed' WHERE id = $1", [runId]);
+  });
+}
 
 /** Signs out, signs back in as the same person, and returns to the session. */
 async function signOutAndBackIn(
@@ -160,6 +217,69 @@ test.describe('session resume', () => {
   });
 
   /*
+   * Round 5, Р-3 — **a page that comes back mid-generation reattaches instead of offering a second
+   * one.** Round 4 (Р-2) made the run outlive its reader; the page did not follow. Landing on a
+   * session while a run was going showed an empty card with a Generate button, and taking it started
+   * a *second* run over the same stage — the "no duplicates" half of the M3 resume rule, broken by a
+   * page that simply did not know a run existed.
+   *
+   * Found by the M6 gate walk (А-2.1), which is the point of walking it.
+   */
+  test('a generation in flight is reattached to, not duplicated (Р-3)', async ({
+    page,
+    context,
+  }) => {
+    await signIn(context, await createSignedInUser('resumer'));
+    const projectUrl = await startSession(page, 'A tool whose generation outlives its page');
+    await reachDrafting(page);
+
+    /*
+     * A run in flight, seeded exactly as the handler would have left it: a `running` row for the
+     * stage the session is on, and two batches already in the durable chunk log. Seeding is what
+     * makes this deterministic — the stub provider finishes instantly, so no honest click can hold a
+     * run open long enough for a page load to land inside it.
+     */
+    const runId = await seedRunningGeneration(projectUrl, 'constitution', [
+      '# Constitution\n\n',
+      '## Project Vision\n',
+    ]);
+
+    let generationsStarted = 0;
+    await page.route('**/api/sessions/*/generate', async (route) => {
+      generationsStarted += 1;
+      await route.fallback();
+    });
+
+    await page.goto(projectUrl);
+    await expect(page.getByTestId('session')).toBeVisible();
+
+    /*
+     * First, the part that owes nothing to JavaScript: the server rendered the run in flight, so the
+     * control that would have duplicated it is not on offer — Stop is. This is asserted before the
+     * streamed text because it must hold whether or not the reattaching effect has run yet.
+     */
+    await expect(page.getByTestId('stop-generation')).toBeEnabled();
+    await expect(page.getByTestId('generate-spec')).toHaveCount(0);
+
+    // Then the reattachment itself: the text on screen is the durable log replayed.
+    await expect(page.getByTestId('spec-stream')).toContainText('# Constitution', {
+      timeout: 20_000,
+    });
+    // Both batches, and patiently: a reattach that lands twice replays from the start, so the second
+    // batch can arrive after the first has been drawn once already.
+    await expect(page.getByTestId('spec-stream')).toContainText('Project Vision', {
+      timeout: 20_000,
+    });
+
+    expect(generationsStarted, 'landing on a running generation must not start another').toBe(0);
+
+    // When the run ends badly, the reattached page is told — it does not sit there for ever.
+    await failRun(runId);
+    await expect(page.getByTestId('generation-error')).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId('generate-spec')).toBeEnabled();
+  });
+
+  /*
    * AC-6, the half that is not about reloading: a request that never completes must leave the
    * session exactly as it was. The route is aborted mid-flight, which is what a dropped connection
    * looks like from the server's side of a fetch.
@@ -185,9 +305,20 @@ test.describe('session resume', () => {
       .getByTestId('proceed')
       .click()
       .catch(() => undefined);
+
+    /*
+     * Wait for the dropped request to be *reported* before navigating (round 5, Р-3). A settled
+     * request now re-reads the server whatever its outcome, so leaving immediately raced that
+     * refresh — the assertion below is about persisted state, and it should be taken after the page
+     * has finished saying what happened, not in the middle of it.
+     */
+    await expect(page.getByTestId('spec-error')).toContainText('did not reach the server');
     await page.unroute('**/api/sessions/*/transition');
 
-    await page.goto(projectUrl);
+    // Tolerant of that refresh being in flight: a navigation interrupted by the page's own re-read
+    // is not a failure, it is the two of them arriving at the same place.
+    await page.goto(projectUrl).catch(() => page.goto(projectUrl));
+    await expect(page.getByTestId('session')).toBeVisible();
 
     expect(await page.getByTestId('stage-substage').textContent()).toBe(before.substage);
     expect(await page.getByTestId('spec-revision-number').textContent()).toBe(before.revision);

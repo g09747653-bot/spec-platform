@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { Button } from '../ui/button';
@@ -9,6 +8,8 @@ import { Input, Label } from '../ui/field';
 
 import { McqCard } from './mcq-card';
 import type { QuestionRoundModel } from './question-round';
+import { WaitingOn } from './waiting-on';
+import { useSessionRequest } from './useSessionRequest';
 
 /**
  * The interview surface of a session (tasks 34/37/38; FR-005; FR-006).
@@ -23,6 +24,12 @@ import type { QuestionRoundModel } from './question-round';
  *   unmet need, recorded directly;
  * - the door to the next step: a transition request the server evaluates through the real gate
  *   (task 38) — the button never decides anything, it only asks.
+ *
+ * Round 5, Р-3: every request this panel starts runs through `useSessionRequest`, so while one is
+ * in flight the panel offers `stop-waiting` beside the disabled control and an elapsed reading
+ * next to it. The door is the reason: entering `review` runs the review agent inside the transition
+ * request, so "the gate is being checked" can honestly last minutes — and before this, those
+ * minutes looked exactly like a page that had died.
  */
 export interface TransitionTargetModel {
   label: string;
@@ -44,7 +51,19 @@ export interface InterviewPanelProps {
   unmetNeeds: readonly string[];
   summaryPersisted: boolean;
   target: TransitionTargetModel | null;
+  /**
+   * How long to keep believing the server is still working, derived from its own provider chain
+   * (round 5, Р-3). Past it the request is abandoned and said so, rather than held forever.
+   */
+  deadlineMs: number;
 }
+
+/** What each action is waiting for, in the words the status line reads out. */
+const WAITING_FOR: Record<string, string> = {
+  ask: 'the next round of questions',
+  proceed: 'the gate to answer',
+  fallback: 'your answers to be recorded',
+};
 
 export function InterviewPanel({
   sessionId,
@@ -56,48 +75,16 @@ export function InterviewPanel({
   unmetNeeds,
   summaryPersisted,
   target,
+  deadlineMs,
 }: InterviewPanelProps) {
-  const router = useRouter();
-  const [busy, setBusy] = useState<'ask' | 'proceed' | 'fallback' | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const { state, elapsedSeconds, send, abandon } = useSessionRequest(deadlineMs);
   const [fallbackText, setFallbackText] = useState<Record<string, string>>({});
 
-  async function post(url: string, body: unknown, action: 'ask' | 'proceed' | 'fallback') {
-    setBusy(action);
-    setNotice(null);
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        const payload: unknown = await response.json().catch(() => null);
-        const message =
-          typeof payload === 'object' &&
-          payload !== null &&
-          'error' in payload &&
-          typeof payload.error === 'object' &&
-          payload.error !== null &&
-          'message' in payload.error &&
-          typeof payload.error.message === 'string'
-            ? payload.error.message
-            : 'That did not go through. Please try again.';
-        setNotice(message);
-      }
-
-      router.refresh();
-    } catch {
-      setNotice('That did not go through. Please try again.');
-    } finally {
-      setBusy(null);
-    }
-  }
+  const busy = state.running;
+  const notice = state.notice;
 
   if (pendingRound !== null) {
-    return <McqCard sessionId={sessionId} round={pendingRound} />;
+    return <McqCard sessionId={sessionId} round={pendingRound} deadlineMs={deadlineMs} />;
   }
 
   const showFallback = !canAskMore && unmetNeeds.length > 0;
@@ -115,6 +102,21 @@ export function InterviewPanel({
         {notice !== null && (
           <p role="alert" data-testid="interview-notice" className="text-sm text-amber-700">
             {notice}
+          </p>
+        )}
+
+        {/*
+          Round 5, Р-3 item 4. The budget running out used to be told by *absence*: the ask button
+          vanished, and — with every need satisfied — nothing replaced it, so the only account the
+          user got of why questions had stopped was a rejection reading "That step is not available
+          yet". The state is named where the state is, with what is exhausted and what to do next.
+        */}
+        {!canAskMore && (
+          <p className="text-ink-muted text-sm" data-testid="rounds-exhausted">
+            {`All ${String(roundBudget)} question rounds for this stage have been used, so nothing further will be asked here. `}
+            {unmetNeeds.length > 0
+              ? 'Answer what is still open below, then move on to the next step.'
+              : 'Everything this stage needed to ask has been answered — move on to the next step.'}
           </p>
         )}
 
@@ -153,7 +155,7 @@ export function InterviewPanel({
                   .map((need) => ({ name: need, text: (fallbackText[need] ?? '').trim() }))
                   .filter((item) => item.text !== '');
 
-                void post(`/api/sessions/${sessionId}/answers`, { fallback: items }, 'fallback');
+                void send('fallback', `/api/sessions/${sessionId}/answers`, { fallback: items });
               }}
               className="self-start"
             >
@@ -176,7 +178,7 @@ export function InterviewPanel({
               data-testid="ask-round"
               disabled={busy === 'ask'}
               onClick={() => {
-                void post(`/api/sessions/${sessionId}/rounds`, undefined, 'ask');
+                void send('ask', `/api/sessions/${sessionId}/rounds`);
               }}
             >
               {busy === 'ask' ? 'Preparing questions…' : 'Ask questions'}
@@ -189,14 +191,10 @@ export function InterviewPanel({
               data-testid="proceed"
               disabled={busy === 'proceed'}
               onClick={() => {
-                void post(
-                  `/api/sessions/${sessionId}/transition`,
-                  {
-                    toStage: target.toStage,
-                    ...(target.toSubstage === null ? {} : { toSubstage: target.toSubstage }),
-                  },
-                  'proceed',
-                );
+                void send('proceed', `/api/sessions/${sessionId}/transition`, {
+                  toStage: target.toStage,
+                  ...(target.toSubstage === null ? {} : { toSubstage: target.toSubstage }),
+                });
               }}
             >
               {busy === 'proceed' ? 'Checking the gate…' : target.label}
@@ -209,6 +207,19 @@ export function InterviewPanel({
             </span>
           )}
         </div>
+
+        {/*
+          The way out, offered for as long as anything this panel started is running (Р-3 item 2).
+          It is rendered outside the row above so it cannot be mistaken for a fourth action: it is
+          not another thing to do, it is permission to stop doing this one.
+        */}
+        {busy !== null && (
+          <WaitingOn
+            what={WAITING_FOR[busy] ?? 'the server'}
+            elapsedSeconds={elapsedSeconds}
+            onStop={abandon}
+          />
+        )}
       </CardContent>
     </Card>
   );
