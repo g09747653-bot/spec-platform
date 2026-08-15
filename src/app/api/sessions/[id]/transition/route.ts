@@ -12,8 +12,12 @@ import { createReviewAgent } from '@/modules/agents/review/review-agent';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
 import { createSessionRepository } from '@/modules/projects/repositories/sessions';
-import { isCoreSpecType } from '@/modules/specs/model/spec-files';
-import { createReviewRepository } from '@/modules/specs/repositories/reviews';
+import { lintSpecDocument, type LintFinding } from '@/modules/specs/lint';
+import { isCoreSpecType, type CoreSpecType } from '@/modules/specs/model/spec-files';
+import {
+  createReviewRepository,
+  type StoredReviewItem,
+} from '@/modules/specs/repositories/reviews';
 import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
 import { createSpecFileRepository } from '@/modules/specs/repositories/spec-files';
 import { errorResponse, jsonResponse, type ErrorCode } from '@/modules/web/api/responses';
@@ -43,15 +47,78 @@ const TransitionRequest = z.object({
 });
 
 /**
- * Produces the review of a stage's approved spec on entry to `review` (task 56; FR-010 AC-1).
+ * Turns a deterministic finding into a board item (task 114; А-3 У-3).
+ *
+ * `blocking` and `confidence: 10` are not a judgement about importance — they are what a
+ * *measurement* looks like on a card built for opinions. A cross-reference either resolves or it
+ * does not; there is no version of that finding the reviewer is 7/10 sure about. `source: 'linter'`
+ * is what lets the card say so instead of printing a confidence score that would be theatre.
+ */
+function asBoardItem(finding: LintFinding): StoredReviewItem {
+  return {
+    id: finding.id,
+    sectionPath: finding.sectionPath,
+    title: finding.title,
+    body: finding.body,
+    suggestion: finding.suggestion,
+    confidence: 10,
+    severity: 'blocking',
+    source: 'linter',
+  };
+}
+
+/**
+ * The deterministic pass over the approved revision (task 114).
+ *
+ * Reads the previous **approved** revision (identifier stability) and the rest of the approved
+ * bundle (cross-references, and requirement→task traceability for a tasks document). Everything it
+ * needs is already persisted, so it costs no model call — which is why it runs before the review
+ * agent and survives it: a board with linter findings and no model opinion is still a useful board.
+ */
+async function lintApprovedRevision(
+  db: SchemaDatabase,
+  scope: OwnerScope,
+  projectId: string,
+  specType: CoreSpecType,
+  approved: { id: string; specFileId: string; revisionNumber: number; content: string },
+): Promise<StoredReviewItem[]> {
+  const revisions = createRevisionRepository(db);
+
+  const history = await revisions.history(approved.specFileId);
+  const earlier = history.filter(
+    (revision) => revision.approved && revision.revisionNumber < approved.revisionNumber,
+  );
+  const previousContent = earlier[earlier.length - 1]?.content ?? null;
+
+  const bundle: Record<string, string> = {};
+  for (const file of await createSpecFileRepository(db).approvedForExport(scope, projectId)) {
+    bundle[file.specType] = file.content;
+  }
+
+  return lintSpecDocument({
+    specType,
+    content: approved.content,
+    previousContent,
+    bundle,
+  }).map(asBoardItem);
+}
+
+/**
+ * Produces the review of a stage's approved spec on entry to `review` (task 56; FR-010 AC-1;
+ * task 114 for the deterministic half).
  *
  * Returns the review's id, or `null` when this transition is not an entry into `review`, when the
- * stage has no approved revision, or when the model would not answer usefully.
+ * stage has no approved revision, or when there is nothing at all to show.
  *
  * **A review that cannot be produced is not a failed transition.** The session has legitimately
  * moved, the approved revision is durable, and the board simply has nothing to show yet. Undoing a
  * gated, permitted move to protect an advisory artifact would trade the user's progress for a
  * second opinion, which is the wrong way round (P5).
+ *
+ * **The two halves of a board are not equally fragile.** The linters read the document and answer;
+ * the reviewer asks a model and may get nothing. So the linters run first and their findings are
+ * kept whatever happens next: an exhausted provider chain now costs the *opinions*, not the
+ * measurements, and a session on a bad day still gets told that FR-042 resolves to nothing.
  *
  * `create` is idempotent per revision, so re-entering `review` after a backward step re-presents the
  * same review rather than replacing it — the content is immutable, so a second review of the same
@@ -78,6 +145,7 @@ async function ensureStageReview(
   if (approved === null) return null;
 
   const reviews = createReviewRepository(db);
+  const linterItems = await lintApprovedRevision(db, scope, projectId, position.stage, approved);
 
   /*
    * What a re-review is verifying (task 113; Эталон §1.3).
@@ -125,19 +193,48 @@ async function ensureStageReview(
     });
   } catch (error) {
     if (!(error instanceof AllProvidersFailedError)) throw error;
-    return null;
+    review = null;
   }
 
-  if (review.kind !== 'review') return null;
+  const opinion = review?.kind === 'review' ? review : null;
+
+  /*
+   * Machine findings first, and a model finding that borrowed a linter's id is dropped rather than
+   * stored beside it. Two items with one id would make `selected_item_ids` ambiguous, which is the
+   * one thing FR-010 AC-7 cannot survive — and between a measurement and an opinion wearing its
+   * name, the measurement is the one to keep.
+   */
+  const machineIds = new Set(linterItems.map((item) => item.id));
+  const items = [
+    ...linterItems,
+    ...(opinion?.items ?? []).filter((item) => !machineIds.has(item.id)),
+  ];
+
+  // Nothing measured and nothing said: there is no board to show, and the transition still stands.
+  if (items.length === 0 && opinion === null) return null;
 
   const stored = await reviews.create({
     specRevisionId: approved.id,
-    outcome: review.artifact.verdict,
-    summary: review.artifact.summary,
-    items: review.items,
+    /*
+     * A blocking item and a passing verdict cannot both be true — the artifact schema refuses that
+     * combination for the model's own findings, and a linter finding is no less blocking for having
+     * arrived from a different producer.
+     */
+    outcome: items.some((item) => item.severity === 'blocking')
+      ? 'needs_revision'
+      : (opinion?.artifact.verdict ?? 'pass'),
+    summary: opinion?.artifact.summary ?? machineOnlySummary(linterItems.length),
+    items,
   });
 
   return stored.id;
+}
+
+/** What the board says when the chain gave nothing and only the linters have spoken (task 114). */
+function machineOnlySummary(findings: number): string {
+  return findings === 1
+    ? 'The automated checks found one problem in this document. The AI reviewer could not be reached, so nothing here is its opinion.'
+    : `The automated checks found ${String(findings)} problems in this document. The AI reviewer could not be reached, so nothing here is its opinion.`;
 }
 
 /** Reasons that are their own HTTP code in the solution's error table; the rest are GATE_REJECTED. */

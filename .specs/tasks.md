@@ -1432,7 +1432,7 @@ Goal: the reviewer that makes the product feel intelligent — structured findin
   - Acceptance Criteria: the re-review prompt provably receives the selected items; unselected items are not re-litigated (fixture); each cycle appends, never overwrites; the loop is bounded with honest copy on exhaustion (gate-copy pattern).
   - _Dependencies: 111, 112_ · _Requirements: Эталон §1.3_ · _Touches: `src/modules/workflow/transition-table.ts`, `src/modules/agents/review/**`_ · _Complexity: Large_ · _Parallel-safe: no_
 
-- [ ] 114\. Deterministic spec linters (У-3)
+- [x] 114\. Deterministic spec linters (У-3)
   - Pre-review linter pass on each drafted revision: cross-reference resolution (FR/NFR/DR/IR mentions exist), identifier stability vs the previous revision (no renumbering), EARS conformance for requirement lines, requirement→task traceability for tasks documents. Findings merge into the board as machine items (source `linter`, confidence 10) under Must Fix.
   - Acceptance Criteria: seeded broken cross-reference, renumbered identifier, and non-EARS requirement are each caught; a clean document yields zero linter items; linter items cost no model call.
   - _Dependencies: 111_ · _Requirements: А-3 У-3; Эталон §6_ · _Touches: `src/modules/specs/lint/**` (new)_ · _Complexity: Large_ · _Parallel-safe: yes_
