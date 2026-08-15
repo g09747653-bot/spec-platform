@@ -8,7 +8,7 @@ import {
   FALLBACK_QUESTION_ID_PREFIX,
   type AnsweredRound,
 } from '@/modules/projects/repositories/interview';
-import type { ProjectDetail } from '@/modules/projects/repositories/projects';
+import type { SessionDetail } from '@/modules/projects/repositories/sessions';
 import { createProposedChangeService } from '@/modules/specs/proposed-changes/proposed-change-service';
 import { createReviewRepository } from '@/modules/specs/repositories/reviews';
 import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
@@ -128,30 +128,54 @@ export function toPosition(stage: string, substage: string | null): StagePositio
     : { stage, substage };
 }
 
+/**
+ * The feed of **one chat**, not of the project (А-6).
+ *
+ * Rounds and runs are session-keyed columns and need no filtering. Revisions, reviews and proposals
+ * live under the *project*, because that is where the bundle lives — so they are attributed here:
+ *
+ * - a revision belongs to the chat named in `source_session_id`;
+ * - a revision with **no** source belongs to the project's **first** chat, which is the only chat
+ *   that existed when it was written. Not "to every chat" and not "to none": the fact is that it was
+ *   written before chats were distinguishable, and the first chat is the one that wrote it;
+ * - a review follows the revision it reviews, because it is a turn about that document;
+ * - a proposal follows its edit batch, and an unbatched one — an M4 refinement — follows the same
+ *   rule as an unattributed revision.
+ *
+ * Doing this in the composition root rather than in five SQL predicates keeps the rule stated once,
+ * in one paragraph, where it can be read against the two facts it rests on.
+ */
 export async function assembleFeedSource(
   db: SchemaDatabase,
   scope: OwnerScope,
-  project: ProjectDetail,
+  session: SessionDetail,
 ): Promise<FeedSource> {
   const [rounds, runs, revisions, reviews, proposals] = await Promise.all([
-    createInterviewRepository(db).roundHistory(project.sessionId),
-    createGenerationStore(db).runsForSession(project.sessionId),
-    createRevisionRepository(db).projectHistory(scope, project.id),
-    createReviewRepository(db).projectHistory(scope, project.id),
-    createProposedChangeService(db).historyForProject(scope, project.id),
+    createInterviewRepository(db).roundHistory(session.id),
+    createGenerationStore(db).runsForSession(session.id),
+    createRevisionRepository(db).projectHistory(scope, session.projectId),
+    createReviewRepository(db).projectHistory(scope, session.projectId),
+    createProposedChangeService(db).historyForProject(scope, session.projectId),
   ]);
+
+  const mine = (sourceSessionId: string | null): boolean =>
+    sourceSessionId === null ? session.primary : sourceSessionId === session.id;
+
+  const ownRuns = new Set(runs.map((run) => run.runId));
+  const ownRevisions = revisions.filter((revision) => mine(revision.sourceSessionId));
+  const ownRevisionIds = new Set(ownRevisions.map((revision) => revision.id));
 
   return {
     session: {
-      sessionId: project.sessionId,
-      projectId: project.id,
-      projectName: project.name,
-      initialPrompt: project.initialPrompt,
-      summary: project.summary,
-      createdAt: iso(project.createdAt),
-      position: toPosition(project.stage, project.substage),
-      completionCount: project.completionCount,
-      methodologyId: project.methodologyId,
+      sessionId: session.id,
+      projectId: session.projectId,
+      projectName: session.projectName,
+      initialPrompt: session.initialPrompt,
+      summary: session.summary,
+      createdAt: iso(session.createdAt),
+      position: toPosition(session.stage, session.substage),
+      completionCount: session.completionCount,
+      methodologyId: session.methodologyId,
       // Configuration in, so the projection itself reads no environment (task 113).
       revisionCycleBudget: getEnv().MAX_REVISION_CYCLES_PER_STAGE,
     },
@@ -163,7 +187,7 @@ export async function assembleFeedSource(
       attempt: run.attempt,
       createdAt: iso(run.createdAt),
     })),
-    revisions: revisions.map((revision) => ({
+    revisions: ownRevisions.map((revision) => ({
       revisionId: revision.id,
       specFileId: revision.specFileId,
       specType: revision.specType,
@@ -172,27 +196,34 @@ export async function assembleFeedSource(
       approved: revision.approved,
       createdAt: iso(revision.createdAt),
     })),
-    reviews: reviews.map((review) => ({
-      reviewId: review.id,
-      specFileId: review.specFileId,
-      specType: review.specType,
-      revisionNumber: review.revisionNumber,
-      outcome: review.outcome,
-      summary: review.summary,
-      items: review.items,
-      decision: review.decision,
-      selectedItemIds: review.selectedItemIds,
-      revisionNote: review.revisionNote,
-      createdAt: iso(review.createdAt),
-      decidedAt: review.decidedAt === null ? null : iso(review.decidedAt),
-    })),
-    proposals: proposals.map((proposal) => ({
-      proposedChangeId: proposal.id,
-      specFileId: proposal.specFileId,
-      fileName: proposal.fileName,
-      instruction: proposal.instruction,
-      status: proposal.status,
-      createdAt: iso(proposal.createdAt),
-    })),
+    reviews: reviews
+      .filter((review) => ownRevisionIds.has(review.specRevisionId))
+      .map((review) => ({
+        reviewId: review.id,
+        specFileId: review.specFileId,
+        specType: review.specType,
+        revisionNumber: review.revisionNumber,
+        outcome: review.outcome,
+        summary: review.summary,
+        items: review.items,
+        decision: review.decision,
+        selectedItemIds: review.selectedItemIds,
+        revisionNote: review.revisionNote,
+        createdAt: iso(review.createdAt),
+        decidedAt: review.decidedAt === null ? null : iso(review.decidedAt),
+      })),
+    proposals: proposals
+      .filter((proposal) =>
+        proposal.editBatchId === null ? session.primary : ownRuns.has(proposal.editBatchId),
+      )
+      .map((proposal) => ({
+        proposedChangeId: proposal.id,
+        specFileId: proposal.specFileId,
+        fileName: proposal.fileName,
+        instruction: proposal.instruction,
+        status: proposal.status,
+        editBatchId: proposal.editBatchId,
+        createdAt: iso(proposal.createdAt),
+      })),
   };
 }

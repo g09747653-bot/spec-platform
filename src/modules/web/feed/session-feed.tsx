@@ -43,6 +43,13 @@ export interface SessionFeedProps {
   refineFileId: string | null;
   /** Whether the position drafts a document (round 2, Д-4). */
   canGenerate: boolean;
+  /**
+   * The sentence the Describe step opens with, for an Edit chat (task 118; Эталон §5.1).
+   *
+   * The session's own `initial_prompt`, handed down rather than stored a second time on the round —
+   * one sentence, one row, shown where the user finishes it.
+   */
+  describePrefill: string | null;
   /** A run the server reported in flight when this page rendered (round 5, Р-3). */
   activeRun: { runId: string; attempt: number } | null;
   /** How many files the bundle currently holds, for the completion panel. */
@@ -59,6 +66,7 @@ export function SessionFeed({
   proposal,
   refineFileId,
   canGenerate,
+  describePrefill,
   activeRun,
   bundleFileCount,
 }: SessionFeedProps) {
@@ -110,6 +118,7 @@ export function SessionFeed({
             block={block}
             pending={isTail}
             deadlineMs={deadlineMs}
+            freeTextPrefill={describePrefill}
           />
         );
 

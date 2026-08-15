@@ -33,6 +33,16 @@ export type MethodologyId = string;
 
 export const DEFAULT_METHODOLOGY_ID = MYSPEC_GREENFIELD_V1.id;
 
+/**
+ * The methodology an Edit chat walks (task 118).
+ *
+ * Named here rather than typed as a string at each call site: exactly one configuration has
+ * `chatClass: 'edit'` today, and the endpoint that starts an edit needs *that* one, not "whichever
+ * edit config happens to be first". If a second edit methodology ever ships, this constant is the
+ * one place that has to become a choice.
+ */
+export const EDIT_METHODOLOGY_ID = MYSPEC_EDIT_V1.id;
+
 const BY_ID: ReadonlyMap<string, MethodologyConfig> = new Map(
   METHODOLOGY_CONFIGS.map((config) => [config.id, config] as const),
 );

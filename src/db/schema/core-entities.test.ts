@@ -90,17 +90,51 @@ describe('core entity schema (task 11)', () => {
     expect(await database.db.select().from(workflowState)).toHaveLength(0);
   });
 
-  it('holds one session per project (ERD: PROJECTS ||--|| SESSIONS)', async () => {
-    const owner = await createUser('one-session@example.test');
+  /*
+   * The relationship inverted in M9п (amendment А-6). The assertion is inverted with it rather than
+   * deleted: "a project holds many chats" is the property tasks 118 and 120 are built on, and it is
+   * worth a test for exactly the reason the old one was — a UNIQUE that came back would break the
+   * Edit workflow silently, at insert time, in a place no page is looking.
+   */
+  it('holds many sessions per project (ERD: PROJECTS ||--o{ SESSIONS; А-6)', async () => {
+    const owner = await createUser('many-sessions@example.test');
     const project = await createProject(owner.id);
 
-    await database.db.insert(sessions).values({ projectId: project.id, initialPrompt: 'first' });
+    await database.db
+      .insert(sessions)
+      .values({ projectId: project.id, title: 'Generate', initialPrompt: 'first' });
+    await database.db
+      .insert(sessions)
+      .values({ projectId: project.id, title: 'Edit', initialPrompt: 'second' });
+
+    const rows = await database.db
+      .select()
+      .from(sessions)
+      .where(sql`${sessions.projectId} = ${project.id}`);
+
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.title).sort()).toEqual(['Edit', 'Generate']);
+  });
+
+  it('names every chat, defaulting rather than leaving one blank (task 120)', async () => {
+    const owner = await createUser('chat-title@example.test');
+    const project = await createProject(owner.id);
+
+    const [row] = await database.db
+      .insert(sessions)
+      .values({ projectId: project.id, initialPrompt: 'no title given' })
+      .returning();
+
+    expect(row?.title).toBe('Untitled chat');
+    expect(row?.archived).toBe(false);
 
     const message = await captureDatabaseError(() =>
-      database.db.insert(sessions).values({ projectId: project.id, initialPrompt: 'second' }),
+      database.db
+        .insert(sessions)
+        .values({ projectId: project.id, title: '   ', initialPrompt: 'blank title' }),
     );
 
-    expect(message).toMatch(/sessions_project_id_unique|duplicate key/i);
+    expect(message).toMatch(/sessions_title_not_blank/i);
   });
 
   it('stores the prompt verbatim, including newlines and leading spaces (FR-003 AC-1)', async () => {

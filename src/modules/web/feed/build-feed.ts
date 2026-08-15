@@ -335,20 +335,55 @@ function revisionNoteBlocks(source: FeedSource): MessageBlock[] {
     }));
 }
 
+/**
+ * Proposals, grouped into the cards a person decides on (task 118).
+ *
+ * A cross-file edit is stored as one row per file — that is what makes it applicable atomically and
+ * what makes the pending-per-file index apply to it — but it is **one decision**, so it is one
+ * block. Grouping happens here rather than in the query for the same reason the chips are derived
+ * here: the projection owns what the conversation looks like, and the tables own what happened.
+ *
+ * An M4 refinement has no batch and is therefore its own group of one, through the same code path
+ * rather than around it.
+ */
 function proposalBlocks(source: FeedSource): ProposalBlock[] {
-  return source.proposals.map((proposal) => ({
-    kind: 'proposal',
-    id: `proposal:${proposal.proposedChangeId}`,
-    role: 'assistant',
-    stage: source.session.position.stage,
-    substage: null,
-    at: proposal.createdAt,
-    proposedChangeId: proposal.proposedChangeId,
-    specFileId: proposal.specFileId,
-    fileName: proposal.fileName,
-    instruction: proposal.instruction,
-    status: proposal.status,
-  }));
+  const groups = new Map<string, FeedSource['proposals'][number][]>();
+
+  for (const proposal of source.proposals) {
+    const key = proposal.editBatchId ?? `single:${proposal.proposedChangeId}`;
+    groups.set(key, [...(groups.get(key) ?? []), proposal]);
+  }
+
+  return [...groups.values()].flatMap((members): ProposalBlock[] => {
+    const ordered = [...members].sort((a, b) => (a.fileName < b.fileName ? -1 : 1));
+    const first = ordered[0];
+    if (first === undefined) return [];
+
+    return [
+      {
+        kind: 'proposal',
+        id: `proposal:${first.proposedChangeId}`,
+        role: 'assistant',
+        stage: source.session.position.stage,
+        substage: null,
+        // The batch was written by one statement, so its rows share an instant; the earliest is it.
+        at: ordered.reduce((earliest, member) =>
+          member.createdAt < earliest.createdAt ? member : earliest,
+        ).createdAt,
+        proposedChangeId: first.proposedChangeId,
+        specFileId: first.specFileId,
+        files: ordered.map((member) => ({
+          specFileId: member.specFileId,
+          fileName: member.fileName,
+        })),
+        fileName: first.fileName,
+        instruction: first.instruction,
+        // A batch is decided as a whole, so its members always agree; taking the first is exact.
+        status: first.status,
+        editBatchId: first.editBatchId,
+      },
+    ];
+  });
 }
 
 /**
@@ -388,11 +423,22 @@ function computeTail(source: FeedSource, blocks: readonly FeedBlock[]): FeedTail
     };
   }
 
-  const pendingProposal = source.proposals.find((proposal) => proposal.status === 'pending');
+  /*
+   * The pending proposal card, found among the **blocks** rather than among the rows.
+   *
+   * A cross-file edit is several rows and one card (task 118), and the card's id is decided by the
+   * grouping above. Reading the rows here would name a member the page never renders as a block, and
+   * the tail would point at nothing — which is how a decision typed in chat would stop matching the
+   * card on screen (FR-009 AC-7).
+   */
+  const pendingProposal = blocks.find(
+    (block): block is ProposalBlock => block.kind === 'proposal' && block.status === 'pending',
+  );
+
   if (pendingProposal !== undefined) {
     return {
       kind: 'pending-proposal',
-      blockId: idOf('proposal', pendingProposal.proposedChangeId),
+      blockId: pendingProposal.id,
       proposedChangeId: pendingProposal.proposedChangeId,
     };
   }

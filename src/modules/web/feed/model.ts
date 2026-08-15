@@ -197,11 +197,20 @@ export interface ReviewBlock extends FeedBlockBase {
 export interface ProposalBlock extends FeedBlockBase {
   kind: 'proposal';
   role: 'assistant';
+  /**
+   * The proposal the decision is addressed to. For a cross-file edit (task 118) that is the first
+   * member of the batch — the endpoint recognises the batch from it and decides the whole set, so
+   * the card has one id to send whether it shows one diff or four.
+   */
   proposedChangeId: string;
   specFileId: string;
+  /** Every file this card covers, in bundle order. One entry for an M4 refinement. */
+  files: readonly { specFileId: string; fileName: string }[];
   fileName: string;
   instruction: string;
   status: 'pending' | 'accepted' | 'rejected';
+  /** Present when this block is a cross-file edit rather than a single-file refinement. */
+  editBatchId: string | null;
 }
 
 /** The sealed session (FR-020 AC-3). */

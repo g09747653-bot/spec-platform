@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { createSignedInUser, downloadBundle, reachDrafting, signIn } from './fixtures';
+import { createSignedInUser, downloadBundle, projectIdOf, reachDrafting, signIn } from './fixtures';
 
 /**
  * The walking skeleton, end to end (task 23; SC-16; constitution — Testing Approaches item 2).
@@ -115,8 +115,10 @@ test.describe('walking skeleton', () => {
       await expect(intruderPage.getByText('Not found')).toBeVisible();
       await expect(intruderPage.getByText('recipe app')).toHaveCount(0);
 
+      // Export is a *project* route, and the page URL now names the session (А-6), so the project
+      // id is read from the page rather than derived from its address.
       const exportResponse = await intruderPage.request.get(
-        `${new URL(projectUrl).pathname.replace('/projects/', '/api/projects/')}/export`,
+        `/api/projects/${await projectIdOf(page)}/export`,
       );
       expect(exportResponse.status()).toBe(404);
     } finally {

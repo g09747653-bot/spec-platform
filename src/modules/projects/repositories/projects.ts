@@ -1,9 +1,9 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import type { SchemaDatabase } from '@/db';
 import { projects, sessions, workflowState } from '@/db/schema';
-import { queryOneRow } from '@/db/sql';
+import { queryOneRow, queryRows } from '@/db/sql';
 
 import type { OwnerScope } from '@/db/owner-scope';
 
@@ -28,12 +28,30 @@ export interface ProjectSummary {
   stage: string;
   substage: string | null;
   updatedAt: Date;
+  /**
+   * The project's primary chat — its earliest session, which is the Generate conversation that
+   * produced the bundle (А-6). Every project has one; Edit chats are added beside it.
+   */
+  sessionId: string;
+  /**
+   * How many chats the project holds. The list links straight into the chat when there is only one,
+   * so a project that has never been edited opens exactly where it always did.
+   */
+  sessionCount: number;
 }
 
-/** One project with its session and workflow position, as a session page resumes from (FR-017). */
+/**
+ * One project with its **primary** session and workflow position (FR-017).
+ *
+ * Since А-6 a project holds many chats, so "the project's session" had to become a definite one
+ * rather than the only one: it is the earliest, which is the Generate chat, because an Edit chat can
+ * only be created against a bundle that already exists. Callers that need a *particular* chat — the
+ * session page, every session endpoint — identify it by session id and go through
+ * `SessionRepository`; this is for the callers that mean "the conversation that produced this
+ * bundle": the export, the refinement language, the attachment set.
+ */
 export interface ProjectDetail extends ProjectSummary {
   createdAt: Date;
-  sessionId: string;
   initialPrompt: string;
   summary: string | null;
   qualityEnabled: boolean;
@@ -53,6 +71,47 @@ export interface ProjectDetail extends ProjectSummary {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
+ * The project's primary chat, as a join.
+ *
+ * `LATERAL … ORDER BY created_at ASC LIMIT 1` rather than a plain join, because a project now has
+ * several sessions and a plain join would multiply every row it touches. The tiebreak on `id` makes
+ * the choice total: two chats created in the same millisecond must still resolve to *one* primary,
+ * or the project list would reorder itself between renders of the same data.
+ */
+const PRIMARY_SESSION = sql`
+  JOIN LATERAL (
+    SELECT ${sessions}.id, ${sessions}.initial_prompt, ${sessions}.summary,
+           ${sessions}.quality_enabled, ${sessions}.methodology_id,
+           ${sessions}.completion_count, ${sessions}.content_language
+    FROM ${sessions}
+    WHERE ${sessions}.project_id = ${projects}.id
+    ORDER BY ${sessions}.created_at ASC, ${sessions}.id ASC
+    LIMIT 1
+  ) AS primary_session ON TRUE
+`;
+
+const ProjectSummaryRow = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  updated_at: z.coerce.date(),
+  session_id: z.uuid(),
+  stage: z.string(),
+  substage: z.string().nullable(),
+  session_count: z.union([z.number(), z.string()]),
+});
+
+const ProjectDetailRow = ProjectSummaryRow.extend({
+  created_at: z.coerce.date(),
+  initial_prompt: z.string(),
+  summary: z.string().nullable(),
+  quality_enabled: z.boolean(),
+  methodology_id: z.string(),
+  completion_count: z.number().int(),
+  content_language: z.string().nullable(),
+  version: z.number().int(),
+});
+
+/**
  * Project reads and writes, every one of them scoped to an owner (NFR-005; D-13).
  *
  * The repository is constructed with a database handle and exposes methods whose **first parameter
@@ -62,23 +121,46 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  */
 export function createProjectRepository(db: SchemaDatabase) {
   return {
-    /** Only the signed-in user's projects, most recently touched first (FR-002 AC-1). */
+    /**
+     * Only the signed-in user's projects, most recently touched first (FR-002 AC-1).
+     *
+     * The join is to the **primary** chat, not to every chat: since А-6 a plain inner join would
+     * return one row per conversation, so a project that had been edited twice would appear three
+     * times in the list. `PRIMARY_SESSION` picks the earliest, and `session_count` comes along
+     * because it decides where the row's link goes — into the chat when there is only one, into the
+     * project's chat list when there are more.
+     */
     async list(scope: OwnerScope): Promise<ProjectSummary[]> {
-      const rows = await db
-        .select({
-          id: projects.id,
-          name: projects.name,
-          stage: workflowState.stage,
-          substage: workflowState.substage,
-          updatedAt: projects.updatedAt,
-        })
-        .from(projects)
-        .innerJoin(sessions, eq(sessions.projectId, projects.id))
-        .innerJoin(workflowState, eq(workflowState.sessionId, sessions.id))
-        .where(eq(projects.ownerId, scope.userId))
-        .orderBy(desc(projects.updatedAt));
+      const rows = await queryRows(
+        db,
+        sql`
+          SELECT
+            ${projects}.id,
+            ${projects}.name,
+            ${projects}.updated_at,
+            primary_session.id AS session_id,
+            ${workflowState}.stage,
+            ${workflowState}.substage,
+            (SELECT count(*) FROM ${sessions} WHERE ${sessions}.project_id = ${projects}.id)
+              AS session_count
+          FROM ${projects}
+          ${PRIMARY_SESSION}
+          JOIN ${workflowState} ON ${workflowState}.session_id = primary_session.id
+          WHERE ${projects}.owner_id = ${scope.userId}::uuid
+          ORDER BY ${projects}.updated_at DESC
+        `,
+        ProjectSummaryRow,
+      );
 
-      return rows;
+      return rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        stage: row.stage,
+        substage: row.substage,
+        updatedAt: row.updated_at,
+        sessionId: row.session_id,
+        sessionCount: Number(row.session_count),
+      }));
     },
 
     /**
@@ -126,8 +208,8 @@ export function createProjectRepository(db: SchemaDatabase) {
           VALUES (${scope.userId}, ${input.name})
           RETURNING id
         ), new_session AS (
-          INSERT INTO ${sessions} (project_id, initial_prompt, audience_profile, content_language, methodology_id)
-          SELECT id, ${input.prompt}, ${input.audience}, ${input.contentLanguage}, ${methodologyId} FROM new_project
+          INSERT INTO ${sessions} (project_id, title, initial_prompt, audience_profile, content_language, methodology_id)
+          SELECT id, ${input.name}, ${input.prompt}, ${input.audience}, ${input.contentLanguage}, ${methodologyId} FROM new_project
           RETURNING id, project_id
         ), new_state AS (
           INSERT INTO ${workflowState} (session_id, stage, substage)
@@ -143,33 +225,59 @@ export function createProjectRepository(db: SchemaDatabase) {
       return { projectId: created.project_id, sessionId: created.session_id };
     },
 
-    /** The project with its session and workflow position, or `null` when it is not this owner's. */
+    /** The project with its primary chat and that chat's position, or `null` if not this owner's. */
     async findById(scope: OwnerScope, projectId: string): Promise<ProjectDetail | null> {
       if (!UUID.test(projectId)) return null;
 
-      const [row] = await db
-        .select({
-          id: projects.id,
-          name: projects.name,
-          createdAt: projects.createdAt,
-          updatedAt: projects.updatedAt,
-          sessionId: sessions.id,
-          initialPrompt: sessions.initialPrompt,
-          summary: sessions.summary,
-          qualityEnabled: sessions.qualityEnabled,
-          methodologyId: sessions.methodologyId,
-          completionCount: sessions.completionCount,
-          contentLanguage: sessions.contentLanguage,
-          stage: workflowState.stage,
-          substage: workflowState.substage,
-          version: workflowState.version,
-        })
-        .from(projects)
-        .innerJoin(sessions, eq(sessions.projectId, projects.id))
-        .innerJoin(workflowState, eq(workflowState.sessionId, sessions.id))
-        .where(and(eq(projects.id, projectId), eq(projects.ownerId, scope.userId)));
+      const rows = await queryRows(
+        db,
+        sql`
+          SELECT
+            ${projects}.id,
+            ${projects}.name,
+            ${projects}.created_at,
+            ${projects}.updated_at,
+            primary_session.id AS session_id,
+            primary_session.initial_prompt,
+            primary_session.summary,
+            primary_session.quality_enabled,
+            primary_session.methodology_id,
+            primary_session.completion_count,
+            primary_session.content_language,
+            ${workflowState}.stage,
+            ${workflowState}.substage,
+            ${workflowState}.version,
+            (SELECT count(*) FROM ${sessions} WHERE ${sessions}.project_id = ${projects}.id)
+              AS session_count
+          FROM ${projects}
+          ${PRIMARY_SESSION}
+          JOIN ${workflowState} ON ${workflowState}.session_id = primary_session.id
+          WHERE ${projects}.id = ${projectId}::uuid
+            AND ${projects}.owner_id = ${scope.userId}::uuid
+        `,
+        ProjectDetailRow,
+      );
 
-      return row ?? null;
+      const row = rows[0];
+      if (row === undefined) return null;
+
+      return {
+        id: row.id,
+        name: row.name,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        sessionId: row.session_id,
+        sessionCount: Number(row.session_count),
+        initialPrompt: row.initial_prompt,
+        summary: row.summary,
+        qualityEnabled: row.quality_enabled,
+        methodologyId: row.methodology_id,
+        completionCount: row.completion_count,
+        contentLanguage: row.content_language,
+        stage: row.stage,
+        substage: row.substage,
+        version: row.version,
+      };
     },
 
     /**

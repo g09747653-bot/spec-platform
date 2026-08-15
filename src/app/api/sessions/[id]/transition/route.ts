@@ -9,9 +9,15 @@ import type { OwnerScope } from '@/db/owner-scope';
 import { AllProvidersFailedError } from '@/modules/adapters/llm';
 import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
 import { createReviewAgent } from '@/modules/agents/review/review-agent';
+import { methodologyConfig } from '@/modules/methodologies';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
+import { describeQuestionSet } from '@/modules/projects/create-chat';
+import { createInterviewRepository } from '@/modules/projects/repositories/interview';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
-import { createSessionRepository } from '@/modules/projects/repositories/sessions';
+import {
+  createSessionRepository,
+  type OwnedSession,
+} from '@/modules/projects/repositories/sessions';
 import { lintSpecDocument, type LintFinding } from '@/modules/specs/lint';
 import { isCoreSpecType, type CoreSpecType } from '@/modules/specs/model/spec-files';
 import {
@@ -24,6 +30,7 @@ import { errorResponse, jsonResponse, type ErrorCode } from '@/modules/web/api/r
 import { applyTransition } from '@/modules/workflow/apply-transition';
 import { registeredCapabilityIds } from '@/modules/workflow/capabilities';
 import {
+  isAskingStage,
   isSpecStage,
   STAGES,
   SUBSTAGES,
@@ -124,6 +131,40 @@ async function lintApprovedRevision(
  * same review rather than replacing it — the content is immutable, so a second review of the same
  * bytes could only ever disagree with the one the user is already looking at.
  */
+/**
+ * The Describe card of an Edit chat, created once per stage entry (task 118).
+ *
+ * The Edit workflow's second step is a sentence the user finishes, and the reference product opens
+ * it prefilled: «I want to update spec {bundle} to …». That prefill is the session's own
+ * `initial_prompt` — stored at the Reference step and shown here — so the card and the record cannot
+ * drift into two different accounts of what the chat is about.
+ *
+ * Idempotent by round number: entering `collect` again after a backward step re-presents the round
+ * that is already there rather than stacking a second identical question, exactly as
+ * `ensureStageReview` re-presents its board.
+ */
+async function ensureDescribeRound(
+  db: SchemaDatabase,
+  session: OwnedSession,
+  position: WorkflowPosition,
+): Promise<void> {
+  if (position.substage !== 'collect') return;
+  if (methodologyConfig(session.methodologyId).chatClass !== 'edit') return;
+  if (!isAskingStage(position.stage)) return;
+
+  const interview = createInterviewRepository(db);
+  const existing = await interview.latestRound(session.id, position.stage);
+  if (existing !== null) return;
+
+  await interview.createRound({
+    sessionId: session.id,
+    stage: position.stage,
+    roundNumber: 1,
+    questions: describeQuestionSet(position.stage),
+    declaredNeeds: ['requested-change'],
+  });
+}
+
 async function ensureStageReview(
   db: SchemaDatabase,
   scope: OwnerScope,
@@ -312,6 +353,19 @@ export async function POST(
         outcome.position,
         session.contentLanguage,
       );
+
+      /*
+       * The Describe step of an Edit chat (task 118), presented on arrival.
+       *
+       * Same shape as `ensureStageReview` above and for the same reason: the card a position owes
+       * the user is produced by *entering* the position, not by the user asking for it — an Edit
+       * chat that landed in Describe with nothing on screen would be a step with no step in it.
+       *
+       * Unlike the review it costs no model call: the question is the same one every time and its
+       * prefill comes from the session's own stored prompt, so there is nothing here that can hang,
+       * fail over, or need a counter beside it.
+       */
+      await ensureDescribeRound(db, session, outcome.position);
 
       return jsonResponse({
         stage: outcome.position.stage,

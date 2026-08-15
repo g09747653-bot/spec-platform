@@ -64,6 +64,8 @@ export interface RunGenerationInput {
    * question and could disagree with the document that was actually generated.
    */
   contextAttachmentIds?: readonly string[];
+  /** The chat this run belongs to, stamped on the revision it writes (task 118; А-6). */
+  sourceSessionId?: string;
   changeInstruction?: string;
   /** The session's content language (У-1; task 108); forwarded to the prompt assembly point. */
   contentLanguage?: string | null | undefined;
@@ -210,6 +212,7 @@ export async function runGeneration(input: RunGenerationInput): Promise<Generati
       specFileId: specFile.id,
       content: result.text,
       contextAttachmentIds: input.contextAttachmentIds ?? [],
+      sourceSessionId: input.sourceSessionId ?? null,
     });
 
     await store.markComplete(runId, result.providerUsed, result.attempts);

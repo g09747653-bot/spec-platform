@@ -51,6 +51,11 @@ const VARIABLES: { [Id in PromptId]: PromptVariables[Id] } = {
     specContent: '# Constitution',
     instruction: 'Add a non-goal.',
   },
+  'edit.propose.v1': {
+    documents: '<<<FILE constitution.md\n# Constitution\nFILE constitution.md',
+    fileNames: 'constitution.md',
+    instruction: 'Add a non-goal.',
+  },
   'decision.intent.v1': {
     message: 'approve it',
     pendingKind: 'spec',

@@ -259,8 +259,8 @@ describe('POST /api/sessions/:id/messages (task 62)', () => {
 
       const [row] = await database.db.select().from(specRevisions);
 
-      // Every column of the row, as stored. There is no provenance field to differ, and adding one
-      // would be the thing this criterion forbids.
+      // Every column of the row, as stored. There is no field that says *how* the decision was
+      // taken, and adding one would be the thing this criterion forbids.
       expect(Object.keys(row ?? {}).sort()).toEqual(
         [
           'approved',
@@ -271,9 +271,18 @@ describe('POST /api/sessions/:id/messages (task 62)', () => {
           'id',
           'origin',
           'revisionNumber',
+          'sourceSessionId',
           'specFileId',
         ].sort(),
       );
+
+      /*
+       * `source_session_id` names **which chat wrote** the revision (task 118; А-6) — a fact about
+       * authorship, set once at insert, and a different fact from which surface a later decision was
+       * pressed on. Approving does not touch it: this fixture seeds the revision directly, so it is
+       * null before the message and null after it, whichever way the approval arrived.
+       */
+      expect(row?.sourceSessionId).toBeNull();
     });
 
     it('reports what is pending now, which is nothing once the spec is approved', async () => {

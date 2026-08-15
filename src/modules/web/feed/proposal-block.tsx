@@ -21,11 +21,16 @@ import type { ProposalBlock as ProposalBlockModel } from './model';
  */
 export interface PendingProposalModel {
   proposedChangeId: string;
-  fileName: string;
   instruction: string;
-  unifiedDiff: string;
-  added: number;
-  removed: number;
+  /**
+   * One entry per touched file, in bundle order (task 118).
+   *
+   * A single-file refinement is a list of one, and a cross-file edit is a list of several — the same
+   * card, the same buttons, and one decision either way. That is not a convenience: the whole point
+   * of an edit batch is that the user approves the *set*, so a surface that could show one member at
+   * a time would be a surface where "apply all of it atomically" had no place to be pressed.
+   */
+  files: readonly { fileName: string; unifiedDiff: string; added: number; removed: number }[];
 }
 
 /** The endpoint's answers, parsed rather than assumed — an HTTP response is external input. */
@@ -113,6 +118,9 @@ export function ProposalBlockCard({
     }
   }
 
+  const edit = block.editBatchId !== null;
+  const label = edit ? 'edit' : 'refinement';
+
   if (proposal === null) {
     return (
       <FeedItem block={block}>
@@ -120,35 +128,56 @@ export function ProposalBlockCard({
           className="border-border-subtle bg-surface flex w-full max-w-[46rem] flex-col gap-1 rounded-xl border p-4"
           data-testid="proposal-decided"
         >
-          <BlockCaption stage={block.stage} trailing="refinement" />
+          <BlockCaption stage={block.stage} trailing={label} />
           <p className="text-sm">
             {block.status === 'accepted' ? 'Applied' : 'Discarded'}: {block.instruction}
+          </p>
+          <p className="text-ink-muted text-xs" data-testid="proposal-decided-files">
+            {block.files.map((file) => file.fileName).join(', ')}
           </p>
         </div>
       </FeedItem>
     );
   }
 
+  const added = proposal.files.reduce((total, file) => total + file.added, 0);
+  const removed = proposal.files.reduce((total, file) => total + file.removed, 0);
+
   return (
     <FeedItem block={block}>
       <div
         className="border-border-subtle bg-surface flex w-full max-w-[46rem] flex-col gap-3 rounded-xl border p-4"
-        data-testid="diff-card"
+        data-testid={edit ? 'edit-card' : 'diff-card'}
       >
-        <BlockCaption stage={block.stage} trailing="refinement" />
+        <BlockCaption stage={block.stage} trailing={label} />
         <p className="text-sm font-medium">
-          Proposed change to <span data-testid="diff-file-name">{proposal.fileName}</span>
+          {edit
+            ? `Proposed edit across ${String(proposal.files.length)} ${
+                proposal.files.length === 1 ? 'document' : 'documents'
+              }`
+            : 'Proposed change'}
         </p>
         <p className="text-ink-muted text-xs">
           <span data-testid="diff-instruction">{proposal.instruction}</span>
           {' — '}
           <span data-testid="diff-counts">
-            +{proposal.added} −{proposal.removed}
+            +{added} −{removed}
           </span>
-          . Nothing is saved until you accept.
+          . Nothing is saved until you {edit ? 'approve' : 'accept'}.
         </p>
 
-        <DiffBody unifiedDiff={proposal.unifiedDiff} />
+        {proposal.files.map((file) => (
+          <div key={file.fileName} className="flex flex-col gap-1" data-testid="diff-file">
+            <p className="text-xs font-medium">
+              <span data-testid="diff-file-name">{file.fileName}</span>
+              <span className="text-ink-muted">
+                {' '}
+                +{file.added} −{file.removed}
+              </span>
+            </p>
+            <DiffBody unifiedDiff={file.unifiedDiff} />
+          </div>
+        ))}
 
         {error !== null && (
           <p role="alert" data-testid="diff-error" className="text-sm text-red-700">
@@ -164,7 +193,13 @@ export function ProposalBlockCard({
               void decide('accept');
             }}
           >
-            {busy === 'accept' ? 'Applying…' : 'Accept'}
+            {busy === 'accept'
+              ? edit
+                ? 'Applying every file…'
+                : 'Applying…'
+              : edit
+                ? 'Approve and apply'
+                : 'Accept'}
           </Button>
           <Button
             variant="secondary"
@@ -174,7 +209,7 @@ export function ProposalBlockCard({
               void decide('reject');
             }}
           >
-            {busy === 'reject' ? 'Discarding…' : 'Reject'}
+            {busy === 'reject' ? 'Discarding…' : edit ? 'Request changes' : 'Reject'}
           </Button>
         </div>
       </div>

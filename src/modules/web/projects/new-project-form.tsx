@@ -57,6 +57,8 @@ const GENERATE_METHODOLOGIES = methodologiesForChatClass('generate');
 
 interface CreatedProject {
   projectId: string;
+  /** The chat the endpoint opened along with the project — where this form navigates (А-6). */
+  sessionId: string;
 }
 
 function isCreatedProject(value: unknown): value is CreatedProject {
@@ -64,7 +66,9 @@ function isCreatedProject(value: unknown): value is CreatedProject {
     typeof value === 'object' &&
     value !== null &&
     'projectId' in value &&
-    typeof value.projectId === 'string'
+    typeof value.projectId === 'string' &&
+    'sessionId' in value &&
+    typeof value.sessionId === 'string'
   );
 }
 
@@ -114,7 +118,9 @@ export function NewProjectForm() {
         return;
       }
 
-      router.push(`/projects/${payload.projectId}`);
+      // Straight into the chat, not to the project's list of one (А-6): a project that has just
+      // been created has exactly one conversation, and it is the one the user came here to have.
+      router.push(`/sessions/${payload.sessionId}`);
     } catch {
       setError('The project could not be created. Please try again.');
     } finally {

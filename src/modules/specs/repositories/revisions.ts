@@ -71,6 +71,7 @@ const ProjectRevisionRow = z.object({
   revision_number: z.number().int().positive(),
   approved: z.boolean(),
   origin: z.enum(['parity', 'enrichment']),
+  source_session_id: z.uuid().nullable(),
   created_at: z.coerce.date(),
 });
 
@@ -82,6 +83,8 @@ export interface ProjectRevision {
   revisionNumber: number;
   approved: boolean;
   origin: RevisionOrigin;
+  /** The chat that wrote it (task 118), or `null` for history written before chats were told apart. */
+  sourceSessionId: string | null;
   createdAt: Date;
 }
 
@@ -92,6 +95,14 @@ export interface AppendRevisionInput {
   origin?: RevisionOrigin;
   derivedFrom?: string | null;
   contextAttachmentIds?: readonly string[];
+  /**
+   * The chat that produced this revision (task 118; А-6).
+   *
+   * Optional and defaulting to `null` rather than required, because "written before chats were
+   * distinguishable" is a real state of the table and must stay distinguishable from "written by
+   * this chat". Every caller that knows its session passes it.
+   */
+  sourceSessionId?: string | null;
 }
 
 /** How many times an allocation collision is retried before giving up. */
@@ -134,14 +145,15 @@ export function createRevisionRepository(db: SchemaDatabase) {
           sql`
             WITH allocated AS (
               INSERT INTO ${specRevisions}
-                (spec_file_id, revision_number, content, origin, derived_from, context_attachment_ids)
+                (spec_file_id, revision_number, content, origin, derived_from, context_attachment_ids, source_session_id)
               SELECT
                 ${input.specFileId}::uuid,
                 COALESCE(MAX(existing.revision_number), 0) + 1,
                 ${input.content},
                 ${origin},
                 ${derivedFrom}::uuid,
-                ${contextIds}::jsonb
+                ${contextIds}::jsonb,
+                ${input.sourceSessionId ?? null}::uuid
               FROM ${specRevisions} AS existing
               WHERE existing.spec_file_id = ${input.specFileId}::uuid
               RETURNING id, spec_file_id, revision_number, content, approved, origin, derived_from, created_at
@@ -282,6 +294,7 @@ export function createRevisionRepository(db: SchemaDatabase) {
             ${specRevisions}.revision_number,
             ${specRevisions}.approved,
             ${specRevisions}.origin,
+            ${specRevisions}.source_session_id,
             ${specRevisions}.created_at
           FROM ${specRevisions}
           JOIN ${specFiles} ON ${specFiles}.id = ${specRevisions}.spec_file_id
@@ -302,6 +315,7 @@ export function createRevisionRepository(db: SchemaDatabase) {
         revisionNumber: row.revision_number,
         approved: row.approved,
         origin: row.origin,
+        sourceSessionId: row.source_session_id,
         createdAt: row.created_at,
       }));
     },

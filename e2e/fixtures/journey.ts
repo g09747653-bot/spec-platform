@@ -57,6 +57,18 @@ export async function startSession(
 }
 
 /**
+ * The project a session page belongs to (А-6).
+ *
+ * Read from the page's own «All chats» link rather than parsed out of the URL: since M9п the URL
+ * names the *session*, and a test that derived a project id from it would be inventing one.
+ */
+export async function projectIdOf(page: Page): Promise<string> {
+  const href = await page.getByTestId('back-to-project').getAttribute('href');
+
+  return href?.split('/').at(-1) ?? '';
+}
+
+/**
  * Answers the grounding interview and leaves it for the constitution.
  *
  * One answered round plus the persisted summary is the whole of the interview exit gate (A2), so this

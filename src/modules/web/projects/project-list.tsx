@@ -15,6 +15,9 @@ export interface ProjectListItem {
   name: string;
   stageLabel: string;
   updatedAt: Date;
+  /** Where the name links: the chat itself when there is only one, otherwise the chat list (А-6). */
+  href: string;
+  sessionCount: number;
 }
 
 /**
@@ -56,13 +59,16 @@ export function ProjectList({ projects }: { projects: readonly ProjectListItem[]
                */}
               <div className="flex items-center justify-between gap-4">
                 <Link
-                  href={`/projects/${project.id}`}
+                  href={project.href}
                   className="truncate font-medium hover:underline"
                   data-testid="project-row"
                 >
                   <span data-testid="project-name">{project.name}</span>
                 </Link>
                 <span className="text-ink-muted flex shrink-0 items-center gap-3 text-xs">
+                  {project.sessionCount > 1 && (
+                    <span data-testid="project-chat-count">{project.sessionCount} chats</span>
+                  )}
                   <span data-testid="project-stage">{project.stageLabel}</span>
                   <time dateTime={project.updatedAt.toISOString()}>
                     {formatUpdatedAt(project.updatedAt)}

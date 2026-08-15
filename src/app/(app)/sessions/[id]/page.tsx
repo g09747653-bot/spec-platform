@@ -1,0 +1,436 @@
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+
+import { getEnv } from '@/config/env';
+import { getDatabase } from '@/db/client';
+import { createGenerationStore } from '@/modules/adapters/llm/generation-store';
+import { requireOwnerScope } from '@/modules/projects/auth/scope';
+import { createAttachmentRepository } from '@/modules/projects/repositories/attachments';
+import { createProjectRepository } from '@/modules/projects/repositories/projects';
+import { createSessionRepository } from '@/modules/projects/repositories/sessions';
+import { bundlePlan, methodologyConfig } from '@/modules/methodologies';
+import { resolveExportMode } from '@/modules/specs/export/resolve-mode';
+import { isSpecType } from '@/modules/specs/model/spec-files';
+import { createProposedChangeService } from '@/modules/specs/proposed-changes/proposed-change-service';
+import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
+import { createSpecFileRepository } from '@/modules/specs/repositories/spec-files';
+import { registeredCapabilityIds } from '@/modules/workflow/capabilities';
+import { qualityExportPort } from '@/modules/workflow/quality-port';
+import { canAskAnotherRound, evaluateTransition } from '@/modules/workflow/evaluate-transition';
+import { isAskingStage, type StagePosition } from '@/modules/workflow/model/stages';
+import { forwardDoors, nextPosition } from '@/modules/workflow/next-position';
+import { assembleWorkflowSnapshot } from '@/modules/workflow/snapshot-assembler';
+import { unmetNeedNames, type WorkflowSnapshot } from '@/modules/workflow/snapshot';
+import { buildFeed } from '@/modules/web/feed/build-feed';
+import { SessionFeed } from '@/modules/web/feed/session-feed';
+import type { StageActionsModel, TransitionTargetModel } from '@/modules/web/feed/stage-actions';
+import { MethodologyBadge } from '@/modules/web/feed/methodology-badge';
+import { StepPills } from '@/modules/web/feed/step-pills';
+import type { PendingProposalModel } from '@/modules/web/feed/proposal-block';
+import { Attachments, type AttachmentModel } from '@/modules/web/session/attachments';
+import { CONDITION_COPY, STILL_NEEDED } from '@/modules/web/session/gate-copy';
+import { stageLabel } from '@/modules/web/session/stage-display';
+import { ExportPanel } from '@/modules/web/session/export-panel';
+import { LocalWorkspace, SessionSidebar } from '@/modules/web/session/sidebar';
+import { SpecsPanel, type SpecFileModel } from '@/modules/web/session/specs-panel';
+
+import { assembleFeedSource } from './feed-source';
+
+/**
+ * The session surface for one project — one conversation, from the seed prompt to the bundle
+ * (task 105; Эталон §1.1).
+ *
+ * **Not found and not owned are the same answer** (AR-2; NFR-005 AC-2): the repository query carries
+ * the owner predicate, so a project belonging to someone else returns `null` exactly as a project
+ * that never existed, and both render `notFound()`. There is no branch here that could distinguish
+ * them, which is what makes 404-not-403 a property of the code rather than a promise.
+ *
+ * Everything on the page is rendered from persisted state, so a reload restores the same feed, the
+ * same pending card and the same gate verdicts (FR-017 AC-1/AC-3/AC-4). The page evaluates gates only
+ * to *present* their state; enforcement lives behind the transition endpoint (P1).
+ *
+ * What changed in M7п is where things are, not what they are: the stage panels became blocks of a
+ * feed, and the feed is a projection of exactly the rows those panels already read. No write path was
+ * added — see `web/feed/build-feed.ts`.
+ */
+
+/**
+ * How a target position reads to a person.
+ *
+ * The position itself comes from `nextPosition` in `workflow`, which is the same forward map the
+ * engine's table describes; only the wording is decided here, because wording is presentation.
+ */
+function labelFor(from: StagePosition, to: StagePosition): string {
+  if (to.stage === 'complete') return 'Finish and seal the session';
+  if (to.substage === 'generate') return 'Proceed to drafting';
+  // Approval permits this move (FR-009 AC-3) and entering it is what produces the review
+  // (FR-010 AC-1), so the door is offered rather than opened as a side effect of approving.
+  if (to.substage === 'review') return 'Proceed to review';
+  if (from.stage === 'complete') return 'Re-open for the Quality stage';
+
+  return `Proceed to ${stageLabel(to.stage)}`;
+}
+
+/**
+ * Where "proceed" leads from the current position.
+ *
+ * Round 5, Р-3 item 4: the wording of a refusal comes from `gate-copy`, which is keyed by the whole
+ * `ReasonCode` union. The chain of ternaries this replaced covered four reasons and fell through to
+ * the **raw code** for the other five, so an exhausted question budget told its owner
+ * `still needed: ROUND_LIMIT_REACHED`.
+ */
+function nextTarget(snapshot: WorkflowSnapshot): TransitionTargetModel | null {
+  const to = nextPosition(snapshot);
+  if (to === null) return null;
+
+  return targetModel(snapshot, to, labelFor(snapshot.position, to));
+}
+
+/** One door, with the gate's current verdict on it. Presentation only — the server re-decides. */
+function targetModel(
+  snapshot: WorkflowSnapshot,
+  to: StagePosition,
+  label: string,
+): TransitionTargetModel {
+  const verdict = evaluateTransition(snapshot, to);
+  const unmet: string[] = verdict.allowed
+    ? []
+    : (verdict.unmet?.map((condition) => CONDITION_COPY[condition]) ?? [
+        STILL_NEEDED[verdict.reason],
+      ]);
+
+  return {
+    label,
+    toStage: to.stage,
+    toSubstage: to.substage,
+    ready: verdict.allowed,
+    unmet,
+  };
+}
+
+/**
+ * How long the page keeps believing the server is still working on a request (round 5, Р-3).
+ *
+ * Derived from the server's own worst case rather than guessed: entering `review` runs the review
+ * agent inside the transition request, and that agent is bounded by `LLM_REQUEST_TIMEOUT_MS` for
+ * each provider it tries in turn. Past that sum plus a margin the server cannot still be working,
+ * so a request still in flight is a request that will never answer.
+ */
+function requestDeadlineMs(): number {
+  const env = getEnv();
+
+  return env.LLM_REQUEST_TIMEOUT_MS * env.LLM_PROVIDER_ORDER.length + 15_000;
+}
+
+/**
+ * The sidebar's Specs rows, derived from the revisions the feed already read (task 119).
+ *
+ * No extra query: the feed source carries every revision of the project, and "how many, and is the
+ * newest approved" is a fold over rows already in hand. That is also what makes the section live —
+ * a new revision changes the feed and this list in the same render, from the same data (AC-2).
+ */
+function specsPanelFiles(
+  revisions: readonly { specType: string; revisionNumber: number; approved: boolean }[],
+): SpecFileModel[] {
+  const byType = new Map<string, SpecFileModel>();
+
+  for (const revision of revisions) {
+    const current = byType.get(revision.specType);
+
+    // "Approved" is a property of the newest revision, not of any of them: a file whose latest
+    // revision awaits a decision is not approved, however many approved ones precede it (FR-009).
+    if (current === undefined || revision.revisionNumber >= current.revisionCount) {
+      byType.set(revision.specType, {
+        specFileId: null,
+        specType: revision.specType,
+        revisionCount: revision.revisionNumber,
+        approved: revision.approved,
+      });
+    }
+  }
+
+  return [...byType.values()];
+}
+
+/**
+ * The pending proposal card's model: the instruction, and one diff per file it touches.
+ *
+ * Addressed by the id the block carries. For a cross-file edit that id is one member of the batch,
+ * and the other members are found through it — so the card's contents and the decision it sends are
+ * derived from the same row, and cannot describe a different set from the one Approve applies.
+ */
+async function pendingProposalModel(
+  proposals: ReturnType<typeof createProposedChangeService>,
+  scope: Awaited<ReturnType<typeof requireOwnerScope>>,
+  proposedChangeId: string,
+): Promise<PendingProposalModel | null> {
+  const proposal = await proposals.findOwned(scope, proposedChangeId);
+  if (proposal === null) return null;
+
+  const members =
+    proposal.editBatchId === null
+      ? [proposal]
+      : (await proposals.batchMembers(scope, proposal.editBatchId)).filter(
+          (member) => member.status === 'pending',
+        );
+
+  const files: { fileName: string; unifiedDiff: string; added: number; removed: number }[] = [];
+
+  for (const member of members) {
+    const diff = await proposals.diffFor(scope, member);
+    if (diff === null) continue;
+
+    files.push({
+      fileName: member.fileName,
+      unifiedDiff: diff.unifiedDiff,
+      added: diff.diff.added,
+      removed: diff.diff.removed,
+    });
+  }
+
+  if (files.length === 0) return null;
+
+  return { proposedChangeId, instruction: proposal.instruction, files };
+}
+
+export default async function SessionPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const scope = await requireOwnerScope();
+  const db = getDatabase();
+
+  /*
+   * Addressed by **session** id since А-6: a project holds several chats, so "the session of this
+   * project" stopped being a thing one could look up. The ownership resolution is unchanged — the
+   * query carries the owner predicate through two joins, so another user's session id is not found
+   * exactly as a session that never existed (AR-2).
+   */
+  const session = await createSessionRepository(db).findDetailById(scope, id);
+  if (session === null) notFound();
+
+  /*
+   * The export estimate, resolved through the same mode machinery the endpoint uses (task 73). The
+   * panel replaces both lists with the endpoint's own manifest once a download happens, so this is
+   * what the user sees *before* deciding, never what is claimed about a produced archive.
+   */
+  const exportMode = resolveExportMode('default', qualityExportPort());
+  const specFileRepository = createSpecFileRepository(db);
+
+  /*
+   * The bundle the *session's methodology* promises (task 117). Names come from the plan, so the
+   * panel, the sidebar and the archive cannot disagree about what belongs in the bundle or about
+   * what a missing file is called.
+   */
+  /*
+   * The bundle a chat shows is the bundle its **project** promises, so an Edit chat — whose own
+   * methodology writes no documents at all — lists the four files it is editing rather than nothing.
+   * The generate chat and the edit chat on one project therefore agree about what the bundle is,
+   * which is the only answer that could be right: there is one bundle.
+   */
+  const bundleMethodologyId =
+    methodologyConfig(session.methodologyId).chatClass === 'edit'
+      ? ((await createProjectRepository(db).findById(scope, session.projectId))?.methodologyId ??
+        session.methodologyId)
+      : session.methodologyId;
+
+  const plan = bundlePlan(methodologyConfig(bundleMethodologyId), exportMode);
+  const exportable = await specFileRepository.approvedForExport(
+    scope,
+    session.projectId,
+    exportMode,
+    plan.map((entry) => entry.specType),
+  );
+  const exportFiles = plan.flatMap((entry) => {
+    const file = exportable.find((candidate) => candidate.specType === entry.specType);
+    return file === undefined ? [] : [{ specFileId: file.specFileId, fileName: entry.fileName }];
+  });
+  const omittedFiles = plan
+    .filter((entry) => !exportFiles.some((file) => file.fileName === entry.fileName))
+    .map((entry) => entry.fileName);
+
+  const [source, attachments, snapshotResult, activeRun, bundleRevisions] = await Promise.all([
+    assembleFeedSource(db, scope, session),
+    createAttachmentRepository(db).listForSession(scope, session.id),
+    assembleWorkflowSnapshot(db, session.id, {
+      roundBudget: getEnv().MAX_ROUNDS_PER_STAGE,
+      capabilities: registeredCapabilityIds(),
+    }),
+    /*
+     * A generation still in flight when this page renders (round 5, Р-3; D-99/D-101). Stated by the
+     * server so the card that would have duplicated it is `Stop` before a line of the page's own
+     * JavaScript has run.
+     */
+    createGenerationStore(db).activeRunForSession(session.id),
+    /*
+     * The sidebar's Specs section describes **the bundle**, not this chat's contribution to it: an
+     * Edit chat that has touched one file must still show the other three as approved, because they
+     * are. The feed is per-chat (А-6); the bundle is per-project, and this is that read.
+     */
+    createRevisionRepository(db).projectHistory(scope, session.projectId),
+  ]);
+
+  const feed = buildFeed(source);
+
+  /*
+   * The document the session is working on: the newest revision of the file most recently written.
+   * Its text is loaded here rather than fetched by the card, because approving a document you cannot
+   * read is not a decision, and a decision that waits on a fetch is a decision that can fail to load.
+   */
+  const revisions = createRevisionRepository(db);
+  const positionStage = session.substage === null ? null : session.stage;
+
+  /*
+   * An Edit chat writes no document of its own, so "the file this position is drafting" has no
+   * answer for it — its `constitution` position is the working stage of a three-step graph, not a
+   * constitution. Asking anyway would put the project's real constitution under an approval card
+   * that belongs to another conversation.
+   */
+  const editChat = methodologyConfig(session.methodologyId).chatClass === 'edit';
+
+  const currentFile = editChat
+    ? null
+    : positionStage !== null && isSpecType(positionStage)
+      ? await specFileRepository.findByProjectAndType(scope, session.projectId, positionStage)
+      : await specFileRepository.currentFile(scope, session.projectId);
+
+  const latest = currentFile === null ? null : await revisions.latest(currentFile.id);
+
+  /*
+   * The pending refinement or edit, if this chat has one (task 60, task 118; FR-011 AC-3/AC-6).
+   *
+   * Each diff is recomputed against the revision its proposal was based on, so the card shows what
+   * the user was offered even if the file has since moved on — a diff against "whatever is current
+   * now" would silently change what accepting means. For a cross-file edit that is one diff per
+   * touched file, decided as one set.
+   */
+  const proposals = createProposedChangeService(db);
+  const pendingBlock = feed.blocks.find(
+    (block): block is Extract<typeof block, { kind: 'proposal' }> =>
+      block.kind === 'proposal' && block.status === 'pending',
+  );
+
+  const proposalModel: PendingProposalModel | null =
+    pendingBlock === undefined
+      ? null
+      : await pendingProposalModel(proposals, scope, pendingBlock.proposedChangeId);
+
+  const snapshot = snapshotResult?.snapshot ?? null;
+  const position = snapshot?.position ?? feed.position;
+  const askingStage =
+    snapshot !== null &&
+    (position.stage === 'interview' || position.substage === 'collect') &&
+    isAskingStage(position.stage)
+      ? position.stage
+      : null;
+
+  const actionsTarget = snapshot === null ? null : nextTarget(snapshot);
+
+  const actions: StageActionsModel = {
+    askingStage,
+    canAskMore:
+      snapshot !== null &&
+      askingStage !== null &&
+      canAskAnotherRound(snapshot, askingStage).allowed,
+    answeredRounds:
+      snapshot !== null && askingStage !== null ? snapshot.answeredRounds[askingStage] : 0,
+    roundBudget: snapshot?.roundBudget ?? 0,
+    unmetNeeds:
+      snapshot !== null && askingStage !== null ? unmetNeedNames(snapshot, askingStage) : [],
+    summaryPersisted: snapshot?.summaryPersisted ?? false,
+    target: actionsTarget,
+    /*
+     * Every other forward door (task 117). The primary one is filtered out by position, not by
+     * label, so a methodology with no fork simply has none — and the parity graph never does,
+     * because its one fork is the Quality selection, which the session has already made.
+     */
+    alternates:
+      snapshot === null
+        ? []
+        : forwardDoors(snapshot)
+            .filter(
+              (door) =>
+                door.to.stage !== actionsTarget?.toStage ||
+                door.to.substage !== actionsTarget.toSubstage,
+            )
+            .flatMap((door) => {
+              return [targetModel(snapshot, door.to, door.label)];
+            }),
+  };
+
+  return (
+    <section className="flex min-h-0 flex-col gap-4" data-testid="session">
+      <header className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-xl font-semibold tracking-tight" data-testid="session-project-name">
+            {session.projectName}
+          </h1>
+          {/*
+           * The chat's own name beside the project's (А-6). A project holds several conversations
+           * now, so a header that named only the project would be the same header on all of them.
+           */}
+          <span className="text-ink-muted text-sm" data-testid="session-title">
+            {session.title}
+          </span>
+          <MethodologyBadge methodologyId={session.methodologyId} />
+          <Link
+            href={`/projects/${session.projectId}`}
+            className="text-ink-muted text-xs hover:underline"
+            data-testid="back-to-project"
+          >
+            All chats
+          </Link>
+        </div>
+        <StepPills
+          currentStage={session.stage}
+          currentSubstage={session.substage}
+          qualityEnabled={session.qualityEnabled}
+          methodologyId={session.methodologyId}
+        />
+      </header>
+
+      <div className="grid min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <SessionFeed
+          sessionId={session.id}
+          feed={feed}
+          deadlineMs={requestDeadlineMs()}
+          actions={actions}
+          primaryRevisionId={latest?.id ?? null}
+          primaryContent={latest?.content ?? null}
+          proposal={proposalModel}
+          refineFileId={latest === null ? null : (currentFile?.id ?? null)}
+          canGenerate={position.substage === 'generate'}
+          describePrefill={editChat ? session.initialPrompt : null}
+          activeRun={
+            activeRun === null ? null : { runId: activeRun.runId, attempt: activeRun.attempt }
+          }
+          bundleFileCount={exportFiles.length}
+        />
+
+        <SessionSidebar>
+          <SpecsPanel plan={plan} files={specsPanelFiles(bundleRevisions)} />
+
+          <LocalWorkspace />
+
+          <Attachments
+            sessionId={session.id}
+            attachments={attachments.map((attachment): AttachmentModel => ({
+              id: attachment.id,
+              fileName: attachment.fileName,
+              mimeType: attachment.mimeType,
+              sizeBytes: attachment.sizeBytes,
+              parseStatus: attachment.parseStatus,
+              parseReason: attachment.parseReason,
+              attachedAtStage: attachment.attachedAtStage,
+            }))}
+          />
+
+          <ExportPanel
+            projectId={session.projectId}
+            mode={exportMode}
+            files={exportFiles}
+            omittedFiles={omittedFiles}
+          />
+        </SessionSidebar>
+      </div>
+    </section>
+  );
+}

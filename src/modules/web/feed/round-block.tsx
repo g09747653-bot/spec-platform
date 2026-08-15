@@ -29,6 +29,8 @@ interface RoundBlockProps {
   /** Whether this round is the one the session is waiting on — the feed's tail. */
   pending: boolean;
   deadlineMs: number;
+  /** Opening words for the free-text box — the Edit chat's Describe prefill (task 118). */
+  freeTextPrefill?: string | null;
 }
 
 /** What each action is waiting for, in the words the status line reads out. */
@@ -42,8 +44,21 @@ interface QuestionState {
   other: string;
 }
 
-const emptyState = (questions: readonly FeedQuestion[]): Record<string, QuestionState> =>
-  Object.fromEntries(questions.map((question) => [question.id, { selected: [], other: '' }]));
+/**
+ * The starting state of the form, with the free-text box optionally pre-filled (task 118).
+ *
+ * The prefill exists for exactly one card — the Describe step of an Edit chat, whose sentence the
+ * reference product opens for the user to finish. It is the session's stored `initial_prompt`,
+ * passed in rather than kept on the round, so the sentence lives in one row and is shown where it
+ * is finished.
+ */
+const emptyState = (
+  questions: readonly FeedQuestion[],
+  prefill: string | null,
+): Record<string, QuestionState> =>
+  Object.fromEntries(
+    questions.map((question) => [question.id, { selected: [], other: prefill ?? '' }]),
+  );
 
 function RoundHeading({ block }: { block: RoundBlockModel }) {
   const count = block.questions.length;
@@ -155,9 +170,15 @@ function AnsweredRound({ block }: { block: RoundBlockModel }) {
   );
 }
 
-export function RoundBlock({ sessionId, block, pending, deadlineMs }: RoundBlockProps) {
+export function RoundBlock({
+  sessionId,
+  block,
+  pending,
+  deadlineMs,
+  freeTextPrefill = null,
+}: RoundBlockProps) {
   const [state, setState] = useState<Record<string, QuestionState>>(() =>
-    emptyState(block.questions),
+    emptyState(block.questions, freeTextPrefill),
   );
   const [replyMode, setReplyMode] = useState(false);
   const [reply, setReply] = useState('');
