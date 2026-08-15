@@ -1,6 +1,7 @@
 import type { NextConfig } from 'next';
 
 import { getEnv } from './src/config/env';
+import { assertMethodologyConfigs } from './src/modules/methodologies';
 import { assertPromptRegistry } from './src/modules/prompts/registry';
 
 /**
@@ -14,6 +15,7 @@ import { assertPromptRegistry } from './src/modules/prompts/registry';
  */
 getEnv();
 assertPromptRegistry();
+assertMethodologyConfigs();
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,

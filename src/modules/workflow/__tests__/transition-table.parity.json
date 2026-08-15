@@ -1,0 +1,398 @@
+[
+  {
+    "id": "interview->constitution.collect",
+    "from": {
+      "stage": "interview",
+      "substage": null
+    },
+    "to": {
+      "stage": "constitution",
+      "substage": "collect"
+    },
+    "gate": "interview-exit"
+  },
+  {
+    "id": "constitution.collect->constitution.generate",
+    "from": {
+      "stage": "constitution",
+      "substage": "collect"
+    },
+    "to": {
+      "stage": "constitution",
+      "substage": "generate"
+    },
+    "gate": "collect"
+  },
+  {
+    "id": "constitution.generate->constitution.review",
+    "from": {
+      "stage": "constitution",
+      "substage": "generate"
+    },
+    "to": {
+      "stage": "constitution",
+      "substage": "review"
+    },
+    "gate": "approval"
+  },
+  {
+    "id": "constitution.generate->constitution.collect",
+    "from": {
+      "stage": "constitution",
+      "substage": "generate"
+    },
+    "to": {
+      "stage": "constitution",
+      "substage": "collect"
+    },
+    "gate": "backward"
+  },
+  {
+    "id": "constitution.review->constitution.generate",
+    "from": {
+      "stage": "constitution",
+      "substage": "review"
+    },
+    "to": {
+      "stage": "constitution",
+      "substage": "generate"
+    },
+    "gate": "backward"
+  },
+  {
+    "id": "constitution.review->constitution.collect",
+    "from": {
+      "stage": "constitution",
+      "substage": "review"
+    },
+    "to": {
+      "stage": "constitution",
+      "substage": "collect"
+    },
+    "gate": "backward"
+  },
+  {
+    "id": "constitution.review->requirements.collect",
+    "from": {
+      "stage": "constitution",
+      "substage": "review"
+    },
+    "to": {
+      "stage": "requirements",
+      "substage": "collect"
+    },
+    "gate": "review-advance"
+  },
+  {
+    "id": "requirements.collect->requirements.generate",
+    "from": {
+      "stage": "requirements",
+      "substage": "collect"
+    },
+    "to": {
+      "stage": "requirements",
+      "substage": "generate"
+    },
+    "gate": "collect"
+  },
+  {
+    "id": "requirements.generate->requirements.review",
+    "from": {
+      "stage": "requirements",
+      "substage": "generate"
+    },
+    "to": {
+      "stage": "requirements",
+      "substage": "review"
+    },
+    "gate": "approval"
+  },
+  {
+    "id": "requirements.generate->requirements.collect",
+    "from": {
+      "stage": "requirements",
+      "substage": "generate"
+    },
+    "to": {
+      "stage": "requirements",
+      "substage": "collect"
+    },
+    "gate": "backward"
+  },
+  {
+    "id": "requirements.review->requirements.generate",
+    "from": {
+      "stage": "requirements",
+      "substage": "review"
+    },
+    "to": {
+      "stage": "requirements",
+      "substage": "generate"
+    },
+    "gate": "backward"
+  },
+  {
+    "id": "requirements.review->requirements.collect",
+    "from": {
+      "stage": "requirements",
+      "substage": "review"
+    },
+    "to": {
+      "stage": "requirements",
+      "substage": "collect"
+    },
+    "gate": "backward"
+  },
+  {
+    "id": "requirements.review->solution.collect",
+    "from": {
+      "stage": "requirements",
+      "substage": "review"
+    },
+    "to": {
+      "stage": "solution",
+      "substage": "collect"
+    },
+    "gate": "review-advance"
+  },
+  {
+    "id": "solution.collect->solution.generate",
+    "from": {
+      "stage": "solution",
+      "substage": "collect"
+    },
+    "to": {
+      "stage": "solution",
+      "substage": "generate"
+    },
+    "gate": "collect"
+  },
+  {
+    "id": "solution.generate->solution.review",
+    "from": {
+      "stage": "solution",
+      "substage": "generate"
+    },
+    "to": {
+      "stage": "solution",
+      "substage": "review"
+    },
+    "gate": "approval"
+  },
+  {
+    "id": "solution.generate->solution.collect",
+    "from": {
+      "stage": "solution",
+      "substage": "generate"
+    },
+    "to": {
+      "stage": "solution",
+      "substage": "collect"
+    },
+    "gate": "backward"
+  },
+  {
+    "id": "solution.review->solution.generate",
+    "from": {
+      "stage": "solution",
+      "substage": "review"
+    },
+    "to": {
+      "stage": "solution",
+      "substage": "generate"
+    },
+    "gate": "backward"
+  },
+  {
+    "id": "solution.review->solution.collect",
+    "from": {
+      "stage": "solution",
+      "substage": "review"
+    },
+    "to": {
+      "stage": "solution",
+      "substage": "collect"
+    },
+    "gate": "backward"
+  },
+  {
+    "id": "solution.review->tasks.collect",
+    "from": {
+      "stage": "solution",
+      "substage": "review"
+    },
+    "to": {
+      "stage": "tasks",
+      "substage": "collect"
+    },
+    "gate": "review-advance"
+  },
+  {
+    "id": "tasks.collect->tasks.generate",
+    "from": {
+      "stage": "tasks",
+      "substage": "collect"
+    },
+    "to": {
+      "stage": "tasks",
+      "substage": "generate"
+    },
+    "gate": "collect"
+  },
+  {
+    "id": "tasks.generate->tasks.review",
+    "from": {
+      "stage": "tasks",
+      "substage": "generate"
+    },
+    "to": {
+      "stage": "tasks",
+      "substage": "review"
+    },
+    "gate": "approval"
+  },
+  {
+    "id": "tasks.generate->tasks.collect",
+    "from": {
+      "stage": "tasks",
+      "substage": "generate"
+    },
+    "to": {
+      "stage": "tasks",
+      "substage": "collect"
+    },
+    "gate": "backward"
+  },
+  {
+    "id": "tasks.review->tasks.generate",
+    "from": {
+      "stage": "tasks",
+      "substage": "review"
+    },
+    "to": {
+      "stage": "tasks",
+      "substage": "generate"
+    },
+    "gate": "backward"
+  },
+  {
+    "id": "tasks.review->tasks.collect",
+    "from": {
+      "stage": "tasks",
+      "substage": "review"
+    },
+    "to": {
+      "stage": "tasks",
+      "substage": "collect"
+    },
+    "gate": "backward"
+  },
+  {
+    "id": "tasks.review->complete",
+    "from": {
+      "stage": "tasks",
+      "substage": "review"
+    },
+    "to": {
+      "stage": "complete",
+      "substage": null
+    },
+    "gate": "tasks-to-complete"
+  },
+  {
+    "id": "tasks.review->quality.collect",
+    "from": {
+      "stage": "tasks",
+      "substage": "review"
+    },
+    "to": {
+      "stage": "quality",
+      "substage": "collect"
+    },
+    "gate": "tasks-to-quality"
+  },
+  {
+    "id": "quality.collect->quality.generate",
+    "from": {
+      "stage": "quality",
+      "substage": "collect"
+    },
+    "to": {
+      "stage": "quality",
+      "substage": "generate"
+    },
+    "gate": "collect"
+  },
+  {
+    "id": "quality.generate->quality.review",
+    "from": {
+      "stage": "quality",
+      "substage": "generate"
+    },
+    "to": {
+      "stage": "quality",
+      "substage": "review"
+    },
+    "gate": "approval"
+  },
+  {
+    "id": "quality.generate->quality.collect",
+    "from": {
+      "stage": "quality",
+      "substage": "generate"
+    },
+    "to": {
+      "stage": "quality",
+      "substage": "collect"
+    },
+    "gate": "backward"
+  },
+  {
+    "id": "quality.review->quality.generate",
+    "from": {
+      "stage": "quality",
+      "substage": "review"
+    },
+    "to": {
+      "stage": "quality",
+      "substage": "generate"
+    },
+    "gate": "backward"
+  },
+  {
+    "id": "quality.review->quality.collect",
+    "from": {
+      "stage": "quality",
+      "substage": "review"
+    },
+    "to": {
+      "stage": "quality",
+      "substage": "collect"
+    },
+    "gate": "backward"
+  },
+  {
+    "id": "quality.review->complete",
+    "from": {
+      "stage": "quality",
+      "substage": "review"
+    },
+    "to": {
+      "stage": "complete",
+      "substage": null
+    },
+    "gate": "quality-to-complete"
+  },
+  {
+    "id": "complete->quality.collect",
+    "from": {
+      "stage": "complete",
+      "substage": null
+    },
+    "to": {
+      "stage": "quality",
+      "substage": "collect"
+    },
+    "gate": "quality-reentry"
+  }
+]

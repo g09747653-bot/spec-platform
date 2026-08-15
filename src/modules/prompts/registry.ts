@@ -59,6 +59,21 @@ export interface PromptVariables {
     /** What the user asked to change on a re-generation (FR-009 AC-4). Empty string otherwise. */
     changeInstruction: string;
   };
+  'spec.generation.methodology.v1': {
+    /** The document as the methodology names it — «Plan», «Proposal», «Specs». */
+    documentLabel: string;
+    /** The vendored template, verbatim: the shape the writer fills in. */
+    template: string;
+    /**
+     * The required headings, rendered by the caller from the configuration's own list. Supplied
+     * rather than derived: the parity baseline's list has exactly two consumers (constitution P3),
+     * and a foreign methodology's headings are its template's, not the baseline's.
+     */
+    requiredSections: string;
+    initialPrompt: string;
+    context: string;
+    changeInstruction: string;
+  };
   'interview.questions.v3': {
     /** A label for our records only — the prompt forbids it appearing in a question (Д-3). */
     stage: string;
@@ -148,6 +163,60 @@ const SPEC_GENERATION: PromptAsset = {
   ].join('\n'),
   variables: ['specType', 'initialPrompt', 'context', 'changeInstruction'],
   derived: ['requiredSections'],
+};
+
+/**
+ * Spec generation for a **non-parity methodology** (task 116).
+ *
+ * A second asset rather than a branch inside the first, and the reason is constitution P3. The
+ * parity prompt *derives* its section list from the section schema — that derivation is one of the
+ * schema's two sanctioned consumers, and it is what makes "what the model is asked to write" and
+ * "what its output is checked against" provably the same list. A methodology's document has a
+ * different contract: its headings come from its own vendored template. Folding both into one asset
+ * would mean one prompt whose section list is sometimes derived and sometimes supplied, and the
+ * guarantee would stop being mechanical.
+ *
+ * The template is quoted whole and framed as a *shape*, not as content to reproduce: it arrives full
+ * of placeholder text and bracketed markers, and a model told to "follow this document" will happily
+ * hand back `[FEATURE NAME]`. So the instruction says, in order: match the structure, replace every
+ * placeholder, and drop the sections the template marks optional if they do not apply.
+ *
+ * `{{requiredSections}}` may render empty — that is the OpenSpec task list, whose upstream template
+ * prescribes no fixed headings. The template alone then carries the shape, which is the honest
+ * answer rather than a heading list invented to fill the hole.
+ */
+const SPEC_GENERATION_METHODOLOGY: PromptAsset = {
+  id: 'spec.generation.methodology.v1',
+  system: [
+    'You are writing one file of a software specification bundle for a coding agent to build from.',
+    'You are following a specific methodology, and its template is given to you: match its structure',
+    'and its level of detail. The template is a shape, not content — replace every placeholder, every',
+    'bracketed marker and every HTML comment with real material about this product, and never return',
+    'any of them verbatim. Drop a section the template marks optional when it does not apply.',
+    'Write GitHub-flavoured Markdown. Use ATX headings (`## Section Name`). Return the document only,',
+    'with no preamble and no code fence around the whole file.',
+  ].join(' '),
+  user: [
+    'Write the {{documentLabel}} document for the following product idea, following this template:',
+    '',
+    '<<<TEMPLATE',
+    '{{template}}',
+    'TEMPLATE',
+    '{{requiredSections}}',
+    '',
+    'Product idea:',
+    '{{initialPrompt}}',
+    '{{context}}',
+    '{{changeInstruction}}',
+  ].join('\n'),
+  variables: [
+    'documentLabel',
+    'template',
+    'requiredSections',
+    'initialPrompt',
+    'context',
+    'changeInstruction',
+  ],
 };
 
 /**
@@ -437,6 +506,7 @@ const SESSION_SUMMARY: PromptAsset = {
 
 export const promptRegistry: Readonly<Record<PromptId, PromptAsset>> = Object.freeze({
   'spec.generation.v2': SPEC_GENERATION,
+  'spec.generation.methodology.v1': SPEC_GENERATION_METHODOLOGY,
   'review.board.v2': REVIEW_BOARD,
   'refinement.propose.v1': REFINEMENT_PROPOSE,
   'revision.note.v1': REVISION_NOTE,

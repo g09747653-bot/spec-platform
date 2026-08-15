@@ -12,10 +12,12 @@ import { findTransition } from './transition-table';
  * Pure and synchronous: a snapshot in, a verdict out, no I/O anywhere on the path (NFR-012 AC-1).
  * The decision is two steps and only two:
  *
- * 1. **Is the movement a row of the table?** A pair the table does not define is illegal — from
- *    `complete` that reads `SESSION_SEALED`, because the one defined exit is `complete → quality`
- *    and everything else is the seal itself (FR-020 AC-9); from anywhere else it is
- *    `TRANSITION_NOT_IN_TABLE`.
+ * 1. **Is the movement a row of the table?** The table is the session's *methodology's* table
+ *    (task 116); a pair it does not define is illegal — from `complete` that reads `SESSION_SEALED`,
+ *    because the one defined exit is `complete → quality` and everything else is the seal itself
+ *    (FR-020 AC-9); from anywhere else it is `TRANSITION_NOT_IN_TABLE`. A methodology that does not
+ *    visit a stage therefore refuses every row into it for exactly the same reason an illegal pair
+ *    is refused: the row is not in that session's table.
  * 2. **Does the row's gate hold?** Gates see persisted state only; nothing a model says can reach
  *    them (constitution P1).
  *
@@ -26,7 +28,7 @@ export function evaluateTransition(
   snapshot: WorkflowSnapshot,
   to: StagePosition,
 ): TransitionResult {
-  const row = findTransition(snapshot.position, to);
+  const row = findTransition(snapshot.position, to, snapshot.methodologyId);
 
   if (row === undefined) {
     return rejected(

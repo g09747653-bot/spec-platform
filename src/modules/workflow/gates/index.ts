@@ -74,6 +74,22 @@ function qualityToComplete(snapshot: WorkflowSnapshot): TransitionResult {
 }
 
 /**
+ * `<stage>.review → complete` for a methodology whose graph ends there (task 116).
+ *
+ * The same two questions `quality-to-complete` asks, about whichever stage owns the row: is the
+ * review decided, and does the bundle this methodology promises exist. It carries no Quality logic
+ * because a graph without a Quality stage has no ordering to contradict and no capability to
+ * register — those are exactly what makes the `tasks-to-*` pair composite, and exactly what a
+ * SpecKit or brownfield session does not have.
+ */
+function stageToComplete(snapshot: WorkflowSnapshot, edge: TransitionEdge): TransitionResult {
+  const review = reviewGate(snapshot, specStageOf(edge.from));
+  if (!review.allowed) return review;
+
+  return completionGate(snapshot);
+}
+
+/**
  * `complete → quality.collect`: the one way out of `complete` (FR-020 AC-5/AC-9).
  *
  * Requires the capability and the persisted Quality selection — nothing more: re-entry exists so
@@ -96,6 +112,7 @@ export const GATES: Readonly<
   'review-advance': (snapshot, edge) => reviewGate(snapshot, specStageOf(edge.from)),
   /** Backward within a stage is unconditional (FR-007 AC-5) — the row's existence is the rule. */
   backward: () => allowed(),
+  'stage-to-complete': (snapshot, edge) => stageToComplete(snapshot, edge),
   'tasks-to-complete': (snapshot) => tasksToComplete(snapshot),
   'tasks-to-quality': (snapshot) => tasksToQuality(snapshot),
   'quality-to-complete': (snapshot) => qualityToComplete(snapshot),

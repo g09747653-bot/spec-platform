@@ -21,6 +21,14 @@ const VARIABLES: { [Id in PromptId]: PromptVariables[Id] } = {
     context: '',
     changeInstruction: '',
   },
+  'spec.generation.methodology.v1': {
+    documentLabel: 'Plan',
+    template: '# Implementation Plan\n\n## Summary\n',
+    requiredSections: '1. ## Summary',
+    initialPrompt: 'A tool for writing specs.',
+    context: '',
+    changeInstruction: '',
+  },
   'interview.questions.v3': {
     stage: 'interview',
     audienceRules: 'They are not technical.',

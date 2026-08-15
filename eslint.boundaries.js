@@ -18,8 +18,12 @@ const MODULES = 'src/modules';
 const FORBIDDEN_IMPORTS = {
   // `web` may reach the domain only through server actions and route handlers.
   web: ['agents', 'quality', 'adapters'],
-  // `workflow` may import repository interfaces, `specs` types, capability interfaces.
+  // `workflow` may import repository interfaces, `specs` types, capability interfaces,
+  // and `methodologies` (its graph is a configuration now — task 116).
   workflow: ['agents', 'prompts', 'projects', 'quality', 'adapters', 'web'],
+  // `methodologies` is configuration data: the stage vocabulary and the file vocabulary, nothing
+  // else. It must never reach a consumer of its own, or the graph would depend on who walks it.
+  methodologies: ['agents', 'prompts', 'projects', 'quality', 'adapters', 'web'],
   // `agents` may import prompts, specs, projects, adapters/llm, adapters/research, workflow.
   agents: ['quality', 'web', 'adapters/parsing', 'adapters/storage'],
   // `quality` may import prompts, specs, adapters/llm.

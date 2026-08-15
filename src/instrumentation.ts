@@ -1,4 +1,5 @@
 import { getEnv } from '@/config/env';
+import { assertMethodologyConfigs } from '@/modules/methodologies';
 import { assertPromptRegistry } from '@/modules/prompts/registry';
 
 /**
@@ -14,4 +15,5 @@ import { assertPromptRegistry } from '@/modules/prompts/registry';
 export function register(): void {
   getEnv();
   assertPromptRegistry();
+  assertMethodologyConfigs();
 }
