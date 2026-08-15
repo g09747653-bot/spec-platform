@@ -1,0 +1,1 @@
+ALTER TABLE "sessions" ADD COLUMN "methodology_id" text DEFAULT 'myspec-greenfield-v1' NOT NULL;

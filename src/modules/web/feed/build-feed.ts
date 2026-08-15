@@ -1,3 +1,4 @@
+import { methodologyConfig } from '@/modules/methodologies';
 import {
   isSpecStage,
   positionKey,
@@ -250,6 +251,17 @@ function generationBlocks(source: FeedSource): GenerationBlock[] {
 }
 
 function documentBlocks(source: FeedSource): DocumentBlock[] {
+  /*
+   * The card shows the name the *methodology* exports, not the storage slot (task 117): SpecKit's
+   * Plan lives in the `solution` row and is `plan.md` everywhere the user can see it — the card, the
+   * path, and the ZIP. Falling back to the stored name keeps a session on an unknown methodology
+   * rendering its files rather than blanks.
+   */
+  const config = methodologyConfig(source.session.methodologyId);
+  const exportedName = (specType: string, stored: string): string =>
+    config.stages.find((stage) => stage.document?.specType === specType)?.document?.fileName ??
+    stored;
+
   return source.revisions.map((revision) => ({
     kind: 'document',
     id: `revision:${revision.revisionId}`,
@@ -260,8 +272,8 @@ function documentBlocks(source: FeedSource): DocumentBlock[] {
     revisionId: revision.revisionId,
     specFileId: revision.specFileId,
     specType: revision.specType,
-    fileName: revision.fileName,
-    path: specPath(source.session.projectName, revision.fileName),
+    fileName: exportedName(revision.specType, revision.fileName),
+    path: specPath(source.session.projectName, exportedName(revision.specType, revision.fileName)),
     revisionNumber: revision.revisionNumber,
     approved: revision.approved,
   }));

@@ -1,46 +1,62 @@
+import {
+  methodologyConfig,
+  stepCoversPosition,
+  type MethodologyConfig,
+} from '@/modules/methodologies';
 import type { Stage } from '@/modules/workflow/model/stages';
-import { TRANSITION_TABLE } from '@/modules/workflow/transition-table';
 
 /**
- * The numbered steps of a session, derived from the transition graph (task 105).
+ * The numbered steps of a session, read off its methodology (tasks 105, 117).
  *
- * The rail this replaces filtered a hand-written stage tuple. That was correct only for as long as
- * the tuple and the table agreed, and M9п turns the table into a *configuration* — one graph per
- * methodology (А-2 · M9). A step list read off a constant would then show MySpec's five steps for
- * an OpenSpec session, so the list is read off the graph now, while there is still only one graph
- * to be wrong about.
+ * The rail this replaced filtered a hand-written stage tuple; task 105 replaced that with a walk of
+ * the transition graph, "while there is still only one graph to be wrong about". There are five now,
+ * and the step list is no longer a walk at all — it is the configuration's own `steps`, because a
+ * step is not always a stage: the Edit workflow's three steps live inside two positions (Эталон
+ * §1.4), and no walk of a graph can recover a header its author wrote.
  *
- * The walk is deliberately simple: from the current stage, take the first forward edge that leaves
- * it, preferring anything over `complete` so the optional Quality detour is taken when the session
- * has opted into it. Backward edges are excluded by gate, not by inspection of the endpoints — a
- * `backward` gate is exactly what "this edge does not advance the session" means.
+ * The Quality detour stays conditional on the session's selection for the same reason it always was:
+ * a step the session has opted out of is not a step it will visit, and showing it greyed would
+ * promise a stage that will never arrive.
  */
-export function stageSequence(qualityEnabled: boolean): Stage[] {
-  const permitted = (stage: Stage): boolean => stage !== 'quality' || qualityEnabled;
+export interface StepModel {
+  label: string;
+  stage: Stage;
+  /** Whether the session's current position falls inside this step. */
+  current: boolean;
+}
 
+export function steps(
+  methodologyId: string | null | undefined,
+  currentStage: string,
+  currentSubstage: string | null,
+  qualityEnabled: boolean,
+): StepModel[] {
+  const config: MethodologyConfig = methodologyConfig(methodologyId);
+
+  return config.steps
+    .filter((step) => step.stage !== 'quality' || qualityEnabled)
+    .map((step) => ({
+      label: step.label,
+      stage: step.stage,
+      current: stepCoversPosition(step, currentStage, currentSubstage),
+    }));
+}
+
+/**
+ * The stages of a methodology in order — what a caller that thinks in stages rather than steps
+ * needs. Kept because a stage may carry several steps, so `steps().length` is not a stage count.
+ */
+export function stageSequence(
+  methodologyId: string | null | undefined,
+  qualityEnabled: boolean,
+): Stage[] {
+  const config = methodologyConfig(methodologyId);
   const order: Stage[] = [];
-  const seen = new Set<Stage>();
-  let current: Stage | undefined = 'interview';
 
-  while (current !== undefined && !seen.has(current)) {
-    order.push(current);
-    seen.add(current);
-
-    if (current === 'complete') break;
-
-    const leaving: Stage = current;
-    const targets: Stage[] = TRANSITION_TABLE.filter(
-      (edge) =>
-        edge.from.stage === leaving &&
-        edge.to.stage !== leaving &&
-        edge.gate !== 'backward' &&
-        permitted(edge.to.stage) &&
-        !seen.has(edge.to.stage),
-    ).map((edge) => edge.to.stage);
-
-    // `tasks.review` forks to `complete` and to `quality.collect`; the detour is the longer route,
-    // and a step list that stopped at the fork would hide a stage the session is going to visit.
-    current = targets.find((stage) => stage !== 'complete') ?? targets[0];
+  for (const stage of config.stages) {
+    if (stage.position === 'complete') continue;
+    if (stage.position === 'quality' && !qualityEnabled) continue;
+    if (!order.includes(stage.position)) order.push(stage.position);
   }
 
   return order;

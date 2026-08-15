@@ -57,6 +57,10 @@ const VARIABLES: { [Id in PromptId]: PromptVariables[Id] } = {
     offeredActions: 'approve, reject',
   },
   'chat.answer.v1': { message: 'what is this?', pendingDescription: 'nothing', context: '' },
+  'methodology.classify.v1': {
+    options: '- myspec-greenfield-v1: the full bundle for something new',
+    description: 'A tool for writing specs.',
+  },
   'interview.reply-assessment.skeleton.v1': { declaredNeeds: 'audience', reply: 'solo devs' },
   'interview.summary.skeleton.v1': {
     initialPrompt: 'A tool for writing specs.',

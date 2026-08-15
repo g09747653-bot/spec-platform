@@ -1,7 +1,9 @@
 import { zipSync, strToU8 } from 'fflate';
 
+import type { BundleEntry } from '@/modules/methodologies';
+
 import { fileNamesForMode, type ExportMode } from '../model/export';
-import { CORE_SPEC_TYPES, type SpecFileName } from '../model/spec-files';
+import { CORE_SPEC_TYPES, specFileName, SPEC_TYPES } from '../model/spec-files';
 import type { ExportableFile } from '../repositories/spec-files';
 
 /**
@@ -22,33 +24,57 @@ export type { ExportMode } from '../model/export';
 
 export interface ExportResult {
   zip: Uint8Array;
-  included: SpecFileName[];
-  omitted: SpecFileName[];
+  included: string[];
+  omitted: string[];
   mode: ExportMode;
 }
 
-export function assembleBundle(files: readonly ExportableFile[], mode: ExportMode): ExportResult {
-  const byName = new Map(files.map((file) => [file.fileName, file] as const));
+/**
+ * The parity plan: the four core files under their own names, plus `quality.md` in quality mode.
+ *
+ * The default when no methodology is supplied, and identical to what `fileNamesForMode` produced
+ * before methodologies existed — storage slot and exported name coincide for every parity file,
+ * which is why `myspec-greenfield-v1` exports byte-for-byte what M6 exported.
+ */
+function parityPlan(mode: ExportMode): BundleEntry[] {
+  const permitted = new Set<string>(fileNamesForMode(mode));
 
-  const included: SpecFileName[] = [];
-  const omitted: SpecFileName[] = [];
+  return SPEC_TYPES.filter((specType) => permitted.has(specFileName(specType))).map((specType) => ({
+    specType,
+    fileName: specFileName(specType),
+  }));
+}
+
+export function assembleBundle(
+  files: readonly ExportableFile[],
+  mode: ExportMode,
+  plan: readonly BundleEntry[] = parityPlan(mode),
+): ExportResult {
+  const byType = new Map(files.map((file) => [file.specType, file] as const));
+
+  const included: string[] = [];
+  const omitted: string[] = [];
   const entries: Record<string, Uint8Array> = {};
 
   /*
-   * The expected set comes from `fileNamesForMode`, which the repository query also keys off. One
+   * The expected set comes from the bundle plan, which the repository query also keys off. One
    * answer to "what belongs in this bundle" serves the resolution, the assembly and the manifest —
-   * so a fifth file cannot appear in one of them and be omitted from another.
+   * so an extra file cannot appear in one of them and be omitted from another.
+   *
+   * Lookup is by **storage slot**, not by name: a methodology's exported name is its own
+   * (`plan.md` for SpecKit's Plan), while what the database holds is the `solution` row. Keying on
+   * the name would have meant the repository and the archive agreeing only by coincidence.
    */
-  for (const fileName of fileNamesForMode(mode)) {
-    const file = byName.get(fileName);
+  for (const entry of plan) {
+    const file = byType.get(entry.specType);
 
     if (file === undefined) {
-      omitted.push(fileName);
+      omitted.push(entry.fileName);
       continue;
     }
 
-    included.push(fileName);
-    entries[fileName] = strToU8(file.content);
+    included.push(entry.fileName);
+    entries[entry.fileName] = strToU8(file.content);
   }
 
   return { zip: zipSync(entries, { level: 6 }), included, omitted, mode };

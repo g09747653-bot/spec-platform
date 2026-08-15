@@ -13,6 +13,7 @@ export const MODULE_ID = 'methodologies';
 
 export {
   bundleFileNames,
+  bundlePlan,
   documentAt,
   requiredDocumentStages,
   stageOf,
@@ -23,6 +24,7 @@ export {
   type MethodologyConfig,
   type MethodologyStage,
   type MethodologyStep,
+  type BundleEntry,
   type StageDocument,
 } from './model/config';
 

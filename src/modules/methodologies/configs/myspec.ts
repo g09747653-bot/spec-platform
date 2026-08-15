@@ -1,4 +1,4 @@
-import type { MethodologyConfig, MethodologyStage } from '../model/config';
+import type { MethodologyConfig, MethodologyStage, MethodologyStep } from '../model/config';
 
 import { vendoredDocument } from './vendored-document';
 
@@ -16,6 +16,15 @@ import { vendoredDocument } from './vendored-document';
  * it — and exports as `proposal.md`. Its round budgets are lower on purpose: brownfield work starts
  * from a system that already exists, so the interview has less to establish.
  */
+
+/**
+ * The terminal step (Эталон §1.4: every workflow's table ends in «Complete»).
+ *
+ * A step even though the position writes nothing: the header numbers what the session is walking
+ * towards, and a rail that stopped at the last document would leave a finished session with no lit
+ * pill at all.
+ */
+const COMPLETE_STEP: MethodologyStep = { label: 'Complete', stage: 'complete', substages: null };
 
 const complete: MethodologyStage = {
   position: 'complete',
@@ -108,6 +117,7 @@ export const MYSPEC_GREENFIELD_V1: MethodologyConfig = {
     { label: 'Solution', stage: 'solution', substages: null },
     { label: 'Tasks', stage: 'tasks', substages: null },
     { label: 'Quality', stage: 'quality', substages: null },
+    COMPLETE_STEP,
   ],
 };
 
@@ -166,6 +176,7 @@ export const MYSPEC_BROWNFIELD_V1: MethodologyConfig = {
     { label: 'Proposal', stage: 'constitution', substages: null },
     { label: 'Requirements', stage: 'requirements', substages: null },
     { label: 'Tasks', stage: 'tasks', substages: null },
+    COMPLETE_STEP,
   ],
 };
 
@@ -205,5 +216,6 @@ export const MYSPEC_EDIT_V1: MethodologyConfig = {
     { label: 'Reference', stage: 'interview', substages: null },
     { label: 'Describe', stage: 'constitution', substages: ['collect'] },
     { label: 'Review', stage: 'constitution', substages: ['generate', 'review'] },
+    COMPLETE_STEP,
   ],
 };

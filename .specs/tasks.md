@@ -1461,7 +1461,7 @@ Goal: methodologies become data, the surface becomes the product's information a
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 117\. Methodology selection and config-driven surface
+- [x] 117\. Methodology selection and config-driven surface
   - New Generate chat offers the methodology picker (badge, step-list preview) with **Auto** as default: a cheap single-shot classification of the seed description over the existing adapter chain; on any failure or ambiguity it falls back to `myspec-greenfield-v1` silently.
   - Session stores the methodology id; step pills, stage prompts, round budgets, document cards, and the ZIP file set all derive from the config. The methodology badge renders in the session header.
   - Export: the default methodology keeps the M6 contract — exactly 4 files with exact names; other methodologies export their config's file set; the omission manifest logic is config-driven.

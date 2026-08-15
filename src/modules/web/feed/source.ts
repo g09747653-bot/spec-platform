@@ -28,6 +28,8 @@ export interface FeedSourceSession {
   /** Where the session is now — read, never inferred. */
   position: StagePosition;
   completionCount: number;
+  /** The session's methodology (task 117); its documents name the files the cards show. */
+  methodologyId: string;
   /**
    * How many times one stage may be sent back for changes (task 113).
    *

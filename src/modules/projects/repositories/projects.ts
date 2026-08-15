@@ -37,6 +37,8 @@ export interface ProjectDetail extends ProjectSummary {
   initialPrompt: string;
   summary: string | null;
   qualityEnabled: boolean;
+  /** The methodology whose graph this session walks (task 117). */
+  methodologyId: string;
   /** How many times the session has reached `complete` (FR-020) — the feed's sealing count. */
   completionCount: number;
   /** The language every generated word answers in (У-1; task 108); `null` when undetermined. */
@@ -90,8 +92,32 @@ export function createProjectRepository(db: SchemaDatabase) {
      */
     async createFromPrompt(
       scope: OwnerScope,
-      input: { name: string; prompt: string; audience: string; contentLanguage: string | null },
+      input: {
+        name: string;
+        prompt: string;
+        audience: string;
+        contentLanguage: string | null;
+        /**
+         * The session's methodology, and the position its graph starts at (task 117).
+         *
+         * Optional, and absent means the parity workflow entered at `interview` — which is what
+         * every caller written before methodologies existed meant, and what the column defaults to.
+         */
+        methodologyId?: string;
+        entryStage?: string;
+        entrySubstage?: string | null;
+      },
     ): Promise<{ projectId: string; sessionId: string }> {
+      /*
+       * The fallbacks are the *schema's* defaults restated, not a workflow decision: `projects` may
+       * not import `workflow` (or the methodology registry that speaks its vocabulary), so a caller
+       * that has a methodology in hand passes its entry position as plain strings, and a caller that
+       * does not gets what the columns would have held anyway.
+       */
+      const methodologyId = input.methodologyId ?? 'myspec-greenfield-v1';
+      const entryStage = input.entryStage ?? 'interview';
+      const entrySubstage = input.entrySubstage ?? null;
+
       const created = await queryOneRow(
         db,
         sql`
@@ -100,12 +126,12 @@ export function createProjectRepository(db: SchemaDatabase) {
           VALUES (${scope.userId}, ${input.name})
           RETURNING id
         ), new_session AS (
-          INSERT INTO ${sessions} (project_id, initial_prompt, audience_profile, content_language)
-          SELECT id, ${input.prompt}, ${input.audience}, ${input.contentLanguage} FROM new_project
+          INSERT INTO ${sessions} (project_id, initial_prompt, audience_profile, content_language, methodology_id)
+          SELECT id, ${input.prompt}, ${input.audience}, ${input.contentLanguage}, ${methodologyId} FROM new_project
           RETURNING id, project_id
         ), new_state AS (
           INSERT INTO ${workflowState} (session_id, stage, substage)
-          SELECT id, 'interview', NULL FROM new_session
+          SELECT id, ${entryStage}, ${entrySubstage} FROM new_session
           RETURNING session_id
         )
         SELECT new_session.project_id AS project_id, new_session.id AS session_id
@@ -131,6 +157,7 @@ export function createProjectRepository(db: SchemaDatabase) {
           initialPrompt: sessions.initialPrompt,
           summary: sessions.summary,
           qualityEnabled: sessions.qualityEnabled,
+          methodologyId: sessions.methodologyId,
           completionCount: sessions.completionCount,
           contentLanguage: sessions.contentLanguage,
           stage: workflowState.stage,

@@ -1,7 +1,6 @@
 import type { NextConfig } from 'next';
 
 import { getEnv } from './src/config/env';
-import { assertMethodologyConfigs } from './src/modules/methodologies';
 import { assertPromptRegistry } from './src/modules/prompts/registry';
 
 /**
@@ -12,10 +11,14 @@ import { assertPromptRegistry } from './src/modules/prompts/registry';
  * The prompt registry is checked in the same breath (task 41): a template that uses an undeclared
  * placeholder, or declares a variable no template uses, fails the build rather than reaching a model
  * with `{{foo}}` in it.
+ *
+ * The methodology configurations are **not** checked here, and cannot be: Next transpiles this file
+ * without the `@/` path alias, so a module with runtime cross-module imports fails to resolve from it
+ * (found by the first live run of the M9п walks). Their guard runs in `instrumentation.ts`, which
+ * refuses to serve traffic, and in a unit test that refuses to merge — see D-123.
  */
 getEnv();
 assertPromptRegistry();
-assertMethodologyConfigs();
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,

@@ -1,3 +1,4 @@
+import type { ExportMode } from '@/modules/specs/model/export';
 import type { SpecType } from '@/modules/specs/model/spec-files';
 import type { SectionList } from '@/modules/specs/validate-structure';
 import type { Stage, Substage } from '@/modules/workflow/model/stages';
@@ -139,11 +140,41 @@ export function requiredDocumentStages(config: MethodologyConfig): Stage[] {
     .map((stage) => stage.position);
 }
 
+export interface BundleEntry {
+  /** Where the content is stored — the closed five-name vocabulary of DR-4. */
+  specType: SpecType;
+  /** What the file is called in the download. */
+  fileName: string;
+}
+
+/**
+ * What a bundle of this methodology contains, in graph order (task 117; FR-015).
+ *
+ * The one answer to "which files belong in this export", serving the repository query, the archive
+ * assembly and the omission manifest alike — the single-source rule `fileNamesForMode` held for the
+ * parity bundle, now keyed by the session's methodology instead of by a constant.
+ *
+ * Each entry pairs the **storage slot** with the **exported name**, because for a foreign
+ * methodology they differ: SpecKit's Plan lives in the `solution` row and downloads as `plan.md`.
+ * For the parity methodology the two coincide, which is why its export stays byte-identical to what
+ * M6 produced.
+ *
+ * `default` mode drops the Quality stage exactly as constitution A6 requires. Stated as "the
+ * optional Quality stage" rather than "the fifth file", so a methodology that has no Quality stage
+ * is simply unaffected rather than special-cased.
+ */
+export function bundlePlan(config: MethodologyConfig, mode: ExportMode): BundleEntry[] {
+  return config.stages.flatMap((stage) => {
+    if (stage.document === null) return [];
+    if (stage.position === 'quality' && mode !== 'quality') return [];
+
+    return [{ specType: stage.document.specType, fileName: stage.document.fileName }];
+  });
+}
+
 /** Every file name this methodology's bundle may contain, in graph order (task 117). */
 export function bundleFileNames(config: MethodologyConfig): string[] {
-  return config.stages.flatMap((stage) =>
-    stage.document === null ? [] : [stage.document.fileName],
-  );
+  return bundlePlan(config, 'quality').map((entry) => entry.fileName);
 }
 
 /** The document produced at `position`, or `null`. */

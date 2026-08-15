@@ -55,12 +55,12 @@ describe('the five configurations (task 116 AC-3; Эталон §1.4)', () => {
   it.each([
     [
       MYSPEC_GREENFIELD_V1,
-      ['Interview', 'Constitution', 'Requirements', 'Solution', 'Tasks', 'Quality'],
+      ['Interview', 'Constitution', 'Requirements', 'Solution', 'Tasks', 'Quality', 'Complete'],
     ],
-    [MYSPEC_BROWNFIELD_V1, ['Interview', 'Proposal', 'Requirements', 'Tasks']],
-    [SPECKIT_GREENFIELD_V1, ['Interview', 'Constitution', 'Specify', 'Plan', 'Tasks']],
-    [OPENSPEC_BROWNFIELD_V1, ['Explore', 'Proposal', 'Specs', 'Solution', 'Tasks']],
-    [MYSPEC_EDIT_V1, ['Reference', 'Describe', 'Review']],
+    [MYSPEC_BROWNFIELD_V1, ['Interview', 'Proposal', 'Requirements', 'Tasks', 'Complete']],
+    [SPECKIT_GREENFIELD_V1, ['Interview', 'Constitution', 'Specify', 'Plan', 'Tasks', 'Complete']],
+    [OPENSPEC_BROWNFIELD_V1, ['Explore', 'Proposal', 'Specs', 'Solution', 'Tasks', 'Complete']],
+    [MYSPEC_EDIT_V1, ['Reference', 'Describe', 'Review', 'Complete']],
   ])('$id lists the steps of Эталон §1.4', (config, steps) => {
     expect(config.steps.map((step) => step.label)).toEqual(steps);
   });

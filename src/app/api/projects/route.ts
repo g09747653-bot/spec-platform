@@ -1,6 +1,13 @@
 import { getDatabase } from '@/db/client';
+import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
+import { createMethodologyClassifier } from '@/modules/agents/methodology/classify';
+import { configEntryPosition, methodologyConfig } from '@/modules/methodologies';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
-import { CreateProjectRequest, deriveProjectName } from '@/modules/projects/create-project';
+import {
+  AUTO_METHODOLOGY,
+  CreateProjectRequest,
+  deriveProjectName,
+} from '@/modules/projects/create-project';
 import { detectContentLanguage } from '@/modules/projects/language';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
 import { errorResponse, jsonResponse } from '@/modules/web/api/responses';
@@ -39,11 +46,30 @@ export async function POST(request: Request): Promise<Response> {
     });
   }
 
-  const { prompt, audience } = parsed.data;
+  const { prompt, audience, methodology } = parsed.data;
+
+  /*
+   * Auto (task 117): one cheap classification over the existing chain, and every failure — a bad
+   * answer, an unknown id, an exhausted provider — lands on the parity workflow without saying so.
+   * The user picked "let it choose", not "tell me who chose".
+   */
+  const methodologyId =
+    methodology === AUTO_METHODOLOGY
+      ? await createMethodologyClassifier(createDefaultAdapter()).classify({
+          description: prompt,
+          runId: `methodology-auto-${scope.userId}`,
+        })
+      : methodology;
+
+  const entry = configEntryPosition(methodologyConfig(methodologyId));
+
   const created = await createProjectRepository(getDatabase()).createFromPrompt(scope, {
     name: deriveProjectName(prompt),
     prompt,
     audience,
+    methodologyId,
+    entryStage: entry.stage,
+    entrySubstage: entry.substage,
     /*
      * У-1: detected here, once, and stored (task 108). Every later call reads the column — the
      * detection is deterministic and cheap, but re-running it per request would let a round whose

@@ -6,14 +6,16 @@ import {
   type LlmAdapter,
   type ProviderId,
 } from '@/modules/adapters/llm';
-import { specGenerationPrompt } from '@/modules/prompts/assets/spec-generation';
+import { templateText, type StageDocument } from '@/modules/methodologies';
+import {
+  methodologyGenerationPrompt,
+  specGenerationPrompt,
+} from '@/modules/prompts/assets/spec-generation';
 import type { CoreSpecType } from '@/modules/specs/model/spec-files';
 import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
-import {
-  describeViolations,
-  parseHeadings,
-  validateStructure,
-} from '@/modules/specs/validate-structure';
+
+import { documentStructureVerdict } from './document-structure';
+import { describeViolations, parseHeadings } from '@/modules/specs/validate-structure';
 
 /**
  * One generation run, end to end (task 45; solution.md — Generation Sequence).
@@ -42,6 +44,15 @@ export interface RunGenerationInput {
   runId: string;
   projectId: string;
   specType: CoreSpecType;
+  /**
+   * The methodology's descriptor for this document (task 117), or absent for the parity path.
+   *
+   * It decides the prompt asset, the template the writer is shown, and the section list the result
+   * is checked against — together, so what is asked for and what is accepted cannot come apart.
+   */
+  document?: StageDocument | null;
+  /** What the methodology calls this document — «Plan», «Proposal». Defaults to the spec type. */
+  documentLabel?: string;
   initialPrompt: string;
   /** Assembled generation context (task 50). */
   context?: string;
@@ -97,13 +108,27 @@ export async function runGeneration(input: RunGenerationInput): Promise<Generati
     },
   });
 
-  const prompt = specGenerationPrompt({
-    specType,
-    initialPrompt: input.initialPrompt,
-    context: input.context,
-    changeInstruction: input.changeInstruction,
-    contentLanguage: input.contentLanguage,
-  });
+  const document = input.document ?? null;
+
+  const prompt =
+    document === null || document.structure.kind === 'parity'
+      ? specGenerationPrompt({
+          specType,
+          initialPrompt: input.initialPrompt,
+          context: input.context,
+          changeInstruction: input.changeInstruction,
+          contentLanguage: input.contentLanguage,
+        })
+      : methodologyGenerationPrompt({
+          documentLabel: input.documentLabel ?? specType,
+          template: document.templateId === null ? '' : templateText(document.templateId),
+          requiredSections:
+            document.structure.kind === 'declared' ? document.structure.sections : [],
+          initialPrompt: input.initialPrompt,
+          context: input.context,
+          changeInstruction: input.changeInstruction,
+          contentLanguage: input.contentLanguage,
+        });
 
   let attempts = 1;
 
@@ -144,7 +169,7 @@ export async function runGeneration(input: RunGenerationInput): Promise<Generati
      * would be true of the checker and false of the bundle. The check goes through
      * `validateStructure`; the agent never sees the heading list itself (D-16).
      */
-    const structure = validateStructure(specType, result.text);
+    const structure = documentStructureVerdict(document, specType, result.text);
 
     if (!structure.valid) {
       /*

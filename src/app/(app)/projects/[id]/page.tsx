@@ -16,12 +16,13 @@ import { registeredCapabilityIds } from '@/modules/workflow/capabilities';
 import { qualityExportPort } from '@/modules/workflow/quality-port';
 import { canAskAnotherRound, evaluateTransition } from '@/modules/workflow/evaluate-transition';
 import { isAskingStage, type StagePosition } from '@/modules/workflow/model/stages';
-import { nextPosition } from '@/modules/workflow/next-position';
+import { forwardDoors, nextPosition } from '@/modules/workflow/next-position';
 import { assembleWorkflowSnapshot } from '@/modules/workflow/snapshot-assembler';
 import { unmetNeedNames, type WorkflowSnapshot } from '@/modules/workflow/snapshot';
 import { buildFeed } from '@/modules/web/feed/build-feed';
 import { SessionFeed } from '@/modules/web/feed/session-feed';
 import type { StageActionsModel, TransitionTargetModel } from '@/modules/web/feed/stage-actions';
+import { MethodologyBadge } from '@/modules/web/feed/methodology-badge';
 import { StepPills } from '@/modules/web/feed/step-pills';
 import type { PendingProposalModel } from '@/modules/web/feed/proposal-block';
 import { Attachments, type AttachmentModel } from '@/modules/web/session/attachments';
@@ -78,6 +79,15 @@ function nextTarget(snapshot: WorkflowSnapshot): TransitionTargetModel | null {
   const to = nextPosition(snapshot);
   if (to === null) return null;
 
+  return targetModel(snapshot, to, labelFor(snapshot.position, to));
+}
+
+/** One door, with the gate's current verdict on it. Presentation only — the server re-decides. */
+function targetModel(
+  snapshot: WorkflowSnapshot,
+  to: StagePosition,
+  label: string,
+): TransitionTargetModel {
   const verdict = evaluateTransition(snapshot, to);
   const unmet: string[] = verdict.allowed
     ? []
@@ -86,7 +96,7 @@ function nextTarget(snapshot: WorkflowSnapshot): TransitionTargetModel | null {
       ]);
 
   return {
-    label: labelFor(snapshot.position, to),
+    label,
     toStage: to.stage,
     toSubstage: to.substage,
     ready: verdict.allowed,
@@ -196,6 +206,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       ? position.stage
       : null;
 
+  const actionsTarget = snapshot === null ? null : nextTarget(snapshot);
+
   const actions: StageActionsModel = {
     askingStage,
     canAskMore:
@@ -208,19 +220,40 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     unmetNeeds:
       snapshot !== null && askingStage !== null ? unmetNeedNames(snapshot, askingStage) : [],
     summaryPersisted: snapshot?.summaryPersisted ?? false,
-    target: snapshot === null ? null : nextTarget(snapshot),
+    target: actionsTarget,
+    /*
+     * Every other forward door (task 117). The primary one is filtered out by position, not by
+     * label, so a methodology with no fork simply has none — and the parity graph never does,
+     * because its one fork is the Quality selection, which the session has already made.
+     */
+    alternates:
+      snapshot === null
+        ? []
+        : forwardDoors(snapshot)
+            .filter(
+              (door) =>
+                door.to.stage !== actionsTarget?.toStage ||
+                door.to.substage !== actionsTarget.toSubstage,
+            )
+            .flatMap((door) => {
+              return [targetModel(snapshot, door.to, door.label)];
+            }),
   };
 
   return (
     <section className="flex min-h-0 flex-col gap-4" data-testid="session">
       <header className="flex flex-col gap-2">
-        <h1 className="text-xl font-semibold tracking-tight" data-testid="session-project-name">
-          {project.name}
-        </h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-xl font-semibold tracking-tight" data-testid="session-project-name">
+            {project.name}
+          </h1>
+          <MethodologyBadge methodologyId={project.methodologyId} />
+        </div>
         <StepPills
           currentStage={project.stage}
           currentSubstage={project.substage}
           qualityEnabled={project.qualityEnabled}
+          methodologyId={project.methodologyId}
         />
       </header>
 

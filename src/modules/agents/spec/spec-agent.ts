@@ -5,12 +5,10 @@ import {
   methodologyGenerationPrompt,
   specGenerationPrompt,
 } from '@/modules/prompts/assets/spec-generation';
-import { isCoreSpecType, type CoreSpecType } from '@/modules/specs/model/spec-files';
-import {
-  validateAgainstSections,
-  validateStructure,
-  type StructureResult,
-} from '@/modules/specs/validate-structure';
+import type { CoreSpecType } from '@/modules/specs/model/spec-files';
+import type { StructureResult } from '@/modules/specs/validate-structure';
+
+import { documentStructureVerdict } from './document-structure';
 
 /**
  * The spec writer (tasks 20 and 51; solution.md — `agents`).
@@ -103,35 +101,10 @@ export function createSpecAgent(adapter: LlmAdapter) {
       return {
         content: result.text,
         promptId: prompt.id,
-        structure: structureOf(document, input.specType, result.text),
+        structure: documentStructureVerdict(document, input.specType, result.text),
       };
     },
   };
-}
-
-/**
- * The verdict on a generated document's structure.
- *
- * Three answers, one per `DocumentStructure`. `parity` goes through `validateStructure`, the single
- * entry point to the baseline (D-16) — unchanged from before methodologies existed. `declared` goes
- * through `validateAgainstSections` with the template's own list. `free` is **valid by definition**:
- * a template that prescribes no headings gives nothing to assert, and reporting a violation against
- * a list that does not exist would block a perfectly well-formed document.
- */
-function structureOf(
-  document: StageDocument | null,
-  specType: CoreSpecType,
-  content: string,
-): StructureResult {
-  if (document === null || document.structure.kind === 'parity') {
-    return isCoreSpecType(specType)
-      ? validateStructure(specType, content)
-      : { valid: true, violations: [] };
-  }
-
-  if (document.structure.kind === 'free') return { valid: true, violations: [] };
-
-  return validateAgainstSections(content, document.structure.sections);
 }
 
 export type SpecAgent = ReturnType<typeof createSpecAgent>;

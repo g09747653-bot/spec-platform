@@ -1,4 +1,4 @@
-import type { MethodologyConfig, MethodologyStage } from '../model/config';
+import type { MethodologyConfig, MethodologyStage, MethodologyStep } from '../model/config';
 
 import { vendoredDocument } from './vendored-document';
 
@@ -16,6 +16,15 @@ import { vendoredDocument } from './vendored-document';
  * one the plan is built from". The user never sees the letter — they see the step name, the file
  * name, and the template's own shape.
  */
+
+/**
+ * The terminal step (Эталон §1.4: every workflow's table ends in «Complete»).
+ *
+ * A step even though the position writes nothing: the header numbers what the session is walking
+ * towards, and a rail that stopped at the last document would leave a finished session with no lit
+ * pill at all.
+ */
+const COMPLETE_STEP: MethodologyStep = { label: 'Complete', stage: 'complete', substages: null };
 
 const complete: MethodologyStage = {
   position: 'complete',
@@ -80,6 +89,7 @@ export const SPECKIT_GREENFIELD_V1: MethodologyConfig = {
     { label: 'Specify', stage: 'requirements', substages: null },
     { label: 'Plan', stage: 'solution', substages: null },
     { label: 'Tasks', stage: 'tasks', substages: null },
+    COMPLETE_STEP,
   ],
 };
 
@@ -135,5 +145,6 @@ export const OPENSPEC_BROWNFIELD_V1: MethodologyConfig = {
     { label: 'Specs', stage: 'requirements', substages: null },
     { label: 'Solution', stage: 'solution', substages: null },
     { label: 'Tasks', stage: 'tasks', substages: null },
+    COMPLETE_STEP,
   ],
 };
