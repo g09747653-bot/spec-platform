@@ -300,7 +300,7 @@ describe('POST /api/sessions/:id/transition (task 29)', () => {
 
     it('still produces a board when the provider chain is exhausted — a measurement costs no call', async () => {
       vi.mocked(createDefaultAdapter).mockReturnValueOnce({
-        generateStreaming: () => Promise.reject(new AllProvidersFailedError([], 'exhausted')),
+        generateStreaming: () => Promise.reject(new AllProvidersFailedError(3)),
       });
 
       await approvedDocument('# Constitution\n\n## Purpose\n\nThis document implements FR-042.\n');
