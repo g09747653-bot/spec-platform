@@ -52,6 +52,8 @@ function toQuestions(payload: unknown): FeedQuestion[] {
       id: option.id,
       label: option.label,
       ...(option.description === undefined ? {} : { description: option.description }),
+      // v3 (task 106). Absent on every round drafted before it, which renders as a plain option.
+      ...(option.recommended === undefined ? {} : { recommended: option.recommended }),
     })),
     allowOther: question.allowOther,
     /*

@@ -69,14 +69,11 @@ export function SessionFeed({
   const [draft, setDraft] = useState('');
 
   /*
-   * The persisted feed with this visit's chat turns on the end. A turn in flight is shown as an
-   * assistant block still being written, so the conversation never jumps from "sent" to "answered"
+   * The persisted feed with this visit's chat turns on the end. A reply still arriving is an
+   * assistant block being written into, so the conversation never jumps from "sent" to "answered"
    * with nothing in between (task 109).
    */
-  const withChat = appendChatTurns(
-    feed,
-    chat.busy ? [...chat.turns, { role: 'assistant', text: '…', streaming: true }] : chat.turns,
-  );
+  const withChat = appendChatTurns(feed, chat.turns);
 
   const { tail } = feed;
   const blocked = tail.kind === 'pending-round';

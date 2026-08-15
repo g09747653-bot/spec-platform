@@ -22,6 +22,8 @@ const ReplyAssessmentArtifact = z.object({
 export interface ReplyAssessmentInput {
   reply: string;
   declaredNeeds: readonly string[];
+  /** The session's content language (У-1; task 108); forwarded to the prompt assembly point. */
+  contentLanguage?: string | null | undefined;
   runId: string;
   signal?: AbortSignal;
 }

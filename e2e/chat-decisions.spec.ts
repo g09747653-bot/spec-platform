@@ -93,4 +93,118 @@ test.describe('deciding from chat', () => {
     await expect(page.getByTestId('spec-card')).toContainText('approved');
     await expect(page.getByTestId('approve-spec')).toHaveCount(0);
   });
+  /**
+   * Task 109 — the composer is live at every position, and asking does not move anything.
+   *
+   * The M4 suite proved chat could decide a *spec card*. In a chat-first session the composer is on
+   * screen the whole way through, so the claim has to hold at the positions the user actually
+   * spends time in — and the sharpest of those is a review, where a question and a decision look
+   * very much alike.
+   */
+  test('a question asked mid-review answers without moving the session (AC-1)', async ({
+    page,
+    context,
+  }) => {
+    test.slow();
+
+    await signIn(context, await createSignedInUser('mid-review'));
+    await draftASpec(page);
+
+    await page.getByTestId('approve-spec').click();
+    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await page.getByTestId('proceed').click();
+    await expect(page.getByTestId('review-board')).toBeVisible({ timeout: 20_000 });
+
+    const before = {
+      stage: await page.getByTestId('stage-current').textContent(),
+      substage: await page.getByTestId('stage-substage').textContent(),
+      revision: await page.getByTestId('spec-revision-number').textContent(),
+    };
+
+    await say(page, 'what should I pick here?');
+    await expect(page.getByTestId('chat-turn-assistant')).toBeVisible({ timeout: 20_000 });
+
+    // The position is untouched, and so is the board: a question is not a decision.
+    expect(await page.getByTestId('stage-current').textContent()).toBe(before.stage);
+    expect(await page.getByTestId('stage-substage').textContent()).toBe(before.substage);
+    expect(await page.getByTestId('spec-revision-number').textContent()).toBe(before.revision);
+    await expect(page.getByTestId('review-board')).toBeVisible();
+    await expect(page.getByTestId('review-accept')).toBeEnabled();
+
+    // …and it survives a reload as what it is: a turn of this visit, not a persisted decision.
+    await page.reload();
+    await expect(page.getByTestId('review-board')).toBeVisible();
+    expect(await page.getByTestId('stage-substage').textContent()).toBe(before.substage);
+  });
+
+  /**
+   * The M4 contract, extended to the card M7п put in the feed: a review decided by typing lands the
+   * same persisted state as the button, because it is the same endpoint on the same input.
+   */
+  test('a decision phrase decides the review, exactly as the button does (AC-2)', async ({
+    page,
+    context,
+  }) => {
+    test.slow();
+
+    await signIn(context, await createSignedInUser('typed-review'));
+    await draftASpec(page);
+
+    await page.getByTestId('approve-spec').click();
+    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await page.getByTestId('proceed').click();
+    await expect(page.getByTestId('review-board')).toBeVisible({ timeout: 20_000 });
+
+    await say(page, 'accept the review');
+
+    await expect(page.getByTestId('review-board')).toHaveCount(0, { timeout: 20_000 });
+    await expect(page.getByTestId('review-decision')).toHaveText('accept');
+
+    // The gate the decision opens is open — which is the whole point of it being the same write.
+    await expect(page.getByTestId('proceed')).toBeEnabled();
+    await page.reload();
+    await expect(page.getByTestId('review-decision')).toHaveText('accept');
+  });
+
+  /** The composer is never the thing that is disabled — that is the liveness invariant's floor. */
+  test('the composer stays usable while a reply is still arriving (AC-3)', async ({
+    page,
+    context,
+  }) => {
+    await signIn(context, await createSignedInUser('streamer'));
+    await draftASpec(page);
+
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    await page.route(
+      '**/api/sessions/*/messages',
+      async (route) => {
+        await held;
+        await route.continue();
+      },
+      { times: 1 },
+    );
+
+    await page.getByTestId('chat-message').fill('what does this file do?');
+    await page.getByTestId('chat-send').click();
+
+    // Send waits for its own request; the box beside it does not, and neither does the card.
+    await expect(page.getByTestId('chat-send')).toBeDisabled();
+    await expect(page.getByTestId('chat-message')).toBeEnabled();
+    await expect(page.getByTestId('approve-spec')).toBeEnabled();
+
+    release();
+    await expect(page.getByTestId('chat-turn-assistant')).toBeVisible({ timeout: 20_000 });
+
+    /*
+     * Send comes back once the reply has *finished* — the turn above appears on the first delta,
+     * which is the point of streaming, so its visibility says the answer started rather than ended.
+     * The box is what has to hold something for Send to be offered at all: it is empty, not busy.
+     */
+    await page.getByTestId('chat-message').fill('and another thing');
+    await expect(page.getByTestId('chat-send')).toBeEnabled({ timeout: 20_000 });
+  });
 });

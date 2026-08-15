@@ -16,16 +16,39 @@
  * The JSON deliberately matches `QuestionSetSchema` — the stub stands in for a well-behaved
  * model; the repair and rejection paths are exercised in unit tests with corrupted documents.
  */
+interface StubOption {
+  id: string;
+  label: string;
+  description?: string;
+  recommended?: boolean;
+}
+
 interface StubQuestion {
   id: string;
   text: string;
   type: 'single' | 'multiple';
-  options: { id: string; label: string; description?: string }[];
+  options: StubOption[];
   allowOther: true;
   informationNeeds: string[];
 }
 
-const option = (id: string, label: string): { id: string; label: string } => ({ id, label });
+const option = (id: string, label: string, description?: string): StubOption => ({
+  id,
+  label,
+  ...(description === undefined ? {} : { description }),
+});
+
+/**
+ * The one option a well-behaved v3 model would advise (task 106; Эталон §1.1).
+ *
+ * Exactly one question of the stub's curriculum carries a recommendation, deliberately: the badge
+ * has to be provably absent where the model did not mark anything, and a fixture that recommended
+ * something everywhere could not show that.
+ */
+const recommend = (id: string, label: string, description: string): StubOption => ({
+  ...option(id, label, description),
+  recommended: true,
+});
 
 function roundOne(stage: string): StubQuestion[] {
   if (stage === 'interview') {
@@ -35,9 +58,9 @@ function roundOne(stage: string): StubQuestion[] {
         text: 'Who is this primarily for?',
         type: 'single',
         options: [
-          option('solo-devs', 'Solo developers and indie hackers'),
-          option('teams', 'Small development teams'),
-          option('founders', 'Non-technical founders'),
+          option('solo-devs', 'Solo developers and indie hackers', 'One person, many projects'),
+          recommend('teams', 'Small development teams', 'Two to ten people sharing a backlog'),
+          option('founders', 'Non-technical founders', 'People who describe, but do not build'),
         ],
         allowOther: true,
         informationNeeds: ['target-users'],
@@ -47,10 +70,10 @@ function roundOne(stage: string): StubQuestion[] {
         text: 'Which problems should it solve first?',
         type: 'multiple',
         options: [
-          option('context', 'Agents lose context'),
-          option('blank-page', 'Writing specs from a blank page'),
-          option('review', 'No review workflow'),
-          option('persistence', 'Nothing is persisted'),
+          option('context', 'Agents lose context', 'The agent forgets what was decided earlier'),
+          option('blank-page', 'Writing specs from a blank page', 'Nothing to start from'),
+          option('review', 'No review workflow', 'Nobody checks the spec before it is built'),
+          option('persistence', 'Nothing is persisted', 'Progress is lost when the tab closes'),
         ],
         allowOther: true,
         informationNeeds: ['core-problem'],

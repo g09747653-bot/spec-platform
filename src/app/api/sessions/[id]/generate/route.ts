@@ -201,6 +201,8 @@ export async function POST(
           projectId: session.projectId,
           specType,
           initialPrompt: session.initialPrompt,
+          // У-1: documents are written in the language the user described the product in (task 108).
+          contentLanguage: session.contentLanguage,
           context: context.text,
           // What the prompt was built from, recorded on the revision this run writes (DR-12).
           contextAttachmentIds: collected.contextAttachmentIds,

@@ -129,6 +129,10 @@ export async function POST(
   try {
     outcome = await agent.draftRound({
       stage,
+      // У-5: how the questions are worded, from the session's stored profile (task 106).
+      audience: session.audienceProfile,
+      // У-1: the session's own language, read from the column, never re-detected (task 108).
+      contentLanguage: session.contentLanguage,
       roundNumber: nextRoundNumber,
       initialPrompt: session.initialPrompt,
       summary: session.summary,

@@ -1,6 +1,21 @@
-import { boolean, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import {
+  boolean,
+  check,
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core';
+
+import { AUDIENCE_PROFILES } from '@/modules/projects/audience';
 
 import { users } from './users';
+
+/** Renders a tuple of names as a SQL value list. The inputs are compile-time constants. */
+const list = (values: readonly string[]) => sql.raw(values.map((value) => `'${value}'`).join(', '));
 
 /**
  * Owned container for one bundle (DR-1; FR-002).
@@ -37,20 +52,43 @@ export const projects = pgTable(
  * `summary` stays null until the interview agent persists one — the third condition of the
  * interview exit gate (constitution A2) is precisely "this column is not null".
  */
-export const sessions = pgTable('sessions', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  projectId: uuid('project_id')
-    .notNull()
-    .unique()
-    .references(() => projects.id, { onDelete: 'cascade' }),
-  initialPrompt: text('initial_prompt').notNull(),
-  summary: text('summary'),
-  /** Current-state field by design; not immutable (solution.md — Entity Notes). */
-  qualityEnabled: boolean('quality_enabled').notNull().default(false),
-  /** Number of times the session has reached `complete` (FR-020). */
-  completionCount: integer('completion_count').notNull().default(0),
-  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
-});
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .unique()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    initialPrompt: text('initial_prompt').notNull(),
+    summary: text('summary'),
+    /** Current-state field by design; not immutable (solution.md — Entity Notes). */
+    qualityEnabled: boolean('quality_enabled').notNull().default(false),
+    /**
+     * Who the interview is addressing (У-5; task 106). Chosen once at project creation and stored
+     * here rather than asked again per round: a register that changed mid-interview would read as
+     * two different interviewers.
+     */
+    audienceProfile: text('audience_profile').notNull().default('non-technical'),
+    /**
+     * The language the user's own words are in (У-1; task 108), as an ISO 639-1 code.
+     *
+     * Nullable, and null is a real value: a two-word prompt in a language with no script of its own
+     * carries no signal, and the prompt layer then instructs the model to mirror the user rather
+     * than guessing. No CHECK — the codes come from our own detector, not from a request.
+     */
+    contentLanguage: text('content_language'),
+    /** Number of times the session has reached `complete` (FR-020). */
+    completionCount: integer('completion_count').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      'sessions_audience_profile_valid',
+      sql`${table.audienceProfile} IN (${list(AUDIENCE_PROFILES)})`,
+    ),
+  ],
+);
 
 export type ProjectRow = typeof projects.$inferSelect;
 export type SessionRow = typeof sessions.$inferSelect;

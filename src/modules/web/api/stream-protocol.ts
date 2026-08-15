@@ -85,16 +85,19 @@ export function encodeEvent(event: GenerationEvent): string {
  * not take down a stream whose remaining events are fine, and the chunk log is what guarantees the
  * text itself is recoverable.
  */
-export function decodeEvents(buffer: string): { events: GenerationEvent[]; rest: string } {
+export function decodeNdjson<T>(
+  buffer: string,
+  schema: z.ZodType<T>,
+): { events: T[]; rest: string } {
   const lines = buffer.split('\n');
   const rest = lines.pop() ?? '';
-  const events: GenerationEvent[] = [];
+  const events: T[] = [];
 
   for (const line of lines) {
     if (line.trim() === '') continue;
 
     try {
-      const parsed = generationEventSchema.safeParse(JSON.parse(line));
+      const parsed = schema.safeParse(JSON.parse(line));
       if (parsed.success) events.push(parsed.data);
     } catch {
       // Not JSON at all. Same treatment: skip the line, keep the stream.
@@ -102,4 +105,8 @@ export function decodeEvents(buffer: string): { events: GenerationEvent[]; rest:
   }
 
   return { events, rest };
+}
+
+export function decodeEvents(buffer: string): { events: GenerationEvent[]; rest: string } {
+  return decodeNdjson(buffer, generationEventSchema);
 }

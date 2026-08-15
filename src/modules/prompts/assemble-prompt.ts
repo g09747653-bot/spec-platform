@@ -1,6 +1,7 @@
 import { isCoreSpecType } from '@/modules/specs/model/spec-files';
 import { requiredSections } from '@/modules/specs/section-schema';
 
+import { contentLanguageInstruction } from './content-language';
 import {
   promptRegistry,
   type AssembledPrompt,
@@ -90,9 +91,28 @@ function suppliedValues(variables: PromptVariables[PromptId]): Record<string, st
   return values;
 }
 
+/**
+ * What every prompt is told regardless of which prompt it is (task 108).
+ *
+ * One field today, and the shape is the point: anything that must hold for *all* model calls belongs
+ * here rather than in each asset, and this is the single assembly point У-1 requires the language
+ * instruction to flow from.
+ */
+export interface PromptContext {
+  /**
+   * The session's content language as an ISO 639-1 code, or `null` when detection could not tell.
+   *
+   * Optional so a caller that has no session — there are none today, and the type would be a lie if
+   * there were — still produces a complete prompt: `null` renders the mirror instruction, which is
+   * the correct answer for an unknown language rather than a degraded one.
+   */
+  contentLanguage?: string | null | undefined;
+}
+
 export function assemblePrompt<Id extends PromptId>(
   id: Id,
   variables: PromptVariables[Id],
+  context: PromptContext = {},
 ): AssembledPrompt {
   const asset = promptRegistry[id];
   const values: Record<string, string> = {
@@ -100,9 +120,16 @@ export function assemblePrompt<Id extends PromptId>(
     ...derivedValues(id, variables),
   };
 
+  const system = interpolateTemplate(asset.system, values, asset.id);
+
   return {
     id,
-    system: interpolateTemplate(asset.system, values, asset.id),
+    /*
+     * Appended, never interpolated: the instruction is not a variable of any asset, so no asset can
+     * omit it, reword it, or place it somewhere the model reads it as part of the task. It goes last
+     * because the last line of a system prompt is the one a model weighs most.
+     */
+    system: `${system}\n\n${contentLanguageInstruction(context.contentLanguage)}`,
     user: interpolateTemplate(asset.user, values, asset.id),
   };
 }

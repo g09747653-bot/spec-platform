@@ -24,19 +24,28 @@ export interface SpecPromptInput {
   context?: string;
   /** What the user asked to change, when this is a re-generation (FR-009 AC-4). */
   changeInstruction?: string;
+  /**
+   * The session's content language (У-1; task 108) — an ISO 639-1 code, or `null`/absent when
+   * detection could not tell. Forwarded to the single assembly point, never acted on here.
+   */
+  contentLanguage?: string | null | undefined;
 }
 
 export function specGenerationPrompt(input: SpecPromptInput): AssembledPrompt {
   const context = input.context?.trim() ?? '';
   const changeInstruction = input.changeInstruction?.trim() ?? '';
 
-  return assemblePrompt('spec.generation.v2', {
-    specType: input.specType,
-    initialPrompt: input.initialPrompt,
-    context: context === '' ? '' : `\nContext gathered so far:\n${context}`,
-    changeInstruction:
-      changeInstruction === ''
-        ? ''
-        : `\nThe previous draft was returned for changes. Apply this instruction:\n${changeInstruction}`,
-  });
+  return assemblePrompt(
+    'spec.generation.v2',
+    {
+      specType: input.specType,
+      initialPrompt: input.initialPrompt,
+      context: context === '' ? '' : `\nContext gathered so far:\n${context}`,
+      changeInstruction:
+        changeInstruction === ''
+          ? ''
+          : `\nThe previous draft was returned for changes. Apply this instruction:\n${changeInstruction}`,
+    },
+    { contentLanguage: input.contentLanguage },
+  );
 }

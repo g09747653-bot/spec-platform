@@ -51,6 +51,8 @@ describe('owner-scoped repositories (task 13)', () => {
       const { projectId, sessionId } = await projectRepository.createFromPrompt(alice, {
         name: 'Recipe app',
         prompt: 'a recipe app for cooks who hate scrolling',
+        audience: 'non-technical',
+        contentLanguage: 'en',
       });
 
       const detail = await projectRepository.findById(alice, projectId);
@@ -68,6 +70,8 @@ describe('owner-scoped repositories (task 13)', () => {
       const { projectId } = await projectRepository.createFromPrompt(alice, {
         name: 'Verbatim',
         prompt,
+        audience: 'non-technical',
+        contentLanguage: 'en',
       });
 
       expect((await projectRepository.findById(alice, projectId))?.initialPrompt).toBe(prompt);
@@ -77,7 +81,12 @@ describe('owner-scoped repositories (task 13)', () => {
       const orphan = OwnerScope.forAuthenticatedUser('00000000-0000-0000-0000-000000000000');
 
       await expect(
-        projectRepository.createFromPrompt(orphan, { name: 'No owner', prompt: 'x' }),
+        projectRepository.createFromPrompt(orphan, {
+          name: 'No owner',
+          prompt: 'x',
+          audience: 'non-technical',
+          contentLanguage: 'en',
+        }),
       ).rejects.toThrow();
 
       // The three inserts are one statement, so a failed foreign key rolls the whole thing back.
@@ -89,9 +98,24 @@ describe('owner-scoped repositories (task 13)', () => {
 
   describe('list', () => {
     it('shows only the caller’s own projects (FR-002 AC-1; NFR-005 AC-1)', async () => {
-      await projectRepository.createFromPrompt(alice, { name: 'Alice one', prompt: 'a' });
-      await projectRepository.createFromPrompt(alice, { name: 'Alice two', prompt: 'b' });
-      await projectRepository.createFromPrompt(bob, { name: 'Bob one', prompt: 'c' });
+      await projectRepository.createFromPrompt(alice, {
+        name: 'Alice one',
+        prompt: 'a',
+        audience: 'non-technical',
+        contentLanguage: 'en',
+      });
+      await projectRepository.createFromPrompt(alice, {
+        name: 'Alice two',
+        prompt: 'b',
+        audience: 'non-technical',
+        contentLanguage: 'en',
+      });
+      await projectRepository.createFromPrompt(bob, {
+        name: 'Bob one',
+        prompt: 'c',
+        audience: 'non-technical',
+        contentLanguage: 'en',
+      });
 
       const forAlice = await projectRepository.list(alice);
       const forBob = await projectRepository.list(bob);
@@ -101,7 +125,12 @@ describe('owner-scoped repositories (task 13)', () => {
     });
 
     it('carries the name, stage and last-updated time the list renders', async () => {
-      await projectRepository.createFromPrompt(alice, { name: 'Shape', prompt: 'a' });
+      await projectRepository.createFromPrompt(alice, {
+        name: 'Shape',
+        prompt: 'a',
+        audience: 'non-technical',
+        contentLanguage: 'en',
+      });
 
       const [summary] = await projectRepository.list(alice);
 
@@ -111,8 +140,18 @@ describe('owner-scoped repositories (task 13)', () => {
     });
 
     it('orders by last touched, most recent first', async () => {
-      const first = await projectRepository.createFromPrompt(alice, { name: 'Older', prompt: 'a' });
-      await projectRepository.createFromPrompt(alice, { name: 'Newer', prompt: 'b' });
+      const first = await projectRepository.createFromPrompt(alice, {
+        name: 'Older',
+        prompt: 'a',
+        audience: 'non-technical',
+        contentLanguage: 'en',
+      });
+      await projectRepository.createFromPrompt(alice, {
+        name: 'Newer',
+        prompt: 'b',
+        audience: 'non-technical',
+        contentLanguage: 'en',
+      });
 
       await projectRepository.touch(alice, first.projectId);
 
@@ -123,7 +162,12 @@ describe('owner-scoped repositories (task 13)', () => {
     });
 
     it('returns an empty list rather than every project when the owner has none', async () => {
-      await projectRepository.createFromPrompt(bob, { name: 'Bob only', prompt: 'c' });
+      await projectRepository.createFromPrompt(bob, {
+        name: 'Bob only',
+        prompt: 'c',
+        audience: 'non-technical',
+        contentLanguage: 'en',
+      });
 
       expect(await projectRepository.list(alice)).toEqual([]);
     });
@@ -134,6 +178,8 @@ describe('owner-scoped repositories (task 13)', () => {
       const { projectId } = await projectRepository.createFromPrompt(alice, {
         name: 'Private',
         prompt: 'secret idea',
+        audience: 'non-technical',
+        contentLanguage: 'en',
       });
 
       expect(await projectRepository.findById(bob, projectId)).toBeNull();
@@ -156,6 +202,8 @@ describe('owner-scoped repositories (task 13)', () => {
       const { projectId } = await projectRepository.createFromPrompt(alice, {
         name: 'Private',
         prompt: 'x',
+        audience: 'non-technical',
+        contentLanguage: 'en',
       });
       const before = await database.db
         .select({ updatedAt: projects.updatedAt })
@@ -178,6 +226,8 @@ describe('owner-scoped repositories (task 13)', () => {
       const { sessionId } = await projectRepository.createFromPrompt(alice, {
         name: 'Session',
         prompt: 'grounding input',
+        audience: 'non-technical',
+        contentLanguage: 'en',
       });
 
       const session = await sessionRepository.findById(alice, sessionId);
@@ -192,6 +242,8 @@ describe('owner-scoped repositories (task 13)', () => {
       const { sessionId } = await projectRepository.createFromPrompt(alice, {
         name: 'Session',
         prompt: 'x',
+        audience: 'non-technical',
+        contentLanguage: 'en',
       });
 
       expect(await sessionRepository.findById(bob, sessionId)).toBeNull();

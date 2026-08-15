@@ -50,8 +50,34 @@ import { POST as decideSpec } from '../../../specs/[specFileId]/decision/route';
 
 import { POST } from './route';
 
-const asJson = async (response: Response): Promise<Record<string, unknown>> =>
-  (await response.json()) as Record<string, unknown>;
+/** Every NDJSON event of a streamed reply, in order (task 109). */
+const asEvents = async (response: Response): Promise<Record<string, unknown>[]> =>
+  (await response.text())
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+/**
+ * The answer this endpoint gives, whichever way it gives it.
+ *
+ * A refusal is a JSON body; a reply is a stream whose **last event is the same object** (task 109).
+ * Reading it this way is the assertion that matters: every expectation below was written against
+ * the JSON contract and none of them changed, which is what "additive" has to mean.
+ */
+const asJson = async (response: Response): Promise<Record<string, unknown>> => {
+  if (response.headers.get('Content-Type')?.includes('x-ndjson') !== true) {
+    return (await response.json()) as Record<string, unknown>;
+  }
+
+  const events = await asEvents(response);
+
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.type === 'result') return event;
+  }
+
+  throw new Error('the chat stream ended without a result event');
+};
 
 function chat(sessionId: string, text: unknown): Promise<Response> {
   return POST(
@@ -64,14 +90,20 @@ function chat(sessionId: string, text: unknown): Promise<Response> {
   );
 }
 
-/** The assistant answers with a fixed sentence; decisions are the deterministic layer's business. */
+/**
+ * The assistant answers with a fixed sentence; decisions are the deterministic layer's business.
+ *
+ * It answers **in pieces**, because a double that resolves in one go cannot show whether the route
+ * forwards what it is given (task 109) — and forwarding is the whole of what the route does with it.
+ */
+const ANSWER = 'The constitution sets the ground rules the other files must comply with.';
+
 const answeringAdapter = {
-  generateStreaming: () =>
-    Promise.resolve({
-      text: 'The constitution sets the ground rules the other files must comply with.',
-      providerUsed: 'stub' as const,
-      attempts: 1,
-    }),
+  generateStreaming: (options: { onChunk?: ((text: string) => void) | undefined }) => {
+    for (const piece of ANSWER.split(/(?<= )/)) options.onChunk?.(piece);
+
+    return Promise.resolve({ text: ANSWER, providerUsed: 'stub' as const, attempts: 1 });
+  },
 };
 
 interface Fixture {
@@ -400,6 +432,43 @@ describe('POST /api/sessions/:id/messages (task 62)', () => {
       const body = await asJson(response);
       expect(body.applied).toBeNull();
       expect(body.pendingAction).toBeNull();
+    });
+  });
+  /**
+   * Task 109 — the reply arrives rather than appears.
+   *
+   * Two claims, and the second is what keeps the change honest: the answer is delivered in pieces
+   * ahead of the result event, and **no write happens inside the response body**. A decision applied
+   * from within a stream would be a decision whose completion depended on someone reading it — so
+   * the dispatch is finished before the body opens, and the test below proves it by never reading
+   * the body at all.
+   */
+  describe('the reply streams (task 109)', () => {
+    it('sends the answer in pieces, then the result event that carries the contract', async () => {
+      const response = await chat(fixture.sessionId, 'what does this file do?');
+
+      expect(response.headers.get('Content-Type')).toContain('x-ndjson');
+
+      const events = await asEvents(response);
+      const deltas = events.filter((event) => event.type === 'delta');
+      const results = events.filter((event) => event.type === 'result');
+
+      expect(deltas.length).toBeGreaterThan(0);
+      expect(results).toHaveLength(1);
+      // Order matters: a result event ahead of the deltas would be a reply that had already ended.
+      expect(events[events.length - 1]?.type).toBe('result');
+
+      // The pieces are the same text the contract carries, so a client may use either.
+      const streamed = deltas.map((event) => String(event.text)).join('');
+      expect(streamed.trim()).toBe(String(results[0]?.reply));
+    });
+
+    it('applies a decision before the body opens, so nothing depends on the reader', async () => {
+      // Deliberately unread: only the returned Response is awaited.
+      await chat(fixture.sessionId, 'approve it');
+
+      const rows = await database.db.select().from(specRevisions);
+      expect(rows[0]?.approved).toBe(true);
     });
   });
 });

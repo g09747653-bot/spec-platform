@@ -1,0 +1,2 @@
+ALTER TABLE "sessions" ADD COLUMN "audience_profile" text DEFAULT 'non-technical' NOT NULL;--> statement-breakpoint
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_audience_profile_valid" CHECK ("sessions"."audience_profile" IN ('non-technical', 'technical'));

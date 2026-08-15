@@ -62,6 +62,8 @@ async function ensureStageReview(
   scope: OwnerScope,
   projectId: string,
   position: WorkflowPosition,
+  /** The session's content language (У-1; task 108) — findings are prose the user has to read. */
+  contentLanguage: string | null,
 ): Promise<string | null> {
   if (position.substage !== 'review' || !isCoreSpecType(position.stage)) return null;
 
@@ -90,6 +92,7 @@ async function ensureStageReview(
     review = await agent.review({
       specType: position.stage,
       specContent: approved.content,
+      contentLanguage,
       runId: randomUUID(),
     });
   } catch (error) {
@@ -176,7 +179,13 @@ export async function POST(
       // permits the move (FR-009 AC-3). AC-8's "a revised spec, once approved, gets a fresh review"
       // follows without a branch: the review is keyed to a revision, so re-entering review after a
       // new approval reviews the new content by construction.
-      const reviewId = await ensureStageReview(db, scope, session.projectId, outcome.position);
+      const reviewId = await ensureStageReview(
+        db,
+        scope,
+        session.projectId,
+        outcome.position,
+        session.contentLanguage,
+      );
 
       return jsonResponse({
         stage: outcome.position.stage,

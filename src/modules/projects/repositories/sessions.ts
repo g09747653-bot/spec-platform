@@ -15,6 +15,10 @@ export interface OwnedSession {
   initialPrompt: string;
   summary: string | null;
   qualityEnabled: boolean;
+  /** Who the interview is addressing (У-5; task 106) — `non-technical` or `technical`. */
+  audienceProfile: string;
+  /** The language every generated word answers in (У-1; task 108); `null` when undetermined. */
+  contentLanguage: string | null;
   /** Plain strings: `projects` may not import `workflow` (see the note on `ProjectSummary`). */
   stage: string;
   substage: string | null;
@@ -45,6 +49,8 @@ export function createSessionRepository(db: SchemaDatabase) {
           initialPrompt: sessions.initialPrompt,
           summary: sessions.summary,
           qualityEnabled: sessions.qualityEnabled,
+          audienceProfile: sessions.audienceProfile,
+          contentLanguage: sessions.contentLanguage,
           stage: workflowState.stage,
           substage: workflowState.substage,
           version: workflowState.version,

@@ -3,6 +3,12 @@
 import { useRouter } from 'next/navigation';
 import { useState, useSyncExternalStore, type SubmitEvent } from 'react';
 
+import {
+  AUDIENCE_PROFILES,
+  DEFAULT_AUDIENCE_PROFILE,
+  type AudienceProfile,
+} from '@/modules/projects/audience';
+
 import { Button } from '../ui/button';
 import { Label, Textarea } from '../ui/field';
 
@@ -18,6 +24,24 @@ import { Label, Textarea } from '../ui/field';
  */
 
 const EMPTY_MESSAGE = 'Describe your idea in a sentence or two before starting.';
+
+/**
+ * How each profile reads to the person choosing it (У-5; task 106).
+ *
+ * The question is about *them*, not about the product: a founder who cannot tell a data model from a
+ * deployment target should be able to answer it, and the wording has to make that possible.
+ */
+const AUDIENCE_COPY: Record<AudienceProfile, { label: string; description: string }> = {
+  'non-technical': {
+    label: 'In plain language',
+    description: 'Questions in everyday words, with no engineering vocabulary.',
+  },
+  technical: {
+    label: 'In technical terms',
+    description:
+      'Questions that name the engineering choices directly, with the trade-offs stated.',
+  },
+};
 
 interface CreatedProject {
   projectId: string;
@@ -35,6 +59,7 @@ function isCreatedProject(value: unknown): value is CreatedProject {
 export function NewProjectForm() {
   const router = useRouter();
   const [prompt, setPrompt] = useState('');
+  const [audience, setAudience] = useState<AudienceProfile>(DEFAULT_AUDIENCE_PROFILE);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   /*
@@ -67,7 +92,7 @@ export function NewProjectForm() {
       const response = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt, audience }),
       });
       const payload: unknown = await response.json().catch(() => null);
 
@@ -118,6 +143,40 @@ export function NewProjectForm() {
           {error}
         </p>
       )}
+
+      {/*
+        У-5: asked once, here, and never again. The interview's register is a property of the
+        session (`sessions.audience_profile`), so a round asked in stage four is worded the same way
+        as the first — an interviewer who changed voice halfway through would read as two people.
+      */}
+      <fieldset className="flex flex-col gap-2" data-testid="audience-profile">
+        <legend className="text-sm font-medium">How should the questions be worded?</legend>
+        {AUDIENCE_PROFILES.map((profile) => (
+          <label
+            key={profile}
+            className="border-border-subtle hover:bg-canvas flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm"
+          >
+            <input
+              type="radio"
+              name="audience"
+              value={profile}
+              checked={audience === profile}
+              onChange={() => {
+                setAudience(profile);
+              }}
+              data-testid={`audience-${profile}`}
+              disabled={submitting}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium">{AUDIENCE_COPY[profile].label}</span>
+              <span className="text-ink-muted block text-xs">
+                {AUDIENCE_COPY[profile].description}
+              </span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
 
       <Button
         type="submit"

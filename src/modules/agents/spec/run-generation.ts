@@ -54,6 +54,8 @@ export interface RunGenerationInput {
    */
   contextAttachmentIds?: readonly string[];
   changeInstruction?: string;
+  /** The session's content language (У-1; task 108); forwarded to the prompt assembly point. */
+  contentLanguage?: string | null | undefined;
   progress: GenerationProgress;
   signal?: AbortSignal;
 }
@@ -100,6 +102,7 @@ export async function runGeneration(input: RunGenerationInput): Promise<Generati
     initialPrompt: input.initialPrompt,
     context: input.context,
     changeInstruction: input.changeInstruction,
+    contentLanguage: input.contentLanguage,
   });
 
   let attempts = 1;

@@ -1,6 +1,7 @@
 import { getDatabase } from '@/db/client';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
 import { CreateProjectRequest, deriveProjectName } from '@/modules/projects/create-project';
+import { detectContentLanguage } from '@/modules/projects/language';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
 import { errorResponse, jsonResponse } from '@/modules/web/api/responses';
 
@@ -38,10 +39,17 @@ export async function POST(request: Request): Promise<Response> {
     });
   }
 
-  const { prompt } = parsed.data;
+  const { prompt, audience } = parsed.data;
   const created = await createProjectRepository(getDatabase()).createFromPrompt(scope, {
     name: deriveProjectName(prompt),
     prompt,
+    audience,
+    /*
+     * У-1: detected here, once, and stored (task 108). Every later call reads the column — the
+     * detection is deterministic and cheap, but re-running it per request would let a round whose
+     * answers happened to be product names look like a different language from the one before it.
+     */
+    contentLanguage: detectContentLanguage(prompt),
   });
 
   return jsonResponse(created, 201);

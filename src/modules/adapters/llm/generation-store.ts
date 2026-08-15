@@ -236,9 +236,7 @@ export function createGenerationStore(db: SchemaDatabase) {
      * once a run completes and its revision is persisted, so a finished run's block is a marker in
      * the timeline and the document beside it is where the text lives.
      */
-    async runsForSession(
-      sessionId: string,
-    ): Promise<
+    async runsForSession(sessionId: string): Promise<
       {
         runId: string;
         stage: string;

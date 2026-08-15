@@ -1321,7 +1321,7 @@ Source of truth for acceptance: `.specs/research/myspec-parity-reference.md` («
 
 Goal: the whole session lives in one conversation feed — messages, question-round forms, stage chips, document cards — on top of the existing state machine, streaming, and liveness contracts (Д-1, Р-2, Р-3 untouched).
 
-- [ ] 104\. Build the conversation feed read model
+- [x] 104\. Build the conversation feed read model
   - Derive the feed as a pure projection of persisted state (seed prompt, question rounds with answers, stage transitions, generation runs, revisions, review boards, chat messages), ordered chronologically; each block carries a stable id, role, stage, substage, and kind.
   - No new write path: the feed is reconstructed deterministically on load; free chat keeps its existing store.
   - Acceptance Criteria:
@@ -1335,7 +1335,7 @@ Goal: the whole session lives in one conversation feed — messages, question-ro
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 105\. Rebuild the session page chat-first
+- [x] 105\. Rebuild the session page chat-first
   - Single feed rendering the projection; sticky header with numbered step pills derived from the transition graph; bottom composer (text + send, wired to the existing chat); seed rendered as the user bubble «I want to build {name}. My project description is: {prompt}».
   - Every session-moving action goes through the `session-request` framework; stop-waiting / stop-generation render inside the owning feed block.
   - Acceptance Criteria:
@@ -1349,7 +1349,7 @@ Goal: the whole session lives in one conversation feed — messages, question-ro
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 106\. In-feed question rounds v2 + audience profile (У-5)
+- [x] 106\. In-feed question rounds v2 + audience profile (У-5)
   - Round header «Round N — K questions»; per question: required marker, «Select one» / «Select all that apply», options with label, one-line description, optional `(Recommended)` flag, and an Other free-text option; Submit Answers; after submit the form stays in the feed, disabled, answers fixed.
   - Extend the round draft schema (v3): the model supplies option descriptions and at most one recommended flag per question; Р-1 parsing and single retry unchanged; v2 drafts still render (missing description → plain option).
   - У-5: audience profile (`technical` | `non-technical`) chosen at project creation with a default, stored on the session; question prompts branch on it (non-technical keeps interview.questions.v2 jargon rules).
@@ -1364,7 +1364,7 @@ Goal: the whole session lives in one conversation feed — messages, question-ro
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 107\. Stage chips and document cards in the feed
+- [x] 107\. Stage chips and document cards in the feed
   - Transition chip (`{Stage} · {from} → {Stage} · {to}`, animated dashes) at every position change; document card: stage name, mono path `specs/{bundle}/{file}.md`, Approved badge, `Rev N`, preview toggle over the existing content endpoint.
   - Generation streams into the feed card via the existing resumable stream; reattach (D-99) and the single-run invariant (D-100/D-101) hold unchanged inside the feed.
   - Acceptance Criteria:
@@ -1377,7 +1377,7 @@ Goal: the whole session lives in one conversation feed — messages, question-ro
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 108\. Content language follows the seed (У-1)
+- [x] 108\. Content language follows the seed (У-1)
   - Detect the seed prompt's language once at session creation (deterministic heuristic, model fallback), persist it on the session, and instruct every agent call — rounds, summaries, documents, reviews, chat replies — to answer in it, from one shared prompt-assembly point. UI chrome stays English.
   - Acceptance Criteria:
     - Russian seed → Russian questions, summaries, documents, and review texts; English seed → English (fixtures both ways).
@@ -1389,7 +1389,7 @@ Goal: the whole session lives in one conversation feed — messages, question-ro
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 109\. Free chat woven into every stage
+- [x] 109\. Free chat woven into every stage
   - The composer is always live; free-form messages are answered in-feed as ordinary blocks stamped with the current stage/substage; decision phrases keep resolving through DecisionIntentResolver with button-equivalent effects (M4 contract).
   - Acceptance Criteria:
     - A question asked mid-review is answered without changing workflow state (DB position identical before/after — test).

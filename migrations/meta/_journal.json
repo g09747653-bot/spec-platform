@@ -71,6 +71,20 @@
       "when": 1786688170850,
       "tag": "0009_export_records",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786773216148,
+      "tag": "0010_audience_profile",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786774649388,
+      "tag": "0011_content_language",
+      "breakpoints": true
     }
   ]
 }

@@ -12,6 +12,8 @@ import { sessionSummaryPrompt } from '@/modules/prompts/assets/interview';
 export interface SummaryAgentInput {
   initialPrompt: string;
   answeredHighlights: readonly string[];
+  /** The session's content language (У-1; task 108); forwarded to the prompt assembly point. */
+  contentLanguage?: string | null | undefined;
   runId: string;
   signal?: AbortSignal;
 }

@@ -28,6 +28,8 @@ export interface RefinementAgentInput {
   /** The current revision's content — what the instruction is about. */
   specContent: string;
   instruction: string;
+  /** The session's content language (У-1; task 108); forwarded to the prompt assembly point. */
+  contentLanguage?: string | null | undefined;
   runId: string;
   signal?: AbortSignal;
 }
@@ -41,11 +43,15 @@ export type RefinementOutcome =
 export function createRefinementAgent(adapter: LlmAdapter) {
   return {
     async propose(input: RefinementAgentInput): Promise<RefinementOutcome> {
-      const prompt = assemblePrompt('refinement.propose.v1', {
-        specType: input.specType,
-        specContent: input.specContent,
-        instruction: input.instruction,
-      });
+      const prompt = assemblePrompt(
+        'refinement.propose.v1',
+        {
+          specType: input.specType,
+          specContent: input.specContent,
+          instruction: input.instruction,
+        },
+        { contentLanguage: input.contentLanguage },
+      );
 
       const result = await adapter.generateStreaming({
         messages: [

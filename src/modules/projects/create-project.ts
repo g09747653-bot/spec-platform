@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { AUDIENCE_PROFILES, DEFAULT_AUDIENCE_PROFILE } from './audience';
+
 /**
  * Starting a session from a prompt (FR-003; task 15).
  *
@@ -21,6 +23,13 @@ export const CreateProjectRequest = z.object({
     .trim()
     .min(1, 'Describe your idea in a sentence or two before starting.')
     .max(MAX_PROMPT_LENGTH, `Keep the prompt under ${String(MAX_PROMPT_LENGTH)} characters.`),
+  /**
+   * Who the interview will be talking to (У-5; task 106).
+   *
+   * Defaulted rather than required: the form offers the choice, and a client that omits it — an
+   * older page still open in a tab, a direct call — gets the plain register, which is the safe one.
+   */
+  audience: z.enum(AUDIENCE_PROFILES).default(DEFAULT_AUDIENCE_PROFILE),
 });
 
 export type CreateProjectInput = z.infer<typeof CreateProjectRequest>;

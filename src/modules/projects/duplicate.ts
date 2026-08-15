@@ -165,8 +165,9 @@ export async function duplicateProject(
         SELECT ${newProjectId}::uuid, src.owner_id, ${name} FROM src
         RETURNING id
       ), new_session AS (
-        INSERT INTO ${sessions} (id, project_id, initial_prompt, summary, quality_enabled)
-        SELECT ${newSessionId}::uuid, new_project.id, s.initial_prompt, s.summary, s.quality_enabled
+        INSERT INTO ${sessions} (id, project_id, initial_prompt, summary, quality_enabled, audience_profile, content_language)
+        SELECT ${newSessionId}::uuid, new_project.id, s.initial_prompt, s.summary, s.quality_enabled,
+               s.audience_profile, s.content_language
         FROM new_project, src_session s
         RETURNING id
       ), new_state AS (
