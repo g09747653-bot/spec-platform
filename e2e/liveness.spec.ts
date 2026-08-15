@@ -20,6 +20,8 @@ const SESSION_CONTROLS = [
   'proceed',
   'generate-spec',
   'stop-generation',
+  // Round 5, Р-3: the way out of a request in flight — the transition's equivalent of `stop-generation`.
+  'stop-waiting',
   'mcq-submit',
   'mcq-reply-toggle',
   'mcq-reply-send',
@@ -56,6 +58,48 @@ async function expectAlive(page: Page, state: string): Promise<void> {
   const live = await liveControls(page);
 
   expect(live, `no way to move the session in state: ${state}`).not.toEqual([]);
+}
+
+/**
+ * Round 5, Р-3 — the same invariant, checked **while a stage transition is in flight**.
+ *
+ * The round-2 test asserted liveness at each *position*: before the click and after it. The gate
+ * died in between, in a state no test visited — the transition request open, the door disabled,
+ * a caption that never changed. This holds the response so the in-between is a state a test can
+ * stand in, and every transition of the journey is walked through it.
+ */
+async function proceedAliveInFlight(page: Page, where: string): Promise<void> {
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  // `times: 1` retires the handler after this one transition, so repeated calls neither stack nor
+  // need an `unroute` racing a route that is still being held.
+  await page.route(
+    '**/transition',
+    async (route) => {
+      await held;
+      await route.continue();
+    },
+    { times: 1 },
+  );
+
+  const responded = page.waitForResponse((response) => response.url().includes('/transition'));
+
+  await page.getByTestId('proceed').click();
+
+  // The door is busy — and something else is not.
+  await expect(page.getByTestId('proceed'), `door not busy at ${where}`).toBeDisabled();
+  await expect(
+    page.getByTestId('stop-waiting'),
+    `no way out of an in-flight transition at ${where}`,
+  ).toBeEnabled();
+  await expect(page.getByTestId('waiting-status')).toBeVisible();
+  await expectAlive(page, `transition in flight at ${where}`);
+
+  release();
+  await responded;
 }
 
 test.describe('the page always offers a way forward', () => {
@@ -179,8 +223,135 @@ test.describe('the page always offers a way forward', () => {
   });
 
   /*
+   * The state the M6 gate actually died in (round 5, Р-3): the transition request open, and nothing
+   * on the page that moved the session. Reproduced here by holding the response — which is what a
+   * provider chain does for real, since entering `review` runs the review agent inside this very
+   * request.
+   */
+  test('a stalled stage transition can be abandoned (Р-3 a)', async ({ page, context }) => {
+    await signIn(context, await createSignedInUser('liveness'));
+    await startSession(page, 'A tool that must survive a stalled transition');
+
+    await page.getByTestId('ask-round').click();
+    await expect(page.getByTestId('mcq-card')).toBeVisible();
+    await page.getByTestId('mcq-option-q-audience-solo-devs').check();
+    await page.getByTestId('mcq-option-q-problem-context').check();
+    await page.getByTestId('mcq-submit').click();
+    await expect(page.getByTestId('interview-panel')).toContainText('summary saved');
+
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(
+      '**/transition',
+      async (route) => {
+        await held;
+        // The client's own abort may already have finished this route — that is the point of the
+        // test, not a failure of it.
+        await route.abort().catch(() => undefined);
+      },
+      { times: 1 },
+    );
+
+    await page.getByTestId('proceed').click();
+
+    // Disabled door, live way out, honest status — the three the frozen page had none of.
+    await expect(page.getByTestId('proceed')).toBeDisabled();
+    await expect(page.getByTestId('proceed')).toHaveText('Checking the gate…');
+    await expect(page.getByTestId('stop-waiting')).toBeEnabled();
+    await expectAlive(page, 'stage transition in flight');
+
+    // The status is not a frozen caption: the count keeps moving, which is the whole difference
+    // between a page that is working and a page that is dead.
+    const status = page.getByTestId('waiting-status');
+    await expect(status).toContainText(/\d+ s/);
+    const firstReading = await status.innerText();
+    await expect(status, 'the elapsed reading never moved').not.toHaveText(firstReading, {
+      timeout: 10_000,
+    });
+
+    // Stopping says so, and gives the door back.
+    await page.getByTestId('stop-waiting').click();
+    await expect(page.getByTestId('interview-notice')).toContainText('You stopped waiting');
+    await expect(page.getByTestId('proceed')).toBeEnabled();
+    await expectAlive(page, 'transition abandoned');
+
+    release();
+
+    // And the session is exactly where the server says it is — the click can simply be made again.
+    await page.getByTestId('proceed').click();
+    await expect(page.getByTestId('stage-current')).toHaveText(/Constitution/i, { timeout: 20_000 });
+  });
+
+  /*
+   * Р-3 c: a refused transition is visible, and it says which gate refused — not "that step is not
+   * available yet", which was the whole of what the gate walk was told.
+   */
+  test('a refused stage transition says why, and leaves the page usable (Р-3 b)', async ({
+    page,
+    context,
+  }) => {
+    await signIn(context, await createSignedInUser('liveness'));
+    await startSession(page, 'A tool whose refusals explain themselves');
+
+    await page.getByTestId('ask-round').click();
+    await expect(page.getByTestId('mcq-card')).toBeVisible();
+    await page.getByTestId('mcq-option-q-audience-solo-devs').check();
+    await page.getByTestId('mcq-option-q-problem-context').check();
+    await page.getByTestId('mcq-submit').click();
+    await expect(page.getByTestId('interview-panel')).toContainText('summary saved');
+
+    await page.route('**/transition', (route) =>
+      route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          error: {
+            code: 'ROUND_LIMIT_REACHED',
+            message: 'anything at all',
+            details: { reason: 'ROUND_LIMIT_REACHED' },
+          },
+        }),
+      }),
+    );
+
+    await page.getByTestId('proceed').click();
+
+    const notice = page.getByTestId('interview-notice');
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText('question round');
+    await expect(notice).toContainText('next step');
+    // The identifier is never the explanation.
+    await expect(notice).not.toContainText('ROUND_LIMIT_REACHED');
+
+    await expect(page.getByTestId('proceed')).toBeEnabled();
+    await expectAlive(page, 'transition refused');
+  });
+
+  /*
+   * Р-3 c, the other half: a request that never reaches the server is a visible failure too, not a
+   * caption that stays put.
+   */
+  test('a transition that cannot reach the server says so (Р-3 c)', async ({ page, context }) => {
+    await signIn(context, await createSignedInUser('liveness'));
+    await startSession(page, 'A tool that survives a dropped connection');
+
+    await page.route('**/transition', (route) => route.abort('failed'));
+
+    await page.getByTestId('proceed').click();
+
+    await expect(page.getByTestId('interview-notice')).toContainText('did not reach the server');
+    await expect(page.getByTestId('proceed')).toBeEnabled();
+    await expectAlive(page, 'transition unreachable');
+  });
+
+  /*
    * The walk that matters most: the invariant checked at every position of the real journey, so a
    * future change that strands the user at some stage fails here rather than at a customer's gate.
+   *
+   * Round 5: every `proceed` of the walk now goes through `proceedAliveInFlight`, so the invariant
+   * is asserted **during** each transition as well as on either side of it.
    */
   test('every position of the journey offers a way forward', async ({ page, context }) => {
     await signIn(context, await createSignedInUser('liveness'));
@@ -198,7 +369,7 @@ test.describe('the page always offers a way forward', () => {
     await expect(page.getByTestId('interview-panel')).toContainText('summary saved');
     await expectAlive(page, 'interview, round answered');
 
-    await page.getByTestId('proceed').click();
+    await proceedAliveInFlight(page, 'leaving the interview');
     await expect(page.getByTestId('stage-current')).toHaveText(/Constitution/i);
     await expectAlive(page, 'constitution/collect');
 
@@ -206,7 +377,8 @@ test.describe('the page always offers a way forward', () => {
     await expect(page.getByTestId('mcq-card')).toBeVisible();
     await page.getByTestId('mcq-option-q-constitution-scope-strict').check();
     await page.getByTestId('mcq-submit').click();
-    await page.getByTestId('proceed').click();
+
+    await proceedAliveInFlight(page, 'constitution collect → generate');
     await expect(page.getByTestId('stage-substage')).toHaveText(/generate/);
     await expectAlive(page, 'constitution/generate, nothing drafted');
 
@@ -218,7 +390,9 @@ test.describe('the page always offers a way forward', () => {
     await expect(page.getByTestId('spec-card')).toContainText('approved');
     await expectAlive(page, 'constitution/generate, approved');
 
-    await page.getByTestId('proceed').click();
+    // The transition that runs the review agent inside the request — the slowest door in the app,
+    // and the one whose in-flight state is least like a fast one.
+    await proceedAliveInFlight(page, 'constitution generate → review');
     await expect(page.getByTestId('review-board')).toBeVisible({ timeout: 20_000 });
     await expectAlive(page, 'constitution/review, board pending');
 

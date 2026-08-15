@@ -58,8 +58,16 @@ const DEFAULT_MESSAGE: Record<ErrorCode, string> = {
   NOT_FOUND: 'Not found.',
   VALIDATION_FAILED: 'The request was not valid.',
   PENDING_DECISION: 'A decision is already pending for this file.',
-  GATE_REJECTED: 'That step is not available yet.',
-  ROUND_LIMIT_REACHED: 'The question budget for this stage is used up.',
+  /*
+   * Round 5, Р-3 item 4. Both of these are read by a person, and both used to say only that
+   * something was refused. A rejection carries its `ReasonCode` in `details`, so the client can say
+   * more than this default — but the default itself must still point at where the answer is, rather
+   * than leave "not available yet" as the whole account.
+   */
+  GATE_REJECTED: 'That step is not available yet — the page lists what is still needed for it.',
+  ROUND_LIMIT_REACHED:
+    'Every question round for this stage has been used, so nothing further will be asked here. ' +
+    'Anything still open can be answered directly on the page; otherwise move on to the next step.',
   CAPABILITY_NOT_REGISTERED: 'That option is not available.',
   CONFLICT: 'The session moved on; refresh and try again.',
   DRAFT_INVALID: 'The drafted questions were not usable. Try asking again.',

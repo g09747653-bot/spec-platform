@@ -25,6 +25,8 @@ export default tseslint.config(
       'test-results/**',
       // Output of the live gate walk — screenshots, transcripts, and hand-run probes (gitignored).
       '.gate-artifacts/**',
+      // Round 5 diagnosis scratch: hand-run reproduction scripts and their output (gitignored).
+      '.gate-tmp/**',
       'next-env.d.ts',
       'migrations/**',
       // Deliberate violations, linted only by `pnpm test:boundaries`.

@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
@@ -9,6 +9,8 @@ import { Label, Textarea } from '../ui/field';
 
 import type { TransitionTargetModel } from './interview-panel';
 import { useResumableStream } from './useResumableStream';
+import { useSessionRequest } from './useSessionRequest';
+import { WaitingOn } from './waiting-on';
 
 /**
  * The spec card: generate, then decide (tasks 21, 45, 46, 49; FR-008, FR-009, FR-018).
@@ -57,6 +59,24 @@ interface SpecCardProps {
    * from the same snapshot the page evaluated; this only presents the verdict.
    */
   target?: TransitionTargetModel | null;
+  /**
+   * How long to keep believing the server is still working (round 5, Р-3).
+   *
+   * It matters most on this card: entering `review` runs the review agent **inside** the transition
+   * request, so the door out of `generate` is the one request on the page whose honest duration is
+   * a provider chain's worth of minutes. Derived from that chain by the page, not guessed here.
+   */
+  deadlineMs: number;
+  /**
+   * The session's generation still in flight when the page was rendered (round 5, Р-3).
+   *
+   * Round 4 made the *run* survive its reader; this makes the **page** survive it too. Leaving the
+   * session mid-generation and coming back used to land on an empty card with a Generate button —
+   * the run was still going, the page said nothing about it, and clicking Generate started a second
+   * one over the same stage. Reattaching to the durable chunk log resolves both: the document
+   * carries on drawing where it left off, and the control that would have duplicated it is Stop.
+   */
+  activeRun?: { runId: string; attempt: number } | null;
 }
 
 function isSpecCardState(value: unknown): value is SpecCardState {
@@ -70,24 +90,89 @@ function isSpecCardState(value: unknown): value is SpecCardState {
   );
 }
 
+/** What each action is waiting for, in the words the status line reads out. */
+const WAITING_FOR: Record<string, string> = {
+  approve: 'the approval to be recorded',
+  changes: 'the revision to be written',
+  proceed: 'the gate to answer',
+};
+
 export function SpecCard({
   sessionId,
   revision,
   generationBlocked = false,
   canGenerate = true,
   target = null,
+  deadlineMs,
+  activeRun = null,
 }: SpecCardProps) {
   const router = useRouter();
-  const [busy, setBusy] = useState<'approve' | 'changes' | 'proceed' | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [instruction, setInstruction] = useState('');
   const [showInstruction, setShowInstruction] = useState(false);
-  const { state: stream, start, stop } = useResumableStream();
+  const [localError, setLocalError] = useState<string | null>(null);
+  const { state: stream, start, resume, stop } = useResumableStream();
+  const { state: request, elapsedSeconds, send: post, abandon } = useSessionRequest(deadlineMs);
 
   const generating = stream.status === 'streaming' || stream.status === 'reconnecting';
+  const busy = request.running;
+  const error = localError ?? request.notice;
+
+  /*
+   * Reattach to a run that was already going when this page loaded (round 5, Р-3).
+   *
+   * `from: -1` because a fresh page has rendered nothing: the durable chunk log replays from the
+   * start, and the reader's own de-duplication by sequence is what makes that safe.
+   *
+   * **The condition is the reader's own state, not a "done it once" ref.** A ref looked right and was
+   * wrong: React's strict mode mounts, unmounts and mounts again, the unmount stops the reader, and
+   * the second mount then sees the ref already set and attaches to nothing — a page permanently
+   * showing Generate over a run that was still going, which is the very defect this exists to fix.
+   * Keying on `idle` re-attaches after that cleanup, and cannot start a second reader because the
+   * first attach leaves the state `streaming`.
+   *
+   * `detached` is what keeps Stop meaningful: stopping publishes `idle`, and without it this would
+   * immediately re-attach to the run the user just walked away from.
+   */
+  const [detached, setDetached] = useState(false);
+  const runId = activeRun?.runId ?? null;
+  const attempt = activeRun?.attempt ?? 1;
+
+  /**
+   * A run the **server** says is in flight — known before a line of this component's JavaScript has
+   * run, and that is the point.
+   *
+   * Reattaching happens in an effect, and the live gate walk found one circumstance, on a machine
+   * saturated by a local model, where that effect did not fire at all (no resume request was ever
+   * made; five isolated reproductions of the same navigation could not repeat it). Whatever the
+   * cause, the page must not be *dishonest* while it waits for its own JavaScript: offering
+   * "Generate" over a run already in flight is the one thing it must never do, and this makes that
+   * a property of the server's render rather than of an effect's timing.
+   *
+   * It is a **snapshot**, so it must yield to anything more recent: once the reader following that
+   * run has seen it end, this claim is stale and holding on to it would hide the retry behind a run
+   * that is already over — a dead end of exactly the kind being fixed here. `Stop` is the other way
+   * out, for the case where no reader ever attached and the snapshot is all the page has.
+   */
+  const runSettled = stream.status === 'complete' || stream.status === 'failed';
+  const runInFlight = runId !== null && !detached && !runSettled;
+
+  useEffect(() => {
+    if (runId === null || detached || stream.status !== 'idle') return;
+
+    void resume(runId, -1, attempt).then((outcome) => {
+      // Same reason as `generate()`: the revision is persisted before `complete` is sent.
+      if (outcome.status === 'complete') router.refresh();
+    });
+  }, [runId, attempt, detached, stream.status, resume, router]);
+
+  /** Stop reading. The run carries on server-side (D-95); this page simply stops following it. */
+  function stopFollowing() {
+    setDetached(true);
+    stop();
+  }
 
   async function generate() {
-    setError(null);
+    setLocalError(null);
     const outcome = await start(sessionId);
 
     // The revision is persisted before `complete` is sent, so refreshing here shows the card the
@@ -95,59 +180,37 @@ export function SpecCard({
     if (outcome.status === 'complete') router.refresh();
   }
 
-  /** The one door a session moves through — the same endpoint the interview panel calls (P1). */
+  /**
+   * The one door a session moves through — the same endpoint the interview panel calls (P1).
+   *
+   * Round 5, Р-3: this is where the wall was widest. The refusal used to be reported as
+   * "That step is not available yet" no matter what the gate had said, and the wait had no end, no
+   * status and no way out. Both are now the shared request's business, so the reason reaches the
+   * user and `stop-waiting` is on screen for every second the request is in flight.
+   */
   async function proceed(to: TransitionTargetModel) {
-    setBusy('proceed');
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/sessions/${sessionId}/transition`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          toStage: to.toStage,
-          ...(to.toSubstage === null ? {} : { toSubstage: to.toSubstage }),
-        }),
-      });
-
-      if (!response.ok) {
-        setError('That step is not available yet.');
-        return;
-      }
-
-      router.refresh();
-    } catch {
-      setError('That step is not available yet.');
-    } finally {
-      setBusy(null);
-    }
+    setLocalError(null);
+    await post('proceed', `/api/sessions/${sessionId}/transition`, {
+      toStage: to.toStage,
+      ...(to.toSubstage === null ? {} : { toSubstage: to.toSubstage }),
+    });
   }
 
   async function send(action: 'approve' | 'changes', url: string, body?: Record<string, unknown>) {
-    setBusy(action);
-    setError(null);
+    setLocalError(null);
+    const outcome = await post(action, url, body);
 
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-      const payload: unknown = await response.json().catch(() => null);
-
-      if (!response.ok || !isSpecCardState(payload)) {
-        setError('That did not work. Please try again.');
-        return;
-      }
-
-      setInstruction('');
-      setShowInstruction(false);
-      router.refresh();
-    } catch {
-      setError('That did not work. Please try again.');
-    } finally {
-      setBusy(null);
+    // A 200 that is not a spec-card state is a contract breach, not a refusal: the request layer
+    // reports transport and refusals, and this is neither.
+    if (outcome.ok && !isSpecCardState(outcome.payload)) {
+      setLocalError('That did not work. Please try again.');
+      return;
     }
+
+    if (!outcome.ok) return;
+
+    setInstruction('');
+    setShowInstruction(false);
   }
 
   if (revision === null) {
@@ -206,18 +269,21 @@ export function SpecCard({
             control back. The run continues server-side and its chunks stay durable (P5), so
             stopping costs the user nothing but the wait.
           */}
-          {generating && (
+          {(generating || runInFlight) && (
             <div className="flex items-center gap-2">
-              <Button variant="secondary" data-testid="stop-generation" onClick={stop}>
+              <Button variant="secondary" data-testid="stop-generation" onClick={stopFollowing}>
                 Stop
               </Button>
               <span className="text-ink-muted text-xs">
-                Generating… you can stop and start again; nothing written so far is lost.
+                {generating
+                  ? 'Generating… you can stop and start again; nothing written so far is lost.'
+                  : 'A generation for this step is already running — this page is picking it up. Stop to take the page back; the run itself carries on either way.'}
               </span>
             </div>
           )}
 
           {!generating &&
+            !runInFlight &&
             (generationBlocked ? (
               <p className="text-ink-muted text-sm" data-testid="generation-blocked">
                 A question card is waiting for your answers above — nothing generates until it is
@@ -350,6 +416,20 @@ export function SpecCard({
               </p>
             )}
           </div>
+        )}
+
+        {/*
+          Round 5, Р-3 item 2. The invariant that round 2 gave the stream now covers this card's
+          requests as well: for as long as one is in flight there is a live control and a number
+          that keeps moving. `proceed` from here is the transition that produces the review, so
+          this is the wait that could last minutes and used to look like death.
+        */}
+        {busy !== null && (
+          <WaitingOn
+            what={WAITING_FOR[busy] ?? 'the server'}
+            elapsedSeconds={elapsedSeconds}
+            onStop={abandon}
+          />
         )}
       </CardContent>
     </Card>

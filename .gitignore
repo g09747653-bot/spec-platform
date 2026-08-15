@@ -44,3 +44,10 @@ Thumbs.db
 
 # gate walk artifacts (round 2, Д-6): screenshots from a live exploratory run
 .gate-artifacts/
+
+# Round 5 diagnosis scratch — reproduction scripts and their output, not part of the build.
+.gate-tmp/
+
+# The gate trace can run to a hundred megabytes; the committed evidence is the screenshots
+# and RESULT.md beside it (see e2e/gate-M6.live.ts).
+artifacts/**/trace.zip

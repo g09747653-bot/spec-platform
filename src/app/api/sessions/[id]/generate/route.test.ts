@@ -365,6 +365,108 @@ describe('POST /api/sessions/:id/generate (task 45)', () => {
    * What is asserted here is the fix in its plainest form: **the run does not depend on anyone
    * reading it.**
    */
+  /*
+   * Round 5, Р-3 — **one generation per session at a time.**
+   *
+   * Since Р-2 a run outlives the client that started it, so "nobody is reading it" stopped meaning
+   * "it is not happening". Nothing here knew that, so a page that offered Generate over a run in
+   * flight — which is what a page loaded mid-generation used to do — started a second run of the
+   * same stage, and two generations racing to write one file is a correctness defect. Found by the
+   * M6 gate walk.
+   */
+  describe('a generation already in flight (Р-3)', () => {
+    it('is not started twice; the second attempt is refused, visibly and retryably', async () => {
+      await readyToGenerate();
+      useChain(['google', { followPrompt: true, delayMs: 2 }]);
+
+      // The first run opens and is left running: its reader takes one event and goes away, which by
+      // Р-2 does not stop it.
+      const first = await post(sessionId);
+      const reader = first.body?.getReader();
+      if (reader === undefined) throw new Error('expected a stream body');
+      await reader.read();
+
+      const runsAfterFirst = await database.db.select().from(generationRuns);
+      expect(runsAfterFirst).toHaveLength(1);
+
+      // A second request, while that one is still running.
+      const second = await post(sessionId);
+      const events = await readEvents(second);
+
+      expect(events).toEqual([
+        {
+          type: 'error',
+          code: 'GENERATION_IN_FLIGHT',
+          message:
+            'A generation for this stage is already running. Reload the page to follow it — nothing is lost.',
+          retryable: true,
+        },
+      ]);
+
+      // And no second run row was written: the refusal is the point, not the message.
+      expect(await database.db.select().from(generationRuns)).toHaveLength(1);
+
+      /*
+       * Let the run in flight reach its end before the test does. Since Р-2 it no longer stops when
+       * its reader leaves, so a test that walked away here would have it writing chunks into a
+       * session the next test has already deleted.
+       */
+      await reader.cancel();
+
+      for (let attempt = 0; attempt < 400; attempt += 1) {
+        const [run] = await database.db.select().from(generationRuns);
+        if (run?.status === 'complete' || run?.status === 'failed') break;
+        await tick(25);
+      }
+    });
+
+    /*
+     * The status that made this defect survive three gate walks.
+     *
+     * A run that fails over to the next provider carries `restarted` until that provider produces
+     * something — and on the gate's chain, where the funded provider refused every call, that was
+     * where runs spent most of their lives. A guard written against `running` alone answered
+     * "nothing is happening" about a generation that was, so the page went on offering Generate over
+     * a live run. In flight is the complement of the terminal statuses, and this says so.
+     */
+    it.each(['running', 'restarted'] as const)(
+      'counts a run in status "%s" as in flight',
+      async (status) => {
+        await readyToGenerate();
+
+        await database.db.insert(generationRuns).values({ sessionId, stage: 'constitution', status });
+
+        const events = await readEvents(await post(sessionId));
+
+        expect(events).toEqual([expect.objectContaining({ code: 'GENERATION_IN_FLIGHT' })]);
+        expect(await database.db.select().from(generationRuns)).toHaveLength(1);
+      },
+    );
+
+    it.each(['complete', 'failed'] as const)(
+      'does not let a run in status "%s" block a new generation',
+      async (status) => {
+        await readyToGenerate();
+
+        // `generation_runs_completion_paired` — a completed run carries its provider and its
+        // finishing time, so the fixture is a row the schema would actually allow.
+        await database.db.insert(generationRuns).values({
+          sessionId,
+          stage: 'constitution',
+          status,
+          ...(status === 'complete'
+            ? { providerUsed: 'google', completedAt: new Date() }
+            : {}),
+        });
+
+        const events = await readEvents(await post(sessionId));
+
+        expect(events.some((event) => event.type === 'complete')).toBe(true);
+        expect(await database.db.select().from(generationRuns)).toHaveLength(2);
+      },
+    );
+  });
+
   describe('a reader that goes away (Р-2)', () => {
     /** Waits for the run to reach a terminal status — the natural end the client is not waiting on. */
     async function settledRun(): Promise<{ status: string; completedAt: Date | null }> {
