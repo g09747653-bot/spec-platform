@@ -25,6 +25,8 @@ export interface SpecAgentInput {
   /** Assembled generation context (task 50). Absent in the skeleton path. */
   context?: string;
   changeInstruction?: string;
+  /** The session's content language (У-1; task 108); forwarded to the prompt assembly point. */
+  contentLanguage?: string | null | undefined;
   runId: string;
   onChunk?: (text: string) => void;
   signal?: AbortSignal;
@@ -45,6 +47,7 @@ export function createSpecAgent(adapter: LlmAdapter) {
         initialPrompt: input.initialPrompt,
         context: input.context,
         changeInstruction: input.changeInstruction,
+        contentLanguage: input.contentLanguage,
       });
 
       const result = await adapter.generateStreaming({

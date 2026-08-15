@@ -40,6 +40,8 @@ export interface RevisionAgentInput {
    * revision may carry either, or both — so the instruction is built from whichever are present.
    */
   instruction?: string;
+  /** The session's content language (У-1; task 108); forwarded to the prompt assembly point. */
+  contentLanguage?: string | null | undefined;
   runId: string;
   budget?: ContextBudget;
   onChunk?: (text: string) => void;
@@ -88,6 +90,7 @@ export function createRevisionAgent(adapter: LlmAdapter) {
         initialPrompt: input.sources.initialPrompt,
         context: context.text,
         ...(parts.length === 0 ? {} : { changeInstruction: parts.join('\n\n') }),
+        contentLanguage: input.contentLanguage,
         runId: input.runId,
         onChunk: input.onChunk,
         signal: input.signal,

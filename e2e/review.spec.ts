@@ -34,9 +34,12 @@ async function generateApproveAndEnterReview(page: Page): Promise<void> {
   await page.getByTestId('generate-spec').click();
   await expect(page.getByTestId('spec-card')).toBeVisible({ timeout: 20_000 });
 
-  // The door is shut until the draft is approved, and it says what is missing.
-  await expect(page.getByTestId('proceed')).toBeDisabled();
-  await expect(page.getByTestId('proceed-unmet')).toContainText('approval');
+  /*
+   * The door is shut until the draft is approved, and it says what is missing. The control itself
+   * stays clickable — the gate is the server's answer, never the page's (P1; task 105) — so what is
+   * asserted is the reason on offer, not a disabled attribute.
+   */
+  await expect(page.getByTestId('gate-unmet')).toContainText('approval');
 
   await page.getByTestId('approve-spec').click();
   await expect(page.getByTestId('spec-card')).toContainText('approved');

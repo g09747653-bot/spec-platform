@@ -37,6 +37,10 @@ export interface ProjectDetail extends ProjectSummary {
   initialPrompt: string;
   summary: string | null;
   qualityEnabled: boolean;
+  /** How many times the session has reached `complete` (FR-020) — the feed's sealing count. */
+  completionCount: number;
+  /** The language every generated word answers in (У-1; task 108); `null` when undetermined. */
+  contentLanguage: string | null;
   version: number;
 }
 
@@ -86,7 +90,7 @@ export function createProjectRepository(db: SchemaDatabase) {
      */
     async createFromPrompt(
       scope: OwnerScope,
-      input: { name: string; prompt: string },
+      input: { name: string; prompt: string; audience: string; contentLanguage: string | null },
     ): Promise<{ projectId: string; sessionId: string }> {
       const created = await queryOneRow(
         db,
@@ -96,8 +100,8 @@ export function createProjectRepository(db: SchemaDatabase) {
           VALUES (${scope.userId}, ${input.name})
           RETURNING id
         ), new_session AS (
-          INSERT INTO ${sessions} (project_id, initial_prompt)
-          SELECT id, ${input.prompt} FROM new_project
+          INSERT INTO ${sessions} (project_id, initial_prompt, audience_profile, content_language)
+          SELECT id, ${input.prompt}, ${input.audience}, ${input.contentLanguage} FROM new_project
           RETURNING id, project_id
         ), new_state AS (
           INSERT INTO ${workflowState} (session_id, stage, substage)
@@ -127,6 +131,8 @@ export function createProjectRepository(db: SchemaDatabase) {
           initialPrompt: sessions.initialPrompt,
           summary: sessions.summary,
           qualityEnabled: sessions.qualityEnabled,
+          completionCount: sessions.completionCount,
+          contentLanguage: sessions.contentLanguage,
           stage: workflowState.stage,
           substage: workflowState.substage,
           version: workflowState.version,

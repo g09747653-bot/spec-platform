@@ -19,6 +19,15 @@ export const QuestionOption = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
   description: z.string().optional(),
+  /**
+   * v3 (task 106): the model's single suggestion for this question (Эталон §1.1).
+   *
+   * **Optional, and that is the compatibility contract.** Every round persisted before v3 is a valid
+   * v3 draft with no flags and no descriptions; it renders as plain options, which is exactly what
+   * it always rendered as. A schema that made this required would have made every stored round of
+   * every existing session unreadable — and the rounds are what the interview gate counts.
+   */
+  recommended: z.boolean().optional(),
 });
 
 export const Question = z
@@ -38,6 +47,19 @@ export const Question = z
     const ids = new Set(question.options.map((option) => option.id));
     if (ids.size !== question.options.length) {
       ctx.addIssue({ code: 'custom', message: `question ${question.id} repeats an option id` });
+    }
+
+    /*
+     * v3: **at most one** recommendation per question. A model that marks three has not recommended
+     * anything, and the badge would then be decoration rather than advice — the same reasoning that
+     * makes `allowOther` a literal rather than a preference.
+     */
+    const recommended = question.options.filter((option) => option.recommended === true);
+    if (recommended.length > 1) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `question ${question.id} recommends ${String(recommended.length)} options; at most one may be recommended`,
+      });
     }
   });
 

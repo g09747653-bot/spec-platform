@@ -144,3 +144,96 @@ describe('QuestionSetSchema (task 32)', () => {
     expect(result).toMatchObject({ ok: false, code: 'DRAFT_INVALID' });
   });
 });
+
+/**
+ * Task 106 — the v3 additions, and the compatibility they are required to keep.
+ *
+ * The whole point of making `description` and `recommended` optional is that every round already in
+ * a customer's database is still a valid draft. That is not a claim worth asserting once in prose:
+ * the interview gate counts *answered rounds*, so a schema change that made an old round unreadable
+ * would strand a session at a gate it had already passed.
+ */
+describe('question set v3 (task 106)', () => {
+  const v2Question = () => ({
+    id: 'q-v2',
+    text: 'Who is this for?',
+    type: 'single' as const,
+    options: [
+      { id: 'a', label: 'Solo developers' },
+      { id: 'b', label: 'Teams' },
+    ],
+    allowOther: true as const,
+    informationNeeds: ['target-users'],
+  });
+
+  it('still accepts a v2 draft — no descriptions, no recommendation', () => {
+    const result = validateQuestionSetDraft({ stage: 'interview', questions: [v2Question()] });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const [question] = result.set.questions;
+      expect(question?.options[0]?.description).toBeUndefined();
+      expect(question?.options[0]?.recommended).toBeUndefined();
+    }
+  });
+
+  it('accepts a v3 draft with descriptions and one recommendation', () => {
+    const result = validateQuestionSetDraft({
+      stage: 'interview',
+      questions: [
+        {
+          ...v2Question(),
+          options: [
+            { id: 'a', label: 'Solo developers', description: 'One person, many projects' },
+            { id: 'b', label: 'Teams', description: 'Two to ten people', recommended: true },
+          ],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.set.questions[0]?.options[1]).toMatchObject({
+        description: 'Two to ten people',
+        recommended: true,
+      });
+    }
+  });
+
+  it('refuses a question that recommends more than one option', () => {
+    const result = validateQuestionSetDraft({
+      stage: 'interview',
+      questions: [
+        {
+          ...v2Question(),
+          options: [
+            { id: 'a', label: 'Solo developers', recommended: true },
+            { id: 'b', label: 'Teams', recommended: true },
+          ],
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({ ok: false, code: 'DRAFT_INVALID' });
+    if (!result.ok) {
+      expect(result.issues.join(' ')).toContain('at most one may be recommended');
+    }
+  });
+
+  it('accepts a question that recommends nothing at all', () => {
+    const result = validateQuestionSetDraft({
+      stage: 'interview',
+      questions: [
+        {
+          ...v2Question(),
+          options: [
+            { id: 'a', label: 'Solo developers', recommended: false },
+            { id: 'b', label: 'Teams', recommended: false },
+          ],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+  });
+});

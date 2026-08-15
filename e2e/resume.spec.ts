@@ -134,18 +134,22 @@ test.describe('session resume', () => {
 
     await expect(page.getByTestId('interview-panel')).toContainText('summary saved');
 
-    // The answers are shown back — by their labels, not their option ids.
-    const history = page.getByTestId('answer-history');
-    await expect(history).toBeVisible();
-    await expect(history).not.toContainText('q-audience-solo-devs');
-    const restored = await history.textContent();
+    /*
+     * The answers are shown back where they were given — the round itself, fixed in place, by the
+     * labels of what was chosen rather than by option ids. In the feed there is no separate history
+     * panel: the conversation *is* the history, which is the whole of task 104.
+     */
+    const answered = page.getByTestId('round-answered');
+    await expect(answered).toBeVisible();
+    await expect(answered).not.toContainText('q-audience-solo-devs');
+    const restored = await answered.textContent();
 
     await signOutAndBackIn(page, context, owner, projectUrl);
 
-    await expect(page.getByTestId('answer-history')).toBeVisible();
-    expect(await page.getByTestId('answer-history').textContent()).toBe(restored);
+    await expect(page.getByTestId('round-answered')).toBeVisible();
+    expect(await page.getByTestId('round-answered').textContent()).toBe(restored);
 
-    // AC-5: the answered round is not re-presented — the panel is offering a *new* round, not that one.
+    // AC-5: the answered round is not re-presented — the feed is offering a *new* round, not that one.
     await expect(page.getByTestId('mcq-card')).toHaveCount(0);
     await expect(page.getByTestId('ask-round')).toBeVisible();
   });
@@ -312,7 +316,8 @@ test.describe('session resume', () => {
      * refresh — the assertion below is about persisted state, and it should be taken after the page
      * has finished saying what happened, not in the middle of it.
      */
-    await expect(page.getByTestId('spec-error')).toContainText('did not reach the server');
+    // The door lives at the tail of the feed now, so its notice is the tail's (task 105).
+    await expect(page.getByTestId('interview-notice')).toContainText('did not reach the server');
     await page.unroute('**/api/sessions/*/transition');
 
     // Tolerant of that refresh being in flight: a navigation interrupted by the page's own re-read

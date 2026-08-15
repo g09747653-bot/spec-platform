@@ -18,6 +18,7 @@ import { createSummaryAgent } from './summary-agent';
  */
 const baseInput = {
   stage: 'interview' as const,
+  audience: 'non-technical',
   roundNumber: 1,
   initialPrompt: 'A spec platform for AI coding agents',
   summary: null,

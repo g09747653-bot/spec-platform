@@ -143,4 +143,72 @@ test.describe('workflow gates and the structured interview', () => {
     await page.getByTestId('proceed').click();
     await expect(page.getByTestId('stage-current')).toHaveText(/Constitution/);
   });
+  /**
+   * Task 106 — the round as the reference product presents it, and as the feed keeps it.
+   *
+   * The four things the acceptance criteria name are all here in one walk, because they are one
+   * interaction: the badge appears only where the model marked it, select-all takes more than one,
+   * Other carries free text, and after Submit the form stays in the conversation with the choices
+   * fixed. The last is the one that could not be tested before M7п: there was no conversation to
+   * stay in.
+   */
+  test('a round renders v3, and stays in the feed once answered (task 106)', async ({
+    page,
+    context,
+  }) => {
+    await signIn(context, await createSignedInUser('rounds-v3'));
+
+    await page.goto('/projects');
+    await expect(page.getByTestId('create-project')).toBeEnabled();
+
+    // У-5: the profile is asked here, once, before the session exists.
+    await expect(page.getByTestId('audience-profile')).toBeVisible();
+    await page.getByTestId('audience-technical').check();
+
+    await page.getByTestId('prompt-input').fill('A scheduling tool for climbing gyms');
+    await page.getByTestId('create-project').click();
+    await expect(page.getByTestId('session')).toBeVisible();
+
+    // …and never again: the session surface offers no second chance to change register.
+    await expect(page.getByTestId('audience-profile')).toHaveCount(0);
+
+    await page.getByTestId('ask-round').click();
+    await expect(page.getByTestId('mcq-card')).toBeVisible();
+
+    // The header names the round and how much it asks (Эталон §1.1).
+    await expect(page.getByTestId('round-heading').first()).toContainText('Round 1 — 2 questions');
+
+    // Required markers and the select-one/select-all captions.
+    await expect(page.getByTestId('mcq-required-q-audience')).toBeVisible();
+    await expect(page.getByTestId('mcq-hint-q-audience')).toHaveText('Select one');
+    await expect(page.getByTestId('mcq-hint-q-problem')).toHaveText('Select all that apply');
+
+    // One recommendation, on the one option the model marked — and nowhere else.
+    await expect(page.getByTestId('mcq-recommended-teams')).toHaveText('(Recommended)');
+    await expect(
+      page.getByTestId('mcq-card').locator('[data-testid^="mcq-recommended-"]'),
+    ).toHaveCount(1);
+
+    // Select-all takes more than one; Other carries free text.
+    await page.getByTestId('mcq-option-q-audience-solo-devs').check();
+    await page.getByTestId('mcq-option-q-problem-context').check();
+    await page.getByTestId('mcq-option-q-problem-review').check();
+    await page.getByTestId('mcq-other-q-problem').fill('and no export formats to speak of');
+    await page.getByTestId('mcq-submit').click();
+
+    // The form stays where it was asked, fixed, with the answers visible — and asks nothing more.
+    const answered = page.getByTestId('round-answered');
+    await expect(answered).toBeVisible();
+    await expect(page.getByTestId('mcq-card')).toHaveCount(0);
+    await expect(answered).toContainText('Solo developers and indie hackers');
+    await expect(answered).toContainText('Agents lose context');
+    await expect(answered).toContainText('No review workflow');
+    await expect(answered).toContainText('and no export formats to speak of');
+
+    // And it survives a reload as exactly that (FR-017 AC-2).
+    const fixed = await answered.textContent();
+    await page.reload();
+    await expect(page.getByTestId('round-answered')).toBeVisible();
+    expect(await page.getByTestId('round-answered').textContent()).toBe(fixed);
+  });
 });

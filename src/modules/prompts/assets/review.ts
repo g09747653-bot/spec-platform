@@ -17,11 +17,17 @@ export interface ReviewPromptInput {
   specType: string;
   /** The approved revision's content, verbatim: the review is about these exact bytes. */
   specContent: string;
+  /**
+   * The session's content language (У-1; task 108) — an ISO 639-1 code, or `null`/absent when
+   * detection could not tell. Forwarded to the single assembly point, never acted on here.
+   */
+  contentLanguage?: string | null | undefined;
 }
 
 export function reviewBoardPrompt(input: ReviewPromptInput): AssembledPrompt {
-  return assemblePrompt('review.board.v1', {
-    specType: input.specType,
-    specContent: input.specContent,
-  });
+  return assemblePrompt(
+    'review.board.v1',
+    { specType: input.specType, specContent: input.specContent },
+    { contentLanguage: input.contentLanguage },
+  );
 }

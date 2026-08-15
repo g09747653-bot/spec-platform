@@ -302,4 +302,74 @@ describe('POST /api/sessions/:id/rounds', () => {
       expect(await createInterviewRepository(database.db).roundsForSession(sessionId)).toEqual([]);
     });
   });
+  /**
+   * У-1 and У-5 reaching a model (tasks 106, 108).
+   *
+   * The unit tests prove the prompt layer words the instruction correctly; this proves the *chain* —
+   * column, repository, route, agent, prompt — carries what is stored to the request that is
+   * actually made. Both are needed: a perfect instruction nobody passes is worth nothing, and the
+   * two halves fail in different places.
+   */
+  describe('what the session tells the model about itself', () => {
+    /** Captures the system prompt of the one call the route makes. */
+    function capture(): { system: () => string } {
+      let seen = '';
+
+      vi.mocked(createDefaultAdapter).mockReturnValue({
+        generateStreaming: (request: {
+          messages: readonly { role: string; content: unknown }[];
+        }) => {
+          const system = request.messages.find((message) => message.role === 'system')?.content;
+          seen = typeof system === 'string' ? system : '';
+
+          return Promise.resolve({
+            text: stubInterviewRoundDocument('interview', 1),
+            providerUsed: 'google',
+            attempts: 1,
+          });
+        },
+      });
+
+      return { system: () => seen };
+    }
+
+    async function setSession(fields: Record<string, string | null>): Promise<void> {
+      await database.db.update(sessions).set(fields).where(eq(sessions.id, sessionId));
+    }
+
+    it('asks in the language the seed was written in (У-1)', async () => {
+      await setSession({ contentLanguage: 'ru' });
+      const russian = capture();
+      await ask(sessionId);
+
+      expect(russian.system()).toContain('Russian');
+      expect(russian.system()).toContain('never translate them');
+    });
+
+    it('asks in English when that is what the seed was (У-1)', async () => {
+      await setSession({ contentLanguage: 'en' });
+      const english = capture();
+      await ask(sessionId);
+
+      expect(english.system()).toContain('English');
+      expect(english.system()).not.toContain('Russian');
+    });
+
+    it('mirrors the user when the language could not be told (У-1)', async () => {
+      await setSession({ contentLanguage: null });
+      const unknown = capture();
+      await ask(sessionId);
+
+      expect(unknown.system()).toContain('the same language the user wrote their own description');
+    });
+
+    it('speaks in the register the audience profile asked for (У-5)', async () => {
+      await setSession({ audienceProfile: 'technical' });
+      const technical = capture();
+      await ask(sessionId);
+
+      expect(technical.system()).toContain('comfortable with engineering vocabulary');
+      expect(technical.system()).not.toContain('They are not technical');
+    });
+  });
 });

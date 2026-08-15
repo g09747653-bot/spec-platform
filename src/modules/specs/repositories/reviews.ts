@@ -109,6 +109,17 @@ const OWNED_REVIEW = sql`
   JOIN ${projects} ON ${projects}.id = ${specFiles}.project_id
 `;
 
+/** A review with the two timestamps the conversation orders it by (task 104). */
+const ProjectReviewRow = ReviewRow.extend({
+  created_at: z.coerce.date(),
+  decided_at: z.coerce.date().nullable(),
+});
+
+export interface ProjectReview extends StoredReview {
+  createdAt: Date;
+  decidedAt: Date | null;
+}
+
 export interface CreateReviewInput {
   specRevisionId: string;
   outcome: ReviewOutcome;
@@ -161,6 +172,37 @@ export function createReviewRepository(db: SchemaDatabase) {
 
       const row = rows[0];
       return row === undefined ? null : toReview(row);
+    },
+
+    /**
+     * Every review of every file of a project, oldest first (task 104).
+     *
+     * A review card is a block of the conversation, decided or not, so the feed reads the whole
+     * chain rather than only the pending one. `decided_at` comes along because a decided review has
+     * a place in the timeline of its own — after the revision it read, before the one it caused.
+     */
+    async projectHistory(scope: OwnerScope, projectId: string): Promise<ProjectReview[]> {
+      if (!UUID.test(projectId)) return [];
+
+      const rows = await queryRows(
+        db,
+        sql`
+          SELECT ${REVIEW_COLUMNS},
+                 ${reviewFeedback}.created_at,
+                 ${reviewFeedback}.decided_at
+          ${OWNED_REVIEW}
+          WHERE ${specFiles}.project_id = ${projectId}::uuid
+            AND ${projects}.owner_id = ${scope.userId}::uuid
+          ORDER BY ${reviewFeedback}.created_at ASC
+        `,
+        ProjectReviewRow,
+      );
+
+      return rows.map((row) => ({
+        ...toReview(row),
+        createdAt: row.created_at,
+        decidedAt: row.decided_at,
+      }));
     },
 
     /**

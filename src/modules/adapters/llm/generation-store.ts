@@ -229,6 +229,51 @@ export function createGenerationStore(db: SchemaDatabase) {
     },
 
     /**
+     * Every generation run of a session, oldest first (task 104).
+     *
+     * A run is a turn of the conversation — the card a document streams into — so the feed reads the
+     * whole series rather than only the one in flight. Content is not read: the chunk log is pruned
+     * once a run completes and its revision is persisted, so a finished run's block is a marker in
+     * the timeline and the document beside it is where the text lives.
+     */
+    async runsForSession(sessionId: string): Promise<
+      {
+        runId: string;
+        stage: string;
+        status: GenerationRun['status'];
+        attempt: number;
+        createdAt: Date;
+      }[]
+    > {
+      if (!UUID.test(sessionId)) return [];
+
+      const rows = await queryRows(
+        db,
+        sql`
+          SELECT id, stage, status, attempt, created_at
+          FROM ${generationRuns}
+          WHERE session_id = ${sessionId}::uuid
+          ORDER BY created_at ASC
+        `,
+        z.object({
+          id: z.uuid(),
+          stage: z.string(),
+          status: z.enum(RUN_STATUSES),
+          attempt: z.number().int().positive(),
+          created_at: z.coerce.date(),
+        }),
+      );
+
+      return rows.map((row) => ({
+        runId: row.id,
+        stage: row.stage,
+        status: row.status,
+        attempt: row.attempt,
+        createdAt: row.created_at,
+      }));
+    },
+
+    /**
      * The run's liveness, without the ownership join.
      *
      * The resume stream polls this while it follows a run in flight (D-15: one long-running function

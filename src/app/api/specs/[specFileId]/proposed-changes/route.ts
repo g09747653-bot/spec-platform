@@ -78,11 +78,19 @@ export async function POST(
 
   // The configured chain, with failover, exactly as generation uses it — refinement needs no
   // provider of its own and no configuration of its own (A3; P7).
+  /*
+   * The session's own language (У-1; task 108). Read here rather than threaded from the caller
+   * because this route is entered by file id: the proposal is prose the user reads, and prose the
+   * user reads is in their language.
+   */
+  const project = await createProjectRepository(db).findById(scope, specFile.projectId);
+
   const agent = createRefinementAgent(createDefaultAdapter());
   const refined = await agent.propose({
     specType: specFile.specType,
     specContent: current.content,
     instruction: parsed.data.instruction,
+    contentLanguage: project?.contentLanguage ?? null,
     runId: randomUUID(),
   });
 

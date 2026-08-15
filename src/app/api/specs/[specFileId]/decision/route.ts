@@ -127,6 +127,8 @@ export async function POST(
     specType: specFile.specType,
     sources: collected.sources,
     instruction: parsed.data.instruction,
+    // У-1: a revision answers in the language the document was written in (task 108).
+    contentLanguage: project.contentLanguage,
     runId: randomUUID(),
   });
 

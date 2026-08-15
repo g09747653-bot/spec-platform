@@ -187,6 +187,7 @@ async function refreshInterviewSummary(
     summary = await summariser.summarise({
       initialPrompt: session.initialPrompt,
       answeredHighlights: highlights,
+      contentLanguage: session.contentLanguage,
       runId: randomUUID(),
     });
   } catch (error) {
@@ -348,6 +349,7 @@ export async function POST(
       satisfied = await assessor.assess({
         reply: parsed.data.reply,
         declaredNeeds,
+        contentLanguage: session.contentLanguage,
         runId: randomUUID(),
       });
     } catch (error) {
@@ -397,6 +399,8 @@ export async function POST(
     try {
       outcome = await agent.draftRound({
         stage,
+        // У-5: how the questions are worded, from the session's stored profile (task 106).
+        audience: session.audienceProfile,
         roundNumber: nextRoundNumber,
         initialPrompt: session.initialPrompt,
         summary: session.summary,

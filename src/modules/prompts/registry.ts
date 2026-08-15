@@ -59,9 +59,14 @@ export interface PromptVariables {
     /** What the user asked to change on a re-generation (FR-009 AC-4). Empty string otherwise. */
     changeInstruction: string;
   };
-  'interview.questions.v2': {
+  'interview.questions.v3': {
     /** A label for our records only — the prompt forbids it appearing in a question (Д-3). */
     stage: string;
+    /**
+     * How to speak to this person (У-5; task 106). Rendered by the asset from the session's stored
+     * profile, so a change of register is a change of one block rather than of the whole prompt.
+     */
+    audienceRules: string;
     /** Which round this is, so a later round can be narrower than the first. */
     roundNumber: string;
     /** What this round is about, in the user's words. Derived from the stage on our side. */
@@ -284,25 +289,25 @@ const CHAT_ANSWER: PromptAsset = {
  * round is *about* — it just does so on our side of the boundary (`interview-topics.ts`).
  */
 const INTERVIEW_QUESTIONS: PromptAsset = {
-  id: 'interview.questions.v2',
+  id: 'interview.questions.v3',
   system: [
-    'You are interviewing someone about a product they want built. They may not be technical.',
-    'Ask about THEIR product, in plain everyday words a friend would understand.',
+    'You are interviewing someone about a product they want built.',
+    '{{audienceRules}}',
     '',
     'Never ask about documents, specifications, sections, formats, or the process you are part of.',
     'Never use the words constitution, requirements document, specification, spec, acceptance',
     'criteria, scope document, milestone or artifact in a question. A question the person could not',
     'answer without knowing how this tool works is a wrong question.',
     '',
-    'Prefer concrete over abstract: "who opens this on a Monday morning?" beats "who are the',
-    'stakeholders?". Offer options that are real possibilities, not categories.',
-    '',
     'Draft the next round as JSON only — no prose, no code fence. Shape:',
     '{"stage": "<stage>", "questions": [{"id", "text", "type": "single"|"multiple",',
-    '"options": [{"id", "label", "description?"}], "allowOther": true,',
+    '"options": [{"id", "label", "description", "recommended?"}], "allowOther": true,',
     '"informationNeeds": ["<need>"]}]}.',
     'Between 2 and 8 options per question; every question carries allowOther: true and names the',
     'information needs it is meant to satisfy. Ask at most three questions in a round.',
+    'Give every option a one-line "description" saying what choosing it would mean in practice.',
+    'Mark at most ONE option per question with "recommended": true — the one you would advise for',
+    'this product — and leave the flag off entirely when no option is clearly better.',
     'Return {"stage": "<stage>", "questions": []} when nothing further is worth asking.',
   ].join(' '),
   user: [
@@ -325,6 +330,7 @@ const INTERVIEW_QUESTIONS: PromptAsset = {
   ].join('\n'),
   variables: [
     'stage',
+    'audienceRules',
     'roundNumber',
     'topics',
     'initialPrompt',
@@ -362,7 +368,7 @@ export const promptRegistry: Readonly<Record<PromptId, PromptAsset>> = Object.fr
   'refinement.propose.v1': REFINEMENT_PROPOSE,
   'decision.intent.v1': DECISION_INTENT,
   'chat.answer.v1': CHAT_ANSWER,
-  'interview.questions.v2': INTERVIEW_QUESTIONS,
+  'interview.questions.v3': INTERVIEW_QUESTIONS,
   'interview.reply-assessment.skeleton.v1': REPLY_ASSESSMENT,
   'interview.summary.skeleton.v1': SESSION_SUMMARY,
 });

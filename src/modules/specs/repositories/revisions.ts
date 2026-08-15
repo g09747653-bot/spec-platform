@@ -2,7 +2,8 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import type { SchemaDatabase } from '@/db';
-import { specFiles, specRevisions } from '@/db/schema';
+import type { OwnerScope } from '@/db/owner-scope';
+import { projects, specFiles, specRevisions } from '@/db/schema';
 import { queryOneRow, queryRows } from '@/db/sql';
 
 import { revisionOriginForMode } from '../export/resolve-mode';
@@ -25,6 +26,8 @@ import { type RevisionOrigin, type SpecType, specFileName } from '../model/spec-
  *   with three different answers, and the export rule of A6 depends on the third being decidable rather
  *   than inferred.
  */
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const RevisionRow = z.object({
   id: z.uuid(),
@@ -58,6 +61,29 @@ const toRevision = (row: z.infer<typeof RevisionRow>): SpecRevision => ({
   derivedFrom: row.derived_from,
   createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
 });
+
+/** A revision with the file it belongs to — what a project-wide read returns (task 104). */
+const ProjectRevisionRow = z.object({
+  id: z.uuid(),
+  spec_file_id: z.uuid(),
+  spec_type: z.string(),
+  file_name: z.string(),
+  revision_number: z.number().int().positive(),
+  approved: z.boolean(),
+  origin: z.enum(['parity', 'enrichment']),
+  created_at: z.coerce.date(),
+});
+
+export interface ProjectRevision {
+  id: string;
+  specFileId: string;
+  specType: string;
+  fileName: string;
+  revisionNumber: number;
+  approved: boolean;
+  origin: RevisionOrigin;
+  createdAt: Date;
+}
 
 export interface AppendRevisionInput {
   specFileId: string;
@@ -232,6 +258,52 @@ export function createRevisionRepository(db: SchemaDatabase) {
         .returning({ id: specRevisions.id });
 
       return updated.length > 0;
+    },
+
+    /**
+     * Every revision of every file of a project, oldest first (task 104).
+     *
+     * The feed is a chronological projection, and a document card is a revision — so the whole
+     * bundle's revision chain is one read rather than one read per file. `spec_type` and `file_name`
+     * come along because the card prints them and the projection has no second lookup to resolve
+     * them with.
+     */
+    async projectHistory(scope: OwnerScope, projectId: string): Promise<ProjectRevision[]> {
+      if (!UUID.test(projectId)) return [];
+
+      const rows = await queryRows(
+        db,
+        sql`
+          SELECT
+            ${specRevisions}.id,
+            ${specRevisions}.spec_file_id,
+            ${specFiles}.spec_type,
+            ${specFiles}.file_name,
+            ${specRevisions}.revision_number,
+            ${specRevisions}.approved,
+            ${specRevisions}.origin,
+            ${specRevisions}.created_at
+          FROM ${specRevisions}
+          JOIN ${specFiles} ON ${specFiles}.id = ${specRevisions}.spec_file_id
+          JOIN ${projects} ON ${projects}.id = ${specFiles}.project_id
+          WHERE ${specFiles}.project_id = ${projectId}::uuid
+            AND ${projects}.owner_id = ${scope.userId}::uuid
+          ORDER BY ${specRevisions}.created_at ASC, ${specFiles}.spec_type ASC,
+                   ${specRevisions}.revision_number ASC
+        `,
+        ProjectRevisionRow,
+      );
+
+      return rows.map((row) => ({
+        id: row.id,
+        specFileId: row.spec_file_id,
+        specType: row.spec_type,
+        fileName: row.file_name,
+        revisionNumber: row.revision_number,
+        approved: row.approved,
+        origin: row.origin,
+        createdAt: row.created_at,
+      }));
     },
 
     /** Every revision of a file, oldest first — the history a diff walks (A4). */

@@ -18,7 +18,12 @@ import {
   type DecidableKind,
   type PendingDecision,
 } from '@/modules/specs/pending-decision';
-import { errorResponse, jsonResponse } from '@/modules/web/api/responses';
+import {
+  CHAT_STREAM_CONTENT_TYPE,
+  encodeChatEvent,
+  type ChatEvent,
+} from '@/modules/web/api/chat-protocol';
+import { errorResponse } from '@/modules/web/api/responses';
 import { pendingRoundId } from '@/modules/workflow/pending-action';
 import { createWorkflowStateRepository } from '@/modules/workflow/repositories/workflow-state';
 
@@ -151,13 +156,20 @@ async function dispatch(
   );
 }
 
-/** The assistant's reply when the message was not a decision (FR-009 AC-6). */
+/**
+ * The assistant's reply when the message was not a decision (FR-009 AC-6; task 109).
+ *
+ * `onDelta` is what turns a reply that appears into one that arrives: the adapter already streams,
+ * and the only thing missing was somewhere for the pieces to go. The complete text is still
+ * returned, so a caller that ignores the deltas gets exactly what it got before.
+ */
 async function answer(
   db: ReturnType<typeof getDatabase>,
   scope: NonNullable<Awaited<ReturnType<typeof currentOwnerScope>>>,
-  session: { id: string; projectId: string; initialPrompt: string },
+  session: { id: string; projectId: string; initialPrompt: string; contentLanguage: string | null },
   pending: PendingDecision,
   text: string,
+  onDelta: (piece: string) => void,
 ): Promise<string> {
   const collected = await collectContextSources(db, scope, {
     sessionId: session.id,
@@ -167,11 +179,16 @@ async function answer(
   // Answering a question writes no revision, so the context set is not recorded anywhere here.
   const context = assembleContext(collected.sources);
 
-  const prompt = assemblePrompt('chat.answer.v1', {
-    message: text,
-    pendingDescription: describePending(pending),
-    context: context.text,
-  });
+  const prompt = assemblePrompt(
+    'chat.answer.v1',
+    {
+      message: text,
+      pendingDescription: describePending(pending),
+      context: context.text,
+    },
+    // У-1: an answer in the conversation is in the language of the conversation (task 108).
+    { contentLanguage: session.contentLanguage },
+  );
 
   try {
     const result = await createDefaultAdapter().generateStreaming({
@@ -180,6 +197,7 @@ async function answer(
         { role: 'user', content: prompt.user },
       ],
       runId: randomUUID(),
+      onChunk: onDelta,
     });
 
     return result.text.trim();
@@ -189,6 +207,51 @@ async function answer(
     // An outage costs the answer, never the card: the decision stays exactly where it was (P5).
     return 'I could not answer that just now. Your pending decision is untouched — please try again.';
   }
+}
+
+/**
+ * The chat response: newline-delimited events, whose **last one is the documented contract**.
+ *
+ * `applied`, `result` and `pendingAction` are the three fields solution.md describes, on the same
+ * route with the same status; anything ahead of the result event is the reply arriving early rather
+ * than a second protocol. A client that read only the final line would behave exactly as the one
+ * this replaced — which is what makes streaming additive here rather than a new API.
+ *
+ * `enqueue` is guarded because a reader that leaves closes the stream underneath us: a delta with
+ * nowhere to go is not an error, it is a person who navigated away.
+ */
+function chatStream(
+  immediate: readonly ChatEvent[],
+  produce?: (send: (event: ChatEvent) => void) => Promise<ChatEvent>,
+): Response {
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      let open = true;
+
+      const send = (event: ChatEvent) => {
+        if (!open) return;
+
+        try {
+          controller.enqueue(encoder.encode(encodeChatEvent(event)));
+        } catch {
+          open = false;
+        }
+      };
+
+      try {
+        for (const event of immediate) send(event);
+        if (produce !== undefined) send(await produce(send));
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: { 'Content-Type': CHAT_STREAM_CONTENT_TYPE, 'Cache-Control': 'no-store' },
+  });
 }
 
 export async function POST(
@@ -235,38 +298,46 @@ export async function POST(
       })
     : { intent: null, reason: 'no-pending' as const };
 
-  if (!isDecidable(pending) || resolution.intent === null) {
-    return jsonResponse({
-      applied: null,
-      reply: await answer(db, scope, session, pending, parsed.data.text),
-      // Unchanged, and stated so the client re-renders exactly what it had (AC-2).
-      pendingAction: pendingActionOf(pending),
-    });
+  const dispatched =
+    !isDecidable(pending) || resolution.intent === null
+      ? null
+      : await dispatch(pending, resolution.intent.action, resolution.intent.editPrompt, request);
+
+  /*
+   * **Every write is finished before the body opens** (task 109).
+   *
+   * The reply streams, and that is worth having — but a decision applied from inside a response
+   * body would be a decision whose completion depends on someone reading it. Resolving and
+   * dispatching above the stream keeps the persisted outcome a property of the request, exactly as
+   * it was before this route streamed anything; what happens inside the stream is a model call that
+   * writes nothing, so a reader who walks away costs the answer and nothing else (P5).
+   */
+  if (dispatched?.ok === true && resolution.intent !== null && isDecidable(pending)) {
+    const result: unknown = await dispatched.json().catch(() => null);
+
+    return chatStream([
+      {
+        type: 'result',
+        applied: { kind: pending.kind, action: resolution.intent.action },
+        result,
+        // Re-derived after the decision, so the client learns what is pending *now* (AC-4).
+        pendingAction: pendingActionOf(await currentPending(db, scope, session)),
+      },
+    ]);
   }
 
-  const dispatched = await dispatch(
-    pending,
-    resolution.intent.action,
-    resolution.intent.editPrompt,
-    request,
-  );
-
-  // Nothing to dispatch to — the resolver named an action this card cannot take from chat. The card
-  // stays exactly as it was, which is the abstaining outcome by another route.
-  if (dispatched?.ok !== true) {
-    return jsonResponse({
-      applied: null,
-      reply: await answer(db, scope, session, pending, parsed.data.text),
-      pendingAction: pendingActionOf(pending),
-    });
-  }
-
-  const result: unknown = await dispatched.json().catch(() => null);
-
-  return jsonResponse({
-    applied: { kind: pending.kind, action: resolution.intent.action },
-    result,
-    // Re-derived after the decision, so the client learns what is pending *now* (FR-017 AC-4).
-    pendingAction: pendingActionOf(await currentPending(db, scope, session)),
-  });
+  /*
+   * Nothing was applied — either the message was not a decision, or the resolver named an action
+   * this card cannot take from chat. Both leave the card exactly as it was, which is the abstaining
+   * outcome, and both get an answer (FR-009 AC-6).
+   */
+  return chatStream([], async (send) => ({
+    type: 'result',
+    applied: null,
+    reply: await answer(db, scope, session, pending, parsed.data.text, (piece) => {
+      send({ type: 'delta', text: piece });
+    }),
+    // Unchanged, and stated so the client re-renders exactly what it had (AC-2).
+    pendingAction: pendingActionOf(pending),
+  }));
 }

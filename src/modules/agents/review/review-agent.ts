@@ -33,6 +33,8 @@ export interface ReviewAgentInput {
   specType: string;
   /** The approved content under review — the exact bytes the artifact will be keyed to. */
   specContent: string;
+  /** The session's content language (У-1; task 108); forwarded to the prompt assembly point. */
+  contentLanguage?: string | null | undefined;
   runId: string;
   signal?: AbortSignal;
 }
@@ -54,6 +56,7 @@ export function createReviewAgent(adapter: LlmAdapter) {
       const prompt = reviewBoardPrompt({
         specType: input.specType,
         specContent: input.specContent,
+        contentLanguage: input.contentLanguage,
       });
 
       const result = await adapter.generateStreaming({

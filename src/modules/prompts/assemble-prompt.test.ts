@@ -67,8 +67,9 @@ describe('assemblePrompt', () => {
   });
 
   it('collapses the gaps an empty optional block leaves behind', () => {
-    const withoutSummary = assemblePrompt('interview.questions.v2', {
+    const withoutSummary = assemblePrompt('interview.questions.v3', {
       stage: 'interview',
+      audienceRules: 'They are not technical.',
       roundNumber: '1',
       topics: '- who will use this',
       initialPrompt: 'A tool for writing specs.',

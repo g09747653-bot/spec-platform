@@ -63,6 +63,7 @@ describe('interview topics (round 2, Д-3)', () => {
     const prompt = (stage: string) =>
       interviewQuestionsPrompt({
         stage,
+        audience: 'non-technical',
         roundNumber: 1,
         initialPrompt: 'An app for tracking what my family spends',
         summary: null,
@@ -99,13 +100,44 @@ describe('interview topics (round 2, Д-3)', () => {
       }
     });
 
-    it('says the person may not be technical', () => {
-      expect(prompt('solution').system).toContain('may not be technical');
+    it('speaks plainly to a non-technical audience, and in engineering terms to a technical one', () => {
+      expect(prompt('solution').system).toContain('They are not technical');
+
+      const technical = interviewQuestionsPrompt({
+        stage: 'solution',
+        audience: 'technical',
+        roundNumber: 1,
+        initialPrompt: 'An app for tracking what my family spends',
+        summary: null,
+        satisfiedNeeds: [],
+        unmetNeeds: [],
+      });
+
+      // У-5: the profile provably changes the prompt, and only its register.
+      expect(technical.system).not.toContain('They are not technical');
+      expect(technical.system).toContain('comfortable with engineering vocabulary');
+      // The prohibition on asking about *our* artifacts is above the register and survives both.
+      expect(technical.system).toContain('Never ask about documents');
+    });
+
+    it('falls back to the plain register for a profile it does not recognise', () => {
+      const unknown = interviewQuestionsPrompt({
+        stage: 'solution',
+        audience: 'martian',
+        roundNumber: 1,
+        initialPrompt: 'An app for tracking what my family spends',
+        summary: null,
+        satisfiedNeeds: [],
+        unmetNeeds: [],
+      });
+
+      expect(unknown.system).toContain('They are not technical');
     });
 
     it('still carries the needs bookkeeping the gates depend on', () => {
       const assembled = interviewQuestionsPrompt({
         stage: 'requirements',
+        audience: 'non-technical',
         roundNumber: 2,
         initialPrompt: 'An app for tracking what my family spends',
         summary: 'A household budget tool for two adults.',

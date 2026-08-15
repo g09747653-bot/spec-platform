@@ -1,0 +1,233 @@
+import type { StagePosition } from '@/modules/workflow/model/stages';
+
+/**
+ * The conversation feed — what a session looks like when it is one continuous chat (task 104).
+ *
+ * The whole surface of M7п rests on one claim: **the feed is a projection, not a store.** Every block
+ * below is derived from a row that already exists — the seed prompt, a question round, a generation
+ * run, a revision, a review — so nothing has to be written for the conversation to exist, and nothing
+ * can drift out of step with the workflow. Reloading rebuilds the identical feed because rebuilding
+ * *is* how it was built the first time (FR-017 AC-1).
+ *
+ * That is also why the block ids are derived from row ids rather than from array positions: an id
+ * that changes when a block is inserted earlier in history is not an id, it is an index, and anchors,
+ * scroll restoration and test selectors all break on it.
+ *
+ * The five block kinds of the reference product (Эталон §1.1) map onto this union as: ordinary
+ * messages → `seed`/`message`, question rounds → `round`, stage chips → `transition`, document cards
+ * → `document`, review cards → `review`. `generation`, `proposal` and `completion` are ours: a run in
+ * flight, a conversational refinement awaiting a decision, and the sealed session — three states the
+ * M6 gate visits that the reference has no separate block for.
+ */
+export type FeedRole = 'user' | 'assistant' | 'system';
+
+export type FeedBlockKind =
+  | 'seed'
+  | 'message'
+  | 'round'
+  | 'transition'
+  | 'generation'
+  | 'document'
+  | 'review'
+  | 'proposal'
+  | 'completion';
+
+export interface FeedBlockBase {
+  /** Stable across reloads: derived from the row this block projects, never from its index. */
+  id: string;
+  role: FeedRole;
+  /**
+   * The workflow position this block belongs to.
+   *
+   * A block that evidences a position (a round is `collect`, a run is `generate`, a review is
+   * `review`) carries that one; a block that evidences none — a chat reply, a refinement — carries
+   * whatever position was current when it happened. It is what `data-msg-stage`/`data-msg-substage`
+   * render, and what free chat is stamped with (task 109).
+   */
+  stage: string;
+  substage: string | null;
+  /** When the underlying row happened, ISO-8601. The ordering key, and never re-derived. */
+  at: string;
+}
+
+/** The templated opening bubble: «I want to build {name}. My project description is: {prompt}». */
+export interface SeedBlock extends FeedBlockBase {
+  kind: 'seed';
+  role: 'user';
+  projectName: string;
+  prompt: string;
+}
+
+/**
+ * Ordinary prose.
+ *
+ * `origin` says where the text came from, because the two are persisted very differently: a
+ * `summary` is a column on the session and survives a reload, a `chat` turn lives in the client's
+ * own store for the length of the visit (task 104 — free chat keeps its existing store). Marking it
+ * is what stops the two from being confused for one another when a reload silently drops half of them.
+ */
+export interface MessageBlock extends FeedBlockBase {
+  kind: 'message';
+  origin: 'summary' | 'chat';
+  text: string;
+  /** True while an assistant reply is still being written into the feed (task 109). */
+  streaming: boolean;
+}
+
+export interface FeedOption {
+  id: string;
+  label: string;
+  description?: string | undefined;
+  /** The model's single suggestion for this question, if it made one (Эталон §1.1). */
+  recommended?: boolean | undefined;
+}
+
+export interface FeedQuestion {
+  id: string;
+  text: string;
+  type: 'single' | 'multiple';
+  options: readonly FeedOption[];
+  allowOther: boolean;
+  /** Whether an answer is required — the red asterisk of Эталон §1.1. */
+  required: boolean;
+}
+
+/** One recorded answer, already resolved to something a person can read. */
+export interface FeedAnswer {
+  /** `null` for a free-text reply to the card as a whole (FR-005 AC-6). */
+  questionId: string | null;
+  /** How to name what was answered — the question text, or the need for a fallback answer. */
+  label: string;
+  selectedOptionIds: readonly string[];
+  freeText: string | null;
+}
+
+/**
+ * A question round, pending or answered.
+ *
+ * Both states are the same block: after submission the form stays in the feed, disabled, with the
+ * chosen answers fixed (Эталон §1.1). Rendering an answered round as something *other* than the form
+ * that was answered is how a chat log becomes a summary of itself.
+ */
+export interface RoundBlock extends FeedBlockBase {
+  kind: 'round';
+  role: 'assistant';
+  roundId: string;
+  roundNumber: number;
+  questions: readonly FeedQuestion[];
+  answers: readonly FeedAnswer[];
+  answered: boolean;
+}
+
+/** The stage chip: `{Stage} · {from} ──▶ {Stage} · {to}` (Эталон §1.1). */
+export interface TransitionBlock extends FeedBlockBase {
+  kind: 'transition';
+  role: 'system';
+  from: StagePosition;
+  to: StagePosition;
+}
+
+/** A generation run — the card a stream draws into, and the only place `Stop` belongs. */
+export interface GenerationBlock extends FeedBlockBase {
+  kind: 'generation';
+  role: 'assistant';
+  runId: string;
+  attempt: number;
+  status: 'running' | 'restarted' | 'complete' | 'failed';
+  /** True while the run is neither complete nor failed — the D-101 definition of "in flight". */
+  inFlight: boolean;
+}
+
+/** A document card: stage name, mono path, `Rev N`, Approved badge, preview toggle (task 107). */
+export interface DocumentBlock extends FeedBlockBase {
+  kind: 'document';
+  role: 'assistant';
+  revisionId: string;
+  specFileId: string;
+  specType: string;
+  fileName: string;
+  /** `specs/{bundle}/{file}.md` — the path the reference product prints under the stage name. */
+  path: string;
+  revisionNumber: number;
+  approved: boolean;
+}
+
+export interface FeedReviewItem {
+  id: string;
+  section: string;
+  line: number;
+  confidenceScore: number;
+  description: string;
+  suggestion: string;
+  severity: 'blocking' | 'advisory';
+}
+
+export interface ReviewBlock extends FeedBlockBase {
+  kind: 'review';
+  role: 'assistant';
+  reviewId: string;
+  specType: string;
+  outcome: 'pass' | 'needs_revision';
+  items: readonly FeedReviewItem[];
+  decision: 'accept' | 'ignore' | 'request_changes' | null;
+  /** What the user ticked, once the decision is taken — history, not a live selection. */
+  selectedItemIds: readonly string[] | null;
+}
+
+/** A conversational refinement awaiting accept or reject (FR-011). */
+export interface ProposalBlock extends FeedBlockBase {
+  kind: 'proposal';
+  role: 'assistant';
+  proposedChangeId: string;
+  specFileId: string;
+  fileName: string;
+  instruction: string;
+  status: 'pending' | 'accepted' | 'rejected';
+}
+
+/** The sealed session (FR-020 AC-3). */
+export interface CompletionBlock extends FeedBlockBase {
+  kind: 'completion';
+  role: 'system';
+  /** How many times the session has reached `complete` — a re-entry is a second sealing. */
+  completionCount: number;
+}
+
+export type FeedBlock =
+  | SeedBlock
+  | MessageBlock
+  | RoundBlock
+  | TransitionBlock
+  | GenerationBlock
+  | DocumentBlock
+  | ReviewBlock
+  | ProposalBlock
+  | CompletionBlock;
+
+/**
+ * What the session is waiting on, as a tail of the feed (task 104 AC-2).
+ *
+ * The five states the M6 gate walks through — a pending round, a generation in flight, a draft
+ * awaiting approval, an undecided review, a sealed session — each map to exactly one variant here,
+ * and each variant names the block that owns it. That is what makes "the controls live inside the
+ * block they belong to" a consequence of the projection rather than a rule the page has to remember.
+ *
+ * **The precedence mirrors `findPendingDecision`** (`specs/pending-decision.ts`) on purpose: the page
+ * and the chat endpoint must agree about which card is in front of the user, or a typed "approve"
+ * applies to something other than what is on screen (FR-009 AC-7).
+ */
+export type FeedTail =
+  | { kind: 'pending-round'; blockId: string; roundId: string }
+  | { kind: 'generating'; blockId: string; runId: string; attempt: number; stage: string }
+  | { kind: 'pending-proposal'; blockId: string; proposedChangeId: string }
+  | { kind: 'pending-review'; blockId: string; reviewId: string }
+  | { kind: 'pending-approval'; blockId: string; specFileId: string; revisionNumber: number }
+  | { kind: 'sealed'; blockId: string }
+  | { kind: 'open' };
+
+export interface Feed {
+  blocks: readonly FeedBlock[];
+  /** Where the session is now, straight from `workflow_state` — never inferred from the blocks. */
+  position: StagePosition;
+  tail: FeedTail;
+}
