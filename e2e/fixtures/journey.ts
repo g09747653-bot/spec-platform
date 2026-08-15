@@ -111,7 +111,15 @@ export async function decideReviewAndAdvance(
   await expect(page.getByTestId('review-board')).toBeVisible();
   await page.getByTestId(`review-${decision}`).click();
 
-  await expect(page.getByTestId('proceed')).toBeEnabled();
+  /*
+   * Wait for the **fact**, not for a button.
+   *
+   * The door is clickable whether or not the gate holds (task 105), so `toBeEnabled()` no longer
+   * says anything about whether the decision has landed — and a proceed sent before the decision
+   * commits is refused by `reviewGate`, which is a race the harness would report as a stuck stage.
+   * A decided board is the decision, observed.
+   */
+  await expect(page.getByTestId('review-board')).toHaveCount(0);
   await page.getByTestId('proceed').click();
 }
 

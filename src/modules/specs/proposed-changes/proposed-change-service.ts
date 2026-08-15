@@ -196,10 +196,39 @@ export function createProposedChangeService(db: SchemaDatabase) {
     return row === undefined ? null : toProposal(row);
   }
 
+  /**
+   * Every proposal of a project, oldest first (task 104).
+   *
+   * A refinement is a turn of the conversation whether it was accepted, rejected or is still
+   * waiting, so the feed reads the chain rather than only the pending one. `pendingForProject`
+   * stays as it is: the pending lookup answers "what is the user deciding", and this answers "what
+   * happened", and collapsing the two would make the tail depend on how history is ordered.
+   */
+  async function historyForProject(
+    scope: OwnerScope,
+    projectId: string,
+  ): Promise<StoredProposal[]> {
+    if (!UUID.test(projectId)) return [];
+
+    const rows = await queryRows(
+      db,
+      sql`
+        SELECT ${PROPOSAL_COLUMNS} ${OWNED_PROPOSAL}
+        WHERE ${specFiles}.project_id = ${projectId}::uuid
+          AND ${projects}.owner_id = ${scope.userId}::uuid
+        ORDER BY ${proposedChanges}.created_at ASC
+      `,
+      ProposalRow,
+    );
+
+    return rows.map(toProposal);
+  }
+
   return {
     findOwned,
     pendingForFile,
     pendingForProject,
+    historyForProject,
 
     /**
      * Computes and stores a proposal — and writes **no revision** (FR-011 AC-1/AC-2).

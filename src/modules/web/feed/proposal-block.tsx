@@ -1,0 +1,284 @@
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { z } from 'zod';
+
+import { Button } from '../ui/button';
+import { Label, Textarea } from '../ui/field';
+
+import { BlockCaption } from './bubbles';
+import { FeedItem } from './feed-item';
+import type { ProposalBlock as ProposalBlockModel } from './model';
+
+/**
+ * A conversational refinement, in the conversation (task 105 carrying tasks 58–60 forward; FR-011).
+ *
+ * A proposal is **not spec content** until it is accepted — nothing that resolves a bundle reads it —
+ * so it appears here as what it is: a suggested change with its diff, awaiting accept or reject. A
+ * decided one stays as a one-line marker, because the revision it produced (or did not) is the block
+ * that carries the outcome.
+ */
+export interface PendingProposalModel {
+  proposedChangeId: string;
+  fileName: string;
+  instruction: string;
+  unifiedDiff: string;
+  added: number;
+  removed: number;
+}
+
+/** The endpoint's answers, parsed rather than assumed — an HTTP response is external input. */
+const RefinementResponse = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('proposed'), proposedChangeId: z.string().min(1) }),
+  z.object({ status: z.literal('clarification'), question: z.string().min(1) }),
+  z.object({ status: z.literal('no-change') }),
+]);
+
+/** The refusal body, for the one refusal whose message the user needs: the named section (AC-8). */
+const ErrorBody = z.object({
+  error: z.object({
+    message: z.string(),
+    details: z.object({ issues: z.array(z.object({ message: z.string() })).min(1) }).optional(),
+  }),
+});
+
+function refusalMessage(payload: unknown): string {
+  const parsed = ErrorBody.safeParse(payload);
+  if (!parsed.success) return 'That did not work. Please try again.';
+
+  return parsed.data.error.details?.issues[0]?.message ?? parsed.data.error.message;
+}
+
+/** Colours the unified diff by line marker, without re-deriving what changed. */
+function DiffBody({ unifiedDiff }: { unifiedDiff: string }) {
+  return (
+    <pre
+      data-testid="diff-body"
+      className="bg-canvas border-border-subtle max-h-72 overflow-auto rounded-md border p-3 text-xs whitespace-pre"
+    >
+      {unifiedDiff.split('\n').map((line, index) => (
+        <span
+          key={`${String(index)}-${line}`}
+          className={
+            line.startsWith('+') && !line.startsWith('+++')
+              ? 'block text-green-700'
+              : line.startsWith('-') && !line.startsWith('---')
+                ? 'block text-red-700'
+                : line.startsWith('@@')
+                  ? 'text-ink-muted block'
+                  : 'block'
+          }
+        >
+          {line === '' ? ' ' : line}
+        </span>
+      ))}
+    </pre>
+  );
+}
+
+export function ProposalBlockCard({
+  block,
+  proposal,
+}: {
+  block: ProposalBlockModel;
+  /** The computed diff, present only while the proposal awaits a decision. */
+  proposal: PendingProposalModel | null;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState<'accept' | 'reject' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function decide(decision: 'accept' | 'reject') {
+    setBusy(decision);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/proposed-changes/${block.proposedChangeId}/decision`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision }),
+      });
+
+      if (!response.ok) {
+        setError('That decision did not go through. Please try again.');
+        return;
+      }
+
+      router.refresh();
+    } catch {
+      setError('That decision did not go through. Please try again.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (proposal === null) {
+    return (
+      <FeedItem block={block}>
+        <div
+          className="border-border-subtle bg-surface flex w-full max-w-[46rem] flex-col gap-1 rounded-xl border p-4"
+          data-testid="proposal-decided"
+        >
+          <BlockCaption stage={block.stage} trailing="refinement" />
+          <p className="text-sm">
+            {block.status === 'accepted' ? 'Applied' : 'Discarded'}: {block.instruction}
+          </p>
+        </div>
+      </FeedItem>
+    );
+  }
+
+  return (
+    <FeedItem block={block}>
+      <div
+        className="border-border-subtle bg-surface flex w-full max-w-[46rem] flex-col gap-3 rounded-xl border p-4"
+        data-testid="diff-card"
+      >
+        <BlockCaption stage={block.stage} trailing="refinement" />
+        <p className="text-sm font-medium">
+          Proposed change to <span data-testid="diff-file-name">{proposal.fileName}</span>
+        </p>
+        <p className="text-ink-muted text-xs">
+          <span data-testid="diff-instruction">{proposal.instruction}</span>
+          {' — '}
+          <span data-testid="diff-counts">
+            +{proposal.added} −{proposal.removed}
+          </span>
+          . Nothing is saved until you accept.
+        </p>
+
+        <DiffBody unifiedDiff={proposal.unifiedDiff} />
+
+        {error !== null && (
+          <p role="alert" data-testid="diff-error" className="text-sm text-red-700">
+            {error}
+          </p>
+        )}
+
+        <div className="flex gap-2">
+          <Button
+            data-testid="accept-diff"
+            disabled={busy === 'accept'}
+            onClick={() => {
+              void decide('accept');
+            }}
+          >
+            {busy === 'accept' ? 'Applying…' : 'Accept'}
+          </Button>
+          <Button
+            variant="secondary"
+            data-testid="reject-diff"
+            disabled={busy === 'reject'}
+            onClick={() => {
+              void decide('reject');
+            }}
+          >
+            {busy === 'reject' ? 'Discarding…' : 'Reject'}
+          </Button>
+        </div>
+      </div>
+    </FeedItem>
+  );
+}
+
+/**
+ * The instruction box — how a refinement is started (FR-011 AC-1).
+ *
+ * It sits at the tail of the conversation rather than beside a document, because refinement applies
+ * to the file the session is working on and that file is whatever the tail says it is. **While a
+ * proposal is pending the box is gone**, not merely disabled (AC-6): a disabled box invites the user
+ * to work out why; an absent one, with the diff in its place, says what the system is waiting for.
+ */
+export function RefineBox({ specFileId }: { specFileId: string }) {
+  const router = useRouter();
+  const [instruction, setInstruction] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [question, setQuestion] = useState<string | null>(null);
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    setQuestion(null);
+
+    try {
+      const response = await fetch(`/api/specs/${specFileId}/proposed-changes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instruction }),
+      });
+      const payload: unknown = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        // The section-removal refusal names the section, and that message is the whole point of it.
+        setError(refusalMessage(payload));
+        return;
+      }
+
+      const parsed = RefinementResponse.safeParse(payload);
+      if (!parsed.success) {
+        setError('That did not work. Please try again.');
+        return;
+      }
+
+      if (parsed.data.status === 'clarification') {
+        setQuestion(parsed.data.question);
+        return;
+      }
+
+      if (parsed.data.status === 'no-change') {
+        setError('That instruction would not change anything in this file.');
+        return;
+      }
+
+      setInstruction('');
+      router.refresh();
+    } catch {
+      setError('That did not work. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="border-border-subtle flex w-full max-w-[46rem] flex-col gap-2 rounded-xl border border-dashed p-4"
+      data-testid="refine-card"
+    >
+      <Label htmlFor="refine-instruction">Refine a file — say what should change</Label>
+      <Textarea
+        id="refine-instruction"
+        data-testid="refine-instruction"
+        value={instruction}
+        onChange={(event) => {
+          setInstruction(event.target.value);
+        }}
+        placeholder="Add a non-goals section under the overview."
+      />
+
+      {question !== null && (
+        <p data-testid="refine-question" className="text-sm">
+          {question}
+        </p>
+      )}
+
+      {error !== null && (
+        <p role="alert" data-testid="refine-error" className="text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      <Button
+        data-testid="submit-refinement"
+        disabled={busy || instruction.trim() === ''}
+        onClick={() => {
+          void submit();
+        }}
+        className="self-start"
+      >
+        {busy ? 'Working…' : 'Propose change'}
+      </Button>
+    </div>
+  );
+}

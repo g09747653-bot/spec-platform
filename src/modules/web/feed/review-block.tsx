@@ -4,45 +4,26 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { Button } from '../ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+
+import { BlockCaption } from './bubbles';
+import { FeedItem } from './feed-item';
+import type { FeedReviewItem, ReviewBlock as ReviewBlockModel } from './model';
 
 /**
- * The review board (task 55; FR-010 AC-4/AC-7).
+ * The review card in the conversation (task 105 carrying task 55 forward; FR-010 AC-4/AC-7).
  *
  * Three actions, no fourth, and no way past the card without one of them — that is P2 rendered. The
- * board is drawn from persisted state, so a reload shows the same pending decision (FR-017 AC-4).
+ * board is drawn from persisted state, so a reload shows the same pending decision, and a decided one
+ * stays in the feed as what it is: a turn of the conversation that has already happened.
  *
  * Blocking and advisory findings are separate lists because they mean different things: one says the
- * document is unusable as written, the other is an opinion. Every item carries its own checkbox, and
- * the checkboxes matter only for request-changes — accept and ignore send no selection at all, which
- * is the same distinction the database draws (`selected_item_ids IS NULL` for both).
+ * document is unusable as written, the other is an opinion. The checkboxes matter only for
+ * request-changes — accept and ignore send no selection at all, which is the same distinction the
+ * database draws (`selected_item_ids IS NULL` for both).
  *
- * **Request-changes is disabled with nothing selected.** Not because the server would accept it —
- * `ReviewDecision` refuses it and so does the table constraint — but because an enabled button that
- * always fails is a worse answer than a disabled one. The rule is enforced in three places on
- * purpose; this is the only one the user sees.
+ * The parity treatment of this card — Must Fix ticked by default, confidence badges, the targeted
+ * revision loop — is M8п's (tasks 111–113). What M7п owes it is a place in the feed.
  */
-export interface ReviewItemModel {
-  id: string;
-  section: string;
-  line: number;
-  description: string;
-  suggestion: string;
-}
-
-export interface ReviewBoardModel {
-  reviewId: string;
-  outcome: 'pass' | 'needs_revision';
-  mustfix: readonly ReviewItemModel[];
-  recommendations: readonly ReviewItemModel[];
-  /** `null` while the board waits — the state the workflow is gated on (AC-4). */
-  decision: 'accept' | 'ignore' | 'request_changes' | null;
-}
-
-interface ReviewBoardProps {
-  review: ReviewBoardModel;
-}
-
 type Action = 'accept' | 'ignore' | 'request_changes';
 
 function ItemList({
@@ -50,11 +31,13 @@ function ItemList({
   selected,
   onToggle,
   testIdPrefix,
+  disabled,
 }: {
-  items: readonly ReviewItemModel[];
+  items: readonly FeedReviewItem[];
   selected: ReadonlySet<string>;
   onToggle: (id: string) => void;
   testIdPrefix: string;
+  disabled: boolean;
 }) {
   return (
     <ul className="flex flex-col gap-2">
@@ -67,6 +50,7 @@ function ItemList({
             <input
               type="checkbox"
               checked={selected.has(item.id)}
+              disabled={disabled}
               onChange={() => {
                 onToggle(item.id);
               }}
@@ -87,11 +71,15 @@ function ItemList({
   );
 }
 
-export function ReviewBoard({ review }: ReviewBoardProps) {
+export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; pending: boolean }) {
   const router = useRouter();
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState<Action | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const mustfix = block.items.filter((item) => item.severity === 'blocking');
+  const recommendations = block.items.filter((item) => item.severity === 'advisory');
+  const total = block.items.length;
 
   function toggle(id: string) {
     setSelected((previous) => {
@@ -107,12 +95,12 @@ export function ReviewBoard({ review }: ReviewBoardProps) {
     setError(null);
 
     try {
-      const response = await fetch(`/api/reviews/${review.reviewId}/decision`, {
+      const response = await fetch(`/api/reviews/${block.reviewId}/decision`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          decision: action,
           // Only request-changes carries a selection; the other two send none at all (AC-7).
+          decision: action,
           ...(action === 'request_changes' ? { selectedItemIds: [...selected] } : {}),
         }),
       });
@@ -130,57 +118,71 @@ export function ReviewBoard({ review }: ReviewBoardProps) {
     }
   }
 
-  const total = review.mustfix.length + review.recommendations.length;
-
-  if (review.decision !== null) {
+  if (block.decision !== null || !pending) {
     return (
-      <Card data-testid="review-board-decided">
-        <CardHeader>
-          <CardTitle>Review decided</CardTitle>
-          <CardDescription>
-            You chose <span data-testid="review-decision">{review.decision}</span> on this review.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <FeedItem block={block}>
+        <div
+          className="border-border-subtle bg-surface flex w-full max-w-[46rem] flex-col gap-1 rounded-xl border p-4"
+          data-testid="review-board-decided"
+        >
+          <BlockCaption stage={block.specType} trailing="review" />
+          <p className="text-sm">
+            You chose <span data-testid="review-decision">{block.decision ?? 'nothing yet'}</span>{' '}
+            on this review of {total} {total === 1 ? 'point' : 'points'}.
+          </p>
+        </div>
+      </FeedItem>
     );
   }
 
   return (
-    <Card data-testid="review-board">
-      <CardHeader>
-        <CardTitle>
-          Automated review{' '}
-          <span className="text-ink-muted text-xs font-normal" data-testid="review-outcome">
-            {review.outcome === 'pass' ? 'pass' : 'needs revision'}
+    <FeedItem block={block}>
+      <div
+        className="border-border-subtle bg-surface flex w-full max-w-[46rem] flex-col gap-4 rounded-xl border p-4"
+        data-testid="review-board"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <BlockCaption stage={block.specType} trailing="review" />
+          <span
+            className={
+              block.outcome === 'pass'
+                ? 'rounded-full border border-green-600/40 px-2 py-0.5 text-xs text-green-700'
+                : 'rounded-full border border-amber-600/40 px-2 py-0.5 text-xs text-amber-700'
+            }
+            data-testid="review-outcome"
+          >
+            {block.outcome === 'pass' ? 'pass' : 'needs revision'}
           </span>
-        </CardTitle>
-        <CardDescription>
+        </div>
+
+        <p className="text-ink-muted text-sm">
           {total === 0
             ? 'The reviewer found nothing to raise. Nothing advances until you decide.'
             : 'Tick the points you want applied, then choose. Nothing advances until you decide.'}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-5">
-        {review.mustfix.length > 0 && (
+        </p>
+
+        {mustfix.length > 0 && (
           <section className="flex flex-col gap-2" data-testid="review-mustfix">
-            <h3 className="text-sm font-semibold">Must fix</h3>
+            <h3 className="text-sm font-semibold">Must fix ({mustfix.length})</h3>
             <ItemList
-              items={review.mustfix}
+              items={mustfix}
               selected={selected}
               onToggle={toggle}
               testIdPrefix="review-mustfix-item"
+              disabled={false}
             />
           </section>
         )}
 
-        {review.recommendations.length > 0 && (
+        {recommendations.length > 0 && (
           <section className="flex flex-col gap-2" data-testid="review-recommendations">
-            <h3 className="text-sm font-semibold">Recommendations</h3>
+            <h3 className="text-sm font-semibold">Recommendations ({recommendations.length})</h3>
             <ItemList
-              items={review.recommendations}
+              items={recommendations}
               selected={selected}
               onToggle={toggle}
               testIdPrefix="review-recommendation-item"
+              disabled={false}
             />
           </section>
         )}
@@ -228,7 +230,7 @@ export function ReviewBoard({ review }: ReviewBoardProps) {
             Requesting changes needs at least one point ticked — only the ticked ones are applied.
           </p>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </FeedItem>
   );
 }

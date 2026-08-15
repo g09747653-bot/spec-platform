@@ -37,6 +37,8 @@ export interface ProjectDetail extends ProjectSummary {
   initialPrompt: string;
   summary: string | null;
   qualityEnabled: boolean;
+  /** How many times the session has reached `complete` (FR-020) — the feed's sealing count. */
+  completionCount: number;
   version: number;
 }
 
@@ -127,6 +129,7 @@ export function createProjectRepository(db: SchemaDatabase) {
           initialPrompt: sessions.initialPrompt,
           summary: sessions.summary,
           qualityEnabled: sessions.qualityEnabled,
+          completionCount: sessions.completionCount,
           stage: workflowState.stage,
           substage: workflowState.substage,
           version: workflowState.version,

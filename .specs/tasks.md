@@ -1036,7 +1036,7 @@ Goal: the complete parity product — the full four-file journey, resumable, exp
 
 > **— MVP CUT LINE —** Everything above delivers the parity product. Ship or beta-test here before starting Milestone 7.
 
-## Milestone 7 — Optional Quality Stage
+## Milestone 7 — Optional Quality Stage [DEFERRED by amendment А-2 → Этап 2/3; see execution.md §3-bis. Task numbers 81+ keep their identity; do not execute until the parity programme (tasks 104+) is accepted.]
 
 Goal: the differentiator, built so that removing it leaves the parity path byte-identical.
 
@@ -1163,7 +1163,7 @@ Goal: the differentiator, built so that removing it leaves the parity path byte-
   - _Complexity: Medium_
   - _Parallel-safe: no_
 
-## Milestone 8 — Hardening
+## Milestone 8 — Hardening [DEFERRED by amendment А-2 → Этап 2 (pre-beta); see execution.md §3-bis]
 
 Goal: prove the non-functional guarantees rather than assert them.
 
@@ -1255,7 +1255,7 @@ Goal: prove the non-functional guarantees rather than assert them.
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-## Milestone 9 — Documentation & Release
+## Milestone 9 — Documentation & Release [DEFERRED by amendment А-2 → Этап 2/3 (final release); see execution.md §3-bis]
 
 - [ ] 99\. Write the README and local setup guide
   - Document prerequisites, environment variables, database setup, and how to run the app and each test suite.
@@ -1311,6 +1311,156 @@ Goal: prove the non-functional guarantees rather than assert them.
   - _Touches: deployment configuration, `docs/release-checklist.md`_
   - _Complexity: Medium_
   - _Parallel-safe: no_
+
+
+## Parity Programme (amendment А-2, accepted 2026-08-14) — Milestones M7п–M10п
+
+Source of truth for acceptance: `.specs/research/myspec-parity-reference.md` («Эталон»; Часть 1 = observed behaviour of app.myspec.dev, Часть 5–6 = official docs and lineage). These milestones replace the deferred blocks above as the active tail of the plan. Existing FR identifiers keep governing the foundation; parity features trace to Эталон sections and to amendments А-2/А-3. Tasks 116–129 are intentionally one notch coarser; the Architect refines each block at the preceding gate. Gate rule А-2.1 (executor self-run with artifacts) applies to every milestone below.
+
+### Milestone 7п — Chat-first core (А-2 · M7)
+
+Goal: the whole session lives in one conversation feed — messages, question-round forms, stage chips, document cards — on top of the existing state machine, streaming, and liveness contracts (Д-1, Р-2, Р-3 untouched).
+
+- [ ] 104\. Build the conversation feed read model
+  - Derive the feed as a pure projection of persisted state (seed prompt, question rounds with answers, stage transitions, generation runs, revisions, review boards, chat messages), ordered chronologically; each block carries a stable id, role, stage, substage, and kind.
+  - No new write path: the feed is reconstructed deterministically on load; free chat keeps its existing store.
+  - Acceptance Criteria:
+    - The projection is a pure function of persisted entities: same state → identical feed (fixture/property tests).
+    - Every state the M6 gate visits (pending round, in-flight generation, pending approval, undecided review, sealed session) maps to a well-defined feed tail.
+    - Block ids are stable across reloads.
+    - Unit fixtures cover all block kinds.
+  - _Dependencies: 75_
+  - _Requirements: Эталон §1.1–1.2; А-2_
+  - _Touches: `src/modules/web/feed/**` (new), reads `src/modules/workflow/**`_
+  - _Complexity: Large_
+  - _Parallel-safe: no_
+
+- [ ] 105\. Rebuild the session page chat-first
+  - Single feed rendering the projection; sticky header with numbered step pills derived from the transition graph; bottom composer (text + send, wired to the existing chat); seed rendered as the user bubble «I want to build {name}. My project description is: {prompt}».
+  - Every session-moving action goes through the `session-request` framework; stop-waiting / stop-generation render inside the owning feed block.
+  - Acceptance Criteria:
+    - The full M6 journey runs inside the feed with the liveness invariant holding at every position and in flight (liveness.spec extended to feed selectors, green).
+    - Step pills highlight the current stage and come from the graph, not a hard-coded list in the component.
+    - Reload at any point reproduces the identical feed (task 75 resume AC re-verified on the feed).
+    - All existing e2e suites updated to the feed and green on CI.
+  - _Dependencies: 104_
+  - _Requirements: Эталон §1.1; FR-017; Р-3 contracts_
+  - _Touches: `src/app/(app)/projects/[id]/**`, `src/modules/web/session/**`, `e2e/**`_
+  - _Complexity: Large_
+  - _Parallel-safe: no_
+
+- [ ] 106\. In-feed question rounds v2 + audience profile (У-5)
+  - Round header «Round N — K questions»; per question: required marker, «Select one» / «Select all that apply», options with label, one-line description, optional `(Recommended)` flag, and an Other free-text option; Submit Answers; after submit the form stays in the feed, disabled, answers fixed.
+  - Extend the round draft schema (v3): the model supplies option descriptions and at most one recommended flag per question; Р-1 parsing and single retry unchanged; v2 drafts still render (missing description → plain option).
+  - У-5: audience profile (`technical` | `non-technical`) chosen at project creation with a default, stored on the session; question prompts branch on it (non-technical keeps interview.questions.v2 jargon rules).
+  - Acceptance Criteria:
+    - v3 drafts validate; a v2 fixture still renders and submits.
+    - `(Recommended)` renders only when the model marked it; select-all accepts multiple; Other submits free text.
+    - A submitted round survives reload as a disabled block with the chosen answers visible.
+    - The profile provably changes the prompt text (unit assertion) and is asked exactly once.
+  - _Dependencies: 104, 105_
+  - _Requirements: Эталон §1.1 (анкеты), §1.2; А-3 У-5_
+  - _Touches: `src/modules/agents/interview/**`, `src/modules/web/feed/**`, `src/modules/web/session/mcq-card.tsx`_
+  - _Complexity: Large_
+  - _Parallel-safe: no_
+
+- [ ] 107\. Stage chips and document cards in the feed
+  - Transition chip (`{Stage} · {from} → {Stage} · {to}`, animated dashes) at every position change; document card: stage name, mono path `specs/{bundle}/{file}.md`, Approved badge, `Rev N`, preview toggle over the existing content endpoint.
+  - Generation streams into the feed card via the existing resumable stream; reattach (D-99) and the single-run invariant (D-100/D-101) hold unchanged inside the feed.
+  - Acceptance Criteria:
+    - A generation started, abandoned mid-flight, and revisited renders in the same card with Stop offered, not Generate (resume.spec adapted to the feed).
+    - `Rev N` equals the file's revision count; Approved appears only after approval.
+    - Chips appear exactly at state-machine position changes (projection ordering test).
+  - _Dependencies: 104, 105_
+  - _Requirements: Эталон §1.1 (чипы, карточки); M3 resume rule_
+  - _Touches: `src/modules/web/feed/**`, `src/modules/web/session/spec-card.tsx`_
+  - _Complexity: Large_
+  - _Parallel-safe: no_
+
+- [ ] 108\. Content language follows the seed (У-1)
+  - Detect the seed prompt's language once at session creation (deterministic heuristic, model fallback), persist it on the session, and instruct every agent call — rounds, summaries, documents, reviews, chat replies — to answer in it, from one shared prompt-assembly point. UI chrome stays English.
+  - Acceptance Criteria:
+    - Russian seed → Russian questions, summaries, documents, and review texts; English seed → English (fixtures both ways).
+    - The language is persisted once; no per-call re-detection.
+    - A unit guard proves the instruction flows from the single assembly point, not per-prompt copies.
+  - _Dependencies: 106_
+  - _Requirements: А-3 У-1; Эталон §5.3_
+  - _Touches: `src/modules/agents/**` (prompt assembly), `src/db/schema/**` (one column)_
+  - _Complexity: Medium_
+  - _Parallel-safe: yes_
+
+- [ ] 109\. Free chat woven into every stage
+  - The composer is always live; free-form messages are answered in-feed as ordinary blocks stamped with the current stage/substage; decision phrases keep resolving through DecisionIntentResolver with button-equivalent effects (M4 contract).
+  - Acceptance Criteria:
+    - A question asked mid-review is answered without changing workflow state (DB position identical before/after — test).
+    - A decision phrase typed in chat produces the same DB state as the button (M4 e2e extended to the feed).
+    - Chat replies stream and obey the liveness invariant while in flight.
+  - _Dependencies: 105_
+  - _Requirements: Эталон §1.2 (свободный чат); FR of M4 decisions_
+  - _Touches: `src/modules/web/feed/**`, `src/modules/agents/decision-intent/**` (read-only)_
+  - _Complexity: Medium_
+  - _Parallel-safe: yes_
+
+- [ ] 110\. M7п gate — feed-first walk (self-run, А-2.1)
+  - Extend the live gate script to the feed surface; artifacts to `artifacts/gate-M7/` (screenshot per feed state, RESULT.md, TRANSCRIPT.md, light trace); liveness counted on every snapshot.
+  - Acceptance Criteria:
+    - Full prompt → ZIP walked in the feed on the `google,ollama` chain; verdict GREEN, or defects fixed and the walk repeated.
+    - All M6 resume checks pass on the feed surface.
+    - Zero available session-moving controls on any snapshot = red run.
+  - _Dependencies: 104–109_
+  - _Requirements: А-2.1_
+  - _Touches: `e2e/gate-M7.live.ts`, `artifacts/gate-M7/**`_
+  - _Complexity: Large_
+  - _Parallel-safe: no_
+
+### Milestone 8п — Review cycle (А-2 · M8)
+
+Goal: the reviewer that makes the product feel intelligent — structured findings, checkbox selection, targeted revision loop — plus the deterministic linters (У-3) the original lacks.
+
+- [ ] 111\. Structured review output (review.v2)
+  - Review agent returns `{verdict: needs_revision | pass, summary, mustFix[], recommendations[]}`; each item `{sectionPath, title, body, suggestion, confidence 1..10}`. Р-1 outer-JSON parse + one retry; boards persist with full history (never applied automatically).
+  - Acceptance Criteria: schema validated with fixtures; malformed output → one retry then visible error; boards survive reload; existing accept/ignore/request-changes decisions still resolve.
+  - _Dependencies: 107_ · _Requirements: Эталон §1.3_ · _Touches: `src/modules/agents/review/**`_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [ ] 112\. Review card parity UI
+  - Verdict badge (Needs Revision / Pass), summary, collapsible Must Fix (checked by default) and Recommendations (unchecked), confidence badge with tooltip, italic Suggestion; buttons Accept feedback / Request changes / Ignore; checkbox state travels with the decision and is fixed in history once decided.
+  - Acceptance Criteria: defaults per group; the three buttons behave per Эталон §1.3; a decided board renders its final checkbox state after reload.
+  - _Dependencies: 111_ · _Requirements: Эталон §1.3_ · _Touches: `src/modules/web/feed/**`, `review-board.tsx`_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [ ] 113\. Targeted revision cycle
+  - Request changes with selected items → an in-feed message stating what was folded in and which open calls the writer made → Rev N+1 → a re-review that verifies the selected items and may add findings caused by the revision → loop until Pass + acceptance. Transition table extended for the loop; the M2 rule (100% of edges tested) holds.
+  - Acceptance Criteria: the re-review prompt provably receives the selected items; unselected items are not re-litigated (fixture); each cycle appends, never overwrites; the loop is bounded with honest copy on exhaustion (gate-copy pattern).
+  - _Dependencies: 111, 112_ · _Requirements: Эталон §1.3_ · _Touches: `src/modules/workflow/transition-table.ts`, `src/modules/agents/review/**`_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [ ] 114\. Deterministic spec linters (У-3)
+  - Pre-review linter pass on each drafted revision: cross-reference resolution (FR/NFR/DR/IR mentions exist), identifier stability vs the previous revision (no renumbering), EARS conformance for requirement lines, requirement→task traceability for tasks documents. Findings merge into the board as machine items (source `linter`, confidence 10) under Must Fix.
+  - Acceptance Criteria: seeded broken cross-reference, renumbered identifier, and non-EARS requirement are each caught; a clean document yields zero linter items; linter items cost no model call.
+  - _Dependencies: 111_ · _Requirements: А-3 У-3; Эталон §6_ · _Touches: `src/modules/specs/lint/**` (new)_ · _Complexity: Large_ · _Parallel-safe: yes_
+
+- [ ] 115\. M8п gate — review-cycle walk (self-run, А-2.1)
+  - Live cycle: needs-revision board → request changes with a subset selected → Rev N+1 → re-review → pass → accept; text-phrase decision parity checked live; artifacts to `artifacts/gate-M8/`.
+  - _Dependencies: 111–114_ · _Requirements: А-2.1_ · _Complexity: Medium_ · _Parallel-safe: no_
+
+### Milestone 9п — Methodologies & IA (А-2 · M9) — to be refined at the M8п gate
+
+- [ ] 116\. Methodology configurations: stage graphs as data (MySpec greenfield/brownfield, SpecKit greenfield, OpenSpec brownfield, Edit workflow Reference→Describe→Review); stage templates vendored from `github/spec-kit` and `Fission-AI/OpenSpec` with licence files; the transition table consumes a config, existing default = current graph byte-for-byte.
+- [ ] 117\. Step pills, bundle file sets, and per-stage prompts derived from the methodology config; methodology badge («MySpec · Greenfield · V1») on sessions.
+- [ ] 118\. Edit workflow: reference existing bundle files, describe the change, review AI-proposed cross-file edits with diff cards; approve applies revisions atomically, request-changes loops.
+- [ ] 119\. Sidebar: Specs (bundle files + status), Attachments (with sizes), Local Workspace section as an honest stub («Mount folder» explains what is coming); resizable.
+- [ ] 120\. Project page: Generate | Edit chat tabs, search, Active/Archived/All filters, chat rows with methodology/bundle badges and last-message age; MCP Servers placeholder card (per-project vs user profile, Add server disabled with honest copy).
+- [ ] 121\. Composer upgrades: @-file references into prompt context, slash commands, per-chat model picker over the provider registry (Auto = failover chain; selection persisted per chat).
+- [ ] 122\. Document viewer: Outline / Preview / Raw / Diff views over revisions.
+- [ ] 123\. M9п gate — five methodologies walked seed→Complete with their own pills; an Edit session changes an existing bundle with diff and Rev; model switch provably changes the call (self-run, artifacts `artifacts/gate-M9/`).
+
+### Milestone 10п — Visual layer & finish (А-2 · M10) — to be refined at the M9п gate
+
+- [ ] 124\. Design tokens and typography per Эталон §1.5 with our own palette and brand (dark/light theme, persisted).
+- [ ] 125\. Brand loader, connection-lost modal, toasts.
+- [ ] 126\. Completion panel (Session completed · bundle · Edit/Download) + «Build with your favourite tool» + Generate AI Prompt (references the approved documents; instructs preservation of architecture and conventions).
+- [ ] 127\. Diff preview polish in the Edit flow (green/red lines, sidebar access).
+- [ ] 128\. Parity checklist walk: every item of Эталон Часть 1 screenshotted ours-vs-theirs, gaps listed; one ultracode red-team pass over the checklist (mode map §3-bis).
+- [ ] 129\. M10п gate — final parity verdict by the Architect over the checklist artifacts; release tag.
+
 
 ## Requirement Coverage
 

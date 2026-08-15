@@ -62,6 +62,8 @@ const AnsweredRoundRow = z.object({
   stage: z.string(),
   round_number: z.number().int().positive(),
   questions: z.unknown(),
+  presented_at: z.coerce.date(),
+  answered_at: z.coerce.date().nullable(),
   answers: z.array(StoredAnswer),
 });
 
@@ -71,6 +73,9 @@ export interface AnsweredRound {
   roundNumber: number;
   /** The persisted `QuestionSetSchema` payload; the caller re-parses it to name the options. */
   questions: unknown;
+  presentedAt: Date;
+  /** When the round was answered — `null` while it is still the card in front of the user. */
+  answeredAt: Date | null;
   answers: z.infer<typeof StoredAnswer>[];
 }
 
@@ -256,18 +261,25 @@ export function createInterviewRepository(db: SchemaDatabase) {
     },
 
     /**
-     * Every answered round with its answers, oldest first (task 75; FR-017 AC-2).
+     * Every round of the session with its answers, oldest first (tasks 75, 104; FR-017 AC-2).
      *
      * What a resumed session shows the owner back: *this is what you told it*. Without it, reopening
      * proves the answers were kept only indirectly — the door is open, the needs are satisfied — and
      * "restore all prior answers" becomes a claim about the database rather than something the user
      * can see.
      *
+     * **Unanswered rounds are included** (task 104). Until the feed, only answered rounds were ever
+     * read back, because the pending one was fetched separately through `workflow_state`. In a
+     * conversation the pending round is not a separate surface — it is the last message — so the
+     * history and the card in front of the user come from one query and cannot disagree about which
+     * round that is. `answered_at` is what tells them apart, and it is the newest answer's stamp
+     * rather than a flag, because the feed orders by time.
+     *
      * One statement, not a round trip per round: the answers are aggregated in SQL. A resumed
      * session can hold a dozen rounds across five stages, and N+1 queries on the page's critical
      * path is exactly the kind of cost that turns a reload into a wait (NFR-002).
      */
-    async answeredHistory(sessionId: string): Promise<AnsweredRound[]> {
+    async roundHistory(sessionId: string): Promise<AnsweredRound[]> {
       const rows = await queryRows(
         db,
         sql`
@@ -276,6 +288,8 @@ export function createInterviewRepository(db: SchemaDatabase) {
             qr.stage,
             qr.round_number,
             qr.questions,
+            qr.presented_at,
+            (SELECT MAX(a.answered_at) FROM ${answers} a WHERE a.round_id = qr.id) AS answered_at,
             COALESCE(
               (
                 SELECT jsonb_agg(
@@ -293,8 +307,7 @@ export function createInterviewRepository(db: SchemaDatabase) {
             ) AS answers
           FROM ${questionRounds} qr
           WHERE qr.session_id = ${sessionId}::uuid
-            AND EXISTS (SELECT 1 FROM ${answers} a WHERE a.round_id = qr.id)
-          ORDER BY qr.presented_at ASC
+          ORDER BY qr.presented_at ASC, qr.round_number ASC
         `,
         AnsweredRoundRow,
       );
@@ -304,6 +317,8 @@ export function createInterviewRepository(db: SchemaDatabase) {
         stage: row.stage,
         roundNumber: row.round_number,
         questions: row.questions,
+        presentedAt: row.presented_at,
+        answeredAt: row.answered_at,
         answers: row.answers,
       }));
     },

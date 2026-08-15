@@ -104,7 +104,8 @@ test.describe('project lifecycle', () => {
     await expect(page.getByTestId('spec-revision-number')).toHaveText('1');
     await expect(page.getByTestId('spec-card')).toContainText('approved');
     // AC-6: the gates pass on the first attempt — the door out of drafting is open, not blocked.
-    await expect(page.getByTestId('answer-history')).toBeVisible();
+    // The answers came with the copy, and in the feed they are the rounds themselves, fixed in place.
+    await expect(page.getByTestId('round-answered').first()).toBeVisible();
     await expect(page.getByTestId('export-included')).toContainText('constitution.md');
 
     const copyUrl = page.url();
