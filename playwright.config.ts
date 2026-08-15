@@ -29,6 +29,17 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
   workers: 1,
+  /*
+   * 60 seconds per test, not Playwright's 30 (round 1 of M9п).
+   *
+   * Every journey test waits on a *streamed* generation. The stub answers quickly on an idle
+   * machine, but the suite runs serially across three engines, and by the time the third one starts
+   * the runner has been busy for twenty minutes — on CI that pushed a stub generation past the
+   * 20-second wait inside a 30-second test, and four correct journeys failed for want of a few
+   * seconds. The wait itself is bounded (`GENERATION_TIMEOUT` in the journey fixture); this is the
+   * envelope around it, and it exists so a slow machine reports slowness rather than a defect.
+   */
+  timeout: 60_000,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : [['list']],
 
   use: {

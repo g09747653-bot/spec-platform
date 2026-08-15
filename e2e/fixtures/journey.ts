@@ -22,8 +22,15 @@ export const PARITY_STAGES = ['constitution', 'requirements', 'solution', 'tasks
 
 export type ParityStage = (typeof PARITY_STAGES)[number];
 
-/** How long a stub generation may take before the test gives up. Streaming, not instant. */
-const GENERATION_TIMEOUT = 20_000;
+/**
+ * How long a stub generation may take before the test gives up. Streaming, not instant.
+ *
+ * Raised from 20s in M9п round 1: the CI run walks 180 tests on one worker, and a generation that
+ * takes four seconds on an idle machine took longer than twenty on a runner that had been going for
+ * twenty minutes. A wait that fails a correct product because the machine is busy is a wait that is
+ * too short — the test timeout (60s, `playwright.config.ts`) is the real bound.
+ */
+const GENERATION_TIMEOUT = 40_000;
 
 /**
  * Creates a project from a prompt and lands on its session page. Returns the session URL.

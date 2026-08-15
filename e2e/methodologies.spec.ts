@@ -78,6 +78,29 @@ async function stepLabels(page: Page): Promise<string[]> {
   return page.getByTestId('step-pills').locator('li > span > span:nth-child(2)').allInnerTexts();
 }
 
+/**
+ * One engine, deliberately.
+ *
+ * What these five tests assert is *configuration* — which graph a session walks, what its steps are
+ * called, which files come out — and none of it is a property of a rendering engine. Browser
+ * coverage (NFR-011) is carried by the journeys that exist to carry it: `critical-journey` and
+ * `skeleton` walk the whole path on all three engines, and every control these tests click is one of
+ * those journeys' controls.
+ *
+ * The cost of the alternative is not theoretical. Run on three engines, these five became fifteen
+ * full journeys on a single worker, and the CI job passed its 30-minute budget mid-WebKit — not
+ * because anything was broken, but because a stub generation on a runner twenty minutes into a
+ * serial suite took longer than the wait allowed. The timeouts were raised for that; running the
+ * same configuration assertions three times over was the part that should not have been there.
+ *
+ * They **were** verified on WebKit locally (5/5, M9п round 1), which is the evidence that they are
+ * not Chromium-specific.
+ */
+test.skip(
+  ({ browserName }) => browserName !== 'chromium',
+  'workflow configuration is engine-independent; NFR-011 coverage lives in the parity journeys',
+);
+
 for (const walk of WALKS) {
   test.describe(`methodology ${walk.id}`, () => {
     test('walks its own graph and exports its own file set', async ({ page, context }) => {
