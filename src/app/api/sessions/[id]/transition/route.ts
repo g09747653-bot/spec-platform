@@ -29,6 +29,8 @@ import { createSpecFileRepository } from '@/modules/specs/repositories/spec-file
 import { errorResponse, jsonResponse, type ErrorCode } from '@/modules/web/api/responses';
 import { applyTransition } from '@/modules/workflow/apply-transition';
 import { registeredCapabilityIds } from '@/modules/workflow/capabilities';
+import { pendingQuestionRound } from '@/modules/workflow/pending-action';
+import { createWorkflowStateRepository } from '@/modules/workflow/repositories/workflow-state';
 import {
   isAskingStage,
   isSpecStage,
@@ -135,13 +137,30 @@ async function ensureDescribeRound(
   const existing = await interview.latestRound(session.id, position.stage);
   if (existing !== null) return;
 
-  await interview.createRound({
+  const round = await interview.createRound({
     sessionId: session.id,
     stage: position.stage,
     roundNumber: 1,
     questions: describeQuestionSet(position.stage),
     declaredNeeds: ['requested-change'],
   });
+
+  /*
+   * The card is **registered as pending**, exactly as the rounds endpoint registers the ones it
+   * asks for. Without it the answers endpoint would refuse the submission — it validates against
+   * the round the state says is waiting, which is what stops an answer landing on a card the
+   * session has moved past (task 35). A card the user can see but not submit is worse than no card,
+   * and the first Edit walk found precisely that.
+   */
+  const workflowStateRepository = createWorkflowStateRepository(db);
+  const state = await workflowStateRepository.find(session.id);
+  if (state === null) return;
+
+  await workflowStateRepository.setPendingAction(
+    session.id,
+    pendingQuestionRound(round.id),
+    state.version,
+  );
 }
 
 /**

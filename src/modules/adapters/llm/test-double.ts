@@ -8,6 +8,7 @@ import {
   stubReplyAssessmentDocument,
   stubSessionSummaryDocument,
 } from './stub-interview';
+import { looksLikeEditPrompt, stubEditDocument } from './stub-edit';
 import { looksLikeRefinementPrompt, stubRefinementDocument } from './stub-refinement';
 import { looksLikeReviewPrompt, specTypeFromReviewPrompt, stubReviewDocument } from './stub-review';
 import {
@@ -191,23 +192,25 @@ export function createStubProviderStream(): (input: {
       ? stubReviewDocument(specTypeFromReviewPrompt(prompt))
       : looksLikeRevisionNotePrompt(prompt)
         ? stubRevisionNoteDocument(pointCountFromNotePrompt(prompt))
-        : looksLikeRefinementPrompt(prompt)
-          ? stubRefinementDocument(prompt)
-          : /*
-             * The interview prompts, answered here rather than by a test double the endpoint built for
-             * itself (round 2, Д-3). Until this milestone the interview routes constructed their own
-             * stub, so the interview never reached a provider at all — on any deployment.
-             */
-            looksLikeInterviewRoundPrompt(prompt)
-            ? stubInterviewRoundDocument(
-                stageFromInterviewPrompt(prompt),
-                roundNumberFromInterviewPrompt(prompt),
-              )
-            : looksLikeSummaryPrompt(prompt)
-              ? stubSessionSummaryDocument(prompt)
-              : looksLikeReplyAssessmentPrompt(prompt)
-                ? stubReplyAssessmentDocument()
-                : documentFromPrompt(prompt);
+        : looksLikeEditPrompt(prompt)
+          ? stubEditDocument(prompt)
+          : looksLikeRefinementPrompt(prompt)
+            ? stubRefinementDocument(prompt)
+            : /*
+               * The interview prompts, answered here rather than by a test double the endpoint built for
+               * itself (round 2, Д-3). Until this milestone the interview routes constructed their own
+               * stub, so the interview never reached a provider at all — on any deployment.
+               */
+              looksLikeInterviewRoundPrompt(prompt)
+              ? stubInterviewRoundDocument(
+                  stageFromInterviewPrompt(prompt),
+                  roundNumberFromInterviewPrompt(prompt),
+                )
+              : looksLikeSummaryPrompt(prompt)
+                ? stubSessionSummaryDocument(prompt)
+                : looksLikeReplyAssessmentPrompt(prompt)
+                  ? stubReplyAssessmentDocument()
+                  : documentFromPrompt(prompt);
 
     for (const chunk of chunkDocument(document, DEFAULT_WORDS_PER_CHUNK)) {
       signal?.throwIfAborted();

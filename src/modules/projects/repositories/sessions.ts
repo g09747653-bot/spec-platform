@@ -293,7 +293,15 @@ export function createSessionRepository(db: SchemaDatabase) {
             AND ${
               methodologyIds === undefined
                 ? sql`TRUE`
-                : sql`${sessions}.methodology_id = ANY(${methodologyIds})`
+                : /*
+                   * A jsonb array unnested in SQL, not a bound array parameter: Drizzle expands an
+                   * array argument into one placeholder per element, so `= ANY($5)` arrives holding
+                   * a single string and Postgres refuses it as a malformed array literal. The same
+                   * pattern `markNeedsSatisfied` uses, for the same reason.
+                   */
+                  sql`${sessions}.methodology_id IN (
+                      SELECT jsonb_array_elements_text(${JSON.stringify([...methodologyIds])}::jsonb)
+                    )`
             }
           ORDER BY ${LAST_ACTIVITY} DESC, ${sessions}.id ASC
         `,

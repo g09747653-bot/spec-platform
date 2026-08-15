@@ -44,7 +44,14 @@ test.describe('walking skeleton', () => {
     await expect(page.getByTestId('session')).toBeVisible();
     await expect(page.getByTestId('session-prompt')).toHaveText(prompt);
     await expect(page.getByTestId('stage-current')).toHaveText(/Interview/);
+    /*
+     * The session's URL, and the project it belongs to — two different identifiers since А-6. Read
+     * here, while the page is unambiguously the session page: later in this test it has been through
+     * a download and a sign-out, and asking it about a link then would be asking a page that has
+     * moved on.
+     */
     const projectUrl = page.url();
+    const projectId = await projectIdOf(page);
 
     // --- Nothing is approved yet, so the export would omit all four files (FR-015 AC-7) ---
     await expect(page.getByTestId('export-omitted')).toContainText('constitution.md');
@@ -116,10 +123,8 @@ test.describe('walking skeleton', () => {
       await expect(intruderPage.getByText('recipe app')).toHaveCount(0);
 
       // Export is a *project* route, and the page URL now names the session (А-6), so the project
-      // id is read from the page rather than derived from its address.
-      const exportResponse = await intruderPage.request.get(
-        `/api/projects/${await projectIdOf(page)}/export`,
-      );
+      // id is the one read from the page above rather than derived from its address.
+      const exportResponse = await intruderPage.request.get(`/api/projects/${projectId}/export`);
       expect(exportResponse.status()).toBe(404);
     } finally {
       await intruderContext.close();

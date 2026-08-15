@@ -62,6 +62,12 @@ export {
   stubRevisionNoteDocument,
 } from './stub-revision-note';
 export {
+  documentsFromEditPrompt,
+  instructionFromEditPrompt,
+  looksLikeEditPrompt,
+  stubEditDocument,
+} from './stub-edit';
+export {
   documentFromRefinementPrompt,
   instructionFromRefinementPrompt,
   looksLikeRefinementPrompt,
