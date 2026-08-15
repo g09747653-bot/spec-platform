@@ -148,12 +148,29 @@ export const reviewFeedback = pgTable(
       .notNull()
       .references(() => specRevisions.id, { onDelete: 'cascade' }),
     outcome: text('outcome').notNull(),
+    /**
+     * The paragraph that opens the card (task 111; Эталон §1.3).
+     *
+     * Nullable, because every review written before review.v2 has none and a board is not something
+     * to rewrite after the fact — a decided review is a turn of a conversation that already
+     * happened. The card renders what is there.
+     */
+    summary: text('summary'),
     items: jsonb('items')
       .notNull()
       .default(sql`'[]'::jsonb`),
     /** Null until the user decides — the pending state the workflow waits on (FR-010 AC-4). */
     decision: text('decision'),
     selectedItemIds: jsonb('selected_item_ids'),
+    /**
+     * What the writer said it was folding in, when this board's decision was request-changes
+     * (task 113; Эталон §1.3).
+     *
+     * It lives on the board rather than on the revision it precedes because it explains **the
+     * decision** — which points were ticked, and what the writer settled that the user had not — and
+     * because at the moment it is written the revision it describes does not exist yet.
+     */
+    revisionNote: text('revision_note'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
     decidedAt: timestamp('decided_at', { withTimezone: true, mode: 'date' }),
   },

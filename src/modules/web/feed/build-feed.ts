@@ -273,6 +273,7 @@ function reviewBlocks(source: FeedSource): ReviewBlock[] {
     reviewId: review.reviewId,
     specType: review.specType,
     outcome: review.outcome,
+    summary: review.summary,
     items: review.items,
     decision: review.decision,
     selectedItemIds: review.selectedItemIds,

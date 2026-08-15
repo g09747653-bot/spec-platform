@@ -158,12 +158,13 @@ test.describe('deciding from chat', () => {
     await say(page, 'accept the review');
 
     await expect(page.getByTestId('review-board')).toHaveCount(0, { timeout: 20_000 });
-    await expect(page.getByTestId('review-decision')).toHaveText('accept');
+    // The decided card says what was decided in words now (task 112); the fact asserted is the same.
+    await expect(page.getByTestId('review-decision')).toContainText('accepted');
 
     // The gate the decision opens is open — which is the whole point of it being the same write.
     await expect(page.getByTestId('proceed')).toBeEnabled();
     await page.reload();
-    await expect(page.getByTestId('review-decision')).toHaveText('accept');
+    await expect(page.getByTestId('review-decision')).toContainText('accepted');
   });
 
   /** The composer is never the thing that is disabled — that is the liveness invariant's floor. */

@@ -32,7 +32,7 @@ const VARIABLES: { [Id in PromptId]: PromptVariables[Id] } = {
     unmetNeeds: '(none declared yet)',
     replyBlock: '',
   },
-  'review.board.v1': { specType: 'constitution', specContent: '# Constitution' },
+  'review.board.v2': { specType: 'constitution', specContent: '# Constitution', verification: '' },
   'refinement.propose.v1': {
     specType: 'constitution',
     specContent: '# Constitution',
@@ -103,7 +103,7 @@ describe('the content-language instruction (task 108)', () => {
   });
 
   it('is appended, so an asset cannot place it where the model reads it as the task', () => {
-    const assembled = assemblePrompt('review.board.v1', VARIABLES['review.board.v1'], {
+    const assembled = assemblePrompt('review.board.v2', VARIABLES['review.board.v2'], {
       contentLanguage: 'ru',
     });
 

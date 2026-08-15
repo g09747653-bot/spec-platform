@@ -43,6 +43,20 @@ export const FEEDBACK_SEVERITIES = ['blocking', 'advisory'] as const;
 export type FeedbackSeverity = (typeof FEEDBACK_SEVERITIES)[number];
 
 /**
+ * Who found the item (task 114; А-3 У-3).
+ *
+ * A board carries findings from two producers that are not alike and must not be presented as
+ * though they were. A `model` item is a judgement — it can be wrong, which is what its confidence
+ * score is for. A `linter` item is a **measurement**: a cross-reference either resolves or it does
+ * not, an identifier either kept its number or it did not. Recording which one an item is keeps the
+ * card honest about how much the number above it is worth, and keeps a machine finding from being
+ * quietly re-derived by a model on the next pass.
+ */
+export const FEEDBACK_SOURCES = ['model', 'linter'] as const;
+
+export type FeedbackSource = (typeof FEEDBACK_SOURCES)[number];
+
+/**
  * The lifecycle of a conversational refinement (FR-011; DR-10; DR-11).
  *
  * `pending` is the only status the partial unique index counts, and it is the only one the user can

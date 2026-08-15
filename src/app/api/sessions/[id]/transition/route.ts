@@ -104,7 +104,8 @@ async function ensureStageReview(
 
   const stored = await createReviewRepository(db).create({
     specRevisionId: approved.id,
-    outcome: review.artifact.outcome,
+    outcome: review.artifact.verdict,
+    summary: review.artifact.summary,
     items: review.items,
   });
 

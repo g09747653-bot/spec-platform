@@ -77,10 +77,18 @@ export interface PromptVariables {
     unmetNeeds: string;
     replyBlock: string;
   };
-  'review.board.v1': {
+  'review.board.v2': {
     /** Named in the instruction only — the review does not derive a section list (see below). */
     specType: string;
     specContent: string;
+    /**
+     * What a re-review is verifying (task 113; Эталон §1.3).
+     *
+     * Rendered by the caller from the points the user ticked on the previous board, and empty on a
+     * first review. The points the user did **not** tick are absent from it, deliberately — see the
+     * asset's note.
+     */
+    verification: string;
   };
   'refinement.propose.v1': {
     specType: string;
@@ -137,35 +145,51 @@ const SPEC_GENERATION: PromptAsset = {
 };
 
 /**
- * The review board asset (task 54; FR-010 AC-1..AC-3).
+ * The review board asset (task 54, rewritten as **v2** by tasks 111/113; FR-010 AC-1..AC-3;
+ * Эталон §1.3).
  *
  * Note what it does **not** carry: `requiredSections`. Structural conformance is `validateStructure`'s
  * verdict, not an opinion to be re-derived by a second model call, and listing the headings here would
  * put structural truth in a third place (constitution P3, and the lint of task 39 would reject it).
  * The reviewer judges substance; structure is already decided by the time a spec is approved.
  *
- * It states the outcome vocabulary but no rule about *what* to do next: `accept`/`ignore`/
+ * It states the verdict vocabulary but no rule about *what* to do next: `accept`/`ignore`/
  * `request_changes` is the user's alphabet (P2), and a prompt that offered it to the model would be
  * inviting it to decide.
+ *
+ * **What `{{verification}}` is, and what it deliberately is not.** On a re-review it lists the points
+ * the user ticked on the previous board and asks whether the new revision actually applied them —
+ * Эталон's «Verifying the revision against the four items you selected». The points the user did
+ * *not* tick are not in it and are not mentioned at all. Naming them, even as "the user declined
+ * these, do not raise them again", is still telling the model about them, and models act on what
+ * they read — the same reasoning task 57 wrote into the context assembler's feedback filter, where
+ * an unselected item is absent rather than marked optional. A finding the reviewer raises anew about
+ * the rewritten text is a fresh judgement on new bytes, which is legitimate; re-litigating a
+ * declined point is not, and the only reliable way to prevent it is to not carry it forward.
  */
 const REVIEW_BOARD: PromptAsset = {
-  id: 'review.board.v1',
+  id: 'review.board.v2',
   system: [
     'You are reviewing one file of a software specification bundle for the coding agent that will',
     'build from it. Report only defects you can point at: a vague requirement, an untestable',
     'acceptance criterion, a contradiction, a gap that would leave the agent guessing.',
     'Return JSON only — no prose, no code fence. Shape:',
-    '{"outcome": "pass"|"needs_revision", "mustfix": [item], "recommendations": [item]}, where item',
-    'is {"id", "section", "line", "confidenceScore", "description", "suggestion"}.',
-    'Put a finding in "mustfix" when the document is unusable without it and in "recommendations"',
-    'otherwise. "id" is a short stable slug, unique across both lists; "section" names the heading',
-    'the finding is in; "line" is a positive line number; "confidenceScore" is an integer from 5 to',
-    '10; "description" states the problem and "suggestion" states a concrete change.',
-    'Use "pass" only when "mustfix" is empty. Report nothing you are not at least moderately',
+    '{"verdict": "pass"|"needs_revision", "summary": "one paragraph", "mustFix": [item],',
+    '"recommendations": [item]}, where item is',
+    '{"id", "sectionPath", "title", "body", "suggestion", "confidence"}.',
+    'Put a finding in "mustFix" when the document is unusable without it and in "recommendations"',
+    'otherwise. "id" is a short stable slug, unique across both lists; "sectionPath" names the',
+    'heading the finding is in, as "Section — subsection"; "title" is a short name for the problem;',
+    '"body" states the problem in full and "suggestion" states a concrete change; "confidence" is an',
+    'integer from 1 to 10 saying how sure you are that the finding is accurate.',
+    '"summary" is one paragraph on the document as a whole, in prose, not a list.',
+    'Use "pass" only when "mustFix" is empty. Report nothing you are not at least moderately',
     'confident about: an empty review is a valid answer.',
   ].join(' '),
-  user: ['Review the {{specType}} document below.', '', '{{specContent}}'].join('\n'),
-  variables: ['specType', 'specContent'],
+  user: ['Review the {{specType}} document below.', '{{verification}}', '', '{{specContent}}'].join(
+    '\n',
+  ),
+  variables: ['specType', 'specContent', 'verification'],
 };
 
 /**
@@ -364,7 +388,7 @@ const SESSION_SUMMARY: PromptAsset = {
 
 export const promptRegistry: Readonly<Record<PromptId, PromptAsset>> = Object.freeze({
   'spec.generation.v2': SPEC_GENERATION,
-  'review.board.v1': REVIEW_BOARD,
+  'review.board.v2': REVIEW_BOARD,
   'refinement.propose.v1': REFINEMENT_PROPOSE,
   'decision.intent.v1': DECISION_INTENT,
   'chat.answer.v1': CHAT_ANSWER,

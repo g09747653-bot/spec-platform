@@ -43,10 +43,12 @@ export interface ContextSpec {
   content: string;
 }
 
-/** One review finding, as the revision prompt would state it. */
+/** One review finding, as the revision prompt would state it (review.v2 fields; task 111). */
 export interface ContextFeedback {
   id: string;
-  description: string;
+  sectionPath: string;
+  title: string;
+  body: string;
   suggestion: string;
 }
 
@@ -250,8 +252,19 @@ export function selectedFeedback(feedback: ContextFeedbackSelection): readonly C
     .sort((a, b) => a.id.localeCompare(b.id));
 }
 
+/**
+ * The ticked findings as the writer reads them: where, what, and what to do about it.
+ *
+ * The section path is carried because a revision has to find the paragraph again, and "the second
+ * acceptance criterion of FR-004" is a better address than a line number the reviewer guessed.
+ */
 function renderFeedback(items: readonly ContextFeedback[]): string {
-  return items.map((item) => `- ${item.description} — ${item.suggestion}`).join('\n');
+  return items
+    .map(
+      (item) =>
+        `- ${item.sectionPath} — ${item.title}: ${item.body}\n  Suggestion: ${item.suggestion}`,
+    )
+    .join('\n');
 }
 
 /**

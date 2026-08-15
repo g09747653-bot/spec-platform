@@ -174,6 +174,7 @@ export async function assembleFeedSource(
       specType: review.specType,
       revisionNumber: review.revisionNumber,
       outcome: review.outcome,
+      summary: review.summary,
       items: review.items,
       decision: review.decision,
       selectedItemIds: review.selectedItemIds,

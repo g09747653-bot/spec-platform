@@ -152,14 +152,18 @@ export interface DocumentBlock extends FeedBlockBase {
   approved: boolean;
 }
 
+/** One finding, in the shape the card renders it (task 111; Эталон §1.3). */
 export interface FeedReviewItem {
   id: string;
-  section: string;
-  line: number;
-  confidenceScore: number;
-  description: string;
+  /** «Section — subsection»: the item's heading. */
+  sectionPath: string;
+  title: string;
+  body: string;
   suggestion: string;
+  confidence: number;
   severity: 'blocking' | 'advisory';
+  /** `linter` items are measurements, not judgements — the card says so (task 114). */
+  source: 'model' | 'linter';
 }
 
 export interface ReviewBlock extends FeedBlockBase {
@@ -168,6 +172,8 @@ export interface ReviewBlock extends FeedBlockBase {
   reviewId: string;
   specType: string;
   outcome: 'pass' | 'needs_revision';
+  /** The paragraph that opens the card; `null` on a board written before review.v2. */
+  summary: string | null;
   items: readonly FeedReviewItem[];
   decision: 'accept' | 'ignore' | 'request_changes' | null;
   /** What the user ticked, once the decision is taken — history, not a live selection. */

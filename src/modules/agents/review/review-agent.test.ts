@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   createTestDoubleAdapter,
@@ -17,7 +17,7 @@ import {
 import { createReviewAgent } from './review-agent';
 
 /**
- * Task 54 — the review contract.
+ * Task 54 — the review contract; task 111 — review.v2 and the Р-1 retry.
  *
  * The acceptance criteria are about what may reach storage, so the assertions are about the
  * *boundary*: what `validateReviewDraft` lets through, and what the agent returns when it does not.
@@ -26,22 +26,23 @@ import { createReviewAgent } from './review-agent';
  */
 const item = (overrides: Record<string, unknown> = {}) => ({
   id: 'mf-1',
-  section: 'Core Principles',
-  line: 12,
-  confidenceScore: 8,
-  description: 'P2 is stated but never gated.',
+  sectionPath: 'Core Principles — P2',
+  title: 'A principle with no gate behind it',
+  body: 'P2 is stated but never gated.',
   suggestion: 'Name the gate that enforces it.',
+  confidence: 8,
   ...overrides,
 });
 
 const artifact = (overrides: Record<string, unknown> = {}) => ({
-  outcome: 'needs_revision',
-  mustfix: [item()],
+  verdict: 'needs_revision',
+  summary: 'The document is close, but one principle is unenforceable as written.',
+  mustFix: [item()],
   recommendations: [],
   ...overrides,
 });
 
-describe('ReviewArtifact validation (task 54)', () => {
+describe('ReviewArtifact validation (tasks 54, 111)', () => {
   describe('AC-1 — output is Zod-validated before persistence', () => {
     it('accepts a well-formed review unchanged', () => {
       const result = validateReviewDraft(artifact());
@@ -49,7 +50,8 @@ describe('ReviewArtifact validation (task 54)', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.repaired).toBe(false);
-      expect(result.artifact.mustfix[0]?.id).toBe('mf-1');
+      expect(result.artifact.mustFix[0]?.id).toBe('mf-1');
+      expect(result.artifact.summary).toMatch(/unenforceable/);
     });
 
     it('rejects a draft that is not an object at all', () => {
@@ -59,51 +61,51 @@ describe('ReviewArtifact validation (task 54)', () => {
     });
 
     it('rejects a draft with no repair pass rather than guessing', () => {
-      const result = validateReviewDraft({ outcome: 'pass' });
+      const result = validateReviewDraft({ verdict: 'pass' });
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.code).toBe('DRAFT_INVALID');
-      expect(result.issues.join('\n')).toMatch(/mustfix/);
+      expect(result.issues.join('\n')).toMatch(/mustFix/);
     });
 
     it('reports the path of each rejection, so a systematic defect is diagnosable', () => {
-      const result = validateReviewDraft(artifact({ mustfix: [item({ confidenceScore: 2 })] }));
+      const result = validateReviewDraft(artifact({ mustFix: [item({ confidence: 0 })] }));
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect(result.issues.join('\n')).toMatch(/mustfix\.0\.confidenceScore/);
+      expect(result.issues.join('\n')).toMatch(/mustFix\.0\.confidence/);
     });
   });
 
   describe('AC-2 — every item classifies as blocking or advisory and names a section', () => {
-    it('carries the classification into storage as an explicit severity', () => {
+    it('carries the classification into storage as an explicit severity and source', () => {
       const items = flattenReviewItems(
         ReviewArtifact.parse(
           artifact({
-            mustfix: [item({ id: 'mf-1' })],
+            mustFix: [item({ id: 'mf-1' })],
             recommendations: [item({ id: 'rec-1' })],
           }),
         ),
       );
 
-      expect(items.map((entry) => [entry.id, entry.severity])).toEqual([
-        ['mf-1', 'blocking'],
-        ['rec-1', 'advisory'],
+      expect(items.map((entry) => [entry.id, entry.severity, entry.source])).toEqual([
+        ['mf-1', 'blocking', 'model'],
+        ['rec-1', 'advisory', 'model'],
       ]);
     });
 
     it('round-trips through storage: split(flatten(x)) restores both lists', () => {
       const parsed = ReviewArtifact.parse(
         artifact({
-          mustfix: [item({ id: 'mf-1' }), item({ id: 'mf-2' })],
+          mustFix: [item({ id: 'mf-1' }), item({ id: 'mf-2' })],
           recommendations: [item({ id: 'rec-1' })],
         }),
       );
 
       const split = splitPersistedItems(flattenReviewItems(parsed));
 
-      expect(split.mustfix.map((entry) => entry.id)).toEqual(['mf-1', 'mf-2']);
+      expect(split.mustFix.map((entry) => entry.id)).toEqual(['mf-1', 'mf-2']);
       expect(split.recommendations.map((entry) => entry.id)).toEqual(['rec-1']);
     });
 
@@ -111,7 +113,7 @@ describe('ReviewArtifact validation (task 54)', () => {
       const items = flattenReviewItems(
         ReviewArtifact.parse(
           artifact({
-            mustfix: [item({ id: 'mf-1' })],
+            mustFix: [item({ id: 'mf-1' })],
             recommendations: [item({ id: 'rec-1' }), item({ id: 'rec-2' })],
           }),
         ),
@@ -120,48 +122,51 @@ describe('ReviewArtifact validation (task 54)', () => {
       expect(items.map((entry) => entry.id)).toEqual(['mf-1', 'rec-1', 'rec-2']);
     });
 
-    it('rejects an item with no section, an empty section, or no suggestion', () => {
+    it('rejects an item missing any part of the finding itself', () => {
       for (const broken of [
-        item({ section: undefined }),
-        item({ section: '' }),
+        item({ sectionPath: undefined }),
+        item({ sectionPath: '' }),
+        item({ title: '' }),
         item({ suggestion: '' }),
-        item({ description: '' }),
+        item({ body: '' }),
       ]) {
-        expect(validateReviewDraft(artifact({ mustfix: [broken] })).ok).toBe(false);
+        expect(validateReviewDraft(artifact({ mustFix: [broken] })).ok).toBe(false);
       }
     });
 
-    it('rejects a line number that is zero, negative or fractional', () => {
-      for (const line of [0, -3, 2.5]) {
-        expect(validateReviewDraft(artifact({ mustfix: [item({ line })] })).ok).toBe(false);
+    it('rejects a confidence outside the declared 1..10 band, and accepts its edges', () => {
+      for (const confidence of [0, 11, 7.5]) {
+        expect(validateReviewDraft(artifact({ mustFix: [item({ confidence })] })).ok).toBe(false);
+      }
+
+      // 1..10, not 5..10: a reviewer with a hunch it still thinks worth raising can say so (task 111).
+      for (const confidence of [1, 4, 10]) {
+        expect(validateReviewDraft(artifact({ mustFix: [item({ confidence })] })).ok).toBe(true);
       }
     });
 
-    it('rejects a confidence score outside the declared 5..10 band', () => {
-      for (const confidenceScore of [4, 11, 7.5]) {
-        expect(validateReviewDraft(artifact({ mustfix: [item({ confidenceScore })] })).ok).toBe(
-          false,
-        );
-      }
+    it('requires a summary — the paragraph that opens the card (Эталон §1.3)', () => {
+      expect(validateReviewDraft(artifact({ summary: undefined })).ok).toBe(false);
+      expect(validateReviewDraft(artifact({ summary: '' })).ok).toBe(false);
     });
   });
 
-  describe('AC-3 — the outcome is exactly pass or needs_revision', () => {
-    it('accepts both declared outcomes', () => {
-      expect(validateReviewDraft(artifact({ outcome: 'needs_revision' })).ok).toBe(true);
+  describe('AC-3 — the verdict is exactly pass or needs_revision', () => {
+    it('accepts both declared verdicts', () => {
+      expect(validateReviewDraft(artifact({ verdict: 'needs_revision' })).ok).toBe(true);
       expect(
-        validateReviewDraft(artifact({ outcome: 'pass', mustfix: [], recommendations: [] })).ok,
+        validateReviewDraft(artifact({ verdict: 'pass', mustFix: [], recommendations: [] })).ok,
       ).toBe(true);
     });
 
-    it('rejects a user decision offered as an outcome (constitution P2)', () => {
-      for (const outcome of ['accept', 'ignore', 'request_changes', 'approve']) {
-        expect(validateReviewDraft(artifact({ outcome })).ok).toBe(false);
+    it('rejects a user decision offered as a verdict (constitution P2)', () => {
+      for (const verdict of ['accept', 'ignore', 'request_changes', 'approve']) {
+        expect(validateReviewDraft(artifact({ verdict })).ok).toBe(false);
       }
     });
 
     it('rejects a pass that contradicts its own blocking items', () => {
-      const result = validateReviewDraft(artifact({ outcome: 'pass', mustfix: [item()] }));
+      const result = validateReviewDraft(artifact({ verdict: 'pass', mustFix: [item()] }));
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
@@ -171,16 +176,16 @@ describe('ReviewArtifact validation (task 54)', () => {
     it('accepts a pass with advisory items — advisory is not blocking', () => {
       expect(
         validateReviewDraft(
-          artifact({ outcome: 'pass', mustfix: [], recommendations: [item({ id: 'rec-1' })] }),
+          artifact({ verdict: 'pass', mustFix: [], recommendations: [item({ id: 'rec-1' })] }),
         ).ok,
       ).toBe(true);
     });
   });
 
   describe('ids are unique across both lists (FR-010 AC-7 depends on it)', () => {
-    it('rejects the same id used in mustfix and recommendations', () => {
+    it('rejects the same id used in mustFix and recommendations', () => {
       const result = validateReviewDraft(
-        artifact({ mustfix: [item({ id: 'dup' })], recommendations: [item({ id: 'dup' })] }),
+        artifact({ mustFix: [item({ id: 'dup' })], recommendations: [item({ id: 'dup' })] }),
       );
 
       expect(result.ok).toBe(false);
@@ -190,7 +195,7 @@ describe('ReviewArtifact validation (task 54)', () => {
 
     it('rejects a duplicate within one list', () => {
       expect(
-        validateReviewDraft(artifact({ mustfix: [item({ id: 'dup' }), item({ id: 'dup' })] })).ok,
+        validateReviewDraft(artifact({ mustFix: [item({ id: 'dup' }), item({ id: 'dup' })] })).ok,
       ).toBe(false);
     });
   });
@@ -200,54 +205,93 @@ describe('ReviewArtifact validation (task 54)', () => {
 
     it('assigns a positional id where the model left none', () => {
       const result = validateReviewDraft(
-        artifact({ mustfix: [item({ id: undefined }), item({ id: undefined })] }),
+        artifact({ mustFix: [item({ id: undefined }), item({ id: undefined })] }),
         repair,
       );
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.repaired).toBe(true);
-      expect(result.artifact.mustfix.map((entry) => entry.id)).toEqual(['mustfix-1', 'mustfix-2']);
+      expect(result.artifact.mustFix.map((entry) => entry.id)).toEqual(['mustfix-1', 'mustfix-2']);
     });
 
     it('disambiguates a duplicated id instead of dropping the item', () => {
       const result = validateReviewDraft(
-        artifact({ mustfix: [item({ id: 'dup' })], recommendations: [item({ id: 'dup' })] }),
+        artifact({ mustFix: [item({ id: 'dup' })], recommendations: [item({ id: 'dup' })] }),
         repair,
       );
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       const ids = [
-        ...result.artifact.mustfix.map((entry) => entry.id),
+        ...result.artifact.mustFix.map((entry) => entry.id),
         ...result.artifact.recommendations.map((entry) => entry.id),
       ];
       expect(new Set(ids).size).toBe(2);
       expect(ids).toContain('dup');
     });
 
-    it('clamps a confidence score into the band and floors a bad line number', () => {
+    it('clamps a confidence into the band', () => {
+      const high = validateReviewDraft(artifact({ mustFix: [item({ confidence: 99 })] }), repair);
+      const low = validateReviewDraft(artifact({ mustFix: [item({ confidence: -4 })] }), repair);
+
+      expect(high.ok && high.artifact.mustFix[0]?.confidence).toBe(10);
+      expect(low.ok && low.artifact.mustFix[0]?.confidence).toBe(1);
+    });
+
+    it('accepts the v1 field names as aliases, so a model that writes them keeps its findings', () => {
       const result = validateReviewDraft(
-        artifact({ mustfix: [item({ confidenceScore: 99, line: 0 })] }),
+        {
+          outcome: 'needs_revision',
+          summary: 'One point.',
+          mustfix: [
+            {
+              id: 'mf-1',
+              section: 'Purpose',
+              description: 'Stated with no way to test it.',
+              suggestion: 'Restate it as a criterion.',
+              confidenceScore: 7,
+            },
+          ],
+          recommendations: [],
+        },
         repair,
       );
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.artifact.mustfix[0]?.confidenceScore).toBe(10);
-      expect(result.artifact.mustfix[0]?.line).toBe(1);
+      expect(result.artifact.mustFix[0]).toMatchObject({
+        sectionPath: 'Purpose',
+        // No separate heading was given, so the section path is the handle — not invented text.
+        title: 'Purpose',
+        body: 'Stated with no way to test it.',
+        confidence: 7,
+      });
     });
 
-    it('derives the outcome from the repaired arrays, rather than trusting a contradiction', () => {
-      const result = validateReviewDraft(artifact({ outcome: 'pass', mustfix: [item()] }), repair);
+    it('derives the verdict from the repaired arrays, rather than trusting a contradiction', () => {
+      const result = validateReviewDraft(artifact({ verdict: 'pass', mustFix: [item()] }), repair);
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.artifact.outcome).toBe('needs_revision');
+      expect(result.artifact.verdict).toBe('needs_revision');
+    });
+
+    it('states a missing summary as a count, and claims nothing else', () => {
+      const result = validateReviewDraft(
+        artifact({ summary: undefined, mustFix: [item()], recommendations: [item({ id: 'r' })] }),
+        repair,
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.artifact.summary).toBe(
+        'The reviewer raised 1 blocking point and 1 recommendation and left no summary of its own.',
+      );
     });
 
     it('normalises a near-miss verdict, and treats anything unrecognised as needing revision', () => {
-      for (const [outcome, expected] of [
+      for (const [verdict, expected] of [
         ['PASS', 'pass'],
         [' pass ', 'pass'],
         ['needs revision', 'needs_revision'],
@@ -255,45 +299,48 @@ describe('ReviewArtifact validation (task 54)', () => {
         [42, 'needs_revision'],
       ] as const) {
         const result = validateReviewDraft(
-          artifact({ outcome, mustfix: [], recommendations: [] }),
+          artifact({ verdict, mustFix: [], recommendations: [] }),
           repair,
         );
 
         expect(result.ok).toBe(true);
         if (!result.ok) return;
-        expect(result.artifact.outcome).toBe(expected);
+        expect(result.artifact.verdict).toBe(expected);
       }
     });
 
     it('drops an item whose finding is missing, rather than inventing one', () => {
       const result = validateReviewDraft(
-        artifact({ mustfix: [item({ id: 'mf-1' }), item({ id: 'mf-2', suggestion: '' })] }),
+        artifact({ mustFix: [item({ id: 'mf-1' }), item({ id: 'mf-2', suggestion: '' })] }),
         repair,
       );
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.artifact.mustfix.map((entry) => entry.id)).toEqual(['mf-1']);
+      expect(result.artifact.mustFix.map((entry) => entry.id)).toEqual(['mf-1']);
     });
 
     it('adds no item that the model did not propose', () => {
       const result = validateReviewDraft(
-        { outcome: 'pass', mustfix: [], recommendations: [] },
+        { verdict: 'pass', summary: 'Nothing to raise.', mustFix: [], recommendations: [] },
         repair,
       );
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.artifact.mustfix).toEqual([]);
+      expect(result.artifact.mustFix).toEqual([]);
       expect(result.artifact.recommendations).toEqual([]);
     });
 
     it('reads a missing or malformed list as an empty one', () => {
-      const result = validateReviewDraft({ outcome: 'pass', mustfix: 'not a list' }, repair);
+      const result = validateReviewDraft(
+        { verdict: 'pass', summary: 'Fine.', mustFix: 'not a list' },
+        repair,
+      );
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.artifact.mustfix).toEqual([]);
+      expect(result.artifact.mustFix).toEqual([]);
       expect(result.artifact.recommendations).toEqual([]);
     });
 
@@ -308,7 +355,7 @@ describe('ReviewArtifact validation (task 54)', () => {
   });
 });
 
-describe('createReviewAgent (task 54)', () => {
+describe('createReviewAgent (tasks 54, 111)', () => {
   const adapter = (document: string) => createTestDoubleAdapter({ document });
 
   /** An adapter that answers with a valid review and records the prompt it was handed. */
@@ -318,6 +365,27 @@ describe('createReviewAgent (task 54)', () => {
       return Promise.resolve({ text: stubReviewDocument(), providerUsed: 'stub', attempts: 1 });
     },
   });
+
+  /** An adapter that answers with each document in turn, so a retry can be observed. */
+  const sequenceAdapter = (
+    documents: readonly string[],
+  ): { adapter: LlmAdapter; calls: number } => {
+    const state = { calls: 0 };
+    const adapterImpl: LlmAdapter = {
+      generateStreaming: () => {
+        const text = documents[Math.min(state.calls, documents.length - 1)] ?? '';
+        state.calls += 1;
+        return Promise.resolve({ text, providerUsed: 'stub', attempts: 1 });
+      },
+    };
+
+    return {
+      adapter: adapterImpl,
+      get calls() {
+        return state.calls;
+      },
+    };
+  };
 
   it('returns a validated artifact and its flattened items', async () => {
     const agent = createReviewAgent(adapter(stubReviewDocument('constitution')));
@@ -330,8 +398,9 @@ describe('createReviewAgent (task 54)', () => {
 
     expect(outcome.kind).toBe('review');
     if (outcome.kind !== 'review') return;
-    expect(outcome.promptId).toBe('review.board.v1');
-    expect(outcome.artifact.outcome).toBe('needs_revision');
+    expect(outcome.promptId).toBe('review.board.v2');
+    expect(outcome.artifact.verdict).toBe('needs_revision');
+    expect(outcome.artifact.summary).not.toBe('');
     expect(outcome.items).toHaveLength(3);
     expect(outcome.items.filter((entry) => entry.severity === 'blocking')).toHaveLength(2);
     expect(outcome.items.filter((entry) => entry.severity === 'advisory')).toHaveLength(1);
@@ -363,11 +432,24 @@ describe('createReviewAgent (task 54)', () => {
     expect(outcome.kind).toBe('review');
   });
 
+  it('accepts a review with one stray character after it (Р-1, the parser layer)', async () => {
+    const agent = createReviewAgent(adapter(`${stubReviewDocument()}.`));
+
+    const outcome = await agent.review({
+      specType: 'requirements',
+      specContent: '# Requirements',
+      runId: 'run-3b',
+    });
+
+    expect(outcome.kind).toBe('review');
+  });
+
   it('repairs a salvageable draft and says that it did', async () => {
     const draft = JSON.stringify({
-      outcome: 'pass',
-      mustfix: [
-        { section: 'Purpose', line: 3, confidenceScore: 20, description: 'a', suggestion: 'b' },
+      verdict: 'pass',
+      summary: 'Looks good.',
+      mustFix: [
+        { sectionPath: 'Purpose', title: 'Vague', body: 'a', suggestion: 'b', confidence: 20 },
       ],
       recommendations: [],
     });
@@ -382,9 +464,65 @@ describe('createReviewAgent (task 54)', () => {
     expect(outcome.kind).toBe('review');
     if (outcome.kind !== 'review') return;
     expect(outcome.repaired).toBe(true);
-    expect(outcome.artifact.outcome).toBe('needs_revision');
+    expect(outcome.artifact.verdict).toBe('needs_revision');
     expect(outcome.items[0]?.id).toBe('mustfix-1');
-    expect(outcome.items[0]?.confidenceScore).toBe(10);
+    expect(outcome.items[0]?.confidence).toBe(10);
+  });
+
+  describe('Р-1 — exactly one retry on an unusable draft (task 111)', () => {
+    it('draws a second sample when the first is unusable, and keeps it', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const sequence = sequenceAdapter(['not JSON at all', stubReviewDocument('constitution')]);
+      const agent = createReviewAgent(sequence.adapter);
+
+      const outcome = await agent.review({
+        specType: 'constitution',
+        specContent: '# Constitution',
+        runId: 'run-7',
+      });
+
+      expect(outcome.kind).toBe('review');
+      expect(sequence.calls).toBe(2);
+      expect(warn).toHaveBeenCalledOnce();
+      warn.mockRestore();
+    });
+
+    it('stops at two: a second failure is an error the user is shown, not a third sample', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const sequence = sequenceAdapter(['not JSON', 'still not JSON', stubReviewDocument()]);
+      const agent = createReviewAgent(sequence.adapter);
+
+      const outcome = await agent.review({
+        specType: 'constitution',
+        specContent: '# Constitution',
+        runId: 'run-8',
+      });
+
+      expect(outcome.kind).toBe('draft-invalid');
+      expect(sequence.calls).toBe(2);
+      warn.mockRestore();
+    });
+
+    it('does not retry a draft that was merely repaired — repair is not failure', async () => {
+      const sequence = sequenceAdapter([
+        JSON.stringify({
+          verdict: 'pass',
+          summary: 'Fine.',
+          mustFix: [{ sectionPath: 'P', title: 't', body: 'b', suggestion: 's', confidence: 99 }],
+          recommendations: [],
+        }),
+      ]);
+      const agent = createReviewAgent(sequence.adapter);
+
+      const outcome = await agent.review({
+        specType: 'constitution',
+        specContent: '# Constitution',
+        runId: 'run-9',
+      });
+
+      expect(outcome.kind).toBe('review');
+      expect(sequence.calls).toBe(1);
+    });
   });
 
   it('reviews the exact bytes it was given — the content reaches the prompt verbatim', async () => {

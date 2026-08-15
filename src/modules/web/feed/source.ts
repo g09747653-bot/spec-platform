@@ -73,6 +73,8 @@ export interface FeedSourceReview {
   /** The revision this review read. A review of anything but the latest is history (FR-010 AC-8). */
   revisionNumber: number;
   outcome: 'pass' | 'needs_revision';
+  /** `null` on a board written before review.v2, which had no summary to write (task 111). */
+  summary: string | null;
   items: readonly FeedReviewItem[];
   decision: 'accept' | 'ignore' | 'request_changes' | null;
   selectedItemIds: readonly string[] | null;

@@ -12,33 +12,34 @@
 export function stubReviewDocument(specType = 'specification'): string {
   return JSON.stringify(
     {
-      outcome: 'needs_revision',
-      mustfix: [
+      verdict: 'needs_revision',
+      summary: `The ${specType} covers the ground it should, but two points would leave a coding agent guessing and one section would read better with an example.`,
+      mustFix: [
         {
           id: 'mf-untestable-criterion',
-          section: 'Purpose',
-          line: 5,
-          confidenceScore: 9,
-          description: `The ${specType} states an outcome with no way to tell whether it was reached.`,
+          sectionPath: 'Purpose — Outcomes',
+          title: 'An outcome with no way to tell whether it was reached',
+          body: `The ${specType} states an outcome with no way to tell whether it was reached.`,
           suggestion: 'Restate it as a criterion an automated test could assert.',
+          confidence: 9,
         },
         {
           id: 'mf-unnamed-actor',
-          section: 'Notes',
-          line: 12,
-          confidenceScore: 8,
-          description: 'A responsibility is described without naming who holds it.',
+          sectionPath: 'Notes',
+          title: 'A responsibility with no owner',
+          body: 'A responsibility is described without naming who holds it.',
           suggestion: 'Name the module that owns the behaviour.',
+          confidence: 8,
         },
       ],
       recommendations: [
         {
           id: 'rec-example',
-          section: 'Notes',
-          line: 13,
-          confidenceScore: 6,
-          description: 'The section would read more clearly with a worked example.',
+          sectionPath: 'Notes',
+          title: 'The list would read better with an example',
+          body: 'The section would read more clearly with a worked example.',
           suggestion: 'Add one short example beneath the list.',
+          confidence: 6,
         },
       ],
     },
@@ -50,13 +51,13 @@ export function stubReviewDocument(specType = 'specification'): string {
 /**
  * Whether an assembled prompt is asking for a review.
  *
- * Recognised by a phrase the `review.board.v1` system template renders verbatim — the same trick
+ * Recognised by a phrase the `review.board.v2` system template renders verbatim — the same trick
  * `documentFromPrompt` uses to spot a section list, and for the same reason: the stub is selected by
  * configuration, not by a test flag, so it has only the prompt to go on. A wording change that broke
  * this would break the stub review test in the same commit.
  */
 export function looksLikeReviewPrompt(prompt: string): boolean {
-  return prompt.includes('"outcome": "pass"|"needs_revision"');
+  return prompt.includes('"verdict": "pass"|"needs_revision"');
 }
 
 /** The spec type named in a review prompt, for a document that mentions the file it reviewed. */
