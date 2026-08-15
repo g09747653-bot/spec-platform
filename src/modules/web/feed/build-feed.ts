@@ -88,6 +88,11 @@ function evidencedPosition(block: FeedBlock): StagePosition | null {
     case 'seed':
       return START;
     case 'message':
+      /*
+       * A revision note evidences nothing, and that is deliberate: it is written while the session
+       * sits in `generate` after a request-changes, and the chip for that move was already emitted
+       * by the run. Claiming a position here would invent a second transition for one movement.
+       */
       return block.origin === 'summary' ? START : null;
     case 'round':
       return block.stage === 'interview'
@@ -262,6 +267,18 @@ function documentBlocks(source: FeedSource): DocumentBlock[] {
   }));
 }
 
+/**
+ * How many times a file has been sent back, counted from the boards themselves.
+ *
+ * Derived rather than stored, like everything else in this projection (D-102): the count *is* the
+ * number of request-changes decisions, so there is nothing to keep in step.
+ */
+function cyclesUsedFor(source: FeedSource, specFileId: string): number {
+  return source.reviews.filter(
+    (review) => review.specFileId === specFileId && review.decision === 'request_changes',
+  ).length;
+}
+
 function reviewBlocks(source: FeedSource): ReviewBlock[] {
   return source.reviews.map((review) => ({
     kind: 'review',
@@ -277,7 +294,33 @@ function reviewBlocks(source: FeedSource): ReviewBlock[] {
     items: review.items,
     decision: review.decision,
     selectedItemIds: review.selectedItemIds,
+    cyclesUsed: cyclesUsedFor(source, review.specFileId),
+    cycleBudget: source.session.revisionCycleBudget,
   }));
+}
+
+/**
+ * The writer's paragraph before Rev N+1 (task 113; Эталон §1.3).
+ *
+ * Anchored to the decision it explains — `decidedAt`, not the moment it was written — so it lands
+ * between the board the user decided and the revision that decision produced. That is where the
+ * reference product puts it, and it is derivable, which a written-at timestamp would only be if we
+ * started storing one.
+ */
+function revisionNoteBlocks(source: FeedSource): MessageBlock[] {
+  return source.reviews
+    .filter((review) => review.revisionNote !== null && review.decidedAt !== null)
+    .map((review) => ({
+      kind: 'message',
+      id: `revision-note:${review.reviewId}`,
+      role: 'assistant',
+      stage: review.specType,
+      substage: null,
+      at: review.decidedAt ?? review.createdAt,
+      origin: 'revision-note',
+      text: review.revisionNote ?? '',
+      streaming: false,
+    }));
 }
 
 function proposalBlocks(source: FeedSource): ProposalBlock[] {
@@ -387,6 +430,7 @@ export function buildFeed(source: FeedSource): Feed {
     ...generationBlocks(source),
     ...documentBlocks(source),
     ...reviewBlocks(source),
+    ...revisionNoteBlocks(source),
     ...proposalBlocks(source),
   ];
 
@@ -442,5 +486,34 @@ export function buildFeed(source: FeedSource): Feed {
     blocks.push(transitionBlock(current, position, 'tail', last?.at ?? source.session.createdAt));
   }
 
-  return { blocks, position, tail: computeTail(source, blocks) };
+  return {
+    blocks,
+    position,
+    tail: computeTail(source, blocks),
+    revisionOwed: computeRevisionOwed(source),
+  };
+}
+
+/**
+ * The rewrite the board asked for and the session still owes (task 113).
+ *
+ * The same predicate `requestedChangesForFile` runs in SQL: a request-changes decision standing on
+ * the file's **latest** revision. Once the rewrite lands, a newer revision exists and the decision
+ * stops describing the newest content — which is exactly when the page should stop offering to
+ * apply it, and exactly when the server stops carrying the feedback into the prompt.
+ *
+ * Without this the feed had no way to say "this stage owes a revision", and so no way to offer one:
+ * a session sent back by its review board sat at `generate` with an approved document, a decided
+ * board, and nothing to press. The M8п cycle walk is what found it.
+ */
+function computeRevisionOwed(source: FeedSource): Feed['revisionOwed'] {
+  for (const review of source.reviews) {
+    if (review.decision !== 'request_changes') continue;
+    if (review.revisionNumber !== latestRevisionNumber(source.revisions, review.specFileId))
+      continue;
+
+    return { specType: review.specType, points: (review.selectedItemIds ?? []).length };
+  }
+
+  return null;
 }

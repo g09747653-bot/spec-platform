@@ -35,6 +35,15 @@ interface GenerationSurfaceProps {
   canGenerate: boolean;
   /** True while a question card awaits submission: generation is blocked (FR-005 AC-4). */
   blocked: boolean;
+  /**
+   * The rewrite the review board asked for, when the stage owes one (task 113).
+   *
+   * It changes what the control *says*, not what it does: the same endpoint, the same run, the same
+   * context — which already carries the ticked points (task 57). A button labelled "Generate" over a
+   * document that exists is a button whose effect the user has to infer, and the effect here is
+   * specific: apply these N points and change nothing else.
+   */
+  revisionOwed?: { specType: string; points: number } | null;
 }
 
 export function GenerationSurface({
@@ -43,6 +52,7 @@ export function GenerationSurface({
   activeRun,
   canGenerate,
   blocked,
+  revisionOwed = null,
 }: GenerationSurfaceProps) {
   const router = useRouter();
   const { state: stream, start, resume, stop } = useResumableStream();
@@ -91,6 +101,8 @@ export function GenerationSurface({
   }
 
   const idle = !generating && !runInFlight;
+  /** Only this stage's own debt: another stage's owed rewrite is not this card's business. */
+  const owed = revisionOwed !== null && revisionOwed.specType === stage ? revisionOwed : null;
 
   /*
    * Nothing to say: the position does not draft, no card is holding drafting up, nothing is
@@ -166,15 +178,28 @@ export function GenerationSurface({
             This step does not draft a document. Use the controls below to move the session on.
           </p>
         ) : (
-          <Button
-            data-testid="generate-spec"
-            onClick={() => {
-              void generate();
-            }}
-            className="self-start"
-          >
-            {stream.error !== null ? 'Try again' : 'Generate'}
-          </Button>
+          <>
+            {owed !== null && (
+              <p className="text-ink-muted text-sm" data-testid="revision-owed">
+                The review sent this document back with {owed.points}{' '}
+                {owed.points === 1 ? 'point' : 'points'} ticked. Rewriting applies exactly those and
+                leaves the rest as it stands.
+              </p>
+            )}
+            <Button
+              data-testid="generate-spec"
+              onClick={() => {
+                void generate();
+              }}
+              className="self-start"
+            >
+              {stream.error !== null
+                ? 'Try again'
+                : owed !== null
+                  ? 'Apply the review points'
+                  : 'Generate'}
+            </Button>
+          </>
         ))}
     </div>
   );

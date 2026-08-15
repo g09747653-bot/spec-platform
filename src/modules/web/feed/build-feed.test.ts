@@ -58,6 +58,7 @@ function source(overrides: Partial<FeedSource> = {}): FeedSource {
       summary: null,
       createdAt: T.created,
       position: { stage: 'interview', substage: null },
+      revisionCycleBudget: 5,
       completionCount: 0,
       ...overrides.session,
     },
@@ -121,6 +122,7 @@ const review = (over: Partial<FeedSourceReview> = {}): FeedSourceReview => ({
   ],
   decision: null,
   selectedItemIds: null,
+  revisionNote: null,
   createdAt: T.review,
   decidedAt: null,
   ...over,
@@ -151,6 +153,7 @@ function walkedToReview(): FeedSource {
       createdAt: T.created,
       position: { stage: 'constitution', substage: 'review' },
       completionCount: 0,
+      revisionCycleBudget: 5,
     },
     rounds: [
       round({ answers: [], answeredAt: T.answered1 }),
@@ -239,6 +242,90 @@ describe('block kinds', () => {
         'proposal',
       ]),
     );
+  });
+
+  /**
+   * Task 113 — the writer's paragraph before Rev N+1 (Эталон §1.3).
+   *
+   * Its place in the conversation is the assertion: after the board whose decision it explains, and
+   * before the revision that decision produced. Anchoring it to `decidedAt` is what puts it there
+   * without storing a timestamp of its own.
+   */
+  describe('the revision note', () => {
+    const cycled = () => ({
+      ...walkedToReview(),
+      reviews: [
+        review({
+          decision: 'request_changes' as const,
+          selectedItemIds: ['item-1'],
+          revisionNote:
+            'I am folding in the point you ticked; on the boundary you left open I have taken the narrower reading.',
+          decidedAt: T.decided,
+        }),
+      ],
+      revisions: [
+        revision(),
+        revision({
+          revisionId: 'rev-2',
+          revisionNumber: 2,
+          createdAt: T.revision2,
+        }),
+      ],
+    });
+
+    it('sits between the board it explains and the revision it precedes', () => {
+      const feed = buildFeed(cycled());
+      const order = feed.blocks.map((block) => block.id);
+
+      expect(order.indexOf('revision-note:review-1')).toBeGreaterThan(
+        order.indexOf('review:review-1'),
+      );
+      expect(order.indexOf('revision-note:review-1')).toBeLessThan(order.indexOf('revision:rev-2'));
+    });
+
+    it('is an assistant turn that survives a reload, and says where it came from', () => {
+      const note = buildFeed(cycled()).blocks.find(
+        (block) => block.id === 'revision-note:review-1',
+      );
+
+      expect(note).toMatchObject({
+        kind: 'message',
+        role: 'assistant',
+        origin: 'revision-note',
+        streaming: false,
+      });
+    });
+
+    it('is absent until a request-changes decision produces one', () => {
+      const feed = buildFeed(walkedToReview());
+
+      expect(feed.blocks.some((block) => block.id.startsWith('revision-note:'))).toBe(false);
+    });
+
+    it('emits no stage chip of its own — one movement, one chip', () => {
+      const withNote = buildFeed(cycled()).blocks.filter((block) => block.kind === 'transition');
+      const withoutNote = buildFeed({
+        ...cycled(),
+        reviews: cycled().reviews.map((entry) => ({ ...entry, revisionNote: null })),
+      }).blocks.filter((block) => block.kind === 'transition');
+
+      expect(withNote.map((block) => block.id)).toEqual(withoutNote.map((block) => block.id));
+    });
+  });
+
+  it('carries the cycle count and the budget onto every board (task 113)', () => {
+    const feed = buildFeed({
+      ...walkedToReview(),
+      reviews: [
+        review({ reviewId: 'r1', decision: 'request_changes', selectedItemIds: ['item-1'] }),
+        review({ reviewId: 'r2', createdAt: T.revision2 }),
+      ],
+    });
+
+    const boards = feed.blocks.filter((block) => block.kind === 'review');
+
+    expect(boards.map((block) => block.cyclesUsed)).toEqual([1, 1]);
+    expect(boards.every((block) => block.cycleBudget === 5)).toBe(true);
   });
 
   it('anchors the interview summary to the round that produced it', () => {

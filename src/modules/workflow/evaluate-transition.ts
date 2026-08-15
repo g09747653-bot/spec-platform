@@ -1,4 +1,5 @@
 import { GATES } from './gates';
+import { revisionBudgetGate } from './gates/revision-budget';
 import { roundBudgetGate } from './gates/round-budget';
 import type { AskingStage, StagePosition } from './model/stages';
 import { rejected, type TransitionResult } from './reason-codes';
@@ -48,4 +49,18 @@ export function canAskAnotherRound(
   stage: AskingStage,
 ): TransitionResult {
   return roundBudgetGate(snapshot, stage);
+}
+
+/**
+ * May this stage be sent back for another revision? (task 113.)
+ *
+ * The sibling of `canAskAnotherRound`, and a standalone predicate for the same reason: what it
+ * bounds is an *action* — the `request_changes` decision — not a movement of the machine, so it has
+ * no row in the table and takes its inputs directly rather than through the snapshot. `cyclesUsed`
+ * is a count of decisions already recorded on the file's boards, which the caller reads; keeping it
+ * out of `WorkflowSnapshot` keeps the snapshot the set of facts the *gates* need, which is what
+ * makes the engine's purity testable from literals.
+ */
+export function canRequestChanges(cyclesUsed: number, budget: number): TransitionResult {
+  return revisionBudgetGate(cyclesUsed, budget);
 }

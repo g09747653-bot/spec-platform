@@ -1,3 +1,4 @@
+import { getEnv } from '@/config/env';
 import type { SchemaDatabase } from '@/db';
 import type { OwnerScope } from '@/db/owner-scope';
 import { createGenerationStore } from '@/modules/adapters/llm/generation-store';
@@ -150,6 +151,8 @@ export async function assembleFeedSource(
       createdAt: iso(project.createdAt),
       position: toPosition(project.stage, project.substage),
       completionCount: project.completionCount,
+      // Configuration in, so the projection itself reads no environment (task 113).
+      revisionCycleBudget: getEnv().MAX_REVISION_CYCLES_PER_STAGE,
     },
     rounds: rounds.map(toRound),
     runs: runs.map((run) => ({
@@ -178,6 +181,7 @@ export async function assembleFeedSource(
       items: review.items,
       decision: review.decision,
       selectedItemIds: review.selectedItemIds,
+      revisionNote: review.revisionNote,
       createdAt: iso(review.createdAt),
       decidedAt: review.decidedAt === null ? null : iso(review.decidedAt),
     })),

@@ -48,12 +48,17 @@ function verificationBlock(items: readonly ReviewVerificationItem[]): string {
 
   const count = items.length;
 
+  const instruction = [
+    `This document has been revised. The revision was asked to apply exactly the ${String(count)}`,
+    `${count === 1 ? 'point' : 'points'} below.`,
+    'Say for each whether the new text actually applies it, and raise a finding where it does not.',
+    'Judge the rest of the document as you normally would: anything the rewrite itself broke is a',
+    'new finding.',
+  ].join(' ');
+
   return [
     '',
-    `This document has been revised. The revision was asked to apply exactly the ${String(count)}`,
-    `${count === 1 ? 'point' : 'points'} below. Say for each whether the new text actually applies`,
-    'it, and raise a finding where it does not. Judge the rest of the document as you normally',
-    'would: anything the rewrite itself broke is a new finding.',
+    instruction,
     '',
     ...items.map((item) => `- ${item.sectionPath} — ${item.title}: ${item.suggestion}`),
   ].join('\n');

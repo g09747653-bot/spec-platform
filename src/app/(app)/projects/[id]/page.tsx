@@ -235,7 +235,6 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           proposal={proposalModel}
           refineFileId={latest === null ? null : (currentFile?.id ?? null)}
           canGenerate={position.substage === 'generate'}
-          hasDraft={source.revisions.some((revision) => revision.specType === position.stage)}
           activeRun={
             activeRun === null ? null : { runId: activeRun.runId, attempt: activeRun.attempt }
           }

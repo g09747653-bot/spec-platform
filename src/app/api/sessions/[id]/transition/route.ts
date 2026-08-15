@@ -77,6 +77,33 @@ async function ensureStageReview(
   const approved = await createRevisionRepository(db).latestApproved(specFile.id);
   if (approved === null) return null;
 
+  const reviews = createReviewRepository(db);
+
+  /*
+   * What a re-review is verifying (task 113; Эталон §1.3).
+   *
+   * When this stage has been round the loop, the previous board carries the points the user ticked,
+   * and the reviewer is asked whether the new text actually applies them — «Verifying the revision
+   * against the four items you selected». Only the ticked ones are passed, and the unticked ones are
+   * not mentioned at all: what a prompt is told, it acts on, which is the reasoning task 57 wrote
+   * into the context assembler's feedback filter and the reason a declined point cannot be
+   * re-litigated by construction rather than by instruction.
+   *
+   * `lastRequestedChangesForFile`, not `requestedChangesForFile`: by the time a re-review runs the
+   * revision exists, so the query that answers "what must the next generation apply?" has gone quiet.
+   */
+  const previous = await reviews.lastRequestedChangesForFile(scope, specFile.id);
+  const verifying =
+    previous === null || previous.specRevisionId === approved.id
+      ? []
+      : previous.items
+          .filter((item) => (previous.selectedItemIds ?? []).includes(item.id))
+          .map((item) => ({
+            sectionPath: item.sectionPath,
+            title: item.title,
+            suggestion: item.suggestion,
+          }));
+
   // The configured chain, with failover, exactly as generation uses it: the review agent needs no
   // provider of its own and no configuration of its own (A3; P7).
   const agent = createReviewAgent(createDefaultAdapter());
@@ -93,6 +120,7 @@ async function ensureStageReview(
       specType: position.stage,
       specContent: approved.content,
       contentLanguage,
+      verifying,
       runId: randomUUID(),
     });
   } catch (error) {
@@ -102,7 +130,7 @@ async function ensureStageReview(
 
   if (review.kind !== 'review') return null;
 
-  const stored = await createReviewRepository(db).create({
+  const stored = await reviews.create({
     specRevisionId: approved.id,
     outcome: review.artifact.verdict,
     summary: review.artifact.summary,

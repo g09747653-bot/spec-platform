@@ -95,6 +95,12 @@ export interface PromptVariables {
     specContent: string;
     instruction: string;
   };
+  'revision.note.v1': {
+    specType: string;
+    /** The ticked points, rendered by the caller — the only ones this paragraph may mention. */
+    selectedPoints: string;
+    specContent: string;
+  };
   'decision.intent.v1': {
     message: string;
     pendingKind: string;
@@ -230,6 +236,49 @@ const REFINEMENT_PROPOSE: PromptAsset = {
     'REQUEST',
   ].join('\n'),
   variables: ['specType', 'specContent', 'instruction'],
+};
+
+/**
+ * The paragraph the writer says before it rewrites (task 113; Эталон §1.3).
+ *
+ * The reference product answers Request changes with one paragraph saying what it folded in and,
+ * crucially, **what it decided for itself**: «On voice-cloning you didn't specify — I've made the
+ * call that…». That second half is the whole value of it. A revision applies a set of tick-marks,
+ * and applying them always requires settling something the ticks did not say; a writer that makes
+ * those calls silently leaves the user to discover them by reading a diff of a document they have
+ * already approved once.
+ *
+ * Prose, not JSON, and the only prompt in the registry that returns prose on purpose: this is a turn
+ * in the conversation, shown verbatim. So the instruction is about *shape* — first person, one
+ * paragraph, no lists, no headings — and about honesty: it may name only the points it was handed,
+ * and if it settled nothing it must say so rather than invent a decision to sound thorough.
+ *
+ * It sees the document because the calls it is announcing are calls about that text. It does **not**
+ * see the unticked points, for the reason the review asset spells out: what a prompt is told, it
+ * acts on.
+ */
+const REVISION_NOTE: PromptAsset = {
+  id: 'revision.note.v1',
+  system: [
+    'You are about to rewrite one file of a specification bundle to apply review points the user',
+    'ticked. Before you write it, say in ONE short paragraph, in the first person, what you are',
+    'folding in and which open questions you are settling yourself and how.',
+    'Prose only: no headings, no bullet list, no JSON, no preamble like "Sure" — just the paragraph.',
+    'Mention only the points you were given. If applying them settles nothing that was left open,',
+    'say plainly that the changes are mechanical and you are deciding nothing on the user’s behalf.',
+    'Do not restate the document, do not write the revision, and do not promise anything beyond the',
+    'points listed.',
+  ].join(' '),
+  user: [
+    'The points the user ticked on the review of the {{specType}} document:',
+    '',
+    '{{selectedPoints}}',
+    '',
+    'The document as it stands:',
+    '',
+    '{{specContent}}',
+  ].join('\n'),
+  variables: ['specType', 'selectedPoints', 'specContent'],
 };
 
 /**
@@ -390,6 +439,7 @@ export const promptRegistry: Readonly<Record<PromptId, PromptAsset>> = Object.fr
   'spec.generation.v2': SPEC_GENERATION,
   'review.board.v2': REVIEW_BOARD,
   'refinement.propose.v1': REFINEMENT_PROPOSE,
+  'revision.note.v1': REVISION_NOTE,
   'decision.intent.v1': DECISION_INTENT,
   'chat.answer.v1': CHAT_ANSWER,
   'interview.questions.v3': INTERVIEW_QUESTIONS,

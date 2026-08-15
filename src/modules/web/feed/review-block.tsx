@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { REASON_EXPLANATION } from '../session/gate-copy';
 import { Button } from '../ui/button';
 
 import { BlockCaption } from './bubbles';
@@ -213,6 +214,16 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
   const [busy, setBusy] = useState<Action | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  /*
+   * The loop's budget, spent (task 113).
+   *
+   * The card stops offering Request changes and says why, in the words `gate-copy` keeps for this
+   * reason code — the server refuses it too, so this is the honest face of a rule rather than the
+   * rule itself (D-100). Accept and Ignore stay, which is what makes an exhausted cycle a fork and
+   * not the dead end round 5 spent itself on.
+   */
+  const exhausted = block.cyclesUsed >= block.cycleBudget;
+
   function toggle(id: string) {
     setSelected((previous) => {
       const next = new Set(previous);
@@ -354,6 +365,12 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
           </p>
         )}
 
+        {exhausted && (
+          <p className="text-ink-muted text-sm" data-testid="review-cycles-exhausted">
+            {REASON_EXPLANATION.REVISION_LIMIT_REACHED}
+          </p>
+        )}
+
         <div className="flex flex-wrap gap-2">
           <Button
             data-testid="review-accept"
@@ -364,16 +381,18 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
           >
             {busy === 'accept' ? 'Accepting…' : 'Accept feedback'}
           </Button>
-          <Button
-            variant="secondary"
-            data-testid="review-request-changes"
-            disabled={busy === 'request_changes' || selected.size === 0}
-            onClick={() => {
-              void decide('request_changes');
-            }}
-          >
-            {busy === 'request_changes' ? 'Sending…' : 'Request changes'}
-          </Button>
+          {!exhausted && (
+            <Button
+              variant="secondary"
+              data-testid="review-request-changes"
+              disabled={busy === 'request_changes' || selected.size === 0}
+              onClick={() => {
+                void decide('request_changes');
+              }}
+            >
+              {busy === 'request_changes' ? 'Sending…' : 'Request changes'}
+            </Button>
+          )}
           <Button
             variant="secondary"
             data-testid="review-ignore"
@@ -386,7 +405,7 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
           </Button>
         </div>
 
-        {selected.size === 0 && total > 0 && (
+        {!exhausted && selected.size === 0 && total > 0 && (
           <p className="text-ink-muted text-xs" data-testid="review-selection-hint">
             Requesting changes needs at least one point ticked — only the ticked ones are applied.
           </p>

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { projects, reviewFeedback, users } from '@/db/schema';
 import { createMigratedDatabase, type TestDatabase } from '@/db/testing/migrated-database';
-import type { OwnerScope } from '@/db/owner-scope';
+import { OwnerScope } from '@/db/owner-scope';
 
 import { createRevisionRepository, type RevisionRepository } from './revisions';
 import { createReviewRepository, type ReviewRepository } from './reviews';
@@ -56,7 +56,7 @@ describe('ReviewRepository (task 111)', () => {
       .insert(users)
       .values({ email: 'owner@example.test' })
       .returning({ id: users.id });
-    scope = { userId: owner?.id ?? '' };
+    scope = OwnerScope.forAuthenticatedUser(owner?.id ?? '');
 
     const [project] = await database.db
       .insert(projects)

@@ -9,6 +9,7 @@ import { createReviewRepository } from '@/modules/specs/repositories/reviews';
 import { errorResponse, jsonResponse } from '@/modules/web/api/responses';
 import { applyTransition } from '@/modules/workflow/apply-transition';
 import { registeredCapabilityIds } from '@/modules/workflow/capabilities';
+import { canRequestChanges } from '@/modules/workflow/evaluate-transition';
 import { isSpecStage } from '@/modules/workflow/model/stages';
 
 /**
@@ -86,6 +87,24 @@ export async function POST(
           { path: 'selectedItemIds', message: `unknown feedback item: ${unknown[0] ?? ''}` },
         ],
       });
+    }
+
+    /*
+     * The loop is bounded, and the bound is enforced here rather than on the transition (task 113).
+     *
+     * `review → generate` is a backward movement and stays unconditional (FR-007 AC-5; A2) — what is
+     * budgeted is *asking for another machine-written revision*, which is this decision and only
+     * this decision. Accept and ignore are unaffected, so an exhausted cycle is a fork rather than a
+     * dead end, and the reason code carries the copy that says so (gate-copy).
+     *
+     * On the server, not only in the card: an invariant that depends on every client knowing it is
+     * not an invariant (D-100).
+     */
+    const cycles = await reviews.countRequestedChanges(scope, review.specFileId);
+    const budget = canRequestChanges(cycles, getEnv().MAX_REVISION_CYCLES_PER_STAGE);
+
+    if (!budget.allowed) {
+      return errorResponse('GATE_REJECTED', { reason: budget.reason });
     }
   }
 

@@ -33,6 +33,11 @@ const VARIABLES: { [Id in PromptId]: PromptVariables[Id] } = {
     replyBlock: '',
   },
   'review.board.v2': { specType: 'constitution', specContent: '# Constitution', verification: '' },
+  'revision.note.v1': {
+    specType: 'constitution',
+    selectedPoints: '- Scope — No non-goals: Add a non-goals list.',
+    specContent: '# Constitution',
+  },
   'refinement.propose.v1': {
     specType: 'constitution',
     specContent: '# Constitution',

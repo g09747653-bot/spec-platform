@@ -68,7 +68,11 @@ export interface SeedBlock extends FeedBlockBase {
  */
 export interface MessageBlock extends FeedBlockBase {
   kind: 'message';
-  origin: 'summary' | 'chat';
+  /**
+   * `revision-note` is the writer's paragraph before Rev N+1 (task 113): persisted on the board
+   * whose decision it explains, so it survives a reload like a summary and unlike a chat turn.
+   */
+  origin: 'summary' | 'chat' | 'revision-note';
   text: string;
   /** True while an assistant reply is still being written into the feed (task 109). */
   streaming: boolean;
@@ -178,6 +182,15 @@ export interface ReviewBlock extends FeedBlockBase {
   decision: 'accept' | 'ignore' | 'request_changes' | null;
   /** What the user ticked, once the decision is taken — history, not a live selection. */
   selectedItemIds: readonly string[] | null;
+  /**
+   * How many times this file has already been sent back, and how many times it may be (task 113).
+   *
+   * Derived, not stored: the count is the number of request-changes decisions among this file's
+   * boards, and the budget is configuration. The card needs both to say *why* it is not offering
+   * Request changes any more, which is the whole of the gate-copy lesson (D-97).
+   */
+  cyclesUsed: number;
+  cycleBudget: number;
 }
 
 /** A conversational refinement awaiting accept or reject (FR-011). */
@@ -236,4 +249,12 @@ export interface Feed {
   /** Where the session is now, straight from `workflow_state` — never inferred from the blocks. */
   position: StagePosition;
   tail: FeedTail;
+  /**
+   * A rewrite the review board asked for and the session has not produced yet (task 113).
+   *
+   * Mirrors `requestedChangesForFile` exactly — a request-changes decision standing on the file's
+   * latest revision — so the control the page offers and the work the generation will actually do
+   * are derived from the same fact rather than from two guesses about it.
+   */
+  revisionOwed: { specType: string; points: number } | null;
 }

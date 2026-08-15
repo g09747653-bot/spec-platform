@@ -51,6 +51,11 @@ export {
 } from './stub-interview';
 export { looksLikeReviewPrompt, specTypeFromReviewPrompt, stubReviewDocument } from './stub-review';
 export {
+  looksLikeRevisionNotePrompt,
+  pointCountFromNotePrompt,
+  stubRevisionNoteDocument,
+} from './stub-revision-note';
+export {
   documentFromRefinementPrompt,
   instructionFromRefinementPrompt,
   looksLikeRefinementPrompt,

@@ -329,6 +329,88 @@ export function createReviewRepository(db: SchemaDatabase) {
     },
 
     /**
+     * The most recent request-changes decision on this file, whatever revision it read (task 113).
+     *
+     * The sibling of `requestedChangesForFile`, and the difference is the whole reason it exists:
+     * that one answers "what must the *next* generation apply?" and therefore stops answering the
+     * moment the revision lands. This one answers "what was the last revision asked to fix?", which
+     * is the question a **re-review** asks — by then the revision exists, so the other query has
+     * gone quiet. Эталон's «Verifying the revision against the four items you selected» is exactly
+     * this lookup.
+     */
+    async lastRequestedChangesForFile(
+      scope: OwnerScope,
+      specFileId: string,
+    ): Promise<StoredReview | null> {
+      if (!UUID.test(specFileId)) return null;
+
+      const rows = await queryRows(
+        db,
+        sql`
+          SELECT ${REVIEW_COLUMNS} ${OWNED_REVIEW}
+          WHERE ${specFiles}.id = ${specFileId}::uuid
+            AND ${projects}.owner_id = ${scope.userId}::uuid
+            AND ${reviewFeedback}.decision = 'request_changes'
+          ORDER BY ${reviewFeedback}.decided_at DESC
+          LIMIT 1
+        `,
+        ReviewRow,
+      );
+
+      const row = rows[0];
+      return row === undefined ? null : toReview(row);
+    },
+
+    /**
+     * How many times this file has been sent back for changes (task 113).
+     *
+     * The count the revision budget is measured against. Decisions, not revisions: a regeneration
+     * the user asked for on the spec card is not a review cycle, and counting revisions would spend
+     * the loop's budget on work the loop never ordered.
+     */
+    async countRequestedChanges(scope: OwnerScope, specFileId: string): Promise<number> {
+      if (!UUID.test(specFileId)) return 0;
+
+      const rows = await queryRows(
+        db,
+        sql`
+          SELECT COUNT(*)::int AS cycles ${OWNED_REVIEW}
+          WHERE ${specFiles}.id = ${specFileId}::uuid
+            AND ${projects}.owner_id = ${scope.userId}::uuid
+            AND ${reviewFeedback}.decision = 'request_changes'
+        `,
+        z.object({ cycles: z.number().int().nonnegative() }),
+      );
+
+      return rows[0]?.cycles ?? 0;
+    },
+
+    /**
+     * Records what the writer said it was folding in, once (task 113; Эталон §1.3).
+     *
+     * `revision_note IS NULL` in the predicate for the same reason `decide` carries
+     * `decision IS NULL`: the paragraph explains a decision that has already been taken, so a second
+     * one would be a second account of the same event. A retried generation therefore keeps the note
+     * the first attempt wrote rather than replacing it — the board is history (task 111).
+     */
+    async noteRevision(reviewId: string, note: string): Promise<boolean> {
+      if (!UUID.test(reviewId)) return false;
+
+      const updated = await queryRows(
+        db,
+        sql`
+          UPDATE ${reviewFeedback}
+          SET revision_note = ${note}
+          WHERE id = ${reviewId}::uuid AND revision_note IS NULL
+          RETURNING id
+        `,
+        z.object({ id: z.uuid() }),
+      );
+
+      return updated.length > 0;
+    },
+
+    /**
      * Records the user's decision, once.
      *
      * Returns `null` when the review was already decided — the caller answers `PENDING_DECISION`

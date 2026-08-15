@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { canAskAnotherRound, evaluateTransition } from '../evaluate-transition';
+import { canAskAnotherRound, canRequestChanges, evaluateTransition } from '../evaluate-transition';
 import { GATES } from '../gates';
 import {
   ALL_POSITIONS,
@@ -656,6 +656,55 @@ describe('round budget (task 27; FR-005 AC-10)', () => {
     expect(canAskAnotherRound(narrowed, 'interview')).toMatchObject({
       allowed: false,
       reason: 'ROUND_LIMIT_REACHED',
+    });
+  });
+});
+
+describe('revision-cycle budget (task 113; Эталон §1.3)', () => {
+  it('permits a cycle below the budget and refuses at it', () => {
+    expect(canRequestChanges(0, 5)).toEqual({ allowed: true });
+    expect(canRequestChanges(4, 5)).toEqual({ allowed: true });
+    expect(canRequestChanges(5, 5)).toMatchObject({
+      allowed: false,
+      reason: 'REVISION_LIMIT_REACHED',
+    });
+    assertedReasons.add('REVISION_LIMIT_REACHED');
+  });
+
+  it('honours a reconfigured budget with no code change', () => {
+    expect(canRequestChanges(5, 8)).toEqual({ allowed: true });
+    expect(canRequestChanges(1, 1)).toMatchObject({ allowed: false });
+  });
+
+  /**
+   * The loop needs no row of its own, and this is the assertion that says so out loud.
+   *
+   * `review → generate` already exists as a **backward** row, and backward movement inside a stage
+   * is unconditional by requirement (FR-007 AC-5; constitution A2). Bounding the loop by gating that
+   * edge would have traded a requirement for a budget — so the bound sits on the `request_changes`
+   * decision instead, and the table is exactly the 33 rows it was. The matrix above still covers
+   * every one of them, which is the M2 rule holding rather than being re-derived.
+   */
+  it('adds no row to the table: the cycle is made of edges that already exist', () => {
+    expect(TRANSITION_TABLE).toHaveLength(33);
+
+    for (const stage of ['constitution', 'requirements', 'solution', 'tasks'] as const) {
+      const back = findTransition({ stage, substage: 'review' }, { stage, substage: 'generate' });
+      const forward = findTransition(
+        { stage, substage: 'generate' },
+        { stage, substage: 'review' },
+      );
+
+      expect(back?.gate).toBe('backward');
+      expect(forward?.gate).toBe('approval');
+    }
+  });
+
+  it('leaves the backward edge unconditional however many cycles have been spent', () => {
+    // The minimal snapshot — nothing satisfied, no notion of a budget anywhere in it.
+    expectAllowed(makeSnapshot({ position: { stage: 'constitution', substage: 'review' } }), {
+      stage: 'constitution',
+      substage: 'generate',
     });
   });
 });

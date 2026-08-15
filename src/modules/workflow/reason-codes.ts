@@ -16,6 +16,15 @@ export const REASON_CODES = [
   'SESSION_SEALED',
   'ROUND_LIMIT_REACHED',
   'CAPABILITY_NOT_REGISTERED',
+  /**
+   * The stage has used its revision cycles (task 113; Эталон §1.3).
+   *
+   * Sibling of `ROUND_LIMIT_REACHED`, and it refuses the same kind of thing: not a *transition* —
+   * backward movement inside a stage is unconditional by requirement (FR-007 AC-5) and stays that
+   * way — but the act of asking for one more machine-produced round of work. The user can still
+   * accept the review, ignore it, or step back by hand; what is exhausted is the loop's own budget.
+   */
+  'REVISION_LIMIT_REACHED',
 ] as const;
 
 export type ReasonCode = (typeof REASON_CODES)[number];

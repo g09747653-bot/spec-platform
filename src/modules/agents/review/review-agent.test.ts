@@ -539,6 +539,80 @@ describe('createReviewAgent (tasks 54, 111)', () => {
     expect(seen[0]).toContain('Review the tasks document');
   });
 
+  /**
+   * Task 113 — the re-review verifies what was ticked, and never re-litigates what was not.
+   *
+   * The negative half is the one that matters, so the fixture carries five points and ticks two:
+   * the other three must appear nowhere in the prompt — not by title, not by suggestion, not under
+   * a heading saying the user declined them. Absence is the mechanism (task 57's reasoning), so
+   * absence is what is asserted.
+   */
+  describe('a re-review is handed the selected points, and only those (task 113)', () => {
+    const FIVE = [
+      { sectionPath: 'Scope', title: 'No non-goals', suggestion: 'Name a non-goal' },
+      { sectionPath: 'Gates', title: 'Ownerless gate', suggestion: 'Name the module' },
+      { sectionPath: 'API', title: 'No example', suggestion: 'Show one request' },
+      { sectionPath: 'Risks', title: 'Order of risks', suggestion: 'Put likelihood first' },
+      { sectionPath: 'Glossary', title: 'Unexpanded acronym', suggestion: 'Expand on first use' },
+    ];
+
+    it('states the ticked points and asks whether the revision applies them', async () => {
+      const seen: string[] = [];
+      const agent = createReviewAgent(recordingAdapter(seen));
+
+      await agent.review({
+        specType: 'constitution',
+        specContent: '# Constitution',
+        verifying: [FIVE[0], FIVE[3]].filter((point) => point !== undefined),
+        runId: 'run-10',
+      });
+
+      const prompt = seen[0] ?? '';
+
+      expect(prompt).toContain('This document has been revised');
+      expect(prompt).toContain('exactly the 2 points');
+      expect(prompt).toContain('Scope — No non-goals: Name a non-goal');
+      expect(prompt).toContain('Risks — Order of risks: Put likelihood first');
+    });
+
+    it('carries no trace of the points the user did not tick', async () => {
+      const seen: string[] = [];
+      const agent = createReviewAgent(recordingAdapter(seen));
+
+      await agent.review({
+        specType: 'constitution',
+        specContent: '# Constitution',
+        verifying: [FIVE[0], FIVE[3]].filter((point) => point !== undefined),
+        runId: 'run-11',
+      });
+
+      const prompt = seen[0] ?? '';
+
+      for (const absent of [
+        'Ownerless gate',
+        'Name the module',
+        'No example',
+        'Show one request',
+        'Unexpanded acronym',
+        'Expand on first use',
+      ]) {
+        expect(prompt).not.toContain(absent);
+      }
+
+      // Not "declined", not "do not raise", not "the user chose not to" — absent.
+      expect(prompt).not.toMatch(/declined|did not select|not chosen|do not raise/i);
+    });
+
+    it('says nothing about verification on a first review', async () => {
+      const seen: string[] = [];
+      const agent = createReviewAgent(recordingAdapter(seen));
+
+      await agent.review({ specType: 'constitution', specContent: '# C', runId: 'run-12' });
+
+      expect(seen[0] ?? '').not.toContain('has been revised');
+    });
+  });
+
   it('never offers the model the user decision vocabulary (constitution P2)', async () => {
     const seen: string[] = [];
     const agent = createReviewAgent(recordingAdapter(seen));

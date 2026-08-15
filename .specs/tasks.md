@@ -1417,17 +1417,17 @@ Goal: the whole session lives in one conversation feed — messages, question-ro
 
 Goal: the reviewer that makes the product feel intelligent — structured findings, checkbox selection, targeted revision loop — plus the deterministic linters (У-3) the original lacks.
 
-- [ ] 111\. Structured review output (review.v2)
+- [x] 111\. Structured review output (review.v2)
   - Review agent returns `{verdict: needs_revision | pass, summary, mustFix[], recommendations[]}`; each item `{sectionPath, title, body, suggestion, confidence 1..10}`. Р-1 outer-JSON parse + one retry; boards persist with full history (never applied automatically).
   - Acceptance Criteria: schema validated with fixtures; malformed output → one retry then visible error; boards survive reload; existing accept/ignore/request-changes decisions still resolve.
   - _Dependencies: 107_ · _Requirements: Эталон §1.3_ · _Touches: `src/modules/agents/review/**`_ · _Complexity: Large_ · _Parallel-safe: no_
 
-- [ ] 112\. Review card parity UI
+- [x] 112\. Review card parity UI
   - Verdict badge (Needs Revision / Pass), summary, collapsible Must Fix (checked by default) and Recommendations (unchecked), confidence badge with tooltip, italic Suggestion; buttons Accept feedback / Request changes / Ignore; checkbox state travels with the decision and is fixed in history once decided.
   - Acceptance Criteria: defaults per group; the three buttons behave per Эталон §1.3; a decided board renders its final checkbox state after reload.
   - _Dependencies: 111_ · _Requirements: Эталон §1.3_ · _Touches: `src/modules/web/feed/**`, `review-board.tsx`_ · _Complexity: Large_ · _Parallel-safe: no_
 
-- [ ] 113\. Targeted revision cycle
+- [x] 113\. Targeted revision cycle
   - Request changes with selected items → an in-feed message stating what was folded in and which open calls the writer made → Rev N+1 → a re-review that verifies the selected items and may add findings caused by the revision → loop until Pass + acceptance. Transition table extended for the loop; the M2 rule (100% of edges tested) holds.
   - Acceptance Criteria: the re-review prompt provably receives the selected items; unselected items are not re-litigated (fixture); each cycle appends, never overwrites; the loop is bounded with honest copy on exhaustion (gate-copy pattern).
   - _Dependencies: 111, 112_ · _Requirements: Эталон §1.3_ · _Touches: `src/modules/workflow/transition-table.ts`, `src/modules/agents/review/**`_ · _Complexity: Large_ · _Parallel-safe: no_
