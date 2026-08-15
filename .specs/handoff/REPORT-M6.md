@@ -125,7 +125,8 @@ finally { setBusy(null) }               ← снимается, только к�
 - `pnpm test:unit` — **1401 тест, 70 файлов, зелено** (было 1396: +5 за раунд).
 - `pnpm test:e2e` — **90 тестов, зелено** на Chromium и WebKit локально. Firefox локально не стартует (D-11, дефект машины) — авторитет по нему CI.
 - `pnpm lint`, `pnpm typecheck`, `pnpm test:boundaries` — зелено.
-- Вывод CI по PR — в конце этой секции после прогона.
+- **CI по PR [#36](https://github.com/g09747653-bot/spec-platform/pull/36) — оба обязательных чека зелёные** (прогон [31857569249](https://github.com/g09747653-bot/spec-platform/actions/runs/31857569249)): «Lint, boundaries, types, unit» — 2 мин 10 с; «End-to-end (Chromium, Firefox, WebKit)» — 13 мин 3 с. Firefox, который локально не стартует, на CI прошёл.
+- Первый прогон был красным по `pnpm format:check`: я не прогнал Prettier. Починено отдельным коммитом — и заодно `artifacts/` внесён в `.prettierignore`: файлы бандла в артефактах — это то, что написали модели, а переформатированный артефакт перестаёт быть артефактом.
 
 ### 6. Что осталось Архитектору
 
