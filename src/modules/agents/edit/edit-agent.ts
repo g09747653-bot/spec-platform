@@ -86,72 +86,95 @@ function renderDocuments(documents: readonly EditDocument[]): string {
 }
 
 export function createEditAgent(adapter: LlmAdapter) {
-  return {
-    async propose(input: EditAgentInput): Promise<EditOutcome> {
-      const prompt = assemblePrompt(
-        'edit.propose.v1',
-        {
-          documents: renderDocuments(input.documents),
-          fileNames: input.documents.map((document) => document.fileName).join(', '),
-          instruction: input.instruction,
-        },
-        { contentLanguage: input.contentLanguage },
-      );
+  /**
+   * One resample on an unusable draft — exactly one (D-94's rule, applied here).
+   *
+   * The M9п gate walk is what asked for it: the local model returned a reply that was not parseable
+   * JSON, and the whole edit was lost to a single bad sample. Resampling is the cheapest repair that
+   * **invents nothing** — the answer is a set of whole documents, so there is no half of it worth
+   * salvaging — and one is the right number: a second failure is a signal about the prompt or the
+   * model, and a third sample would hide it behind a longer wait.
+   */
+  async function sample(input: EditAgentInput, attempt: number): Promise<EditOutcome> {
+    const outcome = await propose(input);
+    if (outcome.kind !== 'draft-invalid' || attempt >= 2) return outcome;
 
-      const result = await adapter.generateStreaming({
-        messages: [
-          { role: 'system', content: prompt.system },
-          { role: 'user', content: prompt.user },
-        ],
-        runId: input.runId,
-        signal: input.signal,
-      });
+    console.warn('edit draft unusable; resampling once', {
+      runId: input.runId,
+      issues: outcome.issues,
+    });
 
-      const attribution: EditAttribution = {
-        providerUsed: result.providerUsed,
-        attempts: result.attempts,
-      };
+    return sample(input, attempt + 1);
+  }
 
-      const draft = parseJsonDocument(result.text);
-      if (draft === null) {
-        return {
-          kind: 'draft-invalid',
-          promptId: prompt.id,
-          issues: ['the draft is not parseable JSON'],
-          ...attribution,
-        };
-      }
+  async function propose(input: EditAgentInput): Promise<EditOutcome> {
+    const prompt = assemblePrompt(
+      'edit.propose.v1',
+      {
+        documents: renderDocuments(input.documents),
+        fileNames: input.documents.map((document) => document.fileName).join(', '),
+        instruction: input.instruction,
+      },
+      { contentLanguage: input.contentLanguage },
+    );
 
-      const parsed = EditResult.safeParse(draft);
-      if (!parsed.success) {
-        return {
-          kind: 'draft-invalid',
-          promptId: prompt.id,
-          issues: parsed.error.issues.map(
-            (issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`,
-          ),
-          ...attribution,
-        };
-      }
+    const result = await adapter.generateStreaming({
+      messages: [
+        { role: 'system', content: prompt.system },
+        { role: 'user', content: prompt.user },
+      ],
+      runId: input.runId,
+      signal: input.signal,
+    });
 
-      const known = new Map(input.documents.map((document) => [document.fileName, document]));
+    const attribution: EditAttribution = {
+      providerUsed: result.providerUsed,
+      attempts: result.attempts,
+    };
 
-      const files = parsed.data.files.flatMap((file): ProposedFileEdit[] => {
-        const original = known.get(file.fileName);
-        if (original === undefined) return [];
-        if (original.content === file.content) return [];
-
-        return [{ fileName: file.fileName, content: file.content, rationale: file.rationale }];
-      });
-
+    const draft = parseJsonDocument(result.text);
+    if (draft === null) {
       return {
-        kind: 'edits',
-        summary: parsed.data.summary,
-        files,
+        kind: 'draft-invalid',
         promptId: prompt.id,
+        issues: ['the draft is not parseable JSON'],
         ...attribution,
       };
-    },
+    }
+
+    const parsed = EditResult.safeParse(draft);
+    if (!parsed.success) {
+      return {
+        kind: 'draft-invalid',
+        promptId: prompt.id,
+        issues: parsed.error.issues.map(
+          (issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`,
+        ),
+        ...attribution,
+      };
+    }
+
+    const known = new Map(input.documents.map((document) => [document.fileName, document]));
+
+    const files = parsed.data.files.flatMap((file): ProposedFileEdit[] => {
+      const original = known.get(file.fileName);
+      if (original === undefined) return [];
+      if (original.content === file.content) return [];
+
+      return [{ fileName: file.fileName, content: file.content, rationale: file.rationale }];
+    });
+
+    return {
+      kind: 'edits',
+      summary: parsed.data.summary,
+      files,
+      promptId: prompt.id,
+      ...attribution,
+    };
+  }
+
+  return {
+    propose: (input: EditAgentInput): Promise<EditOutcome> => sample(input, 1),
   };
 }
 
