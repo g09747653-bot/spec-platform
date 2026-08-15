@@ -702,16 +702,19 @@ Constitution A1 requires boundaries to be lint-enforced. The allowed edges are d
 | `specs` | repository interfaces, capability interfaces |
 | `projects` | repository interfaces, `adapters/parsing`, `adapters/storage` |
 | `prompts` | `specs` (section schema) |
+| `methodologies` | `workflow` (stage model), `specs` (file dictionary, section-list shape) — never `agents`, `prompts`, `projects`, `quality`, `adapters`, `web` (А-6; зона в `eslint.boundaries.js`) |
 | `adapters/*` | external SDKs and configuration only — never a core module |
 
-Nothing may import `quality`; it is reachable only through the capability registry.
+Nothing may import `quality`; it is reachable only through the capability registry. `methodologies` may be imported by `workflow`, `specs`, `agents`, `prompts`, and `web` (А-6): конфигурации методологий — данные; `methodologies` не импортирует никого из своих потребителей, поэтому цикла зон нет (его собственные рёбра — только модель стадий `workflow/model` и словарь файлов `specs`).
 
 ## Data Model
+
+> **А-6 (2026-08-15).** `PROJECTS ||--o{ SESSIONS`: проект держит много сессий-чатов (Generate и Edit), UNIQUE с `sessions.project_id` снят. Требование задач 118/120: Edit-сессия живёт на том же проекте и пишет ревизии в те же `SPEC_FILES`, но несёт собственный граф на собственной строке `WORKFLOW_STATE`. Следствия: страница проекта становится списком чатов (задача 120), поверхность сессии адресуется id сессии, ссылка на проект с единственной сессией ведёт в неё; экспорт остаётся проектным (ревизии `SPEC_FILES` не зависят от числа сессий); дублирование проекта (задача 77) копирует все его сессии. Сессионные колонки задачи 120 (`archived`, отображаемое имя чата) добавляются той же миграцией.
 
 ```mermaid
 erDiagram
     USERS ||--o{ PROJECTS : owns
-    PROJECTS ||--|| SESSIONS : has
+    PROJECTS ||--o{ SESSIONS : has
     PROJECTS ||--o{ SPEC_FILES : contains
     PROJECTS ||--o{ EXPORT_RECORDS : produced
     SESSIONS ||--|| WORKFLOW_STATE : has

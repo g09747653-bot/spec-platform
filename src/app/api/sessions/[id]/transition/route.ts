@@ -9,9 +9,15 @@ import type { OwnerScope } from '@/db/owner-scope';
 import { AllProvidersFailedError } from '@/modules/adapters/llm';
 import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
 import { createReviewAgent } from '@/modules/agents/review/review-agent';
+import { methodologyConfig } from '@/modules/methodologies';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
+import { describeQuestionSet } from '@/modules/projects/create-chat';
+import { createInterviewRepository } from '@/modules/projects/repositories/interview';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
-import { createSessionRepository } from '@/modules/projects/repositories/sessions';
+import {
+  createSessionRepository,
+  type OwnedSession,
+} from '@/modules/projects/repositories/sessions';
 import { lintSpecDocument, type LintFinding } from '@/modules/specs/lint';
 import { isCoreSpecType, type CoreSpecType } from '@/modules/specs/model/spec-files';
 import {
@@ -23,7 +29,10 @@ import { createSpecFileRepository } from '@/modules/specs/repositories/spec-file
 import { errorResponse, jsonResponse, type ErrorCode } from '@/modules/web/api/responses';
 import { applyTransition } from '@/modules/workflow/apply-transition';
 import { registeredCapabilityIds } from '@/modules/workflow/capabilities';
+import { pendingQuestionRound } from '@/modules/workflow/pending-action';
+import { createWorkflowStateRepository } from '@/modules/workflow/repositories/workflow-state';
 import {
+  isAskingStage,
   isSpecStage,
   STAGES,
   SUBSTAGES,
@@ -104,6 +113,57 @@ async function lintApprovedRevision(
 }
 
 /**
+ * The Describe card of an Edit chat, created once per stage entry (task 118).
+ *
+ * The Edit workflow's second step is a sentence the user finishes, and the reference product opens
+ * it prefilled: «I want to update spec {bundle} to …». That prefill is the session's own
+ * `initial_prompt` — stored at the Reference step and shown here — so the card and the record cannot
+ * drift into two different accounts of what the chat is about.
+ *
+ * Idempotent by round number: entering `collect` again after a backward step re-presents the round
+ * that is already there rather than stacking a second identical question, exactly as
+ * `ensureStageReview` re-presents its board.
+ */
+async function ensureDescribeRound(
+  db: SchemaDatabase,
+  session: OwnedSession,
+  position: WorkflowPosition,
+): Promise<void> {
+  if (position.substage !== 'collect') return;
+  if (methodologyConfig(session.methodologyId).chatClass !== 'edit') return;
+  if (!isAskingStage(position.stage)) return;
+
+  const interview = createInterviewRepository(db);
+  const existing = await interview.latestRound(session.id, position.stage);
+  if (existing !== null) return;
+
+  const round = await interview.createRound({
+    sessionId: session.id,
+    stage: position.stage,
+    roundNumber: 1,
+    questions: describeQuestionSet(position.stage),
+    declaredNeeds: ['requested-change'],
+  });
+
+  /*
+   * The card is **registered as pending**, exactly as the rounds endpoint registers the ones it
+   * asks for. Without it the answers endpoint would refuse the submission — it validates against
+   * the round the state says is waiting, which is what stops an answer landing on a card the
+   * session has moved past (task 35). A card the user can see but not submit is worse than no card,
+   * and the first Edit walk found precisely that.
+   */
+  const workflowStateRepository = createWorkflowStateRepository(db);
+  const state = await workflowStateRepository.find(session.id);
+  if (state === null) return;
+
+  await workflowStateRepository.setPendingAction(
+    session.id,
+    pendingQuestionRound(round.id),
+    state.version,
+  );
+}
+
+/**
  * Produces the review of a stage's approved spec on entry to `review` (task 56; FR-010 AC-1;
  * task 114 for the deterministic half).
  *
@@ -131,6 +191,8 @@ async function ensureStageReview(
   position: WorkflowPosition,
   /** The session's content language (У-1; task 108) — findings are prose the user has to read. */
   contentLanguage: string | null,
+  /** The chat's model choice (task 121): a board is an agent call like any other. */
+  modelId: string | null,
 ): Promise<string | null> {
   if (position.substage !== 'review' || !isCoreSpecType(position.stage)) return null;
 
@@ -174,7 +236,7 @@ async function ensureStageReview(
 
   // The configured chain, with failover, exactly as generation uses it: the review agent needs no
   // provider of its own and no configuration of its own (A3; P7).
-  const agent = createReviewAgent(createDefaultAdapter());
+  const agent = createReviewAgent(createDefaultAdapter(undefined, { modelId }));
 
   /*
    * The exhausted-chain case is caught here rather than allowed to propagate, and that is the whole
@@ -311,7 +373,21 @@ export async function POST(
         session.projectId,
         outcome.position,
         session.contentLanguage,
+        session.modelId,
       );
+
+      /*
+       * The Describe step of an Edit chat (task 118), presented on arrival.
+       *
+       * Same shape as `ensureStageReview` above and for the same reason: the card a position owes
+       * the user is produced by *entering* the position, not by the user asking for it — an Edit
+       * chat that landed in Describe with nothing on screen would be a step with no step in it.
+       *
+       * Unlike the review it costs no model call: the question is the same one every time and its
+       * prefill comes from the session's own stored prompt, so there is nothing here that can hang,
+       * fail over, or need a counter beside it.
+       */
+      await ensureDescribeRound(db, session, outcome.position);
 
       return jsonResponse({
         stage: outcome.position.stage,

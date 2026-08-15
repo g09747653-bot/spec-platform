@@ -100,6 +100,8 @@ export interface FeedSourceProposal {
   fileName: string;
   instruction: string;
   status: 'pending' | 'accepted' | 'rejected';
+  /** The cross-file edit this belongs to (task 118); `null` for a single-file refinement. */
+  editBatchId: string | null;
   createdAt: string;
 }
 

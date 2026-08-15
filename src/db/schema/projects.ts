@@ -42,12 +42,17 @@ export const projects = pgTable(
 );
 
 /**
- * The workflow run for a project (FR-003; ERD `PROJECTS ||--|| SESSIONS`).
+ * One conversation on a project (FR-003; ERD `PROJECTS ||--o{ SESSIONS`, amendment А-6).
  *
- * `project_id` is unique, so the one-to-one relationship is enforced by the database rather than by
- * convention. `initial_prompt` is `NOT NULL`: a session cannot exist without the grounding input
- * that FR-003 AC-1 requires it to persist, and FR-003 AC-3 keeps that text available to every later
- * stage without the user restating it.
+ * **A project holds many sessions.** The UNIQUE on `project_id` was dropped in M9п, because the Edit
+ * workflow (task 118) needs a second chat that writes revisions into the *same* `spec_files` — so it
+ * must live on the same project — while carrying its own graph on its own `workflow_state` row. The
+ * index that replaces the constraint is not decoration: every read below a project now filters by
+ * `project_id` and expects several rows back.
+ *
+ * `initial_prompt` is `NOT NULL`: a session cannot exist without the grounding input that FR-003
+ * AC-1 requires it to persist, and FR-003 AC-3 keeps that text available to every later stage
+ * without the user restating it.
  *
  * `summary` stays null until the interview agent persists one — the third condition of the
  * interview exit gate (constitution A2) is precisely "this column is not null".
@@ -58,8 +63,30 @@ export const sessions = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     projectId: uuid('project_id')
       .notNull()
-      .unique()
       .references(() => projects.id, { onDelete: 'cascade' }),
+    /**
+     * What this chat is called in the project's list (task 120).
+     *
+     * `NOT NULL`, so the list always has something to print and to search: a chat with no name of
+     * its own would make the search box lie about what it covers. Distinct from `projects.name`
+     * because the two name different things now — a project is the bundle, a session is one
+     * conversation about it.
+     *
+     * Defaulted for the same reason `methodology_id` is: rows written before M9п are backfilled with
+     * the project's name (which is what the chat has always been called, since a project *was* its
+     * session), and a caller that does not care gets the same honest placeholder `deriveProjectName`
+     * falls back to (D-20). Every caller that has the user's words in hand passes a derived title.
+     */
+    title: text('title').notNull().default('Untitled chat'),
+    /**
+     * Archived chats leave the Active list and nothing else (task 120).
+     *
+     * A flag rather than a deletion, and the whole acceptance criterion is that distinction:
+     * archiving is reversible and never destroys a row. Nothing below a session reads it — the
+     * bundle a session produced stays exportable whether or not the chat that produced it is
+     * archived.
+     */
+    archived: boolean('archived').notNull().default(false),
     initialPrompt: text('initial_prompt').notNull(),
     summary: text('summary'),
     /** Current-state field by design; not immutable (solution.md — Entity Notes). */
@@ -89,15 +116,28 @@ export const sessions = pgTable(
      * the boundary against the registry.
      */
     methodologyId: text('methodology_id').notNull().default('myspec-greenfield-v1'),
+    /**
+     * The model this chat's agent calls use (task 121; Эталон §1.5 — the composer's picker).
+     *
+     * `null` is Auto and is the default: the configured failover chain, exactly as А-3 requires Auto
+     * to mean. A provider id pins the chain to that one provider. No CHECK, for the same reason
+     * `methodology_id` has none — the set of providers is a property of the deployment's
+     * configuration, not of the data, and a row naming a provider whose key was later removed must
+     * still open (it degrades to Auto).
+     */
+    modelId: text('model_id'),
     /** Number of times the session has reached `complete` (FR-020). */
     completionCount: integer('completion_count').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   },
   (table) => [
+    index('sessions_project_id_idx').on(table.projectId),
     check(
       'sessions_audience_profile_valid',
       sql`${table.audienceProfile} IN (${list(AUDIENCE_PROFILES)})`,
     ),
+    /* A chat with a blank name is a row the list cannot print and the search cannot match. */
+    check('sessions_title_not_blank', sql`${table.title} ~ '[^[:space:]]'`),
   ],
 );
 

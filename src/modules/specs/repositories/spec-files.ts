@@ -48,6 +48,14 @@ export interface OwnedSpecFile {
   currentRevision: number;
 }
 
+/** A file an edit may reference: it has an approved revision, and this is that revision. */
+export interface ApprovedFile {
+  specFileId: string;
+  specType: SpecType;
+  revisionNumber: number;
+  content: string;
+}
+
 export interface ExportableFile {
   /** The spec file's id — what a per-file action (copy, FR-016) addresses it by. */
   specFileId: string;
@@ -91,6 +99,62 @@ export function createSpecFileRepository(db: SchemaDatabase) {
 
       const row = rows[0];
       return row === undefined ? null : toOwnedSpecFile(row);
+    },
+
+    /**
+     * The project's files that have something an edit could be based on (task 118).
+     *
+     * "Has an approved revision" is the whole filter, and it is the Reference step's acceptance
+     * criterion stated as a query rather than as a rule the picker remembers: a document nobody has
+     * approved is a draft, and offering it as the basis of an edit would let a session rewrite text
+     * that was never accepted in the first place. The current approved revision number comes along
+     * because it is what the proposal's `base_revision` will be.
+     */
+    async approvedFiles(scope: OwnerScope, projectId: string): Promise<ApprovedFile[]> {
+      if (!UUID.test(projectId)) return [];
+
+      const rows = await queryRows(
+        db,
+        sql`
+          SELECT
+            ${specFiles}.id,
+            ${specFiles}.spec_type,
+            approved.revision_number,
+            approved.content
+          FROM ${specFiles}
+          JOIN ${projects} ON ${projects}.id = ${specFiles}.project_id
+          JOIN LATERAL (
+            SELECT ${specRevisions}.revision_number, ${specRevisions}.content
+            FROM ${specRevisions}
+            WHERE ${specRevisions}.spec_file_id = ${specFiles}.id
+              AND ${specRevisions}.approved = true
+            ORDER BY ${specRevisions}.revision_number DESC
+            LIMIT 1
+          ) AS approved ON TRUE
+          WHERE ${specFiles}.project_id = ${projectId}::uuid
+            AND ${projects}.owner_id = ${scope.userId}::uuid
+          ORDER BY ${specFiles}.spec_type ASC
+        `,
+        z.object({
+          id: z.uuid(),
+          spec_type: z.string(),
+          revision_number: z.number().int().positive(),
+          content: z.string(),
+        }),
+      );
+
+      return rows.flatMap((row) => {
+        if (!isSpecType(row.spec_type)) return [];
+
+        return [
+          {
+            specFileId: row.id,
+            specType: row.spec_type,
+            revisionNumber: row.revision_number,
+            content: row.content,
+          },
+        ];
+      });
     },
 
     /**

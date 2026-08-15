@@ -122,7 +122,10 @@ export async function POST(
     specType: specFile.specType,
   });
 
-  const agent = createRevisionAgent(createDefaultAdapter());
+  // The chat's model choice (task 121). Read from the project's primary chat, because this route is
+  // entered by *file* id: a refinement has no session of its own, and the conversation that owns the
+  // bundle is the one whose choice applies.
+  const agent = createRevisionAgent(createDefaultAdapter(undefined, { modelId: project.modelId }));
   const regenerated = await agent.revise({
     specType: specFile.specType,
     sources: collected.sources,

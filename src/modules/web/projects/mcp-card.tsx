@@ -1,0 +1,51 @@
+import { Button } from '../ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+
+/**
+ * The MCP Servers placeholder (task 120; Эталон §1.5).
+ *
+ * It is a **frame**, and it says so. The reference product's project page splits MCP servers into a
+ * per-project list and a User Profile list, and that split is worth showing because it is where the
+ * capability will live — but nothing behind it exists yet (А-2 Backlog: the MCP runtime is out of
+ * scope), so the count is the true one, the button is disabled, and the copy makes no promise about
+ * when.
+ *
+ * A server component with no client behaviour at all: the acceptance criterion is that this card
+ * performs no network call, and the surest way to hold it is to render nothing that could.
+ */
+export function McpCard() {
+  return (
+    <Card data-testid="mcp-card">
+      <CardHeader>
+        <CardTitle>MCP Servers</CardTitle>
+        <CardDescription>
+          Tools an agent could reach while it works on this bundle. Not yet available — this is the
+          shape it will take, not a feature waiting to be switched on.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-sm font-medium">This project</span>
+          <span className="text-ink-muted text-xs" data-testid="mcp-project-count">
+            0 servers
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-sm font-medium">User profile</span>
+          <span className="text-ink-muted text-xs" data-testid="mcp-profile-count">
+            0 servers
+          </span>
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled
+          data-testid="mcp-add-server"
+          className="self-start"
+        >
+          Add server
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}

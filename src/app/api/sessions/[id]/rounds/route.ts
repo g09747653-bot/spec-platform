@@ -113,7 +113,7 @@ export async function POST(
    * that the M6 gate walk reported. No test caught it: they all point the chain at the stub anyway,
    * so both worlds looked identical from inside the suite.
    */
-  const agent = createInterviewAgent(createDefaultAdapter());
+  const agent = createInterviewAgent(createDefaultAdapter(undefined, { modelId: session.modelId }));
 
   /*
    * An exhausted provider chain is an answer, not a crash (round 2, Д-6).

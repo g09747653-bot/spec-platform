@@ -18,7 +18,8 @@ import { EXPORT_MODES } from '@/modules/specs/model/export';
 import { PROPOSAL_STATUSES, REVIEW_DECISIONS, REVIEW_OUTCOMES } from '@/modules/specs/model/review';
 import { REVISION_ORIGINS, SPEC_FILE_NAMES, SPEC_TYPES } from '@/modules/specs/model/spec-files';
 
-import { projects } from './projects';
+import { generationRuns } from './generation';
+import { projects, sessions } from './projects';
 
 /** Renders a tuple of names as a SQL value list. The inputs are compile-time constants. */
 const list = (values: readonly string[]) => sql.raw(values.map((value) => `'${value}'`).join(', '));
@@ -88,6 +89,25 @@ export const specRevisions = pgTable(
     derivedFrom: uuid('derived_from').references((): AnyPgColumn => specRevisions.id, {
       onDelete: 'restrict',
     }),
+    /**
+     * The chat that produced this revision (task 118; А-6).
+     *
+     * A project now holds several conversations, so "which chat wrote this?" stopped being answerable
+     * from the project — and the history of a file that an Edit session rewrote has to name it, or the
+     * revision list reads as though one conversation did everything.
+     *
+     * Nullable, because every revision written before M9п was written by the project's only session
+     * and there is nothing to infer: a row that names no chat means "written before chats were
+     * distinguishable", which is a different fact from naming the wrong one. Immutable like every
+     * other column of the table (see the trigger in `migrations/0014`).
+     *
+     * The migration declares this constraint **`DEFERRABLE INITIALLY DEFERRED`**, which Drizzle's
+     * schema language cannot express — see `migrations/0014` for why it must be: without deferral a
+     * project delete fails against its own history, because the cascade reaches `sessions` before it
+     * reaches `spec_revisions`. `ON DELETE` stays absent (`NO ACTION`): cascading would delete a
+     * bundle when a chat is deleted, and `SET NULL` would be an update of a frozen column.
+     */
+    sourceSessionId: uuid('source_session_id').references(() => sessions.id),
     /** The attachments available as context when this revision was generated (DR-12). */
     contextAttachmentIds: jsonb('context_attachment_ids')
       .notNull()
@@ -265,10 +285,28 @@ export const proposedChanges = pgTable(
     /** The user's plain-language instruction, kept so the card can restate what was asked. */
     instruction: text('instruction').notNull(),
     status: text('status').notNull().default('pending'),
+    /**
+     * The cross-file edit these rows belong to (task 118), or `null` for a single-file refinement.
+     *
+     * An Edit session proposes changes to several files at once and the user decides on the **set** —
+     * so the set needs a name, and the name is **the generation run that produced it**. That choice
+     * does two things a fresh uuid would not: it makes the batch reachable from the run the feed
+     * already shows, and it makes "which chat wrote this edit?" a join through
+     * `generation_runs.session_id` rather than a fourth column repeating what the run already knows.
+     * One run proposes one batch, so the identity is exact.
+     *
+     * A column rather than a table because a batch has no properties of its own beyond its members:
+     * everything a card prints — the instruction, the diffs, the status — already lives on the rows,
+     * and a parent table would only be a second place for the status to disagree with them.
+     *
+     * Nullable: the M4 refinement path proposes one file and decides one file, exactly as before.
+     */
+    editBatchId: uuid('edit_batch_id').references(() => generationRuns.id),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
     decidedAt: timestamp('decided_at', { withTimezone: true, mode: 'date' }),
   },
   (table) => [
+    index('proposed_changes_edit_batch_id_idx').on(table.editBatchId),
     /*
      * DR-11, as a database invariant. `uniqueIndex(...).where(...)` is a partial index: rows whose
      * status is not `pending` are not in it at all, so a file may accumulate any number of decided

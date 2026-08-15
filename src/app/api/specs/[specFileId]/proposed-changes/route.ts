@@ -85,7 +85,9 @@ export async function POST(
    */
   const project = await createProjectRepository(db).findById(scope, specFile.projectId);
 
-  const agent = createRefinementAgent(createDefaultAdapter());
+  const agent = createRefinementAgent(
+    createDefaultAdapter(undefined, { modelId: project?.modelId ?? null }),
+  );
   const refined = await agent.propose({
     specType: specFile.specType,
     specContent: current.content,

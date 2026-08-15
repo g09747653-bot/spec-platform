@@ -330,7 +330,7 @@ export function createAttachmentRepository(db: SchemaDatabase) {
     async copySourcesForProject(
       scope: OwnerScope,
       projectId: string,
-    ): Promise<{ blobKey: string; fileName: string; mimeType: string }[]> {
+    ): Promise<{ blobKey: string; fileName: string; mimeType: string; sessionId: string }[]> {
       if (!UUID.test(projectId)) return [];
 
       const rows = await queryRows(
@@ -338,7 +338,8 @@ export function createAttachmentRepository(db: SchemaDatabase) {
         sql`
           SELECT ${attachments.blobKey} AS blob_key,
                  ${attachments.fileName} AS file_name,
-                 ${attachments.mimeType} AS mime_type
+                 ${attachments.mimeType} AS mime_type,
+                 ${attachments.sessionId} AS session_id
           FROM ${attachments}
           JOIN ${sessions} ON ${sessions.id} = ${attachments.sessionId}
           JOIN ${projects} ON ${projects.id} = ${sessions.projectId}
@@ -346,13 +347,21 @@ export function createAttachmentRepository(db: SchemaDatabase) {
             AND ${projects.ownerId} = ${scope.userId}
           ORDER BY ${attachments.uploadedAt}
         `,
-        z.object({ blob_key: z.string(), file_name: z.string(), mime_type: z.string() }),
+        z.object({
+          blob_key: z.string(),
+          file_name: z.string(),
+          mime_type: z.string(),
+          session_id: z.uuid(),
+        }),
       );
 
       return rows.map((row) => ({
         blobKey: row.blob_key,
         fileName: row.file_name,
         mimeType: row.mime_type,
+        // Which chat the document was attached to (А-6): a project has several now, and a copied
+        // object has to land under the copy of *its* chat.
+        sessionId: row.session_id,
       }));
     },
 

@@ -42,21 +42,17 @@ async function withDatabase<T>(body: (client: Client) => Promise<T>): Promise<T>
  * under test is precisely "a page loads while a run is going".
  */
 async function seedRunningGeneration(
-  projectUrl: string,
+  sessionUrl: string,
   stage: string,
   deltas: readonly string[],
 ): Promise<string> {
-  const projectId = projectUrl.split('/').at(-1) ?? '';
+  // The session surface is addressed by session id since А-6, so the URL *is* the session id.
+  const sessionId = sessionUrl.split('/').at(-1) ?? '';
 
   return withDatabase(async (client) => {
-    const session = await client.query<{ id: string }>(
-      'SELECT id FROM sessions WHERE project_id = $1',
-      [projectId],
-    );
-
     const run = await client.query<{ id: string }>(
       "INSERT INTO generation_runs (session_id, stage, status, attempt) VALUES ($1, $2, 'running', 1) RETURNING id",
-      [session.rows[0]?.id ?? '', stage],
+      [sessionId, stage],
     );
     const runId = run.rows[0]?.id ?? '';
 

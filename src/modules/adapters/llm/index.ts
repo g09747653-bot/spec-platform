@@ -22,7 +22,13 @@ export {
   ProviderConfigurationError,
   type ProviderEntry,
 } from './provider-registry';
-export { createDefaultAdapter } from './default-adapter';
+export {
+  createDefaultAdapter,
+  modelRegistry,
+  pinnedProvider,
+  AUTO_MODEL,
+  type ModelChoice,
+} from './default-adapter';
 export {
   createStreamRecorder,
   DEFAULT_BATCH_BYTES,
@@ -55,6 +61,12 @@ export {
   pointCountFromNotePrompt,
   stubRevisionNoteDocument,
 } from './stub-revision-note';
+export {
+  documentsFromEditPrompt,
+  instructionFromEditPrompt,
+  looksLikeEditPrompt,
+  stubEditDocument,
+} from './stub-edit';
 export {
   documentFromRefinementPrompt,
   instructionFromRefinementPrompt,

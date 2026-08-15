@@ -1,8 +1,14 @@
 import { getEnv } from '@/config/env';
 import { getDatabase } from '@/db/client';
 import type { OwnerScope } from '@/db/owner-scope';
-import { createGenerationStore, type LlmAdapter } from '@/modules/adapters/llm';
+import {
+  createGenerationStore,
+  type GenerationStore,
+  type LlmAdapter,
+} from '@/modules/adapters/llm';
 import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
+import type { EditDocument } from '@/modules/agents/edit/edit-agent';
+import { runEdit } from '@/modules/agents/edit/run-edit';
 import { createDefaultResearch } from '@/modules/adapters/research';
 import {
   assembleContext,
@@ -17,15 +23,20 @@ import { runGeneration } from '@/modules/agents/spec/run-generation';
 import { targetSpecType } from '@/modules/agents/spec/target-spec-type';
 import { methodologyConfig, stageOf } from '@/modules/methodologies';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
+import { referenceOptionId, REFERENCE_QUESTION_ID } from '@/modules/projects/create-chat';
+import { createInterviewRepository } from '@/modules/projects/repositories/interview';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
-import { createSessionRepository } from '@/modules/projects/repositories/sessions';
+import {
+  createSessionRepository,
+  type OwnedSession,
+} from '@/modules/projects/repositories/sessions';
 import type { SpecType } from '@/modules/specs/model/spec-files';
 import { createReviewRepository } from '@/modules/specs/repositories/reviews';
 import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
 import { createSpecFileRepository } from '@/modules/specs/repositories/spec-files';
 import { applyTransition } from '@/modules/workflow/apply-transition';
 import { registeredCapabilityIds } from '@/modules/workflow/capabilities';
-import { isSpecStage } from '@/modules/workflow/model/stages';
+import { isSpecStage, type AskingStage } from '@/modules/workflow/model/stages';
 import type { ReasonCode } from '@/modules/workflow/reason-codes';
 import { errorResponse, type ErrorCode } from '@/modules/web/api/responses';
 import {
@@ -106,6 +117,194 @@ async function writeRevisionNote(input: {
     // of it (FR-018 AC-7 — nothing here reaches the browser).
     console.warn('revision note not produced', { specType: input.specType, error });
   }
+}
+
+/**
+ * The Review step of an Edit chat: propose, do not write (task 118).
+ *
+ * Three reads decide what the model is asked, and all three come from persisted state:
+ *
+ * - **which documents** — the option ids the Reference round recorded, resolved back to spec files
+ *   through the bundle plan of the chat that produced them;
+ * - **what to change** — the words the user wrote at Describe;
+ * - **the current text** — the newest *approved* revision of each referenced file, which is the same
+ *   text the Reference step required to exist.
+ *
+ * The stream carries the same events a spec generation does, so the card, the counter and the stop
+ * control on the page are the ones that already exist. What it never carries is a `complete` with a
+ * revision number, because no revision was written: the answer is a batch of proposals, and the
+ * user decides on it.
+ */
+async function editReview(
+  db: ReturnType<typeof getDatabase>,
+  scope: OwnerScope,
+  session: OwnedSession,
+  stage: AskingStage,
+  store: GenerationStore,
+): Promise<Response> {
+  const referenced = await referencedDocuments(db, scope, session);
+  const instruction = await describedChange(db, session, stage);
+
+  /*
+   * Both refusals are gate-shaped rather than generation-shaped: nothing has been asked of a model,
+   * and the answer names the step that is missing. A chat that reached `generate` without a
+   * described change got there by a backward step, which is legal and recoverable.
+   */
+  if (referenced.length === 0) {
+    return errorResponse('GATE_REJECTED', { reason: 'INTERVIEW_INCOMPLETE' });
+  }
+  if (instruction === null) {
+    return errorResponse('GATE_REJECTED', { reason: 'NO_ANSWERED_ROUND' });
+  }
+
+  const run = await store.createRun(session.id, stage);
+  const encoder = new TextEncoder();
+
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let open = true;
+
+      const send = (event: GenerationEvent) => {
+        if (!open) return;
+        try {
+          controller.enqueue(encoder.encode(encodeEvent(event)));
+        } catch {
+          open = false;
+        }
+      };
+
+      send({ type: 'run', runId: run.id, stage, attempt: 1 });
+
+      try {
+        const outcome = await runEdit({
+          db,
+          scope,
+          adapter: createDefaultAdapter(undefined, { modelId: session.modelId }),
+          store,
+          runId: run.id,
+          documents: referenced,
+          instruction,
+          contentLanguage: session.contentLanguage,
+        });
+
+        switch (outcome.status) {
+          case 'proposed':
+            await createProjectRepository(db).touch(scope, session.projectId);
+            send({ type: 'complete', specFileId: run.id, revisionNumber: outcome.files.length });
+            break;
+          case 'no-change':
+            send({
+              type: 'error',
+              code: 'NO_CHANGE',
+              message:
+                'Nothing in the referenced documents needed to change for that request. Describe the change differently, or reference another document.',
+              retryable: true,
+            });
+            break;
+          case 'failed':
+            send({
+              type: 'error',
+              code: outcome.code,
+              message: outcome.overloaded
+                ? 'The service is busy right now. Nothing has been lost — try again in a minute.'
+                : 'The edit could not be prepared. Your bundle is untouched.',
+              retryable: true,
+            });
+            break;
+        }
+      } catch {
+        send({
+          type: 'error',
+          code: 'GENERATION_FAILED',
+          message: 'The edit could not be prepared. Your bundle is untouched.',
+          retryable: true,
+        });
+      } finally {
+        open = false;
+        try {
+          controller.close();
+        } catch {
+          // Already cancelled by a client that went away.
+        }
+      }
+    },
+
+    // Round 4, Р-2: a dropped reader is not an abandoned run. Same contract as a spec generation —
+    // deliberately empty, because `send` stops writing on its own once the stream is gone.
+    cancel() {
+      return undefined;
+    },
+  });
+
+  return new Response(body, {
+    status: 200,
+    headers: {
+      'content-type': GENERATION_STREAM_CONTENT_TYPE,
+      'cache-control': 'no-store, no-transform',
+      'x-accel-buffering': 'no',
+    },
+  });
+}
+
+/**
+ * The documents an Edit chat referenced, with the text an edit would be based on.
+ *
+ * Resolved from the Reference round's answers rather than from a column, because the answers *are*
+ * the record of the pick (task 118). The option ids were derived from file names, so the bundle plan
+ * of the chat that produced the bundle maps them back to storage slots — the same plan the export
+ * and the sidebar read, so all three agree on what `plan.md` means.
+ */
+async function referencedDocuments(
+  db: ReturnType<typeof getDatabase>,
+  scope: OwnerScope,
+  session: OwnedSession,
+): Promise<(EditDocument & { specFileId: string })[]> {
+  const rounds = await createInterviewRepository(db).roundHistory(session.id);
+  const reference = rounds.find((round) => round.stage === 'interview');
+  if (reference === undefined) return [];
+
+  const selected = new Set(
+    reference.answers.flatMap((answer) =>
+      answer.questionId === REFERENCE_QUESTION_ID ? answer.selectedOptionIds : [],
+    ),
+  );
+  if (selected.size === 0) return [];
+
+  const project = await createProjectRepository(db).findById(scope, session.projectId);
+  if (project === null) return [];
+
+  const config = methodologyConfig(project.methodologyId);
+  const nameOf = new Map(
+    config.stages.flatMap((entry) =>
+      entry.document === null ? [] : [[entry.document.specType, entry.document.fileName] as const],
+    ),
+  );
+
+  const approved = await createSpecFileRepository(db).approvedFiles(scope, session.projectId);
+
+  return approved.flatMap((file) => {
+    const fileName = nameOf.get(file.specType) ?? `${file.specType}.md`;
+    if (!selected.has(referenceOptionId(fileName))) return [];
+
+    return [{ specFileId: file.specFileId, fileName, content: file.content }];
+  });
+}
+
+/** What the user asked for at Describe: the free text of the working stage's newest answered round. */
+async function describedChange(
+  db: ReturnType<typeof getDatabase>,
+  session: OwnedSession,
+  stage: AskingStage,
+): Promise<string | null> {
+  const rounds = await createInterviewRepository(db).roundHistory(session.id);
+
+  const described = rounds
+    .filter((round) => round.stage === stage)
+    .flatMap((round) => round.answers)
+    .map((answer) => answer.freeText?.trim() ?? '')
+    .filter((text) => text !== '');
+
+  return described[described.length - 1] ?? null;
 }
 
 export async function POST(
@@ -202,6 +401,19 @@ export async function POST(
     );
   }
 
+  /*
+   * An Edit chat's Review step (task 118).
+   *
+   * It shares this endpoint deliberately: from the workflow's point of view it is the same movement
+   * — `collect → generate`, past the same gate, subject to the same one-run-at-a-time rule above,
+   * answered on the same stream. What differs is entirely what the run *produces*: a spec run writes
+   * a revision, an edit run writes a batch of proposals and no revision at all. Branching after the
+   * guards rather than before them is what keeps that sentence true.
+   */
+  if (methodology.chatClass === 'edit') {
+    return editReview(db, scope, session, stage, store);
+  }
+
   // Assembled before the stream opens, so a context that cannot be read is an error the client gets
   // as a status code rather than as a half-written document (FR-008 AC-6).
   //
@@ -219,7 +431,7 @@ export async function POST(
 
   const run = await store.createRun(session.id, stage);
 
-  const adapter = createDefaultAdapter();
+  const adapter = createDefaultAdapter(undefined, { modelId: session.modelId });
 
   const encoder = new TextEncoder();
 
@@ -312,6 +524,8 @@ export async function POST(
           context: context.text,
           // What the prompt was built from, recorded on the revision this run writes (DR-12).
           contextAttachmentIds: collected.contextAttachmentIds,
+          // And which chat wrote it (task 118): a project holds several now (А-6).
+          sourceSessionId: session.id,
           ...(applied.length === 0 ? {} : { changeInstruction: reviseInstruction(applied.length) }),
           progress: {
             delta: (sequence, text) => {

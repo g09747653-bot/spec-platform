@@ -137,6 +137,7 @@ const proposal = (over: Partial<FeedSourceProposal> = {}): FeedSourceProposal =>
   fileName: 'constitution.md',
   instruction: 'Tighten the scope section',
   status: 'pending',
+  editBatchId: null,
   createdAt: T.revision2,
   ...over,
 });

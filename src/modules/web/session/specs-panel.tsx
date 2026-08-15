@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import type { BundleEntry } from '@/modules/methodologies';
 
 /**
@@ -58,7 +60,22 @@ export function SpecsPanel({ plan, files }: SpecsPanelProps) {
               data-testid="specs-panel-row"
               data-file={document.fileName}
             >
-              <span className="font-mono text-xs">{document.fileName}</span>
+              {/*
+               * A written file opens in the viewer (task 122); one that does not exist yet is not a
+               * link, because there is nothing to open. That is the whole of "click opens the
+               * viewer" — the row is the same row either way, and its status already says which.
+               */}
+              {file?.specFileId == null || file.revisionCount === 0 ? (
+                <span className="font-mono text-xs">{document.fileName}</span>
+              ) : (
+                <Link
+                  href={`/specs/${file.specFileId}`}
+                  className="font-mono text-xs hover:underline"
+                  data-testid="specs-panel-open"
+                >
+                  {document.fileName}
+                </Link>
+              )}
               <span className={`text-xs ${status.tone}`} data-testid="specs-panel-status">
                 {status.label}
               </span>

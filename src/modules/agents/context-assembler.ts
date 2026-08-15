@@ -86,6 +86,14 @@ export interface ContextSources {
   approvedSpecs: readonly ContextSpec[];
   feedback?: ContextFeedbackSelection;
   research?: readonly ContextResearch[];
+  /** Documents the message named with `@` (task 121) — bundle files or attachments. */
+  references?: readonly ContextReference[];
+}
+
+export interface ContextReference {
+  /** The name the user typed: `requirements.md`, `notes.pdf`. */
+  name: string;
+  content: string;
 }
 
 export interface ContextBudget {
@@ -215,6 +223,20 @@ function renderAttachments(attachments: readonly ContextAttachment[]): string {
   return [UNTRUSTED_PREAMBLE, ...blocks].join('\n\n');
 }
 
+/**
+ * Referenced documents, named and quoted (task 121).
+ *
+ * Wrapped as untrusted data like every other body the user supplied: a bundle file is text a model
+ * wrote and a person approved, which makes it material to read rather than instructions to follow.
+ */
+function renderReferences(references: readonly ContextReference[]): string {
+  const blocks = [...references]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((reference) => untrustedBlock(`referenced: ${reference.name}`, reference.content));
+
+  return [UNTRUSTED_PREAMBLE, ...blocks].join('\n\n');
+}
+
 function renderResearch(pages: readonly ContextResearch[]): string {
   const blocks = [...pages]
     .sort((a, b) => a.url.localeCompare(b.url))
@@ -310,6 +332,25 @@ export function assembleContext(
       fixed: false,
     },
   ];
+
+  /*
+   * Documents the user pointed at with `@` (task 121).
+   *
+   * A separate section from «already approved», and a **fixed** one, because it answers a different
+   * question. The approved bundle is background the model may consult; a reference is the thing the
+   * message is *about*, and it is the one section a length budget must not quietly shorten — a
+   * truncated reference would answer a question about half a document without saying so.
+   */
+  const references = sources.references ?? [];
+
+  if (references.length > 0) {
+    sections.push({
+      key: 'references',
+      heading: '## Documents this message refers to',
+      body: renderReferences(references),
+      fixed: true,
+    });
+  }
 
   const research = sources.research ?? [];
 

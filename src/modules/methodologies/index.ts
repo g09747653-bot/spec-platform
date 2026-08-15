@@ -48,6 +48,7 @@ export {
   methodologyConfig,
   transitionTableFor,
   DEFAULT_METHODOLOGY_ID,
+  EDIT_METHODOLOGY_ID,
   METHODOLOGY_CONFIGS,
   METHODOLOGY_IDS,
   type MethodologyId,

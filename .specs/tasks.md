@@ -1476,7 +1476,7 @@ Goal: methodologies become data, the surface becomes the product's information a
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 118\. Edit workflow (Reference → Describe → Review)
+- [x] 118\. Edit workflow (Reference → Describe → Review)
   - Edit chat class over `myspec-edit-v1`: Reference (pick bundle files from a completed session), Describe (prefilled «I want to update spec {bundle} to …»), Review (the model proposes cross-file edits rendered as diff cards; approve applies all touched files atomically in one transaction as new revisions; request-changes loops through the M8п cycle machinery).
   - Reuses M4 proposed-changes/diff plumbing and M8п review loop; no new decision endpoints.
   - Acceptance Criteria:
@@ -1503,7 +1503,7 @@ Goal: methodologies become data, the surface becomes the product's information a
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
-- [ ] 120\. Project page: chats, filters, MCP placeholder
+- [x] 120\. Project page: chats, filters, MCP placeholder
   - Generate | Edit tabs listing that project's chats; search by name; Active / Archived / All filters (archive = new boolean on sessions with archive/restore actions; archived sessions excluded from Active everywhere); rows carry methodology badge, bundle badge, completion status, and «Last message Nd ago» derived from the feed's newest block.
   - MCP Servers placeholder card: per-project vs User Profile split, «0 servers», Add server disabled with honest copy (per А-2 Backlog: real MCP runtime is out of scope).
   - Acceptance Criteria:
@@ -1517,7 +1517,7 @@ Goal: methodologies become data, the surface becomes the product's information a
   - _Complexity: Large_
   - _Parallel-safe: yes_
 
-- [ ] 121\. Composer upgrades: @-references, slash commands, model picker
+- [x] 121\. Composer upgrades: @-references, slash commands, model picker
   - @-references: typing `@` offers bundle files and attachments; a chosen reference travels with the message and the handler injects that file's current content into the agent context (existing context-assembly path; no new write path).
   - Slash commands: `/` opens a menu whose entries map 1:1 onto existing actions (ask round, proceed, approve, request changes, export…) and dispatch to the same endpoints as the buttons — a command the current position's gate refuses shows the gate-copy reason.
   - Per-chat model picker: registry derived from configured providers (Auto + each available model; models whose keys are absent are hidden); selection persists on the session; every agent call for that session honours it; Auto = the failover chain exactly as today.
@@ -1532,7 +1532,7 @@ Goal: methodologies become data, the surface becomes the product's information a
   - _Complexity: Large_
   - _Parallel-safe: yes_
 
-- [ ] 122\. Document viewer: Outline / Preview / Raw / Diff
+- [x] 122\. Document viewer: Outline / Preview / Raw / Diff
   - Viewer over a spec file's revisions, opened from the sidebar or a document card: Outline (heading tree parsed from markdown; clicking scrolls Preview to the section), Preview (rendered markdown), Raw (exact bytes), Diff (against the previous revision, reusing the M4 diff renderer; green added / red removed).
   - Read-only; revision switcher lists all revisions with their review verdicts.
   - Acceptance Criteria:

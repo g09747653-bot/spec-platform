@@ -92,12 +92,20 @@ export function duplicateName(name: string): string {
 async function copyObjects(
   storage: StorageStore,
   scope: OwnerScope,
-  newSessionId: string,
-  sources: readonly { blobKey: string; fileName: string; mimeType: string }[],
+  sessionMap: ReadonlyMap<string, string>,
+  sources: readonly {
+    blobKey: string;
+    fileName: string;
+    mimeType: string;
+    sessionId: string;
+  }[],
 ): Promise<Map<string, string>> {
   const mapping = new Map<string, string>();
 
   for (const source of sources) {
+    const newSessionId = sessionMap.get(source.sessionId);
+    if (newSessionId === undefined) continue;
+
     try {
       const bytes = await storage.read(scope, source.blobKey);
       const { blobKey } = await storage.put(scope, {
@@ -135,11 +143,34 @@ export async function duplicateProject(
   if (found === undefined) return null;
 
   const newProjectId = randomUUID();
-  const newSessionId = randomUUID();
   const name = duplicateName(found.name);
 
+  /*
+   * **Every chat of the project** (А-6), each with a new id minted here.
+   *
+   * Minted in the application rather than by the database because the stored objects have to be
+   * copied *before* the statement runs — an attachment's blob key contains its session id, and
+   * `blob_key` is unique, so two rows cannot address one object. Ordered by creation, so the copy's
+   * first chat is the copy of the source's first chat: which chat is "primary" is decided by that
+   * order, and a copy whose primary chat was a different conversation would inherit the wrong
+   * history attribution.
+   */
+  const sourceSessions = await db
+    .select({ id: sessions.id, createdAt: sessions.createdAt })
+    .from(sessions)
+    .where(sql`${sessions.projectId} = ${projectId}::uuid`)
+    .orderBy(sessions.createdAt, sessions.id);
+
+  const sessionMap = new Map(sourceSessions.map((row) => [row.id, randomUUID()] as const));
+  const sessionMapJson = JSON.stringify(Object.fromEntries(sessionMap));
+
+  const firstSession = sourceSessions[0];
+  if (firstSession === undefined) return null;
+
+  const newSessionId = sessionMap.get(firstSession.id) ?? randomUUID();
+
   const sourceAttachments = await attachmentRepository.copySourcesForProject(scope, projectId);
-  const keyMapping = await copyObjects(storage, scope, newSessionId, sourceAttachments);
+  const keyMapping = await copyObjects(storage, scope, sessionMap, sourceAttachments);
 
   /*
    * `key_mapping` travels into the statement as a single jsonb value rather than as one parameter per
@@ -157,17 +188,28 @@ export async function duplicateProject(
         WHERE ${projects}.id = ${projectId}::uuid
           AND ${projects}.owner_id = ${scope.userId}::uuid
       ), src_session AS (
-        SELECT ${sessions}.*
+        /*
+         * Every chat of the source, each paired with the id its copy will carry (А-6). The map
+         * arrives as one jsonb value rather than as one parameter per chat, for the reason the key
+         * mapping does: a statement whose shape depends on the data is a statement tested only at
+         * the sizes somebody happened to try.
+         */
+        SELECT ${sessions}.*, (${sessionMapJson}::jsonb ->> ${sessions}.id::text)::uuid AS new_id
         FROM ${sessions}
         JOIN src ON src.id = ${sessions}.project_id
+        WHERE ${sessionMapJson}::jsonb ? ${sessions}.id::text
       ), new_project AS (
         INSERT INTO ${projects} (id, owner_id, name)
         SELECT ${newProjectId}::uuid, src.owner_id, ${name} FROM src
         RETURNING id
       ), new_session AS (
-        INSERT INTO ${sessions} (id, project_id, initial_prompt, summary, quality_enabled, audience_profile, content_language)
-        SELECT ${newSessionId}::uuid, new_project.id, s.initial_prompt, s.summary, s.quality_enabled,
-               s.audience_profile, s.content_language
+        INSERT INTO ${sessions} (
+          id, project_id, title, archived, initial_prompt, summary, quality_enabled,
+          audience_profile, content_language, methodology_id, created_at
+        )
+        SELECT s.new_id, new_project.id, s.title, s.archived, s.initial_prompt, s.summary,
+               s.quality_enabled, s.audience_profile, s.content_language, s.methodology_id,
+               s.created_at
         FROM new_project, src_session s
         RETURNING id
       ), new_state AS (
@@ -178,16 +220,16 @@ export async function duplicateProject(
          * pending from persisted state anyway (FR-017), so nothing is lost but the dangling pointer.
          */
         INSERT INTO ${workflowState} (session_id, stage, substage, pending_action, version)
-        SELECT new_session.id, ws.stage, ws.substage, NULL, 1
-        FROM new_session, ${workflowState} ws, src_session s
-        WHERE ws.session_id = s.id
+        SELECT s.new_id, ws.stage, ws.substage, NULL, 1
+        FROM ${workflowState} ws
+        JOIN src_session s ON ws.session_id = s.id
         RETURNING session_id
       ), new_rounds AS (
         INSERT INTO ${questionRounds} (session_id, stage, round_number, questions, presented_at)
-        SELECT new_session.id, qr.stage, qr.round_number, qr.questions, qr.presented_at
-        FROM new_session, ${questionRounds} qr, src_session s
-        WHERE qr.session_id = s.id
-        RETURNING id, stage, round_number
+        SELECT s.new_id, qr.stage, qr.round_number, qr.questions, qr.presented_at
+        FROM ${questionRounds} qr
+        JOIN src_session s ON qr.session_id = s.id
+        RETURNING id, session_id, stage, round_number
       ), new_answers AS (
         /* Rounds are keyed by (stage, round_number) within a session, which is what maps old to new. */
         INSERT INTO ${answers} (round_id, question_id, selected_option_ids, free_text, answered_at)
@@ -195,15 +237,17 @@ export async function duplicateProject(
         FROM ${answers} a
         JOIN ${questionRounds} qr ON qr.id = a.round_id
         JOIN src_session s ON s.id = qr.session_id
-        JOIN new_rounds nr ON nr.stage = qr.stage AND nr.round_number = qr.round_number
+        JOIN new_rounds nr
+          ON nr.session_id = s.new_id AND nr.stage = qr.stage AND nr.round_number = qr.round_number
         RETURNING id
       ), new_needs AS (
         INSERT INTO ${informationNeeds} (session_id, stage, name, satisfied_by_round)
-        SELECT new_session.id, n.stage, n.name, nr.id
-        FROM new_session, ${informationNeeds} n
+        SELECT s.new_id, n.stage, n.name, nr.id
+        FROM ${informationNeeds} n
         JOIN src_session s ON s.id = n.session_id
         LEFT JOIN ${questionRounds} qr ON qr.id = n.satisfied_by_round
-        LEFT JOIN new_rounds nr ON nr.stage = qr.stage AND nr.round_number = qr.round_number
+        LEFT JOIN new_rounds nr
+          ON nr.session_id = s.new_id AND nr.stage = qr.stage AND nr.round_number = qr.round_number
         RETURNING id
       ), new_attachments AS (
         INSERT INTO ${attachments} (
@@ -211,10 +255,10 @@ export async function duplicateProject(
           parse_status, parse_reason, extracted_text, attached_at_stage, uploaded_at
         )
         SELECT
-          new_session.id, at.file_name, at.mime_type, at.size_bytes,
+          s.new_id, at.file_name, at.mime_type, at.size_bytes,
           ${mappingJson}::jsonb ->> at.blob_key,
           at.parse_status, at.parse_reason, at.extracted_text, at.attached_at_stage, at.uploaded_at
-        FROM new_session, ${attachments} at
+        FROM ${attachments} at
         JOIN src_session s ON s.id = at.session_id
         WHERE ${mappingJson}::jsonb ? at.blob_key
         RETURNING id
@@ -246,14 +290,21 @@ export async function duplicateProject(
          */
         INSERT INTO ${specRevisions} (
           spec_file_id, revision_number, content, approved, origin, derived_from,
-          context_attachment_ids, created_at
+          context_attachment_ids, source_session_id, created_at
         )
+        /*
+         * The chat that wrote a revision travels with it, remapped to the copy of that chat (task
+         * 118). Unattributed history stays unattributed: a revision written before chats were told
+         * apart cannot be assigned to one now, and guessing would put words in a conversation's
+         * mouth. The join is outer, so a null source stays null rather than dropping the revision.
+         */
         SELECT nf.id, sr.revision_number, sr.content, sr.approved, sr.origin, NULL,
-               '[]'::jsonb, sr.created_at
+               '[]'::jsonb, ss.new_id, sr.created_at
         FROM ${specRevisions} sr
         JOIN ${specFiles} sf ON sf.id = sr.spec_file_id
         JOIN src ON src.id = sf.project_id
         JOIN new_files nf ON nf.spec_type = sf.spec_type
+        LEFT JOIN src_session ss ON ss.id = sr.source_session_id
         WHERE sr.origin = 'parity'
         RETURNING id, spec_file_id, revision_number
       ), new_reviews AS (
@@ -277,7 +328,8 @@ export async function duplicateProject(
       )
       SELECT
         (SELECT id FROM new_project) AS project_id,
-        (SELECT session_id FROM new_state) AS session_id
+        /* The copy's primary chat — the copy of the source's first, which is where a link lands. */
+        (SELECT session_id FROM new_state WHERE session_id = ${newSessionId}::uuid) AS session_id
     `,
     DuplicatedRow,
   );

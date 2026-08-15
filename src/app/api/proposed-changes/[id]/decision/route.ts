@@ -26,6 +26,61 @@ import { errorResponse, jsonResponse } from '@/modules/web/api/responses';
  */
 const ProposalDecision = z.object({ decision: z.enum(['accept', 'reject']) });
 
+/**
+ * Accepting or rejecting a whole cross-file edit (task 118).
+ *
+ * Rejecting writes nothing but the statuses — every referenced document stays byte-for-byte what it
+ * was, which is the M4 contract re-asserted at bundle scale. Accepting is one statement in the
+ * service: either every touched file gains a revision or none does.
+ *
+ * `PENDING_DECISION` on an empty claim is the same answer the single-file path gives, and for the
+ * same reason: the second of two submissions must find the work already done rather than repeat it.
+ */
+async function decideBatch(
+  db: ReturnType<typeof getDatabase>,
+  scope: NonNullable<Awaited<ReturnType<typeof currentOwnerScope>>>,
+  editBatchId: string,
+  decision: 'accept' | 'reject',
+): Promise<Response> {
+  const service = createProposedChangeService(db);
+  const members = await service.batchMembers(scope, editBatchId);
+  const projectId = members[0]?.projectId;
+
+  if (projectId === undefined) return errorResponse('NOT_FOUND');
+
+  if (decision === 'reject') {
+    const rejected = await service.rejectBatch(scope, editBatchId);
+    if (rejected === 0) return errorResponse('PENDING_DECISION', { editBatchId });
+
+    return jsonResponse({ editBatchId, decision: 'reject', files: [] });
+  }
+
+  /*
+   * The chat that produced this edit, stamped on every revision it writes.
+   *
+   * Resolved from the batch's own run rather than taken from the request: the source of a revision
+   * is a fact about who did the work, and a client-supplied one would be a claim.
+   */
+  const session = await service.sessionForBatch(scope, editBatchId);
+  if (session === null) return errorResponse('NOT_FOUND');
+
+  const applied = await service.acceptBatch(scope, editBatchId, session);
+  if (applied.length === 0) return errorResponse('PENDING_DECISION', { editBatchId });
+
+  await createProjectRepository(db).touch(scope, projectId);
+
+  return jsonResponse({
+    editBatchId,
+    decision: 'accept',
+    files: applied.map((file) => ({
+      specFileId: file.specFileId,
+      fileName: file.fileName,
+      revisionId: file.revisionId,
+      revisionNumber: file.revisionNumber,
+    })),
+  });
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -54,6 +109,18 @@ export async function POST(
   }
 
   const { decision } = parsed.data;
+
+  /*
+   * A cross-file edit is decided as one thing (task 118).
+   *
+   * The card the user pressed shows several diffs and one pair of buttons, so the decision has to
+   * cover the set — deciding member by member would let a reload land between two of them and leave
+   * the bundle half-edited. Same endpoint, same body, same two answers: what changes is that the
+   * proposal names a batch, and the service applies or refuses all of its members in one statement.
+   */
+  if (proposal.editBatchId !== null) {
+    return decideBatch(db, scope, proposal.editBatchId, decision);
+  }
 
   const claimed = await service.markDecided(
     proposal.id,

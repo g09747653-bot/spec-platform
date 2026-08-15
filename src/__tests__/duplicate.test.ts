@@ -448,6 +448,110 @@ describe('duplicateProject (task 77)', () => {
     });
   });
 
+  /**
+   * А-6 — a project holds several chats, so a copy of the project is a copy of all of them.
+   *
+   * Copying only one would silently drop the Edit conversations, and the copy's bundle would then
+   * have a history whose authors no longer exist on that project. The primary chat is the copy of
+   * the source's *first*, because that is the chat unattributed history belongs to and the one a
+   * project link lands in.
+   */
+  it('copies every chat of the project, keeping the first one primary (А-6)', async () => {
+    const [edit] = await database.db
+      .insert(sessions)
+      .values({
+        projectId: sourceProjectId,
+        title: 'Edit constitution.md',
+        initialPrompt: 'I want to update spec constitution.md to ',
+        methodologyId: 'myspec-edit-v1',
+        archived: true,
+      })
+      .returning({ id: sessions.id });
+
+    await database.db
+      .insert(workflowState)
+      .values({ sessionId: edit?.id ?? '', stage: 'constitution', substage: 'collect' });
+
+    const result = await duplicate();
+    expect(result).not.toBeNull();
+
+    const copied = await database.db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.projectId, result?.projectId ?? ''));
+
+    expect(copied).toHaveLength(2);
+    expect(copied.map((row) => row.methodologyId).sort()).toEqual([
+      'myspec-edit-v1',
+      'myspec-greenfield-v1',
+    ]);
+
+    // Titles and the archived flag travel: a chat that was filed away stays filed away.
+    const editCopy = copied.find((row) => row.methodologyId === 'myspec-edit-v1');
+    expect(editCopy?.title).toBe('Edit constitution.md');
+    expect(editCopy?.archived).toBe(true);
+
+    // Each copied chat has its own workflow row, at the position its source was in.
+    const states = await Promise.all(
+      copied.map(
+        async (row) =>
+          (
+            await database.db
+              .select()
+              .from(workflowState)
+              .where(eq(workflowState.sessionId, row.id))
+          )[0],
+      ),
+    );
+    expect(states.map((state) => state?.stage).sort()).toEqual(['constitution', 'requirements']);
+
+    // And the result names the copy of the *first* chat.
+    const primary = copied.find((row) => row.methodologyId === 'myspec-greenfield-v1');
+    expect(result?.sessionId).toBe(primary?.id);
+  });
+
+  it('carries the authorship of each revision to the copy of the chat that wrote it', async () => {
+    await buildMidSession();
+
+    const [file] = await database.db
+      .select()
+      .from(specFiles)
+      .where(eq(specFiles.projectId, sourceProjectId));
+
+    /*
+     * A second revision, attributed to the source's chat as a real generation would have written
+     * it. Inserted rather than updated: `source_session_id` is frozen by the same trigger that
+     * freezes the content (DR-2), which is exactly the property that makes authorship trustworthy.
+     */
+    await database.exec(
+      `INSERT INTO spec_revisions (spec_file_id, revision_number, content, approved, source_session_id)
+       VALUES ('${file?.id ?? ''}', 3, '# Requirements v3', true, '${sourceSessionId}')`,
+    );
+
+    const result = await duplicate();
+    expect(result).not.toBeNull();
+
+    const [copiedFile] = await database.db
+      .select()
+      .from(specFiles)
+      .where(eq(specFiles.projectId, result?.projectId ?? ''));
+
+    const copiedRevisions = await database.db
+      .select()
+      .from(specRevisions)
+      .where(eq(specRevisions.specFileId, copiedFile?.id ?? ''));
+
+    const attributed = copiedRevisions.filter((row) => row.sourceSessionId !== null);
+    expect(attributed).toHaveLength(1);
+
+    // Remapped, not carried over: the copy's history names the copy's chat, never the source's.
+    expect(attributed[0]?.sourceSessionId).toBe(result?.sessionId);
+    expect(attributed[0]?.sourceSessionId).not.toBe(sourceSessionId);
+
+    // And history that named no chat still names none — an author is not invented after the fact.
+    expect(copiedRevisions.some((row) => row.sourceSessionId === null)).toBe(true);
+  });
+
   it('is null for a project the caller does not own, and writes nothing (AR-2)', async () => {
     const stranger = OwnerScope.forAuthenticatedUser('11111111-1111-4111-8111-111111111111');
 
