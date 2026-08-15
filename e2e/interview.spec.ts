@@ -50,9 +50,18 @@ test.describe('workflow gates and the structured interview', () => {
       page.getByTestId('mcq-question-q-problem').locator('[data-testid^="mcq-other-"]'),
     ).toHaveCount(1);
 
-    // While the card waits, generation is blocked in this interaction (task 34; FR-005 AC-4).
+    /*
+     * While the card waits, nothing else is on offer (task 34; FR-005 AC-4).
+     *
+     * In the feed the card and the stage's own controls are on screen together, so this has to be
+     * stated where the panel used to state it by simply not existing: no Ask (a second ask hands
+     * back the same round — FR-017 AC-3), no door, no drafting.
+     */
     await expect(page.getByTestId('generation-blocked')).toBeVisible();
     await expect(page.getByTestId('generate-spec')).toHaveCount(0);
+    await expect(page.getByTestId('awaiting-round')).toBeVisible();
+    await expect(page.getByTestId('ask-round')).toHaveCount(0);
+    await expect(page.getByTestId('proceed')).toHaveCount(0);
 
     // --- The same card comes back after a reload (FR-017 AC-3) ---
     await page.reload();
