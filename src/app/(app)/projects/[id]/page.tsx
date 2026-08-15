@@ -6,8 +6,8 @@ import { createGenerationStore } from '@/modules/adapters/llm/generation-store';
 import { requireOwnerScope } from '@/modules/projects/auth/scope';
 import { createAttachmentRepository } from '@/modules/projects/repositories/attachments';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
+import { bundlePlan, methodologyConfig } from '@/modules/methodologies';
 import { resolveExportMode } from '@/modules/specs/export/resolve-mode';
-import { fileNamesForMode } from '@/modules/specs/model/export';
 import { isSpecType } from '@/modules/specs/model/spec-files';
 import { createProposedChangeService } from '@/modules/specs/proposed-changes/proposed-change-service';
 import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
@@ -29,6 +29,8 @@ import { Attachments, type AttachmentModel } from '@/modules/web/session/attachm
 import { CONDITION_COPY, STILL_NEEDED } from '@/modules/web/session/gate-copy';
 import { stageLabel } from '@/modules/web/session/stage-display';
 import { ExportPanel } from '@/modules/web/session/export-panel';
+import { LocalWorkspace, SessionSidebar } from '@/modules/web/session/sidebar';
+import { SpecsPanel, type SpecFileModel } from '@/modules/web/session/specs-panel';
 
 import { assembleFeedSource } from './feed-source';
 
@@ -118,6 +120,36 @@ function requestDeadlineMs(): number {
   return env.LLM_REQUEST_TIMEOUT_MS * env.LLM_PROVIDER_ORDER.length + 15_000;
 }
 
+/**
+ * The sidebar's Specs rows, derived from the revisions the feed already read (task 119).
+ *
+ * No extra query: the feed source carries every revision of the project, and "how many, and is the
+ * newest approved" is a fold over rows already in hand. That is also what makes the section live —
+ * a new revision changes the feed and this list in the same render, from the same data (AC-2).
+ */
+function specsPanelFiles(
+  revisions: readonly { specType: string; revisionNumber: number; approved: boolean }[],
+): SpecFileModel[] {
+  const byType = new Map<string, SpecFileModel>();
+
+  for (const revision of revisions) {
+    const current = byType.get(revision.specType);
+
+    // "Approved" is a property of the newest revision, not of any of them: a file whose latest
+    // revision awaits a decision is not approved, however many approved ones precede it (FR-009).
+    if (current === undefined || revision.revisionNumber >= current.revisionCount) {
+      byType.set(revision.specType, {
+        specFileId: null,
+        specType: revision.specType,
+        revisionCount: revision.revisionNumber,
+        approved: revision.approved,
+      });
+    }
+  }
+
+  return [...byType.values()];
+}
+
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const scope = await requireOwnerScope();
@@ -133,14 +165,26 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
    */
   const exportMode = resolveExportMode('default', qualityExportPort());
   const specFileRepository = createSpecFileRepository(db);
-  const exportable = await specFileRepository.approvedForExport(scope, project.id, exportMode);
-  const exportFiles = exportable.map((file) => ({
-    specFileId: file.specFileId,
-    fileName: file.fileName,
-  }));
-  const omittedFiles = fileNamesForMode(exportMode).filter(
-    (name) => !exportFiles.some((file) => file.fileName === name),
+
+  /*
+   * The bundle the *session's methodology* promises (task 117). Names come from the plan, so the
+   * panel, the sidebar and the archive cannot disagree about what belongs in the bundle or about
+   * what a missing file is called.
+   */
+  const plan = bundlePlan(methodologyConfig(project.methodologyId), exportMode);
+  const exportable = await specFileRepository.approvedForExport(
+    scope,
+    project.id,
+    exportMode,
+    plan.map((entry) => entry.specType),
   );
+  const exportFiles = plan.flatMap((entry) => {
+    const file = exportable.find((candidate) => candidate.specType === entry.specType);
+    return file === undefined ? [] : [{ specFileId: file.specFileId, fileName: entry.fileName }];
+  });
+  const omittedFiles = plan
+    .filter((entry) => !exportFiles.some((file) => file.fileName === entry.fileName))
+    .map((entry) => entry.fileName);
 
   const [source, attachments, snapshotResult, activeRun] = await Promise.all([
     assembleFeedSource(db, scope, project),
@@ -274,7 +318,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           bundleFileCount={exportFiles.length}
         />
 
-        <aside className="flex flex-col gap-4">
+        <SessionSidebar>
+          <SpecsPanel plan={plan} files={specsPanelFiles(source.revisions)} />
+
+          <LocalWorkspace />
+
           <Attachments
             sessionId={project.sessionId}
             attachments={attachments.map((attachment): AttachmentModel => ({
@@ -294,7 +342,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             files={exportFiles}
             omittedFiles={omittedFiles}
           />
-        </aside>
+        </SessionSidebar>
       </div>
     </section>
   );

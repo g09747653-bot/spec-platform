@@ -1490,7 +1490,7 @@ Goal: methodologies become data, the surface becomes the product's information a
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 119\. Sidebar: Specs / Local Workspace / Attachments
+- [x] 119\. Sidebar: Specs / Local Workspace / Attachments
   - Resizable sidebar on the session page: Specs (bundle files with status badges, click opens the viewer of task 122 once it exists — until then the existing preview), Attachments (names + sizes from the M5 store), Local Workspace as an honest stub: «Mount folder» control that plainly says the capability is coming and does nothing else.
   - Acceptance Criteria:
     - Sidebar width persists across reloads (client-side); collapse/expand works.
