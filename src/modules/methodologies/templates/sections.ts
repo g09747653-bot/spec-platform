@@ -1,4 +1,8 @@
-import { defineSectionList, type SectionList } from '@/modules/specs/validate-structure';
+import {
+  defineSectionList,
+  stripTemplateAnnotation,
+  type SectionList,
+} from '@/modules/specs/validate-structure';
 
 import { VENDORED_TEMPLATES, type VendoredTemplateId } from './vendored';
 
@@ -24,14 +28,17 @@ import { VENDORED_TEMPLATES, type VendoredTemplateId } from './vendored';
  * heading of a real document, but the number of phases is the change's business, not the
  * methodology's, so requiring it would fail documents that are perfectly well-formed.
  *
- * Annotations like `*(mandatory)*` are stripped: they are instructions to whoever fills the template
- * in, and they are not part of the document that comes out of it.
+ * Annotations like `*(mandatory)*` are stripped — by `stripTemplateAnnotation`, which the structural
+ * check imports too. Sharing that one function is not tidiness: while the rule lived here alone, the
+ * extractor removed the annotation and the check demanded the bare heading, so a document that
+ * reproduced the vendored template *exactly* — annotation and all, which is what spec-kit's own
+ * output looks like — was rejected for a suffix the template prescribes. What the writer is shown
+ * and what the writer is judged by have to be the same list.
  */
 
 const ATX_LEVEL_2 = /^ {0,3}##[ \t]+(.+?)[ \t]*$/;
 const PLACEHOLDER = /\[[^\]]*\]/;
 const HTML_COMMENT = /<!--[\s\S]*?-->/g;
-const TRAILING_ANNOTATION = /\s*\*\([^)]*\)\*\s*$/;
 const ORDINAL = /(^|\s)(\d+|[A-Z])(\.|:|\)|\b)/;
 
 /** The stable level-2 headings of a template, in document order. May be empty. */
@@ -49,7 +56,7 @@ export function stableHeadings(template: string): string[] {
     }
     HTML_COMMENT.lastIndex = 0;
 
-    const text = raw.replace(TRAILING_ANNOTATION, '').trim();
+    const text = stripTemplateAnnotation(raw);
 
     if (text === '' || PLACEHOLDER.test(text) || ORDINAL.test(text)) continue;
     if (!headings.includes(text)) headings.push(text);

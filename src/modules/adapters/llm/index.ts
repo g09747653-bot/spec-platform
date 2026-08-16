@@ -8,9 +8,24 @@ export {
   type GenerateResult,
   type LlmAdapter,
   type ModelMessage,
+  promptMessages,
+  type PromptForTarget,
+  type PromptTarget,
+  type ProviderCapacity,
   type ProviderId,
   type ToolDefinition,
 } from './types';
+export {
+  capacityFor,
+  charsForTokens,
+  estimatePromptTokens,
+  estimateTokens,
+  generationAllowance,
+  localCapacity,
+  LOCAL_GENERATION_RESERVE_TOKENS,
+  PromptOverCapacityError,
+  UNPACKED_TARGET,
+} from './capacity';
 export {
   createFailoverClient,
   type FailoverClientOptions,

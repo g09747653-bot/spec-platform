@@ -62,8 +62,51 @@ export interface AttemptStart {
   discardsPreviousOutput: boolean;
 }
 
+/**
+ * What a provider will accept as a prompt, and what it must leave room to answer with (А-8).
+ *
+ * Declared by the adapter layer and consumed by whoever builds the prompt, which is what makes
+ * "pack to the target's capacity" expressible at all. The numbers themselves, and the estimate that
+ * converts characters into them, live in `capacity.ts` — at the vendor edge, where an opinion about
+ * tokenisation belongs (constitution P7).
+ */
+export interface ProviderCapacity {
+  /** Tokens the assembled prompt may occupy. */
+  promptTokens: number;
+  /** The *minimum* held back for the answer — the number `promptTokens` was derived from. */
+  generationReserveTokens: number;
+  /**
+   * The whole window, when prompt and answer share one. Absent for hosted providers.
+   *
+   * Present so the adapter can bound the answer by **what is actually left** rather than by the
+   * minimum. The distinction is not academic: the M9п round-4 walk cut an Edit proposal at exactly
+   * 4 096 generated tokens — the flat reserve — with 6 900 tokens of window still unused, and a JSON
+   * answer stopped mid-object is an unparseable answer. The reserve is what the prompt budget is
+   * computed against; the bound is what the answer may use, and the two are not the same number.
+   */
+  windowTokens?: number;
+}
+
+/** The provider an attempt is about to be made against. */
+export interface PromptTarget {
+  provider: ProviderId;
+  capacity: ProviderCapacity;
+}
+
+/**
+ * A prompt built for the provider that is about to read it (А-8).
+ *
+ * The chain is a chain of *different windows*, so "the messages" is not one thing: the same session
+ * state is a 30 000-token prompt for a hosted model and must be a packed one for a local model whose
+ * window is 16 384. A caller that supplies a function accepts the duty of fitting the capacity it is
+ * handed, and the failover client holds it to that (`PromptOverCapacityError`). A caller that
+ * supplies a fixed list has made no such promise, and a provider too small for it is skipped rather
+ * than sent a prompt it would silently truncate.
+ */
+export type PromptForTarget = (target: PromptTarget) => readonly ModelMessage[];
+
 export interface GenerateOptions {
-  messages: readonly ModelMessage[];
+  messages: readonly ModelMessage[] | PromptForTarget;
   /** Correlates the call with its `generation_runs` row; used by the durable chunk log (task 44). */
   runId: string;
   /** Tools the model may call during generation. */
@@ -74,6 +117,23 @@ export interface GenerateOptions {
   onAttempt?: (start: AttemptStart) => void;
   /** Cooperative cancellation, so a disconnected client does not keep a provider call alive. */
   signal?: AbortSignal;
+}
+
+/**
+ * The messages a call carries, whether it stated them or asked to be packed for a target (А-8).
+ *
+ * Every implementation of `LlmAdapter` needs this, which is why it sits with the interface rather
+ * than inside one of them: a caller may hand over a fixed list *or* a function of the provider's
+ * window, and an adapter that understood only the first would work perfectly until the first packed
+ * call and then read `undefined` off a function.
+ */
+export function promptMessages(
+  options: GenerateOptions,
+  target: PromptTarget,
+): readonly ModelMessage[] {
+  const source = options.messages;
+
+  return typeof source === 'function' ? source(target) : source;
 }
 
 export interface GenerateResult {

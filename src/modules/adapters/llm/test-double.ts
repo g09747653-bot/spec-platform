@@ -16,8 +16,10 @@ import {
   pointCountFromNotePrompt,
   stubRevisionNoteDocument,
 } from './stub-revision-note';
+import { UNPACKED_TARGET } from './capacity';
 import {
   AllProvidersFailedError,
+  promptMessages,
   type GenerateOptions,
   type GenerateResult,
   type LlmAdapter,
@@ -234,7 +236,9 @@ export function createTestDoubleAdapter(options: TestDoubleOptions = {}): LlmAda
       const text =
         options.followPrompt === true
           ? documentFromPrompt(
-              generateOptions.messages.map((message) => message.content).join('\n'),
+              promptMessages(generateOptions, UNPACKED_TARGET)
+                .map((message) => message.content)
+                .join('\n'),
               document,
             )
           : document;

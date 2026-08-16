@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { PromptOverCapacityError, UNPACKED_TARGET } from '../capacity';
 import {
   createFailoverClient,
   MAX_RATE_LIMIT_WAIT_MS,
@@ -345,8 +346,11 @@ describe('the entries the client consumes', () => {
   it('carry nothing vendor-shaped, which is what keeps the interface neutral (task 42 AC-1)', () => {
     const entry = fakeEntry('google');
 
-    expect(Object.keys(entry).sort()).toEqual(['id', 'model', 'priority', 'stream']);
+    // `capacity` joined the shape with А-8 and is two numbers of tokens — a fact about a window,
+    // which every vendor has, rather than anything shaped like one vendor's.
+    expect(Object.keys(entry).sort()).toEqual(['capacity', 'id', 'model', 'priority', 'stream']);
     expect(typeof entry.stream).toBe('function');
+    expect(Object.keys(entry.capacity).sort()).toEqual(['generationReserveTokens', 'promptTokens']);
   });
 });
 
@@ -376,6 +380,7 @@ describe('rate limiting (round 2, Д-5)', () => {
       id,
       model: `${id}-test-model`,
       priority: 1,
+      capacity: UNPACKED_TARGET.capacity,
       stream: ({ onDelta }) => {
         seen += 1;
         if (seen <= times) return Promise.reject(new RateLimited());
@@ -617,6 +622,7 @@ describe('retryAfterMs (round 2, Д-5)', () => {
           id: 'google',
           model: 'test',
           priority: 1,
+          capacity: UNPACKED_TARGET.capacity,
           stream: () => {
             asked += 1;
             return Promise.reject(asked === 1 ? quotaError : new Error('done differently'));
@@ -648,6 +654,7 @@ describe('retryAfterMs (round 2, Д-5)', () => {
           id: 'google',
           model: 'test',
           priority: 1,
+          capacity: UNPACKED_TARGET.capacity,
           stream: () => Promise.reject(new QuotaError('Please retry in 600s.')),
         },
       ],
@@ -664,5 +671,92 @@ describe('retryAfterMs (round 2, Д-5)', () => {
     ).rejects.toBeInstanceOf(AllProvidersFailedError);
 
     expect(waits).toEqual([MAX_RATE_LIMIT_WAIT_MS]);
+  });
+});
+
+/**
+ * The window is part of the chain now (task 130; амендмент А-8; D-146).
+ *
+ * A chain is a chain of *different windows*, so "the messages" stopped being one thing: the same
+ * session state is an ordinary prompt for a hosted model and must be packed for a local one. Two
+ * contracts meet here and are deliberately treated differently — a caller that asked to be packed to
+ * a capacity and overshot it has a defect that will repeat identically, while a caller that stated a
+ * fixed prompt has simply outgrown this link.
+ *
+ * What neither may do is reach the provider. A model handed more than it can read does not refuse;
+ * it truncates from the front and answers confidently from what is left.
+ */
+describe('capacity at the boundary (А-8)', () => {
+  const small = (tokens: number): ProviderEntry => ({
+    ...fakeEntry('ollama', { document: 'local answer' }),
+    capacity: { promptTokens: tokens, generationReserveTokens: 64 },
+  });
+
+  const oversize = { role: 'user' as const, content: 'x'.repeat(40_000) };
+
+  it('builds the prompt once per attempt, from the capacity of the provider being tried', async () => {
+    const seen: { provider: ProviderId; promptTokens: number }[] = [];
+
+    const client = createFailoverClient({
+      providers: [
+        { ...fakeEntry('ollama', { failAfterChunks: 0 }), capacity: small(1_000).capacity },
+        fakeEntry('google', { document: 'hosted answer' }, 2),
+      ],
+      timeoutMs: TIMEOUT_MS,
+    });
+
+    const result = await client.generateStreaming({
+      messages: (target) => {
+        seen.push({ provider: target.provider, promptTokens: target.capacity.promptTokens });
+        return [{ role: 'user', content: 'a prompt that fits either window' }];
+      },
+      runId: 'run-1',
+    });
+
+    // Two attempts, two windows: the caller is asked again, for the link that is about to read it.
+    expect(seen).toEqual([
+      { provider: 'ollama', promptTokens: 1_000 },
+      { provider: 'google', promptTokens: UNPACKED_TARGET.capacity.promptTokens },
+    ]);
+    expect(result.providerUsed).toBe('google');
+  });
+
+  it('never streams a prompt past the provider’s window: the next link answers instead', async () => {
+    const failures: ProviderFailure[] = [];
+
+    const client = createFailoverClient({
+      providers: [small(10), fakeEntry('google', { document: 'hosted answer' }, 2)],
+      timeoutMs: TIMEOUT_MS,
+      onProviderFailure: (failure) => failures.push(failure),
+    });
+
+    const result = await client.generateStreaming({ messages: [oversize], runId: 'run-1' });
+
+    expect(result.providerUsed).toBe('google');
+    expect(failures.map((failure) => failure.reason)).toEqual(['over-capacity']);
+    // The skipped link did not consume an attempt: the request was answered on the first one made.
+    expect(result.attempts).toBe(1);
+  });
+
+  it('reports exhaustion when no link in the chain can hold the prompt', async () => {
+    const client = createFailoverClient({
+      providers: [small(10), { ...small(20), id: 'ollama' }],
+      timeoutMs: TIMEOUT_MS,
+    });
+
+    await expect(
+      client.generateStreaming({ messages: [oversize], runId: 'run-1' }),
+    ).rejects.toBeInstanceOf(AllProvidersFailedError);
+  });
+
+  it('raises rather than failing over when a packer overshoots the capacity it was handed', async () => {
+    const client = createFailoverClient({
+      providers: [small(10), fakeEntry('google', { document: 'hosted answer' }, 2)],
+      timeoutMs: TIMEOUT_MS,
+    });
+
+    await expect(
+      client.generateStreaming({ messages: () => [oversize], runId: 'run-1' }),
+    ).rejects.toBeInstanceOf(PromptOverCapacityError);
   });
 });

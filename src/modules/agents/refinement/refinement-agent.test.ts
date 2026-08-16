@@ -6,6 +6,8 @@ import {
   instructionFromRefinementPrompt,
   stubRefinementDocument,
   type LlmAdapter,
+  promptMessages,
+  UNPACKED_TARGET,
 } from '@/modules/adapters/llm';
 
 import { createRefinementAgent } from './refinement-agent';
@@ -25,7 +27,9 @@ const answering = (text: string): LlmAdapter => createTestDoubleAdapter({ docume
 /** An adapter that answers the prompt the way the configured stub provider would. */
 const stub = (): LlmAdapter => ({
   generateStreaming: (options) => {
-    const prompt = options.messages.map((message) => message.content).join('\n');
+    const prompt = promptMessages(options, UNPACKED_TARGET)
+      .map((message) => message.content)
+      .join('\n');
 
     return Promise.resolve({
       text: stubRefinementDocument(prompt),
@@ -59,7 +63,11 @@ describe('createRefinementAgent (task 59)', () => {
       const seen: string[] = [];
       const recorder: LlmAdapter = {
         generateStreaming: (options) => {
-          seen.push(options.messages.map((message) => message.content).join('\n'));
+          seen.push(
+            promptMessages(options, UNPACKED_TARGET)
+              .map((message) => message.content)
+              .join('\n'),
+          );
           return Promise.resolve({
             text: JSON.stringify({ kind: 'proposal', content: DOCUMENT }),
             providerUsed: 'stub',

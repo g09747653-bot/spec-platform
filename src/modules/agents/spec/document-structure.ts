@@ -35,5 +35,14 @@ export function documentStructureVerdict(
 
   if (document.structure.kind === 'free') return { valid: true, violations: [] };
 
-  return validateAgainstSections(content, document.structure.sections);
+  /*
+   * A methodology's list is *parsed from the template we vendor*, and that template writes
+   * `*(mandatory)*` into its own headings. The writer is shown the template, so a faithful document
+   * carries the annotation; the extractor removed it from the list. `ignoreTemplateAnnotations`
+   * closes that gap — and it is set here and nowhere else, because the parity baseline has no
+   * annotations to forgive and D-40 keeps its comparison exact.
+   */
+  return validateAgainstSections(content, document.structure.sections, {
+    ignoreTemplateAnnotations: true,
+  });
 }

@@ -4,6 +4,8 @@ import {
   createTestDoubleAdapter,
   stubReviewDocument,
   type LlmAdapter,
+  promptMessages,
+  UNPACKED_TARGET,
 } from '@/modules/adapters/llm';
 
 import {
@@ -361,7 +363,11 @@ describe('createReviewAgent (tasks 54, 111)', () => {
   /** An adapter that answers with a valid review and records the prompt it was handed. */
   const recordingAdapter = (seen: string[]): LlmAdapter => ({
     generateStreaming: (options) => {
-      seen.push(options.messages.map((message) => message.content).join('\n'));
+      seen.push(
+        promptMessages(options, UNPACKED_TARGET)
+          .map((message) => message.content)
+          .join('\n'),
+      );
       return Promise.resolve({ text: stubReviewDocument(), providerUsed: 'stub', attempts: 1 });
     },
   });

@@ -284,7 +284,7 @@ Rejections are values, not exceptions. `applyTransition` is transactional with a
 | `ReviewAgent` | Produces `{ verdict, summary, mustFix[], recommendations[] }` (review.v2, А-5) with a stable `id` on every feedback item; parsing follows Р-1 (outermost JSON → repair once → one full re-sample). |
 | `RevisionAgent` | Revises an approved spec from a **filtered** feedback set — only the items the user selected. |
 | `DecisionIntentResolver` | Maps a chat-typed message onto a pending decision (FR-009 AC-7): deterministic pattern match first, single-shot model classification only if that is inconclusive. |
-| `ContextAssembler` | Builds the context window from persisted state, with deterministic ordering and size budgeting. |
+| `ContextAssembler` | Builds the context window from persisted state, with deterministic ordering and size budgeting. **Budgeting is provider-aware (А-8):** the target provider declares its effective prompt capacity (tokens), and the assembler packs to it by priority — (1) system instruction + section schema/template are inviolable and always intact, (2) stage-critical state (answered rounds, relevant approved excerpts), (3) attachments/references, (4) web research — shrinking or dropping from the bottom of this list first. A prompt is never handed to a provider larger than its declared capacity: provider-side truncation is treated as a defect, not a degradation path. For local providers the adapter also passes an explicit generation reserve (`num_predict`), so the input allowance is known rather than assumed. Full-capacity providers (paid cloud) keep the full default budget — quality is degraded only where physics demands it, never globally. |
 | `ResearchTool` | Tool wrapper exposing the `research` adapter to agents. |
 
 **Question Set Contract**
@@ -1076,6 +1076,7 @@ All configuration is environment-based and Zod-validated at startup; the process
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY` | Providers |
 | `LLM_PROVIDER_ORDER` | Ordered failover chain (IR-001-AC-4) |
 | `LLM_REQUEST_TIMEOUT_MS` | Per-provider timeout |
+| `OLLAMA_CONTEXT_LENGTH` | The local model's window, from which its declared prompt capacity is derived (А-8). Ollama's own variable, read by its own name: the server sizes its context slot from it and the assembler packs to it, and two numbers meaning one thing is how a prompt gets silently truncated (D-146). Default 4096 — Ollama's default, so an unset machine over-packs rather than overruns |
 | `QUALITY_STAGE_ENABLED` | Registers the optional Quality capability |
 | `MAX_ROUNDS_PER_STAGE` | Question-round budget (default 3) |
 | `DECISION_INTENT_MIN_CONFIDENCE` | Threshold below which a chat decision abstains |

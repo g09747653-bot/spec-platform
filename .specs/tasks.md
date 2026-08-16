@@ -1546,6 +1546,21 @@ Goal: methodologies become data, the surface becomes the product's information a
   - _Complexity: Medium_
   - _Parallel-safe: yes_
 
+- [x] 130\. Provider-aware context packing (амендмент А-8; вне исходной декомпозиции, добавлена Архитектором 2026-08-16)
+  - Every LLM provider declares its effective prompt capacity (tokens) and generation reserve; the Ollama adapter passes an explicit `num_predict`, and its capacity derives from `OLLAMA_CONTEXT_LENGTH` minus that reserve with a safety margin. Cloud providers keep the full default budget.
+  - `ContextAssembler` packs to the TARGET provider's capacity by priority: (1) system instruction + section schema/template — inviolable, always byte-intact; (2) stage-critical state (answered rounds, relevant approved excerpts); (3) attachments/references; (4) web research — shrunk or dropped first. Deterministic packing; a packing record (what was included/dropped, estimated sizes) is logged for gate observability.
+  - A prompt exceeding the declared capacity is an assembler error, never handed to the provider: provider-side truncation is a defect by definition (D-146).
+  - Acceptance Criteria:
+    - A fixture whose full-budget context exceeds local capacity packs with research dropped first and the instruction+template block byte-identical to the unpacked form; the cloud path for the same state produces the same prompt as before А-8 (snapshot).
+    - The Ollama call provably carries `num_predict`; the assembler never exceeds declared capacity (property test over fixtures).
+    - The run-2 failure state (the 114 389-char context that reproduced `missing section`) now yields a structurally conformant document on the local model in a D-91-style pre-flight.
+    - The live gate asserts **zero** `truncating input prompt` records in the server/Ollama log for the whole walk.
+  - _Dependencies: 116_
+  - _Requirements: А-8; А-7 (основной режим — локальный); D-146_
+  - _Touches: `src/modules/adapters/llm/**`, `src/modules/agents/**` (ContextAssembler), `e2e/gate-M9.live.ts` (truncation assert)_
+  - _Complexity: Large_
+  - _Parallel-safe: no_
+
 - [ ] 123\. M9п gate — methodologies walked live (self-run, А-2.1)
   - Live set, bounded deliberately (default config is already covered by the M7п gate): one **full** live journey on `speckit-greenfield-v1` (the longest foreign graph) and one on `myspec-brownfield-v1` (the shortest); one live **Edit** session over the bundle the SpecKit walk produced; a live model-picker check (explicitly select the local model; verify the call and the badge). All five configs green on stub e2e.
   - Closes the M8п open question: the RESULT records, for every requirements/tasks board the walks produce, that linters ran and how many machine items each board carried (zero is a valid count on a clean document — the record is the evidence).

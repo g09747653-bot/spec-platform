@@ -33,7 +33,7 @@ vi.mock('@/db/client', () => ({ getDatabase: vi.fn() }));
 vi.mock('@/modules/adapters/llm/default-adapter', () => ({ createDefaultAdapter: vi.fn() }));
 
 import { getDatabase } from '@/db/client';
-import { stubRefinementDocument } from '@/modules/adapters/llm';
+import { promptMessages, stubRefinementDocument, UNPACKED_TARGET } from '@/modules/adapters/llm';
 import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
 
@@ -87,7 +87,11 @@ describe('conversational refinement endpoints (tasks 59, 60)', () => {
     vi.mocked(createDefaultAdapter).mockReturnValue({
       generateStreaming: (options) =>
         Promise.resolve({
-          text: stubRefinementDocument(options.messages.map((m) => m.content).join('\n')),
+          text: stubRefinementDocument(
+            promptMessages(options, UNPACKED_TARGET)
+              .map((m) => m.content)
+              .join('\n'),
+          ),
           providerUsed: 'stub',
           attempts: 1,
         }),

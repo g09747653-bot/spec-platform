@@ -167,6 +167,20 @@ const baseEnvSchema = z.object({
    * reconfigured (D-90).
    */
   OLLAMA_BASE_URL: z.url().optional().default(DEFAULT_OLLAMA_BASE_URL),
+  /**
+   * The window the local model's server was started with (А-8; task 130).
+   *
+   * **Ollama's own variable, read here by its own name, deliberately.** It is one number describing
+   * one machine: the server sizes its context slot from it, and the assembler packs prompts to it.
+   * A variable of our own meaning the same thing would be two numbers that can disagree — and the
+   * symptom of that disagreement is a silently truncated prompt, which is the defect this whole
+   * amendment exists to remove (D-146).
+   *
+   * The default is Ollama's own default, not the gate's 16 384. A machine that has not set it is
+   * therefore *under*-declared and over-packs, which costs context; over-declaring would cost the
+   * system instruction.
+   */
+  OLLAMA_CONTEXT_LENGTH: positiveInt(4_096),
   /** Ordered failover chain — configuration, never code (IR-001-AC-4). */
   LLM_PROVIDER_ORDER: csv(DEFAULT_PROVIDER_ORDER).pipe(z.array(z.enum(LLM_PROVIDERS)).min(1)),
   LLM_REQUEST_TIMEOUT_MS: positiveInt(60_000),

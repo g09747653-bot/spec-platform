@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { createTestDoubleAdapter, type LlmAdapter } from '@/modules/adapters/llm';
+import {
+  createTestDoubleAdapter,
+  promptMessages,
+  UNPACKED_TARGET,
+  type LlmAdapter,
+} from '@/modules/adapters/llm';
 
 import {
   assembleContext,
@@ -148,7 +153,9 @@ describe('createRevisionAgent (task 57 AC-2)', () => {
   /** Records the prompt the adapter was handed, and answers it the way the stub would. */
   const recordingAdapter = (seen: string[]): LlmAdapter => ({
     generateStreaming: (options) => {
-      const prompt = options.messages.map((message) => message.content).join('\n');
+      const prompt = promptMessages(options, UNPACKED_TARGET)
+        .map((message) => message.content)
+        .join('\n');
       seen.push(prompt);
 
       return createTestDoubleAdapter({ followPrompt: true }).generateStreaming(options);
