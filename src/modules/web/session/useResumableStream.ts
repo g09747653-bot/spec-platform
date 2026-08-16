@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { connectionFromStream, reportServerAnswered, reportServerUnreachable } from './connection';
 import {
   createResumableStream,
   initialStreamState,
@@ -31,7 +32,21 @@ export function useResumableStream(): UseResumableStream {
   const streamRef = useRef<ResumableStream | null>(null);
 
   const stream = (): ResumableStream => {
-    streamRef.current ??= createResumableStream({ onState: setState });
+    streamRef.current ??= createResumableStream({
+      onState: (next) => {
+        setState(next);
+
+        /*
+         * Task 125: the reader already knows whether it has a connection — `reconnecting` is its own
+         * word for having lost one — so the connection banner reads that rather than probing for
+         * itself. Deliberately not a `useEffect` on `state.status`: this is the same call stack the
+         * reader publishes from, so the banner and the card never disagree for a frame.
+         */
+        const reported = connectionFromStream(next);
+        if (reported === 'lost') reportServerUnreachable();
+        else if (reported === 'online') reportServerAnswered();
+      },
+    });
     return streamRef.current;
   };
 

@@ -1586,7 +1586,7 @@ Goal: the visual layer with our own tint, the completion surface, structured loc
   - Acceptance Criteria: theme toggle persists across reloads; a grep/lint gate proves zero hard-coded colors outside the brand file; text contrast meets WCAG AA in both themes (checked for token pairs, not by eye); existing e2e suites green on both themes (one smoke pass per theme).
   - _Dependencies: 110_ · _Requirements: Эталон §1.5; А-2 («свой оттенок»)_ · _Touches: `src/app/globals.css`, `src/modules/web/**`_ · _Complexity: Large_ · _Parallel-safe: no_
 
-- [ ] 125\. Brand loader, connection-lost surface, toasts
+- [x] 125. Brand loader, connection-lost surface, toasts
   - Animated brand loader (our own SVG) for initial session load; a connection-lost surface that appears when the stream/page loses the server and offers reconnect — wired to the existing resume machinery, not a parallel path; toasts for archive/restore/copy/export actions.
   - Acceptance Criteria: killing the dev server mid-session raises the surface, restarting it reconnects and the feed resumes (existing resume tests reused); loader never traps the page (liveness invariant applies); toasts are announced accessibly (aria-live).
   - _Dependencies: 124_ · _Requirements: Эталон §1.5_ · _Touches: `src/modules/web/**`_ · _Complexity: Medium_ · _Parallel-safe: yes_

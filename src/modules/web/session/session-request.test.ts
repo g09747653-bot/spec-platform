@@ -216,6 +216,91 @@ describe('a session-moving request', () => {
     await first;
   });
 
+  /*
+   * Task 125. The connection banner is built from what these requests already learn, so what they
+   * report — and what they deliberately do not — is the whole contract behind it.
+   */
+  describe('reporting whether the server was reachable', () => {
+    it('reports reachable when a response arrives, whatever it says', async () => {
+      const { onState } = recorder();
+      const reachability = vi.fn();
+
+      const request = createSessionRequest({
+        onState,
+        sleep: NEVER,
+        onReachability: reachability,
+        fetchImpl: answering(409, {
+          error: { code: 'CONFLICT', message: 'The session moved on.' },
+        }),
+      });
+
+      await request.send('proceed', '/api/sessions/s/transition');
+
+      // A 409 is the server answering. Only the network's silence is a lost connection.
+      expect(reachability).toHaveBeenCalledExactlyOnceWith(true);
+    });
+
+    it('reports unreachable when the request never got there', async () => {
+      const { onState } = recorder();
+      const reachability = vi.fn();
+
+      const request = createSessionRequest({
+        onState,
+        sleep: NEVER,
+        onReachability: reachability,
+        fetchImpl: () => Promise.reject(new TypeError('Failed to fetch')),
+      });
+
+      await request.send('proceed', '/api/sessions/s/transition');
+
+      expect(reachability).toHaveBeenCalledExactlyOnceWith(false);
+    });
+
+    it('reports nothing when the user abandoned the wait', async () => {
+      const { onState } = recorder();
+      const reachability = vi.fn();
+
+      const request = createSessionRequest({
+        onState,
+        sleep: NEVER,
+        onReachability: reachability,
+        fetchImpl: hangingFetch(),
+      });
+
+      const inFlight = request.send('proceed', '/api/sessions/s/transition');
+      request.abandon();
+      await inFlight;
+
+      // The user stopped waiting; that says nothing about the server, and a banner claiming it had
+      // gone would be the page inventing a fault out of a user's choice.
+      expect(reachability).not.toHaveBeenCalled();
+    });
+
+    it('reports nothing when its own deadline expired', async () => {
+      const { onState } = recorder();
+      const reachability = vi.fn();
+      const fired: (() => void)[] = [];
+
+      const request = createSessionRequest({
+        onState,
+        deadlineMs: 1_000,
+        onReachability: reachability,
+        fetchImpl: hangingFetch(),
+        sleep: () => new Promise<void>((resolve) => fired.push(resolve)),
+      });
+
+      const inFlight = request.send('proceed', '/api/sessions/s/transition');
+      fired.forEach((release) => {
+        release();
+      });
+      await inFlight;
+
+      expect(request.state.notice).toBe(expiredNotice(1_000));
+      // A server past its own worst case may still be working. "Slow" is not "gone".
+      expect(reachability).not.toHaveBeenCalled();
+    });
+  });
+
   it('clears a notice on request, so the next interaction starts clean', async () => {
     const { onState } = recorder();
 

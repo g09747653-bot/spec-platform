@@ -40,3 +40,59 @@
     outline-offset: 2px;
   }
 }
+
+/**
+ * The brand loader's animation (task 125).
+ *
+ * Here rather than inline on the element because keyframes are not an inline style, and here rather
+ * than in `brand.css` because that file's subject is colour. Every rule below moves geometry or
+ * opacity; none of them names a colour.
+ */
+@layer components {
+  .brand-loader-frame {
+    transform-origin: center;
+    animation: brand-loader-spin 2.4s linear infinite;
+  }
+
+  .brand-loader-brackets {
+    stroke-dasharray: 14;
+    animation: brand-loader-trace 1.6s ease-in-out infinite;
+  }
+
+  .brand-loader-slash {
+    animation: brand-loader-pulse 1.6s ease-in-out infinite;
+  }
+
+  @keyframes brand-loader-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes brand-loader-trace {
+    0% {
+      stroke-dashoffset: 28;
+    }
+    100% {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  @keyframes brand-loader-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .brand-loader-frame,
+    .brand-loader-brackets,
+    .brand-loader-slash {
+      animation: none;
+    }
+  }
+}

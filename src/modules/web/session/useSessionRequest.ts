@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { reportServerAnswered, reportServerUnreachable } from './connection';
 import {
   createSessionRequest,
   initialSessionRequestState,
@@ -45,6 +46,12 @@ export function useSessionRequest(deadlineMs?: number): UseSessionRequest {
   const getRequest = useCallback((): SessionRequest => {
     requestRef.current ??= createSessionRequest({
       onState: setState,
+      // Task 125: every session-moving request already learns whether the server is there. This is
+      // where that knowledge reaches the connection banner — no extra request is made for it.
+      onReachability: (reachable) => {
+        if (reachable) reportServerAnswered();
+        else reportServerUnreachable();
+      },
       ...(deadlineMs === undefined ? {} : { deadlineMs }),
     });
     return requestRef.current;

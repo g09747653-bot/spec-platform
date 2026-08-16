@@ -1,3 +1,5 @@
+'use client';
+
 import { themeScriptSource } from './theme';
 
 /**
@@ -13,6 +15,10 @@ import { themeScriptSource } from './theme';
  * DOM update never executes. Ours only ever needs to run during the server-rendered parse, so it is
  * `text/javascript` there and inert `text/plain` on the client. `suppressHydrationWarning` covers
  * the resulting attribute difference.
+ *
+ * `'use client'` is what makes that switch mean anything. Rendered as a Server Component, this
+ * module only ever runs where `window` is undefined, the type is always `text/javascript`, and React
+ * warns on every page in development — which is how the warning turned up in the e2e log.
  */
 export function ThemeScript() {
   return (

@@ -6,6 +6,7 @@ import { useState } from 'react';
 
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { showToast } from '../ui/toast';
 
 /**
  * The project's chats (task 120; Эталон §1.5 — the project page).
@@ -64,12 +65,21 @@ function ArchiveButton({ chat }: { chat: ChatListItem }) {
 
       if (!response.ok) {
         setError('That did not go through. Please try again.');
+        showToast('That chat could not be archived. Nothing changed.', 'danger');
         return;
       }
 
+      // Task 125: the row itself is about to be filtered out of the list by the refresh, so the
+      // confirmation has to live somewhere the row does not — otherwise the only feedback for a
+      // successful archive is a chat disappearing.
+      showToast(
+        chat.archived ? 'Chat restored.' : 'Chat archived. Restore it from Archived.',
+        'success',
+      );
       router.refresh();
     } catch {
       setError('That did not go through. Please try again.');
+      showToast('That chat could not be archived. Nothing changed.', 'danger');
     } finally {
       setBusy(false);
     }
@@ -116,7 +126,7 @@ export function ChatList({ chats }: { chats: readonly ChatListItem[] }) {
     <ul className="flex flex-col gap-3" data-testid="chats-list">
       {chats.map((chat) => (
         <li key={chat.id}>
-          <Card className="hover:border-border transition-colors">
+          <Card className="hover:border-border-strong transition-colors">
             <CardContent className="flex flex-col gap-3 p-4">
               <div className="flex items-center justify-between gap-4">
                 <Link

@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { showToast } from '../ui/toast';
 
 /**
  * The export panel (tasks 22, 73; FR-015 AC-4/AC-6/AC-7/AC-8).
@@ -137,18 +138,21 @@ export function ExportPanel({ projectId, files, omittedFiles, mode }: ExportPane
 
       if (!response.ok) {
         setCopy({ kind: 'failed', specFileId: file.specFileId });
+        showToast(`${file.fileName} could not be copied.`, 'danger');
         return;
       }
 
       markdown = await response.text();
     } catch {
       setCopy({ kind: 'failed', specFileId: file.specFileId });
+      showToast(`${file.fileName} could not be copied.`, 'danger');
       return;
     }
 
     try {
       await navigator.clipboard.writeText(markdown);
       setCopy({ kind: 'copied', specFileId: file.specFileId });
+      showToast(`${file.fileName} copied — the ${mode}-mode revision.`, 'success');
     } catch {
       // AC-4: the text is offered for manual selection rather than lost with an apology.
       setCopy({
@@ -174,14 +178,20 @@ export function ExportPanel({ projectId, files, omittedFiles, mode }: ExportPane
         setFailure(
           parsed.success ? parsed.data.error.message : 'The export could not be produced.',
         );
+        showToast('The export could not be produced.', 'danger');
         return;
       }
 
       const produced = readManifest(response);
       saveArchive(await response.blob(), `${projectId}-specs.zip`);
       setManifest(produced);
+      showToast(
+        `Downloaded ${String(produced.included.length)} ${produced.included.length === 1 ? 'file' : 'files'} in ${produced.mode} mode.`,
+        'success',
+      );
     } catch {
       setFailure('The download did not start. Check your connection and try again.');
+      showToast('The download did not start.', 'danger');
     } finally {
       setBusy(false);
     }
