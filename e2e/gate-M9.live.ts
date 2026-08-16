@@ -75,7 +75,14 @@ const SESSION_CONTROLS = [
   'reject-diff',
   'submit-refinement',
   'chat-send',
-  'export-download',
+  /*
+   * `download-export`, not `export-download` (round 3). The two words were transposed here, and the
+   * cost was not a missing line in a log: at a completed session the Download ZIP button is the *only*
+   * enabled control that moves anything, so the liveness rule reported zero live controls on a page
+   * that had one and called four healthy states red. An invariant that names a control by a testid the
+   * product never had cannot fail safe — it fails silent until the one state that depends on it.
+   */
+  'download-export',
 ];
 
 const problems: string[] = [];
@@ -590,8 +597,10 @@ async function journey(
     await snapshot(page, `${methodology}-${label}-left`);
   }
 
+  // `session-complete` is what the feed renders for a sealed session (`bubbles.tsx`); there has never
+  // been a `completion-panel` testid, so this wait could only ever spend its 120 s and then lie.
   const finished = await page
-    .getByTestId('completion-panel')
+    .getByTestId('session-complete')
     .waitFor({ timeout: 120_000 })
     .then(() => true)
     .catch(() => false);
