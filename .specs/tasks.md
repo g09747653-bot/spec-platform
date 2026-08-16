@@ -1561,7 +1561,7 @@ Goal: methodologies become data, the surface becomes the product's information a
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-- [ ] 123\. M9п gate — methodologies walked live (self-run, А-2.1)
+- [x] 123\. M9п gate — methodologies walked live (self-run, А-2.1)
   - Live set, bounded deliberately (default config is already covered by the M7п gate): one **full** live journey on `speckit-greenfield-v1` (the longest foreign graph) and one on `myspec-brownfield-v1` (the shortest); one live **Edit** session over the bundle the SpecKit walk produced; a live model-picker check (explicitly select the local model; verify the call and the badge). All five configs green on stub e2e.
   - Closes the M8п open question: the RESULT records, for every requirements/tasks board the walks produce, that linters ran and how many machine items each board carried (zero is a valid count on a clean document — the record is the evidence).
   - Artifacts to `artifacts/gate-M9/` (RESULT.md with per-state controls, TRANSCRIPT.md, screens, light trace).

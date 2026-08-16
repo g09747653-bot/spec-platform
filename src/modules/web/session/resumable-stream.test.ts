@@ -62,13 +62,72 @@ function stalls(events: readonly GenerationEvent[]): Response {
   return new Response(body, { status: 200 });
 }
 
+/**
+ * A connection that says nothing but `heartbeat` for a while, then produces (round 5, Р-4; А-9).
+ *
+ * The shape of every long local generation: the run is alive, the socket is fine, and there is no
+ * text yet because the model is still reading the prompt or reasoning. The beats are what tell the
+ * reader those two facts apart from a far end that has gone away.
+ *
+ * It honours the abort signal, because that is the one behaviour of `fetch` this file's `stop()`
+ * depends on: without it a stopped reader would go on consuming beats for ever.
+ */
+function beating(options: {
+  beatMs: number;
+  beats: number;
+  lead?: readonly GenerationEvent[];
+  then?: readonly GenerationEvent[];
+  signal?: AbortSignal | null;
+}): Response {
+  const encoder = new TextEncoder();
+  const write = (
+    controller: ReadableStreamDefaultController<Uint8Array>,
+    event: GenerationEvent,
+  ) => {
+    controller.enqueue(encoder.encode(encodeEvent(event)));
+  };
+
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      (options.lead ?? [run()]).forEach((event) => {
+        write(controller, event);
+      });
+
+      let beats = 0;
+      const timer = setInterval(() => {
+        if (beats < options.beats) {
+          beats += 1;
+          write(controller, { type: 'heartbeat' });
+          return;
+        }
+
+        clearInterval(timer);
+        (options.then ?? []).forEach((event) => {
+          write(controller, event);
+        });
+        controller.close();
+      }, options.beatMs);
+
+      options.signal?.addEventListener('abort', () => {
+        clearInterval(timer);
+        controller.error(new Error('aborted'));
+      });
+    },
+  });
+
+  return new Response(body, { status: 200 });
+}
+
 interface Call {
   url: string;
   method: string;
 }
 
 /** A fetch that answers each call from a queue and records what was asked for. */
-function fakeFetch(responses: (() => Response)[]): { fetchImpl: typeof fetch; calls: Call[] } {
+function fakeFetch(responses: ((init?: RequestInit) => Response)[]): {
+  fetchImpl: typeof fetch;
+  calls: Call[];
+} {
   const calls: Call[] = [];
   let index = 0;
 
@@ -80,7 +139,7 @@ function fakeFetch(responses: (() => Response)[]): { fetchImpl: typeof fetch; ca
     index += 1;
 
     if (next === undefined) return Promise.reject(new Error('no response queued'));
-    return Promise.resolve(next());
+    return Promise.resolve(next(init));
   }) as typeof fetch;
 
   return { fetchImpl, calls };
@@ -103,7 +162,7 @@ const complete = (): GenerationEvent => ({
   revisionNumber: 1,
 });
 
-function reader(responses: (() => Response)[]) {
+function reader(responses: ((init?: RequestInit) => Response)[]) {
   const { fetchImpl, calls } = fakeFetch(responses);
   const states: StreamState[] = [];
 
@@ -111,6 +170,39 @@ function reader(responses: (() => Response)[]) {
     fetchImpl,
     sleep: () => Promise.resolve(),
     backoff: [0, 0, 0],
+    onState: (state) => states.push(state),
+  });
+
+  return { stream, calls, states };
+}
+
+/**
+ * Scaled-down twins of the production pair (15 s beat, 45 s deadline).
+ *
+ * The ratio here is sixteen beats to a deadline rather than three, and deliberately so: a worker
+ * running this suite alongside eighty others does not get its timers when it asks for them, and a
+ * beat that slips past the deadline would read as a defect in the reader rather than as load on the
+ * machine. Sixteen missed slots in a row is not slip. (Production keeps three, because there the
+ * beat is 15 seconds and nothing slips by 45.)
+ */
+const BEAT_MS = 25;
+const IDLE_MS = 400;
+
+/**
+ * The same reader against a real clock.
+ *
+ * Everywhere else the deadline is a fake `sleep` that resolves at once, which is what makes those
+ * tests instant — but it also means they cannot say anything about *when* the deadline fires. These
+ * three properties are about exactly that, so here the timers are real.
+ */
+function timedReader(responses: ((init?: RequestInit) => Response)[]) {
+  const { fetchImpl, calls } = fakeFetch(responses);
+  const states: StreamState[] = [];
+
+  const stream = createResumableStream({
+    fetchImpl,
+    backoff: [0, 0, 0],
+    idleTimeoutMs: IDLE_MS,
     onState: (state) => states.push(state),
   });
 
@@ -171,6 +263,28 @@ describe('applyEvent', () => {
     });
     expect(failed.status).toBe('failed');
     expect(failed.error?.retryable).toBe(true);
+  });
+
+  /**
+   * Round 5, Р-4 (А-9). A heartbeat's whole effect happened before the reducer saw it — the read
+   * that carried it reset the idle deadline. Here it must do nothing else at all: any change to
+   * text, sequence or attempt would be a transport event editing the durable position, which is the
+   * one thing Р-2 forbids it.
+   */
+  it('leaves everything exactly as it was when a heartbeat arrives', () => {
+    const before = [run(1), delta(0, 'half a document'), { type: 'research', status: 'started' }]
+      .map((event) => event as GenerationEvent)
+      .reduce(applyEvent, initialStreamState);
+
+    const after = [{ type: 'heartbeat' } as const, { type: 'heartbeat' } as const].reduce(
+      applyEvent,
+      before,
+    );
+
+    expect(after).toEqual(before);
+    expect(after.sequence).toBe(0);
+    expect(after.attempt).toBe(1);
+    expect(after.status).toBe('streaming');
   });
 
   it('drives the research indicator without touching the document', () => {
@@ -376,6 +490,65 @@ describe('following a stream', () => {
       expect(final.status).toBe('idle');
       // Stopping keeps what was rendered; it is the only evidence of what the run produced.
       expect(final.text).toBe('half a document');
+    });
+  });
+
+  /**
+   * Round 5, Р-4 (А-9). What the M9п gate's Edit step needed and did not have: minutes of silence
+   * from a producer that is working, told apart from a connection whose far end is gone. Real
+   * timers here — the point of each case is the deadline, and a fake `sleep` would assert nothing
+   * about it.
+   */
+  describe('a producer that is silent but alive', () => {
+    it('waits through silence many deadlines long while the beats keep coming', async () => {
+      // Three deadlines' worth of a producer with nothing to show for itself but its own liveness.
+      const { stream, calls, states } = timedReader([
+        (init) =>
+          beating({
+            beatMs: BEAT_MS,
+            beats: (3 * IDLE_MS) / BEAT_MS,
+            then: [delta(0, 'the proposal, at last'), complete()],
+            signal: init?.signal ?? null,
+          }),
+      ]);
+
+      const final = await stream.start('session-1');
+
+      // One connection, start to finish: nothing was ever treated as dropped.
+      expect(calls).toHaveLength(1);
+      expect(final.status).toBe('complete');
+      expect(final.text).toBe('the proposal, at last');
+      // And no error card while it waited — the page said "waiting", not "try again".
+      expect(states.some((state) => state.status === 'failed')).toBe(false);
+      expect(states.some((state) => state.status === 'reconnecting')).toBe(false);
+    });
+
+    it('still calls a producer that sends nothing at all dead, on the same deadline', async () => {
+      const silent = () => stalls([run()]);
+      const { stream, calls } = timedReader([silent, silent, silent, silent]);
+
+      const final = await stream.start('session-1');
+
+      // Four connections — the first plus a ladder of three — then the state the user can act from.
+      expect(calls).toHaveLength(4);
+      expect(final.status).toBe('failed');
+      expect(final.error).toMatchObject({ code: 'STREAM_DISCONNECTED', retryable: true });
+    });
+
+    it('stops on the user’s say-so mid-beat, and does not reconnect', async () => {
+      const { stream, calls } = timedReader([
+        (init) => beating({ beatMs: BEAT_MS, beats: 10_000, signal: init?.signal ?? null }),
+        () => streamOf([complete()]),
+      ]);
+
+      setTimeout(() => {
+        stream.stop();
+      }, BEAT_MS * 4);
+
+      const final = await stream.start('session-1');
+
+      expect(calls).toHaveLength(1);
+      expect(final.status).toBe('idle');
     });
   });
 

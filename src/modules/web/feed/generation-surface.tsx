@@ -148,6 +148,22 @@ export function GenerationSurface({
         </p>
       )}
 
+      {/*
+        Waiting is not an error, and the page should say which one it is (round 5, Р-4; А-9).
+
+        Between the `run` event and the first token there can be minutes: a provider working through
+        a quota back-off before the chain fails over, a local model reading a long prompt, a local
+        model reasoning before it writes prose. The connection is alive throughout — the heartbeat
+        is what proves it — so the honest thing to render is what is being waited for, not a
+        spinner that looks the same as one over a broken socket.
+      */}
+      {stream.status === 'streaming' && stream.text === '' && !stream.researching && (
+        <p className="text-ink-muted text-sm" data-testid="stream-waiting">
+          Waiting for the first words. A local model can think for a minute or two before it starts
+          writing — nothing is stuck, and nothing is lost if you stop.
+        </p>
+      )}
+
       {stream.status === 'reconnecting' && (
         <p className="text-ink-muted text-sm" data-testid="stream-reconnecting">
           The connection dropped. Reconnecting — nothing written so far is lost.

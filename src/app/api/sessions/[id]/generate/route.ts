@@ -34,6 +34,7 @@ import { applyTransition } from '@/modules/workflow/apply-transition';
 import { registeredCapabilityIds } from '@/modules/workflow/capabilities';
 import { isSpecStage, type AskingStage } from '@/modules/workflow/model/stages';
 import type { ReasonCode } from '@/modules/workflow/reason-codes';
+import { withHeartbeat } from '@/modules/web/api/heartbeat';
 import { errorResponse, type ErrorCode } from '@/modules/web/api/responses';
 import {
   encodeEvent,
@@ -160,7 +161,7 @@ async function editReview(
     async start(controller) {
       let open = true;
 
-      const send = (event: GenerationEvent) => {
+      const emit = (event: GenerationEvent) => {
         if (!open) return;
         try {
           controller.enqueue(encoder.encode(encodeEvent(event)));
@@ -168,6 +169,15 @@ async function editReview(
           open = false;
         }
       };
+
+      /*
+       * The step that made the heartbeat necessary (round 5, Р-4; А-9). An edit proposal is one
+       * model call with no research phase and no incremental prose — on a local provider it is
+       * minutes of complete silence between `run` and `complete`, which is precisely the shape the
+       * reader used to read as a dead connection.
+       */
+      const beat = withHeartbeat(emit);
+      const send = beat.send;
 
       send({ type: 'run', runId: run.id, stage, attempt: 1 });
 
@@ -216,6 +226,7 @@ async function editReview(
           retryable: true,
         });
       } finally {
+        beat.stop();
         open = false;
         try {
           controller.close();
@@ -435,7 +446,7 @@ export async function POST(
     async start(controller) {
       let open = true;
 
-      const send = (event: GenerationEvent) => {
+      const emit = (event: GenerationEvent) => {
         if (!open) return;
         try {
           controller.enqueue(encoder.encode(encodeEvent(event)));
@@ -444,6 +455,18 @@ export async function POST(
           open = false;
         }
       };
+
+      /*
+       * Liveness while the run has nothing to say yet (round 5, Р-4; А-9).
+       *
+       * Everything between the `run` event and the first delta is silent by nature — the revision
+       * note, the quota back-off of a provider that will fail over, the local model reading the
+       * prompt — and on a local provider that adds up to minutes. The heartbeat is what makes the
+       * reader's idle deadline a statement about the *connection* again rather than about how fast
+       * a model thinks. It is transport only: nothing below writes it to the chunk log.
+       */
+      const beat = withHeartbeat(emit);
+      const send = beat.send;
 
       // `run` is always first: it is what the client stores in order to resume (FR-017).
       send({ type: 'run', runId: run.id, stage, attempt: 1 });
@@ -592,6 +615,7 @@ export async function POST(
           retryable: true,
         });
       } finally {
+        beat.stop();
         open = false;
         try {
           controller.close();

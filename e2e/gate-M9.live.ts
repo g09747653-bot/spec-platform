@@ -673,6 +673,35 @@ async function editSession(page: Page, projectId: string): Promise<void> {
 
   if (!(await click(page, 'start-edit-chat', 'edit: start'))) return;
   await page.getByTestId('session').waitFor({ timeout: 60_000 });
+
+  /*
+   * **`GATE_EDIT_LOCAL=1` walks the proposal on the local model** (round 5, Р-4/А-9).
+   *
+   * Off by default, because the gate's job is to walk what the deployment does, and the deployment's
+   * chain answers from the funded provider. On, it turns this step into the sharpest available probe
+   * of the heartbeat: the Edit proposal is the one call in the walk with nothing at all to say while
+   * it runs — no research phase, no incremental prose, one JSON answer restating whole documents —
+   * so on the local provider it is minutes of complete silence. That is the exact shape А-9 was
+   * written for and the exact step round 4 lost to the reader's idle deadline.
+   *
+   * Round 5 ran it both ways on purpose. On the funded provider the proposal arrives in ~40 s, i.e.
+   * inside the deadline, which is green and says nothing about the fix; pinned local it ran 4.5
+   * minutes per attempt with the reader waiting throughout — and surfaced a separate limit that the
+   * deadline had been hiding (D-161).
+   */
+  if (process.env.GATE_EDIT_LOCAL === '1') {
+    await page
+      .getByTestId('model-picker')
+      .selectOption(LOCAL_MODEL)
+      .then(() => {
+        say(`edit: the proposal is pinned to the local model «${LOCAL_MODEL}» — Р-4 lives here`);
+      })
+      .catch(() => {
+        problem(`edit: the picker does not offer «${LOCAL_MODEL}»`);
+      });
+    await page.waitForTimeout(2000);
+  }
+
   await snapshot(page, 'edit-reference');
 
   const steps = await page
@@ -722,6 +751,23 @@ async function editSession(page: Page, projectId: string): Promise<void> {
 
     const began = Date.now();
     if (!(await click(page, 'generate-spec', 'edit: propose the changes'))) return;
+
+    /*
+     * А-9 point 3: while only heartbeats are arriving the page owes the user an honest account of
+     * what is being waited for, not an error and not a silent spinner. Read once, a few seconds in
+     * — on the local model there is nothing else on screen for minutes.
+     */
+    await page.waitForTimeout(5_000);
+    const waiting = await page
+      .getByTestId('stream-waiting')
+      .isVisible()
+      .catch(() => false);
+    say(
+      waiting
+        ? 'edit: the page says it is waiting for the first words (Р-4, А-9 п.3)'
+        : 'edit: no waiting status on screen — either the first tokens are already in, or the honest status is missing',
+    );
+
     await snapshot(page, `edit-proposing-${String(attempt)}`);
 
     arrived = await Promise.race([
@@ -844,21 +890,32 @@ async function modelPicker(page: Page, sessionUrl: string): Promise<void> {
    * And the call actually goes there. A chat message is the cheapest live agent call on this page,
    * and `generation_runs` is not written by it — so the evidence is the *answer arriving at all*
    * with the chain pinned to one provider that is not the funded one.
+   *
+   * **Counted, not awaited by selector** (round 5, and D-154 all over again). Every assistant block
+   * in the feed carries `data-msg-role="assistant"` — question rounds, documents, review boards —
+   * so on a session that has just written four documents, `.last().waitFor()` resolves instantly
+   * against a bubble that has been on screen for minutes. Run 5 reported «the pinned model answered
+   * a chat message» in 0.1 s while the local runtime's log showed it had never loaded a model at
+   * all: a check that cannot fail is not a check. The evidence is **one more** assistant block than
+   * there were before the question was asked.
    */
+  const before = await page.locator('[data-msg-role="assistant"]').count();
+
   const began = Date.now();
   await page.getByTestId('chat-message').fill('In one sentence: what is this session about?');
   await click(page, 'chat-send', 'picker: ask the local model');
 
   const answered = await page
     .locator('[data-msg-role="assistant"]')
-    .last()
+    .nth(before)
     .waitFor({ timeout: 900_000 })
     .then(() => true)
     .catch(() => false);
 
-  timings.push(`local-model reply: ${String(Math.round((Date.now() - began) / 100) / 10)} s`);
+  const took = Math.round((Date.now() - began) / 100) / 10;
+  timings.push(`local-model reply: ${String(took)} s`);
 
-  if (answered) say(`the pinned model answered a chat message`);
+  if (answered) say(`the pinned model answered a chat message in ${String(took)} s`);
   else problem('the pinned model produced no answer');
 
   await snapshot(page, 'model-answered');
