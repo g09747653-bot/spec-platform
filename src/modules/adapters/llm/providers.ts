@@ -85,12 +85,19 @@ export function toSdkTools(tools: readonly ToolDefinition[] | undefined): ToolSe
  * before its first token and takes 97 in total, which `LLM_REQUEST_TIMEOUT_MS` would abort, and
  * `qwen3.5:9b` spent 114 seconds reasoning without emitting a single content token. A model that
  * cannot answer inside the budget is not a slower provider, it is a failing one.
+ *
+ * **Re-measured for the M9п gate (round 3, D-144), by the same method and on the same machine.** The
+ * customer's choice, `qwen3.8:27b`, writes a conformant SpecKit constitution but needs 474 s for it —
+ * 16.8 GB of weights do not fit 16 GiB of VRAM, and a third of the model runs on the CPU. That is
+ * past the 300 s per-provider budget, so the documented fallback applies: `qwen3:14b`, which is
+ * conformant on the same prompt in 32.4 s and stays wholly on the GPU. D-91's objection to it was the
+ * 60-second timeout of its day; the gate's budget has been 300 s since D-90.
  */
 export const DEFAULT_MODELS: Readonly<Record<ProviderId, string>> = Object.freeze({
   anthropic: 'claude-sonnet-5',
   openai: 'gpt-5.2',
   google: 'gemini-3.5-flash',
-  ollama: 'qwen2.5:14b-instruct-q4_K_M',
+  ollama: 'qwen3:14b',
   stub: 'deterministic-stub',
 });
 
