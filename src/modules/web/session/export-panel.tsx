@@ -242,7 +242,7 @@ export function ExportPanel({ projectId, files, omittedFiles, mode }: ExportPane
          */}
         {copy.kind === 'manual' && (
           <div className="flex flex-col gap-1" data-testid="copy-manual">
-            <label className="text-ink-muted text-xs" htmlFor="copy-manual-text">
+            <label className="text-foreground-muted text-xs" htmlFor="copy-manual-text">
               The clipboard was not available. Here is {copy.fileName} — select and copy it.
             </label>
             <textarea
@@ -251,13 +251,13 @@ export function ExportPanel({ projectId, files, omittedFiles, mode }: ExportPane
               readOnly
               value={copy.content}
               rows={8}
-              className="bg-canvas border-border-subtle rounded-md border p-2 font-mono text-xs"
+              className="bg-background border-border-subtle rounded-md border p-2 font-mono text-xs"
             />
           </div>
         )}
 
         {shown.omitted.length > 0 && (
-          <p className="text-ink-muted text-sm" data-testid="export-omitted">
+          <p className="text-foreground-muted text-sm" data-testid="export-omitted">
             Omitted for want of an approved revision: {shown.omitted.join(', ')}
           </p>
         )}

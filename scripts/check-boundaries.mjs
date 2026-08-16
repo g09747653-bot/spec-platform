@@ -15,6 +15,8 @@ const RULE = 'import-x/no-restricted-paths';
 /** Covers both specifier restrictions: the section schema's chain and the provider-SDK edge. */
 const SCHEMA_IMPORT_RULE = 'no-restricted-imports';
 const HEADINGS_RULE = 'spec-platform/no-duplicated-section-headings';
+/** Task 124: one home for colour. */
+const COLOUR_RULE = 'design-tokens/no-raw-colours';
 
 /** @type {{ file: string, shouldFail: boolean, why: string, rule?: string }[]} */
 const EXPECTATIONS = [
@@ -77,6 +79,24 @@ const EXPECTATIONS = [
     shouldFail: true,
     rule: 'no-restricted-globals',
     why: 'EventSource is not used anywhere in this codebase (task 46 AC-2; D-8)',
+  },
+  {
+    file: 'src/modules/web/__fixtures__/web-uses-raw-colour.ts',
+    shouldFail: true,
+    rule: COLOUR_RULE,
+    why: 'colours live only in src/app/brand.css and reach components as tokens (task 124)',
+  },
+  {
+    file: 'src/modules/web/__fixtures__/web-uses-palette-utility.ts',
+    shouldFail: true,
+    rule: COLOUR_RULE,
+    why: 'a palette utility paints the same colour in both themes (task 124)',
+  },
+  {
+    file: 'src/modules/web/__fixtures__/web-uses-token-utility.ts',
+    shouldFail: false,
+    rule: COLOUR_RULE,
+    why: 'token utilities are the spelling components are supposed to use',
   },
 ];
 

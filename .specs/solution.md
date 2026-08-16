@@ -509,6 +509,8 @@ function generateStreaming(o: GenerateOptions): Promise<GenerateResult>;
 - All providers exhausted → `AllProvidersFailedError`, surfaced with retry (FR-018 AC-2/AC-3) and reported to Sentry (NFR-010).
 - Provider names and raw payloads are stripped from user-facing messages (FR-018 AC-7).
 
+**Structured local output (амендмент А-10, 2026-08-16).** For structured artifacts (Edit proposal, review.v2, interview drafts) the local provider is called with grammar/schema-constrained decoding (Ollama `format` + JSON schema), so JSON validity does not depend on model obedience; the cloud path is unchanged. Р-1 parsing layers remain as the outer guard. If a local model cannot deliver under constraint, that is a named limitation of local mode, never a silent cloud reroute (А-7).
+
 #### `adapters/research`
 
 **Responsibilities** — issue web searches and fetch pages during generation (IR-003), and bound what reaches a model.

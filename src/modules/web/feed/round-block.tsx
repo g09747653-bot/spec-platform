@@ -64,10 +64,7 @@ function RoundHeading({ block }: { block: RoundBlockModel }) {
   const count = block.questions.length;
 
   return (
-    <p
-      className="text-ink-muted text-xs font-medium tracking-widest uppercase"
-      data-testid="round-heading"
-    >
+    <p className="text-foreground-muted text-label uppercase" data-testid="round-heading">
       Round {block.roundNumber} — {count} {count === 1 ? 'question' : 'questions'}
     </p>
   );
@@ -75,7 +72,7 @@ function RoundHeading({ block }: { block: RoundBlockModel }) {
 
 function SelectionHint({ question }: { question: FeedQuestion }) {
   return (
-    <span className="text-ink-muted text-xs" data-testid={`mcq-hint-${question.id}`}>
+    <span className="text-foreground-muted text-xs" data-testid={`mcq-hint-${question.id}`}>
       {question.type === 'single' ? 'Select one' : 'Select all that apply'}
     </span>
   );
@@ -87,14 +84,14 @@ function OptionBody({ option }: { option: FeedQuestion['options'][number] }) {
       <span className="font-medium">{option.label}</span>
       {option.recommended === true && (
         <span
-          className="text-accent-strong ml-1.5 text-xs"
+          className="text-primary-strong ml-1.5 text-xs"
           data-testid={`mcq-recommended-${option.id}`}
         >
           (Recommended)
         </span>
       )}
       {option.description !== undefined && (
-        <span className="text-ink-muted block text-xs">{option.description}</span>
+        <span className="text-foreground-muted block text-xs">{option.description}</span>
       )}
     </span>
   );
@@ -134,7 +131,7 @@ function AnsweredRound({ block }: { block: RoundBlockModel }) {
                 .map((option) => (
                   <span
                     key={option.id}
-                    className="border-border-subtle bg-canvas rounded-md border px-3 py-1.5 text-sm"
+                    className="border-border-subtle bg-background rounded-md border px-3 py-1.5 text-sm"
                     data-testid="answered-value"
                   >
                     {option.label}
@@ -142,14 +139,14 @@ function AnsweredRound({ block }: { block: RoundBlockModel }) {
                 ))}
               {answer?.freeText !== undefined && answer.freeText !== null && (
                 <span
-                  className="border-border-subtle bg-canvas rounded-md border px-3 py-1.5 text-sm"
+                  className="border-border-subtle bg-background rounded-md border px-3 py-1.5 text-sm"
                   data-testid="answered-value"
                 >
                   {answer.freeText}
                 </span>
               )}
               {selected.size === 0 && (answer?.freeText ?? null) === null && (
-                <span className="text-ink-muted text-sm" data-testid="answered-value">
+                <span className="text-foreground-muted text-sm" data-testid="answered-value">
                   —
                 </span>
               )}
@@ -161,7 +158,7 @@ function AnsweredRound({ block }: { block: RoundBlockModel }) {
       {loose.map((answer, index) => (
         <div key={`${answer.label}-${String(index)}`} className="flex flex-col">
           <span className="text-sm font-medium">{answer.label}</span>
-          <span className="text-ink-muted text-sm" data-testid="answered-value">
+          <span className="text-foreground-muted text-sm" data-testid="answered-value">
             {answer.freeText ?? answer.selectedOptionIds.join(', ')}
           </span>
         </div>
@@ -232,7 +229,7 @@ export function RoundBlock({
                   {question.required && (
                     <span
                       aria-label="required"
-                      className="ml-1 text-red-600"
+                      className="ml-1 text-danger-ink"
                       data-testid={`mcq-required-${question.id}`}
                     >
                       *
@@ -246,7 +243,7 @@ export function RoundBlock({
                 {question.options.map((option) => (
                   <label
                     key={option.id}
-                    className="border-border-subtle hover:bg-canvas flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm"
+                    className="border-border-subtle hover:bg-background flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm"
                   >
                     <input
                       type={question.type === 'single' ? 'radio' : 'checkbox'}
@@ -289,7 +286,7 @@ export function RoundBlock({
         })}
 
         {error !== null && (
-          <p role="alert" data-testid="mcq-error" className="text-sm text-red-700">
+          <p role="alert" data-testid="mcq-error" className="text-sm text-danger-ink">
             {error}
           </p>
         )}
@@ -325,7 +322,7 @@ export function RoundBlock({
             <button
               type="button"
               data-testid="mcq-reply-toggle"
-              className="text-ink-muted self-start text-xs underline underline-offset-2"
+              className="text-foreground-muted self-start text-xs underline underline-offset-2"
               onClick={() => {
                 setReplyMode(true);
               }}

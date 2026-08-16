@@ -52,7 +52,9 @@ export function RawPane({ specFileId, content }: { specFileId: string; content: 
           <span
             role="status"
             data-testid="viewer-copy-status"
-            className={state === 'copied' ? 'text-ink-muted text-xs' : 'text-xs text-red-700'}
+            className={
+              state === 'copied' ? 'text-foreground-muted text-xs' : 'text-xs text-danger-ink'
+            }
           >
             {state === 'copied'
               ? 'Copied the approved revision to the clipboard.'
@@ -63,7 +65,7 @@ export function RawPane({ specFileId, content }: { specFileId: string; content: 
 
       <pre
         data-testid="viewer-raw"
-        className="bg-canvas border-border-subtle overflow-auto rounded-md border p-3 text-xs whitespace-pre-wrap"
+        className="bg-background border-border-subtle overflow-auto rounded-md border p-3 text-xs whitespace-pre-wrap"
       >
         {content}
       </pre>

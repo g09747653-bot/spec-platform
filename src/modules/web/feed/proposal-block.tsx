@@ -60,18 +60,18 @@ function DiffBody({ unifiedDiff }: { unifiedDiff: string }) {
   return (
     <pre
       data-testid="diff-body"
-      className="bg-canvas border-border-subtle max-h-72 overflow-auto rounded-md border p-3 text-xs whitespace-pre"
+      className="bg-background border-border-subtle max-h-72 overflow-auto rounded-md border p-3 text-xs whitespace-pre"
     >
       {unifiedDiff.split('\n').map((line, index) => (
         <span
           key={`${String(index)}-${line}`}
           className={
             line.startsWith('+') && !line.startsWith('+++')
-              ? 'block text-green-700'
+              ? 'block text-diff-added-ink'
               : line.startsWith('-') && !line.startsWith('---')
-                ? 'block text-red-700'
+                ? 'block text-diff-removed-ink'
                 : line.startsWith('@@')
-                  ? 'text-ink-muted block'
+                  ? 'text-foreground-muted block'
                   : 'block'
           }
         >
@@ -132,7 +132,7 @@ export function ProposalBlockCard({
           <p className="text-sm">
             {block.status === 'accepted' ? 'Applied' : 'Discarded'}: {block.instruction}
           </p>
-          <p className="text-ink-muted text-xs" data-testid="proposal-decided-files">
+          <p className="text-foreground-muted text-xs" data-testid="proposal-decided-files">
             {block.files.map((file) => file.fileName).join(', ')}
           </p>
         </div>
@@ -157,7 +157,7 @@ export function ProposalBlockCard({
               }`
             : 'Proposed change'}
         </p>
-        <p className="text-ink-muted text-xs">
+        <p className="text-foreground-muted text-xs">
           <span data-testid="diff-instruction">{proposal.instruction}</span>
           {' — '}
           <span data-testid="diff-counts">
@@ -170,7 +170,7 @@ export function ProposalBlockCard({
           <div key={file.fileName} className="flex flex-col gap-1" data-testid="diff-file">
             <p className="text-xs font-medium">
               <span data-testid="diff-file-name">{file.fileName}</span>
-              <span className="text-ink-muted">
+              <span className="text-foreground-muted">
                 {' '}
                 +{file.added} −{file.removed}
               </span>
@@ -180,7 +180,7 @@ export function ProposalBlockCard({
         ))}
 
         {error !== null && (
-          <p role="alert" data-testid="diff-error" className="text-sm text-red-700">
+          <p role="alert" data-testid="diff-error" className="text-sm text-danger-ink">
             {error}
           </p>
         )}
@@ -299,7 +299,7 @@ export function RefineBox({ specFileId }: { specFileId: string }) {
       )}
 
       {error !== null && (
-        <p role="alert" data-testid="refine-error" className="text-sm text-red-700">
+        <p role="alert" data-testid="refine-error" className="text-sm text-danger-ink">
           {error}
         </p>
       )}

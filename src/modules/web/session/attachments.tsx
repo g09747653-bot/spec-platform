@@ -229,7 +229,7 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {attachments.length === 0 ? (
-          <p className="text-ink-muted text-sm" data-testid="attachments-empty">
+          <p className="text-foreground-muted text-sm" data-testid="attachments-empty">
             No documents attached.
           </p>
         ) : (
@@ -244,15 +244,15 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
                   <span className="text-sm font-medium" data-testid="attachment-name">
                     {attachment.fileName}
                   </span>
-                  <span className="text-ink-muted text-xs" data-testid="attachment-meta">
+                  <span className="text-foreground-muted text-xs" data-testid="attachment-meta">
                     {TYPE_LABELS[attachment.mimeType] ?? attachment.mimeType} ·{' '}
                     {sizeLabel(attachment.sizeBytes)} · attached at {attachment.attachedAtStage}
                   </span>
                   <span
                     className={
                       attachment.parseStatus === 'failed'
-                        ? 'text-xs text-red-700'
-                        : 'text-ink-muted text-xs'
+                        ? 'text-xs text-danger-ink'
+                        : 'text-foreground-muted text-xs'
                     }
                     data-testid={`attachment-status-${attachment.parseStatus}`}
                   >
@@ -279,7 +279,7 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
         {late !== null && late.affected.length > 0 && (
           <div
             data-testid="late-attachment-notice"
-            className="border-border-subtle bg-canvas flex flex-col gap-2 rounded-md border p-3"
+            className="border-border-subtle bg-background flex flex-col gap-2 rounded-md border p-3"
           >
             <p className="text-sm">
               These approved files were written before <strong>{late.fileName}</strong> was
@@ -305,14 +305,14 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
                 </li>
               ))}
             </ul>
-            <p className="text-ink-muted text-xs">
+            <p className="text-foreground-muted text-xs">
               Nothing has been changed. Refining proposes an update you can review and accept.
             </p>
           </div>
         )}
 
         {error !== null && (
-          <p role="alert" data-testid="attachment-error" className="text-sm text-red-700">
+          <p role="alert" data-testid="attachment-error" className="text-sm text-danger-ink">
             {error}
           </p>
         )}

@@ -6,6 +6,7 @@ import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescrip
 import tseslint from 'typescript-eslint';
 
 import { noRestrictedPathsRule } from './eslint.boundaries.js';
+import { designTokensConfigs } from './eslint.design-tokens.js';
 import { restrictedImportConfigs } from './eslint.restricted-imports.js';
 import { sectionSchemaConfigs } from './eslint.section-schema.js';
 
@@ -139,6 +140,9 @@ export default tseslint.config(
   // Constitution P7: one file may import a provider SDK.
   ...sectionSchemaConfigs,
   ...restrictedImportConfigs,
+
+  // Task 124: one home for colour. Tokens are declared in src/app/brand.css and nowhere else.
+  ...designTokensConfigs,
 
   // Plain JS tooling scripts are outside the TypeScript program.
   {

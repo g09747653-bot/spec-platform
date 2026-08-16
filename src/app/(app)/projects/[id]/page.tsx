@@ -118,10 +118,10 @@ export default async function ProjectPage({
   return (
     <section className="flex flex-col gap-6" data-testid="project-page">
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight" data-testid="project-page-name">
+        <h1 className="text-h1" data-testid="project-page-name">
           {project.name}
         </h1>
-        <p className="text-ink-muted text-sm">
+        <p className="text-foreground-muted text-sm">
           Every conversation about this bundle. Archiving hides a chat from Active and changes
           nothing else.
         </p>
@@ -138,7 +138,7 @@ export default async function ProjectPage({
               className={
                 tab === entry.key
                   ? 'border-border bg-surface rounded-md border px-3 py-1.5 text-sm font-medium'
-                  : 'text-ink-muted rounded-md px-3 py-1.5 text-sm hover:underline'
+                  : 'text-foreground-muted rounded-md px-3 py-1.5 text-sm hover:underline'
               }
             >
               {entry.label}
@@ -156,7 +156,7 @@ export default async function ProjectPage({
               className={
                 filter === entry.key
                   ? 'border-border bg-surface rounded-md border px-3 py-1.5 text-xs font-medium'
-                  : 'text-ink-muted rounded-md px-3 py-1.5 text-xs hover:underline'
+                  : 'text-foreground-muted rounded-md px-3 py-1.5 text-xs hover:underline'
               }
             >
               {entry.label}

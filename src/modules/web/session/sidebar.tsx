@@ -104,7 +104,7 @@ export function SessionSidebar({ children }: SessionSidebarProps) {
         tabIndex={0}
         data-testid="sidebar-resize"
         className={cn(
-          'hover:bg-accent/40 focus-visible:bg-accent/60 w-1 shrink-0 cursor-col-resize rounded-full',
+          'hover:bg-primary/40 focus-visible:bg-primary/60 w-1 shrink-0 cursor-col-resize rounded-full',
           collapsed && 'hidden',
         )}
         onMouseDown={() => {
@@ -130,7 +130,7 @@ export function SessionSidebar({ children }: SessionSidebarProps) {
         type="button"
         data-testid="sidebar-toggle"
         aria-expanded={!collapsed}
-        className="border-border-subtle text-ink-muted hover:bg-canvas h-8 shrink-0 self-start rounded-md border px-2 text-xs"
+        className="border-border-subtle text-foreground-muted hover:bg-background h-8 shrink-0 self-start rounded-md border px-2 text-xs"
         onClick={() => {
           setCollapsed((current) => !current);
         }}
@@ -160,11 +160,11 @@ export function LocalWorkspace() {
         type="button"
         disabled
         data-testid="mount-folder"
-        className="border-border-subtle text-ink-muted cursor-not-allowed rounded-md border px-3 py-1.5 text-sm opacity-60"
+        className="border-border-subtle text-foreground-muted cursor-not-allowed rounded-md border px-3 py-1.5 text-sm opacity-60"
       >
         Mount folder
       </button>
-      <p className="text-ink-muted text-xs">
+      <p className="text-foreground-muted text-xs">
         Mounting a folder from this machine is not built yet. Nothing here reads or writes your
         files.
       </p>

@@ -9,8 +9,8 @@ import Link from 'next/link';
 export default function NotFound() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-3 px-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Not found</h1>
-      <p className="text-ink-muted text-sm">
+      <h1 className="text-h1">Not found</h1>
+      <p className="text-foreground-muted text-sm">
         We could not find that page. It may have been deleted, or the link may be wrong.
       </p>
       <Link href="/projects" className="text-sm underline" data-testid="not-found-back">

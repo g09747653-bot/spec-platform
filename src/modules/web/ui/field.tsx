@@ -14,7 +14,7 @@ import { cn } from '../lib/cn';
  * (FR-005 AC-3) are both built from these.
  */
 const controlClasses =
-  'bg-surface border-border-subtle placeholder:text-ink-muted flex w-full rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50';
+  'bg-surface border-border-subtle placeholder:text-foreground-muted flex w-full rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50';
 
 export const Label = forwardRef<HTMLLabelElement, LabelHTMLAttributes<HTMLLabelElement>>(
   function Label({ className, ...props }, ref) {

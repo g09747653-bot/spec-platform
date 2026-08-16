@@ -24,8 +24,8 @@ export default async function ProjectsPage() {
   return (
     <section className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
-        <p className="text-ink-muted text-sm">
+        <h1 className="text-h1">Projects</h1>
+        <p className="text-foreground-muted text-sm">
           Each project holds one specification bundle and the chats that write it.
         </p>
       </div>

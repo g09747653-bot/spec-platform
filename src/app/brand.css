@@ -1,0 +1,187 @@
+/**
+ * The brand file — the one place in `src/` allowed to name a colour (task 124).
+ *
+ * Everything else in the application reaches colour through the token utilities generated below,
+ * and `spec-platform/no-raw-colours` (eslint.design-tokens.js) plus the CSS half of the same gate
+ * (`src/modules/web/theme/brand.test.ts`) make that a build failure rather than a review topic.
+ *
+ * **Our tint, not theirs.** The reference product is violet/cyan (#5939e2, #02dede, #a249f9); the
+ * structure of its token system is what we copy, the palette is not. Ours is azure and gold:
+ * `--palette-primary` is a deep azure blue, `--palette-brand-accent` a warm gold, and the two
+ * together are the mark and the loader.
+ *
+ * **Every value is authored in OKLCH** so that a light/dark pair can be reasoned about by
+ * lightness rather than by eye, and so the contrast test can convert and assert. Every foreground
+ * token is chosen to clear WCAG AA against the surfaces it is used on, in both themes; the pairs
+ * are enumerated and asserted in `brand.test.ts`, so a "small tweak" that breaks one is a red test.
+ *
+ * Naming follows the pairing the components rely on:
+ *   `-ink`         text/icon colour of that role, on `background`/`surface`
+ *   `-soft`        tinted fill of that role, for badges and callouts
+ *   `-foreground`  text colour to use *on top of* the solid role colour
+ */
+
+:root {
+  color-scheme: light;
+
+  --palette-background: oklch(98.6% 0.004 250);
+  --palette-surface: oklch(100% 0 0);
+  --palette-surface-muted: oklch(96.4% 0.006 250);
+
+  --palette-border-subtle: oklch(90.5% 0.008 250);
+  --palette-border-strong: oklch(55% 0.022 255);
+
+  --palette-foreground: oklch(24% 0.03 255);
+  --palette-foreground-muted: oklch(48% 0.026 255);
+  --palette-foreground-subtle: oklch(53% 0.022 255);
+
+  --palette-primary: oklch(48% 0.17 245);
+  --palette-primary-ink: oklch(45% 0.17 245);
+  --palette-primary-foreground: oklch(100% 0 0);
+  --palette-primary-soft: oklch(95% 0.03 245);
+
+  --palette-success: oklch(48% 0.13 152);
+  --palette-success-ink: oklch(45% 0.12 152);
+  --palette-success-soft: oklch(95.5% 0.03 152);
+
+  --palette-warning: oklch(52% 0.12 70);
+  --palette-warning-ink: oklch(47% 0.11 70);
+  --palette-warning-soft: oklch(96% 0.04 75);
+
+  --palette-danger: oklch(50% 0.2 25);
+  --palette-danger-ink: oklch(47% 0.19 25);
+  --palette-danger-soft: oklch(96% 0.02 25);
+
+  /* Diff rendering (task 127): green added, red removed, in both themes. */
+  --palette-diff-added-ink: oklch(45% 0.12 152);
+  --palette-diff-added-soft: oklch(95.5% 0.03 152);
+  --palette-diff-removed-ink: oklch(47% 0.19 25);
+  --palette-diff-removed-soft: oklch(96% 0.02 25);
+
+  /* The mark and the loader (task 125). */
+  --palette-brand: oklch(48% 0.17 245);
+  --palette-brand-accent: oklch(72% 0.15 78);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --palette-background: oklch(17% 0.012 258);
+  --palette-surface: oklch(21.5% 0.014 258);
+  --palette-surface-muted: oklch(26% 0.016 258);
+
+  --palette-border-subtle: oklch(31% 0.018 258);
+  --palette-border-strong: oklch(52% 0.025 258);
+
+  --palette-foreground: oklch(95% 0.006 250);
+  --palette-foreground-muted: oklch(76% 0.018 245);
+  --palette-foreground-subtle: oklch(66% 0.02 245);
+
+  --palette-primary: oklch(70% 0.15 245);
+  --palette-primary-ink: oklch(76% 0.13 245);
+  --palette-primary-foreground: oklch(17% 0.02 258);
+  --palette-primary-soft: oklch(30% 0.05 245);
+
+  --palette-success: oklch(72% 0.14 152);
+  --palette-success-ink: oklch(78% 0.13 152);
+  --palette-success-soft: oklch(28% 0.04 152);
+
+  --palette-warning: oklch(78% 0.13 75);
+  --palette-warning-ink: oklch(82% 0.12 75);
+  --palette-warning-soft: oklch(30% 0.04 75);
+
+  --palette-danger: oklch(64% 0.2 25);
+  --palette-danger-ink: oklch(72% 0.16 25);
+  --palette-danger-soft: oklch(29% 0.05 25);
+
+  --palette-diff-added-ink: oklch(78% 0.13 152);
+  --palette-diff-added-soft: oklch(28% 0.04 152);
+  --palette-diff-removed-ink: oklch(72% 0.16 25);
+  --palette-diff-removed-soft: oklch(29% 0.05 25);
+
+  --palette-brand: oklch(70% 0.15 245);
+  --palette-brand-accent: oklch(80% 0.13 78);
+}
+
+/*
+ * `inline` matters: it makes Tailwind emit `var(--palette-…)` into every utility instead of the
+ * resolved value, which is what lets one attribute on <html> repaint the whole application.
+ */
+@theme inline {
+  --color-background: var(--palette-background);
+  --color-surface: var(--palette-surface);
+  --color-surface-muted: var(--palette-surface-muted);
+
+  --color-border-subtle: var(--palette-border-subtle);
+  --color-border-strong: var(--palette-border-strong);
+
+  --color-foreground: var(--palette-foreground);
+  --color-foreground-muted: var(--palette-foreground-muted);
+  --color-foreground-subtle: var(--palette-foreground-subtle);
+
+  --color-primary: var(--palette-primary);
+  --color-primary-ink: var(--palette-primary-ink);
+  --color-primary-foreground: var(--palette-primary-foreground);
+  --color-primary-soft: var(--palette-primary-soft);
+
+  --color-success: var(--palette-success);
+  --color-success-ink: var(--palette-success-ink);
+  --color-success-soft: var(--palette-success-soft);
+
+  --color-warning: var(--palette-warning);
+  --color-warning-ink: var(--palette-warning-ink);
+  --color-warning-soft: var(--palette-warning-soft);
+
+  --color-danger: var(--palette-danger);
+  --color-danger-ink: var(--palette-danger-ink);
+  --color-danger-soft: var(--palette-danger-soft);
+
+  --color-diff-added-ink: var(--palette-diff-added-ink);
+  --color-diff-added-soft: var(--palette-diff-added-soft);
+  --color-diff-removed-ink: var(--palette-diff-removed-ink);
+  --color-diff-removed-soft: var(--palette-diff-removed-soft);
+
+  --color-brand: var(--palette-brand);
+  --color-brand-accent: var(--palette-brand-accent);
+}
+
+/*
+ * Typography scale (Эталон §1.5: text-h1…h3 / body / caption / label).
+ *
+ * A named step carries its line height, weight and tracking with it, so a heading is one class
+ * rather than four that can drift apart. `label` is the small caps-and-tracking style the round
+ * headers and section labels use.
+ */
+@theme {
+  --text-h1: 1.75rem;
+  --text-h1--line-height: 2.125rem;
+  --text-h1--font-weight: 600;
+  --text-h1--letter-spacing: -0.02em;
+
+  --text-h2: 1.375rem;
+  --text-h2--line-height: 1.75rem;
+  --text-h2--font-weight: 600;
+  --text-h2--letter-spacing: -0.015em;
+
+  --text-h3: 1.125rem;
+  --text-h3--line-height: 1.5rem;
+  --text-h3--font-weight: 600;
+  --text-h3--letter-spacing: -0.01em;
+
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.5rem;
+
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.25rem;
+
+  --text-label: 0.6875rem;
+  --text-label--line-height: 1rem;
+  --text-label--font-weight: 600;
+  --text-label--letter-spacing: 0.08em;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono:
+    ui-monospace, 'SFMono-Regular', 'JetBrains Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+
+  --radius-card: 0.75rem;
+}

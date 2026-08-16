@@ -102,14 +102,16 @@ export function NewEditChat({
                 />
                 <span>
                   {file.fileName}
-                  <span className="text-ink-muted ml-2 text-xs">Rev {file.revisionNumber}</span>
+                  <span className="text-foreground-muted ml-2 text-xs">
+                    Rev {file.revisionNumber}
+                  </span>
                 </span>
               </label>
             ))}
           </div>
 
           {error !== null && (
-            <p role="alert" className="text-sm text-red-700" data-testid="edit-chat-error">
+            <p role="alert" className="text-sm text-danger-ink" data-testid="edit-chat-error">
               {error}
             </p>
           )}

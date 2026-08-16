@@ -30,9 +30,7 @@ export const CardHeader = forwardRef<HTMLDivElement, DivProps>(function CardHead
 
 export const CardTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadingElement>>(
   function CardTitle({ className, ...props }, ref) {
-    return (
-      <h2 ref={ref} className={cn('text-base leading-none font-semibold', className)} {...props} />
-    );
+    return <h2 ref={ref} className={cn('text-h3', className)} {...props} />;
   },
 );
 
@@ -40,7 +38,7 @@ export const CardDescription = forwardRef<
   HTMLParagraphElement,
   HTMLAttributes<HTMLParagraphElement>
 >(function CardDescription({ className, ...props }, ref) {
-  return <p ref={ref} className={cn('text-ink-muted text-sm', className)} {...props} />;
+  return <p ref={ref} className={cn('text-foreground-muted text-sm', className)} {...props} />;
 });
 
 export const CardContent = forwardRef<HTMLDivElement, DivProps>(function CardContent(
