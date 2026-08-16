@@ -157,7 +157,7 @@ export function NewProjectForm() {
           id="prompt-error"
           role="alert"
           data-testid="prompt-error"
-          className="text-sm text-red-700"
+          className="text-sm text-danger-ink"
         >
           {error}
         </p>
@@ -173,7 +173,7 @@ export function NewProjectForm() {
         {AUDIENCE_PROFILES.map((profile) => (
           <label
             key={profile}
-            className="border-border-subtle hover:bg-canvas flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm"
+            className="border-border-subtle hover:bg-background flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm"
           >
             <input
               type="radio"
@@ -189,7 +189,7 @@ export function NewProjectForm() {
             />
             <span>
               <span className="font-medium">{AUDIENCE_COPY[profile].label}</span>
-              <span className="text-ink-muted block text-xs">
+              <span className="text-foreground-muted block text-xs">
                 {AUDIENCE_COPY[profile].description}
               </span>
             </span>
@@ -205,7 +205,7 @@ export function NewProjectForm() {
       <fieldset className="flex flex-col gap-2" data-testid="methodology-picker">
         <legend className="text-sm font-medium">Which workflow?</legend>
 
-        <label className="border-border-subtle hover:bg-canvas flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm">
+        <label className="border-border-subtle hover:bg-background flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm">
           <input
             type="radio"
             name="methodology"
@@ -220,7 +220,7 @@ export function NewProjectForm() {
           />
           <span>
             <span className="font-medium">Auto</span>
-            <span className="text-ink-muted block text-xs">
+            <span className="text-foreground-muted block text-xs">
               Pick the workflow that fits the description.
             </span>
           </span>
@@ -229,7 +229,7 @@ export function NewProjectForm() {
         {GENERATE_METHODOLOGIES.map((config) => (
           <label
             key={config.id}
-            className="border-border-subtle hover:bg-canvas flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm"
+            className="border-border-subtle hover:bg-background flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm"
           >
             <input
               type="radio"
@@ -247,8 +247,8 @@ export function NewProjectForm() {
               <span className="font-medium">
                 {config.badge.vendor} · {config.badge.flavour} · {config.badge.version}
               </span>
-              <span className="text-ink-muted block text-xs">{config.summary}</span>
-              <span className="text-ink-muted mt-1 block font-mono text-[11px]">
+              <span className="text-foreground-muted block text-xs">{config.summary}</span>
+              <span className="text-foreground-muted mt-1 block font-mono text-[11px]">
                 {config.steps.map((step) => step.label).join(' → ')}
               </span>
             </span>

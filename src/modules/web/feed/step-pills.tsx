@@ -49,16 +49,16 @@ export function StepPills({
                 data-state={isCurrent ? 'current' : isDone ? 'done' : 'upcoming'}
                 className={cn(
                   'inline-flex items-center gap-1.5 rounded-full border py-1 pr-3 pl-1.5',
-                  isCurrent && 'border-accent bg-accent text-accent-ink font-medium',
-                  isDone && 'border-border-subtle text-ink-muted',
-                  !isCurrent && !isDone && 'border-border-subtle text-ink-muted opacity-60',
+                  isCurrent && 'border-primary bg-primary text-primary-foreground font-medium',
+                  isDone && 'border-border-subtle text-foreground-muted',
+                  !isCurrent && !isDone && 'border-border-subtle text-foreground-muted opacity-60',
                 )}
               >
                 <span
                   aria-hidden
                   className={cn(
                     'inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] leading-none',
-                    isCurrent ? 'bg-accent-ink/15' : 'border-border-subtle border',
+                    isCurrent ? 'bg-primary-foreground/15' : 'border-border-subtle border',
                   )}
                 >
                   {index + 1}
@@ -71,7 +71,7 @@ export function StepPills({
                 )}
               </span>
               {index < stages.length - 1 && (
-                <span aria-hidden className="text-ink-muted opacity-40">
+                <span aria-hidden className="text-foreground-muted opacity-40">
                   →
                 </span>
               )}

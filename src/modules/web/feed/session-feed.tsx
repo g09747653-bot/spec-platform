@@ -194,7 +194,10 @@ export function SessionFeed({
 
         return (
           <FeedItem key={block.id} block={block}>
-            <p className="text-ink-muted max-w-[46rem] text-xs" data-testid="generation-marker">
+            <p
+              className="text-foreground-muted max-w-[46rem] text-xs"
+              data-testid="generation-marker"
+            >
               {block.status === 'failed'
                 ? 'That generation did not complete. Nothing was lost.'
                 : `Drafted on attempt ${String(block.attempt)} — an earlier provider did not answer.`}

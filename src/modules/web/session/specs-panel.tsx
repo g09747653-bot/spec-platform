@@ -33,11 +33,11 @@ export interface SpecsPanelProps {
 
 function statusOf(file: SpecFileModel | undefined): { label: string; tone: string } {
   if (file === undefined || file.revisionCount === 0) {
-    return { label: 'Not started', tone: 'text-ink-muted' };
+    return { label: 'Not started', tone: 'text-foreground-muted' };
   }
-  if (file.approved) return { label: 'Approved', tone: 'text-green-700' };
+  if (file.approved) return { label: 'Approved', tone: 'text-success-ink' };
 
-  return { label: `Rev ${String(file.revisionCount)}`, tone: 'text-ink-muted' };
+  return { label: `Rev ${String(file.revisionCount)}`, tone: 'text-foreground-muted' };
 }
 
 export function SpecsPanel({ plan, files }: SpecsPanelProps) {

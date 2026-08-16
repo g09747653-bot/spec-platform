@@ -112,14 +112,14 @@ export function DocumentBlock({
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div className="flex flex-col gap-0.5">
             <BlockCaption stage={block.specType} />
-            <span className="text-ink-muted font-mono text-xs" data-testid="document-path">
+            <span className="text-foreground-muted font-mono text-xs" data-testid="document-path">
               {block.path}
             </span>
           </div>
           <div className="flex items-center gap-2">
             {block.approved && (
               <span
-                className="rounded-full border border-green-600/40 px-2 py-0.5 text-xs text-green-700"
+                className="rounded-full border border-success-ink/40 px-2 py-0.5 text-xs text-success-ink"
                 data-testid="document-approved"
               >
                 Approved
@@ -131,7 +131,7 @@ export function DocumentBlock({
               revision" has to name a single card or it names four.
             */}
             <span
-              className="border-border-subtle text-ink-muted rounded-full border px-2 py-0.5 text-xs"
+              className="border-border-subtle text-foreground-muted rounded-full border px-2 py-0.5 text-xs"
               data-testid="document-revision"
             >
               Rev{' '}
@@ -144,7 +144,7 @@ export function DocumentBlock({
           </div>
         </div>
 
-        <p className="text-ink-muted text-xs">
+        <p className="text-foreground-muted text-xs">
           {primary ? <span data-testid="spec-file-name">{block.fileName}</span> : block.fileName}
           {block.approved
             ? ' · approved — included in the export.'
@@ -155,7 +155,7 @@ export function DocumentBlock({
           <button
             type="button"
             data-testid="document-preview-toggle"
-            className="text-ink-muted self-start text-xs underline underline-offset-2"
+            className="text-foreground-muted self-start text-xs underline underline-offset-2"
             onClick={() => {
               void togglePreview();
             }}
@@ -167,14 +167,14 @@ export function DocumentBlock({
         {shown !== null && (
           <pre
             data-testid={primary ? 'spec-content' : 'document-content'}
-            className="bg-canvas border-border-subtle max-h-72 overflow-auto rounded-md border p-3 text-xs whitespace-pre-wrap"
+            className="bg-background border-border-subtle max-h-72 overflow-auto rounded-md border p-3 text-xs whitespace-pre-wrap"
           >
             {shown}
           </pre>
         )}
 
         {error !== null && (
-          <p role="alert" data-testid="spec-error" className="text-sm text-red-700">
+          <p role="alert" data-testid="spec-error" className="text-sm text-danger-ink">
             {error}
           </p>
         )}

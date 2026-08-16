@@ -88,14 +88,14 @@ export function StageActions({
       data-testid="interview-panel"
     >
       {awaitingRound && (
-        <p className="text-ink-muted text-sm" data-testid="awaiting-round">
+        <p className="text-foreground-muted text-sm" data-testid="awaiting-round">
           The questions above are waiting for your answers — nothing else moves until they are
           submitted.
         </p>
       )}
 
       {asking && (
-        <p className="text-ink-muted text-xs">
+        <p className="text-foreground-muted text-xs">
           {actions.answeredRounds} of {actions.roundBudget} question rounds answered
           {actions.askingStage === 'interview' &&
             (actions.summaryPersisted ? ' · summary saved' : ' · no summary yet')}
@@ -103,7 +103,7 @@ export function StageActions({
       )}
 
       {notice !== null && (
-        <p role="alert" data-testid="interview-notice" className="text-sm text-amber-700">
+        <p role="alert" data-testid="interview-notice" className="text-sm text-warning-ink">
           {notice}
         </p>
       )}
@@ -114,7 +114,7 @@ export function StageActions({
         stopped was a rejection reading "That step is not available yet".
       */}
       {asking && !awaitingRound && !actions.canAskMore && (
-        <p className="text-ink-muted text-sm" data-testid="rounds-exhausted">
+        <p className="text-foreground-muted text-sm" data-testid="rounds-exhausted">
           {`All ${String(actions.roundBudget)} question rounds for this stage have been used, so nothing further will be asked here. `}
           {actions.unmetNeeds.length > 0
             ? 'Answer what is still open below, then move on to the next step.'
@@ -229,7 +229,7 @@ export function StageActions({
           !awaitingRound &&
           !actions.target.ready &&
           actions.target.unmet.length > 0 && (
-            <span className="text-ink-muted text-xs" data-testid="gate-unmet">
+            <span className="text-foreground-muted text-xs" data-testid="gate-unmet">
               still needed: {actions.target.unmet.join(', ')}
             </span>
           )}

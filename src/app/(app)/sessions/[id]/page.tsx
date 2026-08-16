@@ -377,20 +377,20 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
     <section className="flex min-h-0 flex-col gap-4" data-testid="session">
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-semibold tracking-tight" data-testid="session-project-name">
+          <h1 className="text-h2" data-testid="session-project-name">
             {session.projectName}
           </h1>
           {/*
            * The chat's own name beside the project's (А-6). A project holds several conversations
            * now, so a header that named only the project would be the same header on all of them.
            */}
-          <span className="text-ink-muted text-sm" data-testid="session-title">
+          <span className="text-foreground-muted text-sm" data-testid="session-title">
             {session.title}
           </span>
           <MethodologyBadge methodologyId={session.methodologyId} />
           <Link
             href={`/projects/${session.projectId}`}
-            className="text-ink-muted text-xs hover:underline"
+            className="text-foreground-muted text-xs hover:underline"
             data-testid="back-to-project"
           >
             All chats

@@ -30,7 +30,7 @@ export function WaitingOn({ what, elapsedSeconds, onStop }: WaitingOnProps) {
       <Button variant="secondary" data-testid="stop-waiting" onClick={onStop}>
         Stop waiting
       </Button>
-      <span className="text-ink-muted text-xs" data-testid="waiting-status">
+      <span className="text-foreground-muted text-xs" data-testid="waiting-status">
         Waiting for {what} — {String(elapsedSeconds)} s. Stopping loses nothing: the page re-reads
         the session from the server either way.
       </span>

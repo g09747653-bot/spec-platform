@@ -22,7 +22,7 @@ export function MethodologyBadge({ methodologyId, className }: MethodologyBadgeP
   return (
     <span
       className={cn(
-        'border-border-subtle text-ink-muted inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs',
+        'border-border-subtle text-foreground-muted inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs',
         className,
       )}
       data-testid="methodology-badge"

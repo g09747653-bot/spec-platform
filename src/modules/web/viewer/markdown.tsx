@@ -39,7 +39,7 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
 
     if (token.startsWith('`')) {
       nodes.push(
-        <code key={key} className="bg-canvas rounded px-1 py-0.5 text-[0.9em]">
+        <code key={key} className="bg-background rounded px-1 py-0.5 text-[0.9em]">
           {token.slice(1, -1)}
         </code>,
       );
@@ -72,9 +72,9 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
 }
 
 const HEADING_CLASS: Record<number, string> = {
-  1: 'text-2xl font-semibold tracking-tight',
-  2: 'text-xl font-semibold tracking-tight',
-  3: 'text-lg font-semibold',
+  1: 'text-h1',
+  2: 'text-h2',
+  3: 'text-h3',
   4: 'text-base font-semibold',
   5: 'text-sm font-semibold',
   6: 'text-sm font-medium',
@@ -116,7 +116,7 @@ export function Markdown({ content }: { content: string }) {
       blocks.push({
         key: `code-${String(blocks.length)}`,
         node: (
-          <pre className="bg-canvas border-border-subtle overflow-x-auto rounded-md border p-3 text-xs">
+          <pre className="bg-background border-border-subtle overflow-x-auto rounded-md border p-3 text-xs">
             <code>{body.join('\n')}</code>
           </pre>
         ),
@@ -189,7 +189,7 @@ export function Markdown({ content }: { content: string }) {
       blocks.push({
         key: `quote-${String(blocks.length)}`,
         node: (
-          <blockquote className="border-border text-ink-muted border-l-2 pl-3">
+          <blockquote className="border-border text-foreground-muted border-l-2 pl-3">
             {renderInline(quoted.join(' '), `q${String(blocks.length)}`)}
           </blockquote>
         ),

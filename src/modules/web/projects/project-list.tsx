@@ -65,7 +65,7 @@ export function ProjectList({ projects }: { projects: readonly ProjectListItem[]
                 >
                   <span data-testid="project-name">{project.name}</span>
                 </Link>
-                <span className="text-ink-muted flex shrink-0 items-center gap-3 text-xs">
+                <span className="text-foreground-muted flex shrink-0 items-center gap-3 text-xs">
                   {project.sessionCount > 1 && (
                     <span data-testid="project-chat-count">{project.sessionCount} chats</span>
                   )}

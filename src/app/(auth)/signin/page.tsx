@@ -58,7 +58,7 @@ export default async function SignInPage({
             <p
               role="alert"
               data-testid="signin-error"
-              className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+              className="rounded-md border border-danger-ink/30 bg-danger-soft px-3 py-2 text-sm text-danger-ink"
             >
               {errorMessage}
             </p>

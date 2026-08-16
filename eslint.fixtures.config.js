@@ -3,6 +3,7 @@ import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescrip
 import tseslint from 'typescript-eslint';
 
 import { noRestrictedPathsRule } from './eslint.boundaries.js';
+import { designTokensPlugin, designTokensRule } from './eslint.design-tokens.js';
 import { restrictedImportRule } from './eslint.restricted-imports.js';
 import { specPlatformPlugin } from './eslint.section-schema.js';
 
@@ -21,7 +22,11 @@ export default tseslint.config({
     parser: tseslint.parser,
     parserOptions: { sourceType: 'module', ecmaVersion: 'latest' },
   },
-  plugins: { 'import-x': importX, 'spec-platform': specPlatformPlugin },
+  plugins: {
+    'import-x': importX,
+    'spec-platform': specPlatformPlugin,
+    'design-tokens': designTokensPlugin,
+  },
   settings: {
     'import-x/resolver-next': [createTypeScriptImportResolver({ project: './tsconfig.json' })],
   },
@@ -31,6 +36,8 @@ export default tseslint.config({
     // deliberate violations. Both rule definitions are imported, never restated.
     'spec-platform/no-duplicated-section-headings': 'error',
     ...restrictedImportRule,
+    // Task 124: colour literals and palette utilities, checked on deliberate violations.
+    ...designTokensRule,
     // Task 46 AC-2 / D-8: `EventSource` is not used in this codebase.
     'no-restricted-globals': [
       'error',

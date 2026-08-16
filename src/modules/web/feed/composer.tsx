@@ -93,13 +93,13 @@ export function Composer({
       data-testid="composer"
     >
       {error !== null && (
-        <p role="alert" data-testid="chat-error" className="text-sm text-red-700">
+        <p role="alert" data-testid="chat-error" className="text-sm text-danger-ink">
           {error}
         </p>
       )}
 
       {notice !== null && (
-        <p role="status" data-testid="reference-notice" className="text-ink-muted text-sm">
+        <p role="status" data-testid="reference-notice" className="text-foreground-muted text-sm">
           {notice}
         </p>
       )}
@@ -114,7 +114,7 @@ export function Composer({
               <button
                 type="button"
                 data-testid={`slash-${command.id}`}
-                className="hover:bg-canvas flex w-full flex-col items-start px-3 py-1.5 text-left text-sm"
+                className="hover:bg-background flex w-full flex-col items-start px-3 py-1.5 text-left text-sm"
                 onClick={() => {
                   const dispatched = onCommand(command);
                   onChange('');
@@ -126,7 +126,7 @@ export function Composer({
                 }}
               >
                 <span className="font-medium">{command.label}</span>
-                <span className="text-ink-muted text-xs">{command.description}</span>
+                <span className="text-foreground-muted text-xs">{command.description}</span>
               </button>
             </li>
           ))}
@@ -143,13 +143,13 @@ export function Composer({
               <button
                 type="button"
                 data-testid={`reference-option-${target.name}`}
-                className="hover:bg-canvas flex w-full items-center justify-between px-3 py-1.5 text-left text-sm"
+                className="hover:bg-background flex w-full items-center justify-between px-3 py-1.5 text-left text-sm"
                 onClick={() => {
                   onChange(applyReference(value, reference.start, target.name));
                 }}
               >
                 <span>{target.name}</span>
-                <span className="text-ink-muted text-xs">
+                <span className="text-foreground-muted text-xs">
                   {target.empty === true ? 'not written yet' : target.kind}
                 </span>
               </button>

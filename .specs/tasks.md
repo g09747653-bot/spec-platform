@@ -1576,15 +1576,48 @@ Goal: methodologies become data, the surface becomes the product's information a
   - _Complexity: Large_
   - _Parallel-safe: no_
 
-### Milestone 10п — Visual layer & finish (А-2 · M10) — to be refined at the M9п gate
+### Milestone 10п — Visual layer & finish (А-2 · M10) — refined at the M9п gate (Architect, 2026-08-16)
 
-- [ ] 124\. Design tokens and typography per Эталон §1.5 with our own palette and brand (dark/light theme, persisted).
-- [ ] 125\. Brand loader, connection-lost modal, toasts.
-- [ ] 126\. Completion panel (Session completed · bundle · Edit/Download) + «Build with your favourite tool» + Generate AI Prompt (references the approved documents; instructs preservation of architecture and conventions).
-- [ ] 127\. Diff preview polish in the Edit flow (green/red lines, sidebar access).
-- [ ] 128\. Parity checklist walk: every item of Эталон Часть 1 screenshotted ours-vs-theirs, gaps listed; one ultracode red-team pass over the checklist (mode map §3-bis).
-- [ ] 129\. M10п gate — final parity verdict by the Architect over the checklist artifacts; release tag.
+Goal: the visual layer with our own tint, the completion surface, structured local output (D-161 ruling), and the final parity verdict. Gate profile per decisions.md (2026-08-16): fresh Google key fronts the chain; the local fallback for this gate is measured at pre-flight — `qwen3:8b` first, `qwen3:14b` if it fails structure/JSON.
 
+- [x] 124\. Design tokens and theme with our own tint
+  - Token system per Эталон §1.5 structure (CSS variables for color/surface/foreground, typography scale) with **our own palette and brand** — not their colors; dark/light theme, persisted client-side, SSR-safe (no hydration flash).
+  - Every surface consumes tokens; raw color literals outside the single brand file are a lint error.
+  - Acceptance Criteria: theme toggle persists across reloads; a grep/lint gate proves zero hard-coded colors outside the brand file; text contrast meets WCAG AA in both themes (checked for token pairs, not by eye); existing e2e suites green on both themes (one smoke pass per theme).
+  - _Dependencies: 110_ · _Requirements: Эталон §1.5; А-2 («свой оттенок»)_ · _Touches: `src/app/globals.css`, `src/modules/web/**`_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [ ] 125\. Brand loader, connection-lost surface, toasts
+  - Animated brand loader (our own SVG) for initial session load; a connection-lost surface that appears when the stream/page loses the server and offers reconnect — wired to the existing resume machinery, not a parallel path; toasts for archive/restore/copy/export actions.
+  - Acceptance Criteria: killing the dev server mid-session raises the surface, restarting it reconnects and the feed resumes (existing resume tests reused); loader never traps the page (liveness invariant applies); toasts are announced accessibly (aria-live).
+  - _Dependencies: 124_ · _Requirements: Эталон §1.5_ · _Touches: `src/modules/web/**`_ · _Complexity: Medium_ · _Parallel-safe: yes_
+
+- [ ] 126\. Completion panel and «Build with your favourite tool»
+  - Session completed panel at terminal: bundle name, file count, Edit and Download actions. Below it — «Build with your favourite tool»: **Generate AI Prompt** produces a prompt that references the approved revisions and instructs the coding agent to follow the bundle (per Эталон §5.1 handoff pattern); platform buttons (Lovable/Bolt/Replit) copy that prompt and open the platform — no fake deeplinks: what we cannot integrate honestly is a copy-and-open, stated as such in the UI.
+  - Acceptance Criteria: panel renders only at Complete; the generated prompt names the actual approved revisions of THIS bundle and its methodology's file names; Download from the panel equals the export contract byte-for-byte; copy-and-open behaviour is honest (no claim of direct import).
+  - _Dependencies: 124_ · _Requirements: Эталон §1.1 (финал ленты), §5.1_ · _Touches: `src/modules/web/feed/**`, `src/modules/specs/export/**`_ · _Complexity: Large_ · _Parallel-safe: yes_
+
+- [ ] 127\. Edit-flow diff preview polish
+  - Green/red line diff rendering in Edit review cards (M4 renderer restyled by tokens); sidebar access to the last edit's diffs; text command «go back to previous step» creates a NEW revision restoring the prior content — immutability of revisions preserved, revert is an append, never a rewrite.
+  - Acceptance Criteria: diff colors come from tokens (both themes); revert produces Rev N+1 byte-equal to Rev N-1 with the edit chat as source; history shows all three revisions.
+  - _Dependencies: 124_ · _Requirements: Эталон §5.1 (Diff Preview, «Go back»)_ · _Touches: `src/modules/web/**`, `src/modules/specs/**`_ · _Complexity: Medium_ · _Parallel-safe: yes_
+
+- [ ] 131\. Structured local output — grammar-constrained JSON (вердикт Архитектора по D-161)
+  - The local adapter requests grammar/schema-constrained output (Ollama `format` with the JSON schema) for structured calls — Edit proposal, review.v2, interview drafts — so valid JSON does not depend on model obedience. Cloud path unchanged byte-for-byte (snapshot). Р-1 layers stay as the outer guard.
+  - Pre-flight proves the whole-bundle Edit proposal on the gate's local model; if the model still cannot deliver under constraint, that is reported as a named limitation of local mode — not silently rerouted to cloud.
+  - The recommendation-repair (`atMostOneRecommended`) logs one line when it fires, so future gates can tell «repair worked» from «model complied» (вердикт по §7.1 рапорта р.5).
+  - Acceptance Criteria: constrained Edit call returns parseable JSON on the pre-flight state that failed in D-161 (three-for-three); cloud snapshot unchanged; repair emits a log line covered by a test; `GATE_EDIT_LOCAL=1` walk segment passes with the constraint on.
+  - _Dependencies: 130_ · _Requirements: D-161; А-7 (основной режим — локальный); А-8_ · _Touches: `src/modules/adapters/llm/**`, `src/modules/agents/**`_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [ ] 128\. Parity checklist walk (ultracode red-team)
+  - Build the checklist from Эталон Часть 1 (§1.1–1.5, every observable behaviour and surface); walk our product item-by-item with screenshots ours-vs-dump; produce the gap list with a verdict per item (parity / deliberate own-tint difference / gap). Then ONE ultracode red-team pass adversarially hunting for missed discrepancies (mode map §3-bis).
+  - Acceptance Criteria: every checklist item carries a verdict and evidence; gaps are enumerated with owners (fix in 129 or recorded as accepted difference by the Architect); the red-team pass found-items are all dispositioned; artifacts in `artifacts/parity-M10/`.
+  - _Dependencies: 124–127, 131_ · _Requirements: А-2 (финальный парити-вердикт)_ · _Touches: `artifacts/parity-M10/**`, `e2e/**`_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [ ] 129\. M10п gate — final walk and stage-1 seal (self-run, А-2.1)
+  - Pre-flight per the gate profile: fresh key check, `qwen3:8b` measured (document structure + JSON round + constrained Edit); the smallest passing model becomes the walk's local fallback. Full live walk on the final visual layer, both themes smoked; fix-worthy gaps from 128 closed and re-walked.
+  - Acceptance Criteria: walk GREEN with zero truncations and zero structural rejections; parity checklist verdicts all dispositioned; CI green; artifacts `artifacts/gate-M10/`.
+  - After the Architect accepts: tag `m10p-accepted` and release tag `stage1-complete` — Этап 1 закрыт.
+  - _Dependencies: 128_ · _Requirements: А-2.1_ · _Touches: `e2e/gate-M10.live.ts`, `artifacts/gate-M10/**`_ · _Complexity: Large_ · _Parallel-safe: no_
 
 ## Requirement Coverage
 

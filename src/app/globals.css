@@ -1,48 +1,42 @@
 @import 'tailwindcss';
+@import './brand.css';
 
 /**
- * Design tokens (Tailwind v4 CSS-first configuration).
+ * Global base styles.
  *
- * Every vendored primitive in `src/modules/web/ui` styles itself from these tokens, so a theme
- * change is one edit here rather than a sweep through components.
+ * Tokens live next door in `brand.css` — the only file permitted to name a colour. Everything
+ * here reaches them through `var(--color-…)`, which is also what keeps the theme switch to a
+ * single attribute on <html>.
  */
-@theme {
-  --color-canvas: oklch(98.4% 0.003 247.86);
-  --color-surface: oklch(100% 0 0);
-  --color-border-subtle: oklch(92.9% 0.006 264.53);
-  --color-ink: oklch(27.9% 0.041 260.03);
-  --color-ink-muted: oklch(55.1% 0.027 264.36);
-  --color-accent: oklch(48.8% 0.243 264.38);
-  --color-accent-ink: oklch(100% 0 0);
-  --color-danger: oklch(57.7% 0.245 27.33);
-
-  --radius-card: 0.75rem;
-}
 
 @layer base {
   * {
     box-sizing: border-box;
   }
 
-  html {
-    color-scheme: light;
-  }
-
   body {
     margin: 0;
-    background-color: var(--color-canvas);
-    color: var(--color-ink);
-    font-family:
-      ui-sans-serif,
-      system-ui,
-      -apple-system,
-      'Segoe UI',
-      Roboto,
-      sans-serif;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    /*
+     * Repainting the whole page on a theme flip looks like a fault rather than a choice, so the
+     * two token-driven properties ease. Anyone who has asked their system not to animate gets no
+     * transition at all.
+     */
+    transition:
+      background-color 150ms ease,
+      color 150ms ease;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    body {
+      transition: none;
+    }
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--color-primary);
     outline-offset: 2px;
   }
 }

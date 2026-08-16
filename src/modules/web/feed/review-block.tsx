@@ -46,7 +46,7 @@ function ConfidenceBadge({ item }: { item: FeedReviewItem }) {
   if (item.source === 'linter') {
     return (
       <span
-        className="border-border-subtle text-ink-muted rounded-full border px-2 py-0.5 text-[0.7rem] whitespace-nowrap"
+        className="border-border-subtle text-foreground-muted rounded-full border px-2 py-0.5 text-[0.7rem] whitespace-nowrap"
         title={LINTER_TOOLTIP}
         data-testid={`review-item-source-${item.id}`}
       >
@@ -57,7 +57,7 @@ function ConfidenceBadge({ item }: { item: FeedReviewItem }) {
 
   return (
     <span
-      className="border-border-subtle text-ink-muted rounded-full border px-2 py-0.5 text-[0.7rem] whitespace-nowrap"
+      className="border-border-subtle text-foreground-muted rounded-full border px-2 py-0.5 text-[0.7rem] whitespace-nowrap"
       title={CONFIDENCE_TOOLTIP}
       data-testid={`review-item-confidence-${item.id}`}
     >
@@ -86,7 +86,7 @@ function ItemRow({
         <span className="font-medium">{item.title}</span>
         <ConfidenceBadge item={item} />
       </span>
-      <span className="text-ink-muted block text-xs">{item.sectionPath}</span>
+      <span className="text-foreground-muted block text-xs">{item.sectionPath}</span>
       <span className="block">{item.body}</span>
       <span className="block text-xs italic" data-testid={`review-item-suggestion-${item.id}`}>
         Suggestion: {item.suggestion}
@@ -107,7 +107,7 @@ function ItemRow({
 
   return (
     <label
-      className={`${className} hover:bg-canvas cursor-pointer`}
+      className={`${className} hover:bg-background cursor-pointer`}
       data-testid={`${testIdPrefix}-${item.id}`}
     >
       <input
@@ -154,7 +154,7 @@ function ItemGroup({
   return (
     <details open className="flex flex-col gap-2" data-testid={testId}>
       <summary className="cursor-pointer text-sm font-semibold">
-        <span className={tone === 'blocking' ? 'text-red-700' : undefined}>
+        <span className={tone === 'blocking' ? 'text-danger-ink' : undefined}>
           {title} ({items.length})
         </span>
       </summary>
@@ -180,8 +180,8 @@ function VerdictBadge({ outcome }: { outcome: 'pass' | 'needs_revision' }) {
     <span
       className={
         outcome === 'pass'
-          ? 'rounded-full border border-green-600/40 px-2 py-0.5 text-xs text-green-700'
-          : 'rounded-full border border-amber-600/40 px-2 py-0.5 text-xs text-amber-700'
+          ? 'rounded-full border border-success-ink/40 px-2 py-0.5 text-xs text-success-ink'
+          : 'rounded-full border border-warning-ink/40 px-2 py-0.5 text-xs text-warning-ink'
       }
       data-testid="review-outcome"
     >
@@ -289,7 +289,7 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
         >
           {header}
           {summary}
-          <p className="text-ink-muted text-sm">
+          <p className="text-foreground-muted text-sm">
             <span data-testid="review-decision">
               {decided === null
                 ? 'This review is no longer the one in front of you.'
@@ -332,7 +332,7 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
         {header}
         {summary}
 
-        <p className="text-ink-muted text-sm">
+        <p className="text-foreground-muted text-sm">
           {total === 0
             ? 'The reviewer found nothing to raise. Nothing advances until you decide.'
             : 'Ticked points are the ones a rewrite would apply. Nothing advances until you decide.'}
@@ -360,13 +360,13 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
         />
 
         {error !== null && (
-          <p role="alert" data-testid="review-error" className="text-sm text-red-700">
+          <p role="alert" data-testid="review-error" className="text-sm text-danger-ink">
             {error}
           </p>
         )}
 
         {exhausted && (
-          <p className="text-ink-muted text-sm" data-testid="review-cycles-exhausted">
+          <p className="text-foreground-muted text-sm" data-testid="review-cycles-exhausted">
             {REASON_EXPLANATION.REVISION_LIMIT_REACHED}
           </p>
         )}
@@ -406,7 +406,7 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
         </div>
 
         {!exhausted && selected.size === 0 && total > 0 && (
-          <p className="text-ink-muted text-xs" data-testid="review-selection-hint">
+          <p className="text-foreground-muted text-xs" data-testid="review-selection-hint">
             Requesting changes needs at least one point ticked — only the ticked ones are applied.
           </p>
         )}

@@ -123,7 +123,7 @@ export function GenerationSurface({
       <BlockCaption stage={stage} trailing="drafting" />
 
       {stream.error !== null && (
-        <p role="alert" data-testid="generation-error" className="text-sm text-red-700">
+        <p role="alert" data-testid="generation-error" className="text-sm text-danger-ink">
           {stream.error.message}
         </p>
       )}
@@ -131,7 +131,7 @@ export function GenerationSurface({
       {stream.text !== '' && (
         <pre
           data-testid="spec-stream"
-          className="bg-canvas border-border-subtle max-h-72 overflow-auto rounded-md border p-3 text-xs whitespace-pre-wrap"
+          className="bg-background border-border-subtle max-h-72 overflow-auto rounded-md border p-3 text-xs whitespace-pre-wrap"
         >
           {stream.text}
         </pre>
@@ -143,7 +143,7 @@ export function GenerationSurface({
         for both makes a slow search look like a stalled generation.
       */}
       {stream.researching && (
-        <p className="text-ink-muted text-sm" data-testid="stream-researching">
+        <p className="text-foreground-muted text-sm" data-testid="stream-researching">
           Reading current sources on the web…
         </p>
       )}
@@ -158,14 +158,14 @@ export function GenerationSurface({
         spinner that looks the same as one over a broken socket.
       */}
       {stream.status === 'streaming' && stream.text === '' && !stream.researching && (
-        <p className="text-ink-muted text-sm" data-testid="stream-waiting">
+        <p className="text-foreground-muted text-sm" data-testid="stream-waiting">
           Waiting for the first words. A local model can think for a minute or two before it starts
           writing — nothing is stuck, and nothing is lost if you stop.
         </p>
       )}
 
       {stream.status === 'reconnecting' && (
-        <p className="text-ink-muted text-sm" data-testid="stream-reconnecting">
+        <p className="text-foreground-muted text-sm" data-testid="stream-reconnecting">
           The connection dropped. Reconnecting — nothing written so far is lost.
         </p>
       )}
@@ -175,7 +175,7 @@ export function GenerationSurface({
           <Button variant="secondary" data-testid="stop-generation" onClick={stopFollowing}>
             Stop
           </Button>
-          <span className="text-ink-muted text-xs">
+          <span className="text-foreground-muted text-xs">
             {generating
               ? 'Generating… you can stop and start again; nothing written so far is lost.'
               : 'A generation for this step is already running — this page is picking it up. Stop to take the page back; the run itself carries on either way.'}
@@ -185,18 +185,18 @@ export function GenerationSurface({
 
       {idle &&
         (blocked ? (
-          <p className="text-ink-muted text-sm" data-testid="generation-blocked">
+          <p className="text-foreground-muted text-sm" data-testid="generation-blocked">
             A question card is waiting for your answers above — nothing generates until it is
             submitted.
           </p>
         ) : !canGenerate ? (
-          <p className="text-ink-muted text-sm" data-testid="generation-unavailable">
+          <p className="text-foreground-muted text-sm" data-testid="generation-unavailable">
             This step does not draft a document. Use the controls below to move the session on.
           </p>
         ) : (
           <>
             {owed !== null && (
-              <p className="text-ink-muted text-sm" data-testid="revision-owed">
+              <p className="text-foreground-muted text-sm" data-testid="revision-owed">
                 The review sent this document back with {owed.points}{' '}
                 {owed.points === 1 ? 'point' : 'points'} ticked. Rewriting applies exactly those and
                 leaves the rest as it stands.

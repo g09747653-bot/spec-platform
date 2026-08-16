@@ -26,13 +26,13 @@ export function McpCard() {
       <CardContent className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-4">
           <span className="text-sm font-medium">This project</span>
-          <span className="text-ink-muted text-xs" data-testid="mcp-project-count">
+          <span className="text-foreground-muted text-xs" data-testid="mcp-project-count">
             0 servers
           </span>
         </div>
         <div className="flex items-center justify-between gap-4">
           <span className="text-sm font-medium">User profile</span>
-          <span className="text-ink-muted text-xs" data-testid="mcp-profile-count">
+          <span className="text-foreground-muted text-xs" data-testid="mcp-profile-count">
             0 servers
           </span>
         </div>

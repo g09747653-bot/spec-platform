@@ -78,7 +78,7 @@ function ArchiveButton({ chat }: { chat: ChatListItem }) {
   return (
     <span className="flex items-center gap-2">
       {error !== null && (
-        <span role="alert" className="text-xs text-red-700" data-testid="chat-error">
+        <span role="alert" className="text-xs text-danger-ink" data-testid="chat-error">
           {error}
         </span>
       )}
@@ -126,7 +126,7 @@ export function ChatList({ chats }: { chats: readonly ChatListItem[] }) {
                 >
                   <span data-testid="chat-title">{chat.title}</span>
                 </Link>
-                <span className="text-ink-muted flex shrink-0 items-center gap-3 text-xs">
+                <span className="text-foreground-muted flex shrink-0 items-center gap-3 text-xs">
                   <span data-testid="chat-methodology">{chat.badge}</span>
                   <span data-testid="chat-bundle">{chat.bundleLabel}</span>
                   <span data-testid="chat-status">
@@ -136,7 +136,7 @@ export function ChatList({ chats }: { chats: readonly ChatListItem[] }) {
               </div>
 
               <div className="flex items-center justify-between gap-4">
-                <span className="text-ink-muted text-xs" data-testid="chat-age">
+                <span className="text-foreground-muted text-xs" data-testid="chat-age">
                   {lastMessageLabel(chat.ageSeconds)}
                 </span>
                 <ArchiveButton chat={chat} />
