@@ -1,3 +1,4 @@
+import { methodologyConfig } from '@/modules/methodologies';
 import { isSubstage, type StagePosition, type Substage } from '@/modules/workflow/model/stages';
 
 import { stageLabel } from '../session/stage-display';
@@ -51,4 +52,17 @@ export function bundleSlug(projectName: string): string {
 /** `specs/<bundle>/<file>.md` — the mono path under the stage name on a document card. */
 export function specPath(projectName: string, fileName: string): string {
   return `specs/${bundleSlug(projectName)}/${fileName}`;
+}
+
+/**
+ * «MySpec · Greenfield · V1» as one string (task 126).
+ *
+ * The badge renders the three parts separately so a test can assert the parts rather than the
+ * punctuation; the handoff prompt needs them joined. Both read the same three fields of the same
+ * config, and the separator is written down once — here.
+ */
+export function methodologyLabel(methodologyId: string | null | undefined): string {
+  const { vendor, flavour, version } = methodologyConfig(methodologyId).badge;
+
+  return `${vendor} · ${flavour} · ${version}`;
 }

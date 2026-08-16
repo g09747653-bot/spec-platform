@@ -19,11 +19,21 @@ export interface CapturedArchive {
   entries: Record<string, string>;
 }
 
-/** Clicks the download control and returns the archive it produced. */
-export async function downloadBundle(page: Page): Promise<CapturedArchive> {
+/**
+ * Clicks a download control and returns the archive it produced.
+ *
+ * `control` exists because task 126 added a second one: the completion panel's Download must produce
+ * the same archive as the export panel's, and the way to assert that is to capture both with the
+ * same helper and compare the files. It defaults to the export panel, which is what every caller
+ * written before that meant.
+ */
+export async function downloadBundle(
+  page: Page,
+  control = 'download-export',
+): Promise<CapturedArchive> {
   const download = await Promise.all([
     page.waitForEvent('download'),
-    page.getByTestId('download-export').click(),
+    page.getByTestId(control).click(),
   ]).then(([event]) => event);
 
   const path = await download.path();

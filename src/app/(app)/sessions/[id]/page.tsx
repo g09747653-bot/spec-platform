@@ -28,6 +28,7 @@ import { forwardDoors, nextPosition } from '@/modules/workflow/next-position';
 import { assembleWorkflowSnapshot } from '@/modules/workflow/snapshot-assembler';
 import { unmetNeedNames, type WorkflowSnapshot } from '@/modules/workflow/snapshot';
 import { buildFeed } from '@/modules/web/feed/build-feed';
+import { bundleSlug, methodologyLabel } from '@/modules/web/feed/labels';
 import { SessionFeed } from '@/modules/web/feed/session-feed';
 import type { StageActionsModel, TransitionTargetModel } from '@/modules/web/feed/stage-actions';
 import { MethodologyBadge } from '@/modules/web/feed/methodology-badge';
@@ -276,10 +277,30 @@ async function SessionBody({ session, scope }: { session: SessionDetail; scope: 
     exportMode,
     plan.map((entry) => entry.specType),
   );
-  const exportFiles = plan.flatMap((entry) => {
+  /*
+   * The bundle's files, in the plan's order, each carrying the revision the export resolves to.
+   *
+   * The revision number travels with the row rather than being looked up again for the completion
+   * panel (task 126): the handoff prompt has to name the revision that would actually be exported,
+   * and asking a second query for "the latest" would answer a different question after enrichment.
+   */
+  const handoffFiles = plan.flatMap((entry) => {
     const file = exportable.find((candidate) => candidate.specType === entry.specType);
-    return file === undefined ? [] : [{ specFileId: file.specFileId, fileName: entry.fileName }];
+
+    return file === undefined
+      ? []
+      : [
+          {
+            specFileId: file.specFileId,
+            fileName: entry.fileName,
+            revisionNumber: file.revisionNumber,
+          },
+        ];
   });
+  const exportFiles = handoffFiles.map((file) => ({
+    specFileId: file.specFileId,
+    fileName: file.fileName,
+  }));
   const omittedFiles = plan
     .filter((entry) => !exportFiles.some((file) => file.fileName === entry.fileName))
     .map((entry) => entry.fileName);
@@ -474,7 +495,20 @@ async function SessionBody({ session, scope }: { session: SessionDetail; scope: 
           activeRun={
             activeRun === null ? null : { runId: activeRun.runId, attempt: activeRun.attempt }
           }
-          bundleFileCount={exportFiles.length}
+          /*
+           * The completion panel's model (task 126). Every field is the bundle's own: the slug the
+           * document cards already print, the badge parts of the session's methodology, and the
+           * files with the revisions the export would resolve to — so the handoff prompt describes
+           * this bundle and no other.
+           */
+          completion={{
+            projectId: session.projectId,
+            bundleName: bundleSlug(session.projectName),
+            methodologyLabel: methodologyLabel(bundleMethodologyId),
+            files: handoffFiles,
+            omittedFiles,
+            exportMode,
+          }}
         />
 
         <SessionSidebar>
