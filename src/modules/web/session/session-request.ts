@@ -66,6 +66,15 @@ export interface SessionRequestOptions {
    * default only applies where nothing was passed.
    */
   deadlineMs?: number;
+  /**
+   * Whether the server was reachable, reported per request (task 125).
+   *
+   * `true` the moment a response arrives, whatever its status — a 409 is the server answering. `false`
+   * only when the request never reached it. **The deadline reports neither**: a server that has not
+   * answered within its own worst case may still be working, and calling that "unreachable" would
+   * put a connection banner over a session that is merely slow.
+   */
+  onReachability?: (reachable: boolean) => void;
 }
 
 export interface SessionRequest {
@@ -186,11 +195,15 @@ export function createSessionRequest(options: SessionRequestOptions): SessionReq
 
     if ('error' in outcome) {
       // The signal is the record of who ended it: `abandon()` aborts, a dropped connection does not.
-      settle(local.signal.aborted ? ABANDONED_NOTICE : UNREACHABLE_NOTICE);
+      const abandoned = local.signal.aborted;
+      if (!abandoned) options.onReachability?.(false);
+
+      settle(abandoned ? ABANDONED_NOTICE : UNREACHABLE_NOTICE);
       return { ok: false, payload: null };
     }
 
     const { response } = outcome;
+    options.onReachability?.(true);
     const payload: unknown = await response.json().catch(() => null);
 
     /*

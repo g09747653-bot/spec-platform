@@ -1,14 +1,19 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { Suspense } from 'react';
 
 import { getEnv } from '@/config/env';
 import { getDatabase } from '@/db/client';
+import type { OwnerScope } from '@/db/owner-scope';
 import { AUTO_MODEL, modelRegistry } from '@/modules/adapters/llm';
 import { createGenerationStore } from '@/modules/adapters/llm/generation-store';
 import { requireOwnerScope } from '@/modules/projects/auth/scope';
 import { createAttachmentRepository } from '@/modules/projects/repositories/attachments';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
-import { createSessionRepository } from '@/modules/projects/repositories/sessions';
+import {
+  createSessionRepository,
+  type SessionDetail,
+} from '@/modules/projects/repositories/sessions';
 import { bundlePlan, methodologyConfig } from '@/modules/methodologies';
 import { resolveExportMode } from '@/modules/specs/export/resolve-mode';
 import { isSpecType } from '@/modules/specs/model/spec-files';
@@ -33,6 +38,7 @@ import { CONDITION_COPY, STILL_NEEDED } from '@/modules/web/session/gate-copy';
 import { stageLabel } from '@/modules/web/session/stage-display';
 import { ExportPanel } from '@/modules/web/session/export-panel';
 import { LocalWorkspace, SessionSidebar } from '@/modules/web/session/sidebar';
+import { BrandLoader } from '@/modules/web/theme/brand-loader';
 import { SpecsPanel, type SpecFileModel } from '@/modules/web/session/specs-panel';
 
 import { assembleFeedSource } from './feed-source';
@@ -213,6 +219,30 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
    */
   const session = await createSessionRepository(db).findDetailById(scope, id);
   if (session === null) notFound();
+
+  /*
+   * The loader begins **here**, and not a line earlier (task 125).
+   *
+   * A Suspense boundary is where the response body starts streaming, and a response that has begun
+   * cannot change its status code. `notFound()` above therefore has to run before this boundary is
+   * reached, or a session belonging to someone else would answer `200` with the not-found page
+   * inside it — a soft 404, and a weaker answer than AR-2/NFR-005 AC-2 asks for. That is exactly why
+   * this is a boundary in the page rather than a `loading.tsx`: the route file convention puts the
+   * fallback above the whole segment, ownership check included.
+   */
+  return (
+    <Suspense fallback={<BrandLoader label="Opening the session…" />}>
+      <SessionBody session={session} scope={scope} />
+    </Suspense>
+  );
+}
+
+/**
+ * Everything the session page reads and renders once the session is known to exist and to be this
+ * user's. Split out only so the fallback above has something to suspend on — see the note there.
+ */
+async function SessionBody({ session, scope }: { session: SessionDetail; scope: OwnerScope }) {
+  const db = getDatabase();
 
   /*
    * The export estimate, resolved through the same mode machinery the endpoint uses (task 73). The

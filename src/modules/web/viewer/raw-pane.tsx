@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { Button } from '../ui/button';
+import { showToast } from '../ui/toast';
 
 /**
  * The Raw pane (task 122 AC-3).
@@ -25,13 +26,16 @@ export function RawPane({ specFileId, content }: { specFileId: string; content: 
       const response = await fetch(`/api/specs/${specFileId}/content`);
       if (!response.ok) {
         setState('failed');
+        showToast('That copy did not go through.', 'danger');
         return;
       }
 
       await navigator.clipboard.writeText(await response.text());
       setState('copied');
+      showToast('Copied the approved revision to the clipboard.', 'success');
     } catch {
       setState('failed');
+      showToast('That copy did not go through.', 'danger');
     }
   }
 

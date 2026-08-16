@@ -165,6 +165,14 @@ export const DEFAULT_BACKOFF: readonly number[] = [250, 500, 1000, 2000, 4000, 8
 
 export const DEFAULT_IDLE_TIMEOUT_MS = 45_000;
 
+/**
+ * The code the reader ends on when it could not keep — or could not open — a connection.
+ *
+ * Named here because this is the only place that produces it, and read by `connection.ts` to tell a
+ * lost server apart from a failed generation (task 125).
+ */
+export const STREAM_DISCONNECTED = 'STREAM_DISCONNECTED';
+
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** Marker for a connection that delivered nothing for the whole idle deadline. */
@@ -308,7 +316,7 @@ export function createResumableStream(options: ResumableStreamOptions): Resumabl
           ...state,
           status: 'failed',
           error: {
-            code: 'STREAM_DISCONNECTED',
+            code: STREAM_DISCONNECTED,
             message: 'The connection to the generation was lost. Nothing has been lost — retry.',
             retryable: true,
           },
