@@ -76,8 +76,26 @@ export function SpecsPanel({ plan, files }: SpecsPanelProps) {
                   {document.fileName}
                 </Link>
               )}
-              <span className={`text-xs ${status.tone}`} data-testid="specs-panel-status">
-                {status.label}
+              <span className="flex items-baseline gap-2">
+                {/*
+                 * Straight to the Diff view of the newest revision (task 127; Эталон §5.1 — «Diff
+                 * Preview из сайдбара»). Offered only from the second revision on, because a file
+                 * with one has nothing to compare against, and the viewer would open on a pane that
+                 * says so. The link is the viewer's own URL state (task 122 AC-4), not a second
+                 * surface.
+                 */}
+                {file?.specFileId != null && file.revisionCount > 1 && (
+                  <Link
+                    href={`/specs/${file.specFileId}?view=diff`}
+                    className="text-primary-ink text-xs hover:underline"
+                    data-testid="specs-panel-diff"
+                  >
+                    Diff
+                  </Link>
+                )}
+                <span className={`text-xs ${status.tone}`} data-testid="specs-panel-status">
+                  {status.label}
+                </span>
               </span>
             </li>
           );

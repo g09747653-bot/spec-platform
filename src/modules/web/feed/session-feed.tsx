@@ -15,6 +15,7 @@ import { FeedItem } from './feed-item';
 import { GenerationSurface } from './generation-surface';
 import type { Feed, FeedBlock } from './model';
 import { ProposalBlockCard, RefineBox, type PendingProposalModel } from './proposal-block';
+import { RevertCard, type RevertModel } from './revert-card';
 import { ReviewBlockCard } from './review-block';
 import { RoundBlock } from './round-block';
 import { StageActions, type StageActionsModel } from './stage-actions';
@@ -57,6 +58,8 @@ export interface SessionFeedProps {
   activeRun: { runId: string; attempt: number } | null;
   /** Everything the completion panel needs: the bundle, its files, and where to export it. */
   completion: CompletionModel;
+  /** The go-back offer for the document on screen, or `null` when it has only one revision. */
+  revert: RevertModel | null;
   /** What an `@` may name in this chat: the bundle's files and the session's documents (task 121). */
   references: readonly ReferenceTarget[];
   /** Auto plus each configured model. A model whose key is absent is not in this list. */
@@ -78,6 +81,7 @@ export function SessionFeed({
   describePrefill,
   activeRun,
   completion,
+  revert,
   references,
   models,
   selectedModel,
@@ -266,6 +270,12 @@ export function SessionFeed({
         {refineFileId !== null && proposal === null && (
           <li className="flex w-full">
             <RefineBox specFileId={refineFileId} />
+          </li>
+        )}
+
+        {revert !== null && proposal === null && (
+          <li className="flex w-full">
+            <RevertCard sessionId={sessionId} revert={revert} />
           </li>
         )}
       </ol>

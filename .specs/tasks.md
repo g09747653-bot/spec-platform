@@ -1596,7 +1596,7 @@ Goal: the visual layer with our own tint, the completion surface, structured loc
   - Acceptance Criteria: panel renders only at Complete; the generated prompt names the actual approved revisions of THIS bundle and its methodology's file names; Download from the panel equals the export contract byte-for-byte; copy-and-open behaviour is honest (no claim of direct import).
   - _Dependencies: 124_ · _Requirements: Эталон §1.1 (финал ленты), §5.1_ · _Touches: `src/modules/web/feed/**`, `src/modules/specs/export/**`_ · _Complexity: Large_ · _Parallel-safe: yes_
 
-- [ ] 127\. Edit-flow diff preview polish
+- [x] 127. Edit-flow diff preview polish
   - Green/red line diff rendering in Edit review cards (M4 renderer restyled by tokens); sidebar access to the last edit's diffs; text command «go back to previous step» creates a NEW revision restoring the prior content — immutability of revisions preserved, revert is an append, never a rewrite.
   - Acceptance Criteria: diff colors come from tokens (both themes); revert produces Rev N+1 byte-equal to Rev N-1 with the edit chat as source; history shows all three revisions.
   - _Dependencies: 124_ · _Requirements: Эталон §5.1 (Diff Preview, «Go back»)_ · _Touches: `src/modules/web/**`, `src/modules/specs/**`_ · _Complexity: Medium_ · _Parallel-safe: yes_

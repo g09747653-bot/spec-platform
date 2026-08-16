@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { z } from 'zod';
 
 import { Button } from '../ui/button';
+import { DiffBody } from '../ui/diff-body';
 import { Label, Textarea } from '../ui/field';
 
 import { BlockCaption } from './bubbles';
@@ -53,33 +54,6 @@ function refusalMessage(payload: unknown): string {
   if (!parsed.success) return 'That did not work. Please try again.';
 
   return parsed.data.error.details?.issues[0]?.message ?? parsed.data.error.message;
-}
-
-/** Colours the unified diff by line marker, without re-deriving what changed. */
-function DiffBody({ unifiedDiff }: { unifiedDiff: string }) {
-  return (
-    <pre
-      data-testid="diff-body"
-      className="bg-background border-border-subtle max-h-72 overflow-auto rounded-md border p-3 text-xs whitespace-pre"
-    >
-      {unifiedDiff.split('\n').map((line, index) => (
-        <span
-          key={`${String(index)}-${line}`}
-          className={
-            line.startsWith('+') && !line.startsWith('+++')
-              ? 'block text-diff-added-ink'
-              : line.startsWith('-') && !line.startsWith('---')
-                ? 'block text-diff-removed-ink'
-                : line.startsWith('@@')
-                  ? 'text-foreground-muted block'
-                  : 'block'
-          }
-        >
-          {line === '' ? ' ' : line}
-        </span>
-      ))}
-    </pre>
-  );
 }
 
 export function ProposalBlockCard({
@@ -175,7 +149,7 @@ export function ProposalBlockCard({
                 +{file.added} −{file.removed}
               </span>
             </p>
-            <DiffBody unifiedDiff={file.unifiedDiff} />
+            <DiffBody unifiedDiff={file.unifiedDiff} testId="diff-body" />
           </div>
         ))}
 

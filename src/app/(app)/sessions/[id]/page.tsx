@@ -15,6 +15,7 @@ import {
   type SessionDetail,
 } from '@/modules/projects/repositories/sessions';
 import { bundlePlan, methodologyConfig } from '@/modules/methodologies';
+import { diffLines, formatUnifiedDiff } from '@/modules/specs/diff';
 import { resolveExportMode } from '@/modules/specs/export/resolve-mode';
 import { isSpecType } from '@/modules/specs/model/spec-files';
 import { createProposedChangeService } from '@/modules/specs/proposed-changes/proposed-change-service';
@@ -363,6 +364,44 @@ async function SessionBody({ session, scope }: { session: SessionDetail; scope: 
   const latest = currentFile === null ? null : await revisions.latest(currentFile.id);
 
   /*
+   * What «Go back to previous step» would go back to (task 127; Эталон §5.1).
+   *
+   * **The last document this conversation changed** — read from `source_session_id`, which is the
+   * column that exists to answer exactly this now that a project holds several chats (А-6). An Edit
+   * chat writes no document of its own, so "the current file" is not a thing it has; what it has is
+   * the file it last touched. A generate chat falls back to the document it is working on.
+   *
+   * `null` when the file has one revision: there is no earlier content, and an offer whose only
+   * outcome is a refusal is not an offer.
+   */
+  const lastTouched = bundleRevisions
+    .filter((revision) => revision.sourceSessionId === session.id)
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+
+  const revertFileId = lastTouched?.specFileId ?? currentFile?.id ?? null;
+  const revertHistory = revertFileId === null ? [] : await revisions.history(revertFileId);
+  const revertOrdered = [...revertHistory].sort((a, b) => a.revisionNumber - b.revisionNumber);
+  const revertCurrent = revertOrdered.at(-1);
+  const revertPrevious = revertOrdered.at(-2);
+
+  const revert =
+    revertFileId === null || revertCurrent === undefined || revertPrevious === undefined
+      ? null
+      : {
+          specFileId: revertFileId,
+          fileName:
+            lastTouched?.fileName ??
+            plan.find((entry) => entry.specType === currentFile?.specType)?.fileName ??
+            'the document',
+          currentRevision: revertCurrent.revisionNumber,
+          previousRevision: revertPrevious.revisionNumber,
+          unifiedDiff: formatUnifiedDiff(
+            diffLines(revertCurrent.content, revertPrevious.content),
+            lastTouched?.fileName ?? 'document.md',
+          ),
+        };
+
+  /*
    * The pending refinement or edit, if this chat has one (task 60, task 118; FR-011 AC-3/AC-6).
    *
    * Each diff is recomputed against the revision its proposal was based on, so the card shows what
@@ -465,6 +504,7 @@ async function SessionBody({ session, scope }: { session: SessionDetail; scope: 
           primaryContent={latest?.content ?? null}
           proposal={proposalModel}
           refineFileId={latest === null ? null : (currentFile?.id ?? null)}
+          revert={revert}
           canGenerate={position.substage === 'generate'}
           describePrefill={editChat ? session.initialPrompt : null}
           /*

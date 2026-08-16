@@ -38,6 +38,12 @@ export const SLASH_COMMANDS = [
     control: 'review-accept',
   },
   {
+    id: 'go-back',
+    label: '/go-back',
+    description: 'Go back to the previous revision of this document',
+    control: 'go-back',
+  },
+  {
     id: 'export',
     label: '/export',
     description: 'Download the bundle',
