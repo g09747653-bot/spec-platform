@@ -1,3 +1,4 @@
+import { estimatePromptTokens, PromptOverCapacityError } from './capacity';
 import type { ProviderEntry } from './provider-registry';
 import {
   AllProvidersFailedError,
@@ -6,6 +7,7 @@ import {
   type GenerateOptions,
   type GenerateResult,
   type LlmAdapter,
+  type ModelMessage,
   type ProviderId,
 } from './types';
 
@@ -51,9 +53,52 @@ export interface FailoverClientOptions {
 export interface ProviderFailure {
   provider: ProviderId;
   attempt: number;
-  reason: 'error' | 'timeout' | 'rate-limited';
+  /**
+   * `over-capacity` is the one that is not the provider's fault (А-8; task 130): the prompt the
+   * caller supplied is larger than this provider's window, and it was skipped rather than sent
+   * something it would have truncated. It is a failure of *this link*, not of the request — a later
+   * provider with a bigger window may well answer it.
+   */
+  reason: 'error' | 'timeout' | 'rate-limited' | 'over-capacity';
   /** Present for logging only; never rendered. */
   cause?: unknown;
+}
+
+/**
+ * The prompt this provider is about to be sent, and the check that it may be (А-8; task 130).
+ *
+ * Two callers, two contracts, and the difference in how a violation is treated is deliberate:
+ *
+ * - A caller that supplied a **function** asked to be packed to a capacity. If what comes back is
+ *   still too large, the packer broke its own promise: that is a defect in our code, it will repeat
+ *   identically on the next call, and failing over would replace a loud error with a slow one. It
+ *   throws.
+ * - A caller that supplied a **fixed list** promised nothing. Its prompt is simply larger than this
+ *   provider's window — an ordinary reason this link cannot serve this request, which is exactly
+ *   what the chain exists to survive. It returns `null`, and the chain moves on.
+ *
+ * What neither does is send it anyway. That is the whole of D-146: a provider handed more than it
+ * can read does not refuse, it truncates from the front and answers confidently from what is left.
+ */
+function promptFor(
+  request: GenerateOptions,
+  provider: ProviderEntry,
+): readonly ModelMessage[] | null {
+  const source = request.messages;
+  const messages =
+    typeof source === 'function'
+      ? source({ provider: provider.id, capacity: provider.capacity })
+      : source;
+
+  const estimated = estimatePromptTokens(messages);
+
+  if (estimated <= provider.capacity.promptTokens) return messages;
+
+  if (typeof source === 'function') {
+    throw new PromptOverCapacityError(provider.id, estimated, provider.capacity.promptTokens);
+  }
+
+  return null;
 }
 
 /**
@@ -114,6 +159,25 @@ export function createFailoverClient(options: FailoverClientOptions): LlmAdapter
         const provider = queue[index];
         if (provider === undefined) continue;
 
+        /*
+         * The prompt is built **here**, once per attempt, because the chain is a chain of different
+         * windows (А-8): the same state is one prompt for a hosted model and a packed one for a
+         * local model whose window is a fraction of the size. Before the attempt is counted, so a
+         * provider that cannot hold this prompt does not consume one.
+         */
+        const messages = promptFor(request, provider);
+
+        if (messages === null) {
+          onProviderFailure?.({
+            provider: provider.id,
+            attempt: attempts + 1,
+            reason: 'over-capacity',
+          });
+          onlyRateLimits = false;
+          index += rateLimitBackoff.length - (index % (rateLimitBackoff.length + 1));
+          continue;
+        }
+
         attempts += 1;
 
         request.onAttempt?.({
@@ -136,7 +200,7 @@ export function createFailoverClient(options: FailoverClientOptions): LlmAdapter
 
         try {
           const text = await provider.stream({
-            messages: request.messages,
+            messages,
             tools: request.tools,
             signal: controller.signal,
             onDelta: (delta) => {

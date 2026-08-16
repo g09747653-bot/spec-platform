@@ -19,6 +19,7 @@
     "format:check": "prettier --check .",
     "test:boundaries": "node scripts/check-boundaries.mjs",
     "test:unit": "vitest run --coverage",
+    "test:preflight": "vitest run --config vitest.live.config.ts",
     "test:e2e": "playwright test",
     "db:test-server": "node scripts/test-db-server.mjs",
     "db:generate": "node --env-file-if-exists=.env ./node_modules/drizzle-kit/bin.cjs generate",

@@ -1,5 +1,6 @@
 import { getEnv, type Env } from '@/config/env';
 
+import { capacityFor } from './capacity';
 import {
   createProviderStream,
   DEFAULT_MODELS,
@@ -7,7 +8,7 @@ import {
   type ProviderStream,
 } from './providers';
 import { createStubProviderStream } from './test-double';
-import type { ProviderId } from './types';
+import type { ProviderCapacity, ProviderId } from './types';
 
 /**
  * The provider registry (task 42; solution.md — `adapters/llm`; IR-001-AC-4).
@@ -25,6 +26,8 @@ export interface ProviderEntry {
   model: string;
   /** 1-based position in the chain: the order providers are attempted in. */
   priority: number;
+  /** What this provider will read, and what it must leave room to write (А-8; task 130). */
+  capacity: ProviderCapacity;
   stream: ProviderStream;
 }
 
@@ -66,17 +69,19 @@ function connectionFor(env: Env, provider: ProviderId): ProviderConnection {
 export function buildProviderRegistry(env: Env = getEnv()): readonly ProviderEntry[] {
   return env.LLM_PROVIDER_ORDER.map((id, index) => {
     const model = DEFAULT_MODELS[id];
+    const capacity = capacityFor(id, env.OLLAMA_CONTEXT_LENGTH);
 
     return {
       id,
       model,
       priority: index + 1,
+      capacity,
       // The double is a provider like any other from here: same interface, chosen the same way, and
       // reached with no key because it has no vendor behind it (D-48; IR-001-AC-5).
       stream:
         id === 'stub'
           ? createStubProviderStream()
-          : createProviderStream(id, connectionFor(env, id), model),
+          : createProviderStream(id, connectionFor(env, id), model, capacity),
     };
   });
 }

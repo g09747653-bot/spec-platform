@@ -1,3 +1,4 @@
+import { UNPACKED_TARGET } from '../capacity';
 import type { ProviderEntry } from '../provider-registry';
 import type { ProviderStream } from '../providers';
 import { documentFromPrompt } from '../test-double';
@@ -91,7 +92,14 @@ export function fakeEntry(
   behaviour: FakeBehaviour = {},
   priority = 1,
 ): ProviderEntry {
-  return { id, model: `${id}-test-model`, priority, stream: fakeProviderStream(id, behaviour) };
+  return {
+    id,
+    model: `${id}-test-model`,
+    priority,
+    // A fake provider has no window; declaring the unpacked one keeps these tests about failover.
+    capacity: UNPACKED_TARGET.capacity,
+    stream: fakeProviderStream(id, behaviour),
+  };
 }
 
 /** A chain in attempt order, with priorities filled in from the position. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { LlmAdapter } from '@/modules/adapters/llm';
+import { promptMessages, UNPACKED_TARGET, type LlmAdapter } from '@/modules/adapters/llm';
 
 import { createRevisionNoteAgent } from './revision-note';
 
@@ -14,7 +14,11 @@ import { createRevisionNoteAgent } from './revision-note';
  */
 const answering = (text: string, seen?: string[]): LlmAdapter => ({
   generateStreaming: (options) => {
-    seen?.push(options.messages.map((message) => message.content).join('\n'));
+    seen?.push(
+      promptMessages(options, UNPACKED_TARGET)
+        .map((message) => message.content)
+        .join('\n'),
+    );
     return Promise.resolve({ text, providerUsed: 'stub', attempts: 1 });
   },
 });

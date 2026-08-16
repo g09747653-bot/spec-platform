@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-properties -- a hand-run gate script, not application code: it takes
    its target from the environment because that is how a person points it at a running server. */
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
 import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import pg from 'pg';
@@ -36,9 +36,15 @@ import pg from 'pg';
  * depends on one.
  *
  * Run it as the gate is run:
- *   pnpm db:test-server        (one terminal — leave it running; restart it before every walk)
- *   pnpm dev:gate              (another; chain google,ollama and the raised local timeout)
+ *   OLLAMA_CONTEXT_LENGTH=16384 OLLAMA_KEEP_ALIVE=4h OLLAMA_NUM_PARALLEL=1 ollama serve
+ *                              (one terminal, logging to `<OUT>/ollama-serve.err` — D-92, D-145)
+ *   pnpm db:test-server        (another — leave it running; restart it before every walk)
+ *   pnpm dev:gate              (another; chain google,ollama, the raised local timeout, and the
+ *                               same window declared to the application — round 4, А-8)
  *   node --experimental-strip-types e2e/gate-M9.live.ts
+ *
+ * The two logs are not decoration: from round 4 the walk reads them, and a single
+ * `truncating input prompt` record in either is a red verdict on its own (START_HERE §3).
  *
  * Artifacts land in `artifacts/gate-M9/` and are committed: the gate is accepted from them.
  */
@@ -454,10 +460,29 @@ async function walkStage(page: Page, label: string): Promise<boolean> {
     transcript.push(`### ${label} — the document\n\n\`\`\`\n${drafted.slice(0, 2500)}\n\`\`\`\n`);
   }
 
+  /*
+   * **The product's own marker, and one *more* of it than there was** (round 4).
+   *
+   * Two defects in one line, and together they cost a journey. It waited for a `spec-card` whose
+   * text contained «approved» — but the card contains the *document the model wrote*, so any
+   * specification using the word satisfied it. On the SpecKit walk it was satisfied while the
+   * approval was still in flight: the next line clicked «Proceed to review», the transition was
+   * refused 409 because the approval had not landed, and the walk then spent 900 s waiting for a
+   * review board nobody had asked for. The snapshot of that state shows the button still reading
+   * «Approving…».
+   *
+   * `document-approved` is rendered by `document-block.tsx` only when a revision *is* approved —
+   * the fact rather than the prose, which is the rule D-103 wrote two functions below. And it is
+   * counted first, because by the third document of a journey the feed already carries two of
+   * them: waiting for a badge that is on screen already is not waiting.
+   */
+  const approvedBefore = await page.getByTestId('document-approved').count();
+
   if (!(await click(page, 'approve-spec', `${label}: approve`))) return false;
+
   await page
-    .getByTestId('spec-card')
-    .filter({ hasText: 'approved' })
+    .getByTestId('document-approved')
+    .nth(approvedBefore)
     .waitFor({ timeout: 120_000 })
     .catch(() => {
       problem(`${label}: the revision was not marked approved`);
@@ -590,9 +615,31 @@ async function journey(
     const doors = await page.locator('[data-testid^="proceed"]').count();
     say(`${methodology}-${label}: ${String(doors)} forward door(s) offered`);
 
-    if (!(await click(page, 'proceed', `${methodology}-${label}: leave the stage`))) {
+    /*
+     * **The terminal door, when the stage offers one** (round 4).
+     *
+     * The comment above has always said the walk takes it deliberately, and the code below has
+     * always clicked plain `proceed` — the *primary* door, which for brownfield's Requirements is
+     * the one into Tasks. So the walk left the session sitting in a stage it had no labels for and
+     * then spent 120 s waiting for a completion panel that was correctly absent, and called it red.
+     * `proceed-alternate-complete` is the door D-120/D-125 are about: «Tasks optional» is a property
+     * of the graph, and taking the terminal exit is what demonstrates it.
+     */
+    const terminal = page.getByTestId('proceed-alternate-complete');
+    const takesTerminal = (await terminal.count()) > 0;
+
+    if (
+      !(await click(
+        page,
+        takesTerminal ? 'proceed-alternate-complete' : 'proceed',
+        `${methodology}-${label}: leave the stage`,
+      ))
+    ) {
       return { sessionUrl, projectId, reached: label };
     }
+
+    if (takesTerminal)
+      say(`${methodology}-${label}: took the terminal door, skipping the optional stage`);
     await page.waitForTimeout(1500);
     await snapshot(page, `${methodology}-${label}-left`);
   }
@@ -885,6 +932,99 @@ const list = (lines: readonly string[]) => (lines.length === 0 ? '_None._' : lin
 const bullets = (lines: readonly string[]) =>
   lines.length === 0 ? '_None._' : lines.map((line) => `- ${line}`).join('\n');
 
+/* ------------------------------------------------- the prompt-truncation rule (round 4, А-8) */
+
+/**
+ * **One `truncating input prompt` record is a red run, whatever else went well** (START_HERE §3).
+ *
+ * This is the invariant round 3 did not have, and its absence is what let the gate stay red for
+ * three rounds against a diagnosis that was wrong twice. A local runtime handed more than it can
+ * read does not refuse: it drops the head of the prompt — the system instruction and the required
+ * section list — reads the tail, and answers confidently from the web research it found there. The
+ * document that comes back is fluent, plausible, about the wrong thing, and is rejected on structure
+ * three retries running, because truncation is deterministic (D-146).
+ *
+ * So the runtime's own log is read as evidence rather than the walk's outcome being trusted: a walk
+ * can be green in every visible way while every local document was written from a mutilated prompt.
+ *
+ * The packing records are counted from the server log for the same reason, though they are not a
+ * verdict: how often the research was shrunk or dropped is the difference between "the local link
+ * carried the walk" and "the local link carried a walk with most of its context removed".
+ */
+function readLog(path: string): string {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+const OLLAMA_LOG = process.env.OLLAMA_LOG ?? `${OUT}/ollama-serve.err`;
+const SERVER_LOG = process.env.SERVER_LOG ?? `${OUT}/dev-server.log`;
+
+/**
+ * **The window is this walk, not this file** — and getting that wrong is its own D-147.
+ *
+ * `OLLAMA_KEEP_ALIVE=4h` (D-145) exists precisely so the local server outlives the gaps in a walk,
+ * which means it also outlives the walk: one server, one log, several sessions. The pre-flight that
+ * precedes a round deliberately sends one **unpacked** prompt in order to reproduce the failure it
+ * is fixing, so its truncation record is evidence rather than a defect — and a rule that counted the
+ * whole file would read that evidence as a red verdict on a walk that never truncated anything.
+ *
+ * Ollama stamps every line with an ISO timestamp, so the window is exact. The dev-server log needs
+ * no filter: `pnpm dev:gate` is started for the walk and its log begins there.
+ */
+const walkStartedAt = new Date(startedAt).toISOString();
+
+/**
+ * Parsed, never compared as text. Ollama stamps local time with an offset (`…+03:00`) and
+ * `toISOString` writes UTC with a `Z`; comparing those two spellings as strings is not a comparison
+ * at all, and the first version of this rule did exactly that — and reported four pre-flight records
+ * as a red verdict on a walk that truncated nothing.
+ */
+const stampOf = (line: string) => {
+  const raw = /^time=(\S+)/.exec(line)?.[1];
+  const parsed = raw === undefined ? Number.NaN : new Date(raw).getTime();
+
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const ollamaTruncations = [...readLog(OLLAMA_LOG).matchAll(/.*truncating input prompt.*/g)]
+  .map((match) => match[0].trim())
+  .filter((line) => stampOf(line) >= startedAt);
+
+const earlierTruncations =
+  [...readLog(OLLAMA_LOG).matchAll(/truncating input prompt/g)].length - ollamaTruncations.length;
+
+const truncationRecords = [
+  ...ollamaTruncations,
+  ...[...readLog(SERVER_LOG).matchAll(/.*truncating input prompt.*/g)].map((match) =>
+    match[0].trim(),
+  ),
+];
+
+const packingRecords = [...readLog(SERVER_LOG).matchAll(/context packing .*/g)].map((match) =>
+  match[0].trim(),
+);
+
+const shrunkResearch = packingRecords.filter((line) => /research=\d/.test(line)).length;
+const droppedResearch = packingRecords.filter((line) => line.includes('research=dropped')).length;
+
+if (truncationRecords.length > 0) {
+  problem(
+    `the local runtime truncated ${String(truncationRecords.length)} prompt(s) — ` +
+      'the instruction and the required-section list are what it drops (D-146; А-8). ' +
+      `First record: ${truncationRecords[0] ?? ''}`,
+  );
+}
+
+if (packingRecords.length === 0) {
+  notes.push(
+    '- no packing records in the server log: either no generation reached a model, or the log was ' +
+      'not captured (`SERVER_LOG`). The truncation rule cannot be evidence without one.',
+  );
+}
+
 writeFileSync(
   `${OUT}/RESULT.md`,
   [
@@ -898,6 +1038,26 @@ writeFileSync(
     '## Problems',
     '',
     bullets(problems),
+    '',
+    '## Prompt truncation (round 4 — the new red condition)',
+    '',
+    `\`truncating input prompt\` records for the whole walk: **${String(truncationRecords.length)}**. ` +
+      'One is a red run, whatever else went well: what a local runtime drops is the head of the ' +
+      'prompt — the instruction and the required-section list (D-146; А-8).',
+    '',
+    bullets(truncationRecords.slice(0, 10)),
+    '',
+    `Counted from \`${walkStartedAt}\`, when this walk began. The same log holds ` +
+      `**${String(earlierTruncations)}** earlier record(s) from before it — the pre-flight sends one ` +
+      'unpacked prompt on purpose, to reproduce the failure being fixed, and its record is evidence ' +
+      'rather than a defect (`preflight/RUN-2-STATE.md`).',
+    '',
+    '## Context packing (А-8, point 4)',
+    '',
+    `${String(packingRecords.length)} packing record(s): the web research was shrunk in ` +
+      `**${String(shrunkResearch)}** and dropped entirely in **${String(droppedResearch)}** of them.`,
+    '',
+    bullets(packingRecords),
     '',
     '## Review boards, and what the linters found on each',
     '',

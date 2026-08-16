@@ -114,6 +114,37 @@ export function parseHeadings(markdown: string): ParsedHeading[] {
 }
 
 /**
+ * The scaffolding a template writes **into its own headings**: `*(mandatory)*`, `*(include if …)*`.
+ *
+ * One rule, in one place, with two consumers — `templateSections` strips it when it reads a
+ * template's required headings, and the comparison below strips it when it reads a generated
+ * document's. That pairing is the whole point, and its absence is what the M9п round-4 walk found:
+ * the extractor removed the annotation, the check therefore demanded `## Requirements`, the model
+ * reproduced the vendored template faithfully as `## Requirements *(mandatory)*`, and a perfectly
+ * well-formed SpecKit specification was rejected three times running for a suffix the template
+ * itself prescribes. What the writer is shown and what the writer is judged by must be the same
+ * list; two spellings of one rule is how they came apart.
+ */
+const TEMPLATE_ANNOTATION = /\s*\*\([^)]*\)\*\s*$/;
+
+export function stripTemplateAnnotation(heading: string): string {
+  return heading.replace(TEMPLATE_ANNOTATION, '').trim();
+}
+
+export interface SectionMatchOptions {
+  /**
+   * Read a trailing `*(annotation)*` off the document's headings before comparing them.
+   *
+   * **Only the methodology path sets it**, and deliberately so. The parity baseline's headings carry
+   * no annotations, nothing shows a parity writer a template that does, and loosening the comparison
+   * there would weaken P3 for no gain — D-40 fixed normalisation at case and whitespace precisely so
+   * that everything else stays exact. A foreign methodology is the other case: its required list is
+   * *parsed from a file we vendor byte-for-byte*, and that file writes the annotation itself.
+   */
+  ignoreTemplateAnnotations?: boolean;
+}
+
+/**
  * Checks a document against an explicit section list.
  *
  * Extra headings are permitted anywhere — a `tasks.md` carries a milestone heading per milestone and
@@ -124,10 +155,16 @@ export function parseHeadings(markdown: string): ParsedHeading[] {
 export function validateAgainstSections(
   markdown: string,
   required: readonly RequiredSection[],
+  options: SectionMatchOptions = {},
 ): StructureResult {
+  const strip =
+    options.ignoreTemplateAnnotations === true
+      ? stripTemplateAnnotation
+      : (heading: string) => heading;
+
   const headings = parseHeadings(markdown).map((heading, position) => ({
     ...heading,
-    normalised: normaliseHeading(heading.text),
+    normalised: normaliseHeading(strip(heading.text)),
     position,
   }));
 
@@ -135,7 +172,7 @@ export function validateAgainstSections(
   let cursor = 0;
 
   for (const section of required) {
-    const wanted = normaliseHeading(section.heading);
+    const wanted = normaliseHeading(strip(section.heading));
     const matches = headings.filter((heading) => heading.normalised === wanted);
 
     if (matches.length === 0) {

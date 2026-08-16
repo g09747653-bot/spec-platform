@@ -129,9 +129,39 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  *
  * It fixes exactly the defects a well-meaning draft commonly has — a missing or false
  * `allowOther`, a stage echoed wrong, oversized option or question lists, questions that are not
- * objects at all — and drops what it cannot fix. It invents nothing: no option, question or need
- * is ever added, so the repaired set is always a subset of what the model proposed.
+ * objects at all, **more than one option marked as recommended** — and drops what it cannot fix. It
+ * invents nothing: no option, question or need is ever added, so the repaired set is always a subset
+ * of what the model proposed.
+ *
+ * The recommendation rule joined the list in M9п round 4, and the walk is why. `qwen3:14b` marks
+ * three or four options `(Recommended)` about as often as it marks one, and the schema allows one
+ * (v3) — so a draft that was otherwise perfectly good was discarded, re-sampled at four and a half
+ * minutes a go, discarded again for the same reason, and the stage could not leave `collect`. There
+ * is nothing to re-sample *for*: keeping the first flag and clearing the rest removes a marker, which
+ * is repair in exactly the sense this function already means it, and it costs no model call.
  */
+/**
+ * Keeps the first recommendation and clears the rest — the model's own first choice, not ours.
+ *
+ * First rather than best, because "best" would be a judgement this function has no business making;
+ * the order is the model's and it put that option first among the ones it liked. A draft that marked
+ * none is left exactly as it is: no recommendation is a legitimate answer, and inventing one here
+ * would be inventing content.
+ */
+function atMostOneRecommended(options: readonly unknown[]): unknown[] {
+  let kept = false;
+
+  return options.map((option) => {
+    if (!isRecord(option) || option.recommended !== true) return option;
+    if (!kept) {
+      kept = true;
+      return option;
+    }
+
+    return { ...option, recommended: false };
+  });
+}
+
 export function repairQuestionSetDraft(expectedStage: string): QuestionSetRepair {
   return (draft) => {
     if (!isRecord(draft)) return draft;
@@ -152,7 +182,11 @@ export function repairQuestionSetDraft(expectedStage: string): QuestionSetRepair
         ({ needs, options }) => options.length >= 2 && Array.isArray(needs) && needs.length > 0,
       )
       .slice(0, 5)
-      .map(({ question, options }) => ({ ...question, allowOther: true, options }));
+      .map(({ question, options }) => ({
+        ...question,
+        allowOther: true,
+        options: atMostOneRecommended(options),
+      }));
 
     return { ...draft, stage: expectedStage, questions: repairedQuestions };
   };

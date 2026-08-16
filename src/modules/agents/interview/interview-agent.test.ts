@@ -8,6 +8,8 @@ import {
   type LlmAdapter,
 } from '@/modules/adapters/llm';
 
+import { validateQuestionSetDraft } from '../schemas/question-set';
+
 import { createInterviewAgent, parseJsonDocument, repairQuestionSetDraft } from './interview-agent';
 import { createReplyAssessor } from './reply-assessment';
 import { createSummaryAgent } from './summary-agent';
@@ -331,5 +333,73 @@ describe('summary agent (task 38)', () => {
     expect(
       await agent.summarise({ initialPrompt: 'x', answeredHighlights: [], runId: 'run-6' }),
     ).toBeNull();
+  });
+});
+
+/**
+ * **More than one recommendation is repaired, not re-sampled** (M9п, round 4).
+ *
+ * The walk found this the expensive way: `qwen3:14b` marks three or four options `(Recommended)`
+ * about as often as it marks one, and v3 allows one. A draft that was otherwise perfectly usable was
+ * discarded, re-drafted at four and a half minutes a go, discarded again for the same reason, and
+ * the stage could not leave `collect`. Nothing about that failure needed a second opinion from a
+ * model — the fix is to remove a marker, which is what this repair pass is for.
+ */
+describe('at most one recommendation (round 4)', () => {
+  const draft = (recommendedFlags: readonly boolean[]) => ({
+    stage: 'requirements',
+    questions: [
+      {
+        id: 'main_actions',
+        text: 'What should it do first?',
+        type: 'single',
+        allowOther: true,
+        informationNeeds: ['scope'],
+        options: recommendedFlags.map((recommended, index) => ({
+          id: `o${String(index)}`,
+          label: `Option ${String(index)}`,
+          ...(recommended ? { recommended: true } : {}),
+        })),
+      },
+    ],
+  });
+
+  const repaired = (flags: readonly boolean[]) =>
+    validateQuestionSetDraft(draft(flags), repairQuestionSetDraft('requirements'));
+
+  it('keeps the first flag and clears the rest, so the draft survives', () => {
+    const result = repaired([true, true, true]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const recommended = result.set.questions[0]?.options.filter(
+      (option) => option.recommended === true,
+    );
+
+    expect(recommended).toHaveLength(1);
+    expect(recommended?.[0]?.id).toBe('o0');
+    expect(result.repaired).toBe(true);
+  });
+
+  it('leaves a draft that marked exactly one alone', () => {
+    const result = repaired([false, true, false]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.set.questions[0]?.options[1]?.recommended).toBe(true);
+    expect(result.repaired).toBe(false);
+  });
+
+  it('invents nothing: a draft that recommended none still recommends none', () => {
+    const result = repaired([false, false, false]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.set.questions[0]?.options.some((option) => option.recommended === true)).toBe(
+      false,
+    );
   });
 });

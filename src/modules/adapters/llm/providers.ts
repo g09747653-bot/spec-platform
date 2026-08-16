@@ -3,7 +3,8 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
 import { jsonSchema, streamText, tool, type ToolSet } from 'ai';
 
-import type { ModelMessage, ProviderId, ToolDefinition } from './types';
+import { generationAllowance } from './capacity';
+import type { ModelMessage, ProviderCapacity, ProviderId, ToolDefinition } from './types';
 
 /**
  * The vendor edge (task 42; constitution P7, A3; D-6).
@@ -183,6 +184,37 @@ function languageModel(provider: ProviderId, model: string, connection: Provider
 }
 
 /**
+ * The explicit generation bound, and why only the local provider gets one (А-8, point 3; task 130).
+ *
+ * A model reached by address shares **one window** between the prompt it reads and the answer it
+ * writes. Left unstated, the split is the runtime's to choose, and the runtime's choice is what
+ * D-146 caught in the act: the prompt was cut to fit whatever was left, from the front, taking the
+ * system instruction with it. Stating the reserve is what turns the input allowance into a number
+ * the assembler can pack against — `capacity.promptTokens` is literally the window minus this.
+ *
+ * `maxOutputTokens` is the SDK's vendor-neutral spelling; against Ollama's OpenAI-compatible surface
+ * it arrives as `max_tokens` and is applied as `num_predict`, which is verified live rather than
+ * assumed (see the round-4 pre-flight: `max_tokens: 8` returns `finish_reason: "length"` after
+ * exactly eight tokens).
+ *
+ * A hosted provider is deliberately **not** bounded. Its window is an order of magnitude larger than
+ * anything assembled here, so a bound would constrain nothing that needed constraining while
+ * changing a request that A-8 promises to leave alone — and a cap low enough to matter would cut off
+ * documents the provider was perfectly able to finish.
+ */
+function generationBound(
+  connection: ProviderConnection,
+  capacity: ProviderCapacity | undefined,
+  messages: readonly ModelMessage[],
+): { maxOutputTokens?: number } {
+  if (capacity === undefined || !('baseUrl' in connection)) return {};
+
+  const allowance = generationAllowance(capacity, messages);
+
+  return allowance === null ? {} : { maxOutputTokens: allowance };
+}
+
+/**
  * Builds the streaming call for one provider.
  *
  * Two details here are load-bearing and easy to get wrong:
@@ -199,6 +231,7 @@ export function createProviderStream(
   provider: ProviderId,
   connection: ProviderConnection,
   model: string,
+  capacity?: ProviderCapacity,
 ): ProviderStream {
   return async ({ messages, tools, onDelta, signal }) => {
     const { system, turns } = splitMessages(messages);
@@ -209,6 +242,7 @@ export function createProviderStream(
         model: languageModel(provider, model, connection),
         ...(system === undefined ? {} : { system }),
         ...(toolSet === undefined ? {} : { tools: toolSet }),
+        ...generationBound(connection, capacity, messages),
         messages: turns,
         abortSignal: signal,
         maxRetries: 0,

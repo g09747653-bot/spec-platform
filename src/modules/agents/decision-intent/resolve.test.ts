@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { LlmAdapter } from '@/modules/adapters/llm';
+import { promptMessages, UNPACKED_TARGET, type LlmAdapter } from '@/modules/adapters/llm';
 
 import { CARD_ACTIONS, CHAT_RESOLVABLE, PENDING_KINDS, type PendingKind } from './pending-actions';
 import { CONFIDENCE_FLOOR, resolveDecisionIntent } from './resolve';
@@ -437,7 +437,11 @@ describe('the model layer is a fallback, and a distrusted one', () => {
     const seen: string[] = [];
     const recorder: LlmAdapter = {
       generateStreaming: (options) => {
-        seen.push(options.messages.map((message) => message.content).join('\n'));
+        seen.push(
+          promptMessages(options, UNPACKED_TARGET)
+            .map((message) => message.content)
+            .join('\n'),
+        );
         return Promise.resolve({
           text: JSON.stringify({ action: null, confidence: 0 }),
           providerUsed: 'stub',

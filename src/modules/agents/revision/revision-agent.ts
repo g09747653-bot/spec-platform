@@ -1,13 +1,7 @@
 import type { LlmAdapter } from '@/modules/adapters/llm';
 import type { CoreSpecType } from '@/modules/specs/model/spec-files';
 
-import {
-  assembleContext,
-  selectedFeedback,
-  type ContextBudget,
-  type ContextSources,
-  type TruncationNote,
-} from '../context-assembler';
+import { selectedFeedback, type ContextSources, type TruncationNote } from '../context-assembler';
 import { createSpecAgent, type SpecAgentResult } from '../spec/spec-agent';
 
 /**
@@ -43,7 +37,6 @@ export interface RevisionAgentInput {
   /** The session's content language (У-1; task 108); forwarded to the prompt assembly point. */
   contentLanguage?: string | null | undefined;
   runId: string;
-  budget?: ContextBudget;
   onChunk?: (text: string) => void;
   signal?: AbortSignal;
 }
@@ -77,7 +70,6 @@ export function createRevisionAgent(adapter: LlmAdapter) {
     async revise(input: RevisionAgentInput): Promise<RevisionAgentResult> {
       const applied =
         input.sources.feedback === undefined ? [] : selectedFeedback(input.sources.feedback);
-      const context = assembleContext(input.sources, input.budget);
 
       const typed = input.instruction?.trim() ?? '';
       const parts = [
@@ -85,10 +77,16 @@ export function createRevisionAgent(adapter: LlmAdapter) {
         ...(applied.length === 0 ? [] : [reviseInstruction(applied.length)]),
       ];
 
+      /*
+       * The sources go through unassembled since А-8: the spec agent packs them to the window of the
+       * provider that answers. What this module owns is unchanged and is still the whole point — the
+       * *filter*: `sources.feedback` carries the items and the ticked ids together, and no argument
+       * here can express «render an item the user declined».
+       */
       const generated = await specAgent.generate({
         specType: input.specType,
         initialPrompt: input.sources.initialPrompt,
-        context: context.text,
+        sources: input.sources,
         ...(parts.length === 0 ? {} : { changeInstruction: parts.join('\n\n') }),
         contentLanguage: input.contentLanguage,
         runId: input.runId,
@@ -99,7 +97,9 @@ export function createRevisionAgent(adapter: LlmAdapter) {
       return {
         ...generated,
         appliedItemIds: applied.map((item) => item.id),
-        truncated: context.truncated,
+        truncated: (generated.packing?.sections ?? [])
+          .filter((entry) => entry.omittedChars > 0)
+          .map((entry) => ({ section: entry.section, omittedChars: entry.omittedChars })),
       };
     },
   };

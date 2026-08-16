@@ -102,6 +102,54 @@ export interface ContextBudget {
 }
 
 /**
+ * How much a section is worth keeping when the budget cannot hold everything (амендмент А-8).
+ *
+ * Four levels, from the one that must survive whole to the one that goes first. The order is not a
+ * preference — it is the correction of a specific defect. Before А-8 the budget was one number for
+ * every provider and the local runtime made the prompt fit by itself, keeping the *tail*: the web
+ * research survived and the instruction did not, so the model wrote a summary of the pages it had
+ * been shown (D-146). This is that order inverted and made ours.
+ *
+ * `GROUNDING` is the user's own description of the product. It is never shortened at any budget
+ * (FR-003 AC-3): a model that has lost the sentence saying what it is building has lost the task.
+ * The system instruction and the section template are not here at all, because they are not the
+ * assembler's — they are the prompt's, and `packPrompt` keeps them byte-intact by construction.
+ */
+export const SECTION_PRIORITY = {
+  /** The grounding input. Inviolable. */
+  GROUNDING: 0,
+  /** Stage-critical state: answered rounds, approved specs, the feedback being applied. */
+  STAGE_STATE: 1,
+  /** Documents the user supplied or pointed at. */
+  SUPPLIED: 2,
+  /** Live web research. Shrunk, then dropped, before anything above it loses a character. */
+  RESEARCH: 3,
+} as const;
+
+export type SectionPriority = (typeof SECTION_PRIORITY)[keyof typeof SECTION_PRIORITY];
+
+/**
+ * Below this, a section is dropped rather than shortened.
+ *
+ * Two hundred characters of a fetched web page is not a shorter source, it is noise wearing a
+ * heading — and a model reads it as material it is expected to use. Dropping says the honest thing
+ * instead, and says it in the text (see `droppedBody`).
+ */
+const MIN_KEPT_CHARS = 400;
+
+/** One line of the packing record: what a section contributed, and what it did not (А-8, point 4). */
+export interface PackingEntry {
+  section: string;
+  priority: SectionPriority;
+  /** Characters of body the assembled context carries. */
+  keptChars: number;
+  /** Characters the budget could not hold. Zero when the section survived whole. */
+  omittedChars: number;
+  /** Whether the body was dropped in full rather than shortened. */
+  dropped: boolean;
+}
+
+/**
  * The default budget.
  *
  * Characters, not tokens: token counts are provider-specific, and a provider-specific measurement in
@@ -120,14 +168,22 @@ export interface AssembledContext {
   text: string;
   /** What was shortened, and by how much. Reported, never silent (AC-3). */
   truncated: readonly TruncationNote[];
+  /**
+   * Every section and what became of it, in assembly order (А-8, point 4).
+   *
+   * Unlike `truncated`, this lists sections that survived whole as well, because the question the
+   * gate has to answer is "what did the model actually read", and a record that only names losses
+   * cannot answer it.
+   */
+  packing: readonly PackingEntry[];
 }
 
 interface Section {
   key: string;
   heading: string;
   body: string;
-  /** A section that must survive whole. The grounding input is the only one (FR-003 AC-3). */
-  fixed: boolean;
+  /** What this section loses to before it loses anything itself (А-8). */
+  priority: SectionPriority;
 }
 
 /** Canonical order of the bundle's files, for sorting approved specs. */
@@ -302,6 +358,75 @@ function truncateBody(body: string, keep: number): string {
   return `${kept}\n\n[truncated: ${String(omitted)} characters omitted to fit the context budget]`;
 }
 
+/**
+ * What stands in for a section the budget could not hold at all.
+ *
+ * The heading stays. That is the same rule the empty case already follows — "(no documents
+ * attached)" rather than no section — and for the same reason: a model cannot ask about material it
+ * was never told existed, and one that reasons confidently from a context it believes is complete is
+ * the worst of the available outcomes.
+ */
+function droppedBody(omitted: number): string {
+  return `[omitted: ${String(omitted)} characters did not fit the context budget for this provider]`;
+}
+
+/**
+ * Hands out the budget by priority, then shares what a level gets among its sections.
+ *
+ * Two rules, and the second is why this is not simply "shorten the longest".
+ *
+ * **Between levels, strictly.** A level takes what it needs; the next sees only the remainder. That
+ * is what makes the guarantee legible — research cannot cost the interview a single character,
+ * whatever their relative sizes — and it is the whole content of А-8. The alternative, which is what
+ * this code did before, spends the budget on whatever section happens to be biggest, and the biggest
+ * section on a generation call is always the web research.
+ *
+ * **Within a level, evenly, with the leftovers passed on.** Sections of one level are peers; giving
+ * each an equal share and handing back what the short ones do not use is what stops one large
+ * approved spec from starving the interview answers beside it. This half is unchanged from task 50.
+ */
+function allocate(sections: readonly Section[], bodyBudget: number): Map<string, number> {
+  const shares = new Map<string, number>();
+  const shrinkable: Section[] = [];
+  let remaining = bodyBudget;
+
+  /*
+   * Two kinds of section are settled before any level is: the grounding input, which survives whole
+   * at any budget (FR-003 AC-3), and anything already shorter than the marker that would replace it.
+   * The second is not generosity — «(no documents attached)» is twenty-three characters and the note
+   * saying it was dropped is seventy, so shortening it *costs* budget. A rule that trades characters
+   * for more characters is not a budget.
+   */
+  for (const section of sections) {
+    if (section.priority !== SECTION_PRIORITY.GROUNDING && section.body.length > MIN_KEPT_CHARS) {
+      shrinkable.push(section);
+      continue;
+    }
+
+    shares.set(section.key, section.body.length);
+    remaining -= section.body.length;
+  }
+
+  remaining = Math.max(remaining, 0);
+
+  const levels = [...new Set(shrinkable.map((section) => section.priority))].sort((a, b) => a - b);
+
+  for (const level of levels) {
+    const pending = shrinkable
+      .filter((section) => section.priority === level)
+      .sort((a, b) => a.body.length - b.body.length || a.key.localeCompare(b.key));
+
+    for (const [index, section] of pending.entries()) {
+      const share = Math.floor(remaining / (pending.length - index));
+      const take = Math.min(section.body.length, share);
+      shares.set(section.key, take);
+      remaining -= take;
+    }
+  }
+
+  return shares;
+}
+
 export function assembleContext(
   sources: ContextSources,
   budget: ContextBudget = DEFAULT_CONTEXT_BUDGET,
@@ -311,35 +436,38 @@ export function assembleContext(
       key: 'prompt',
       heading: '## The product idea, as the user described it',
       body: sources.initialPrompt.trim(),
-      fixed: true,
+      priority: SECTION_PRIORITY.GROUNDING,
     },
     {
       key: 'answers',
       heading: '## Answers given during the interview',
       body: renderAnswers(sources.answers),
-      fixed: false,
+      priority: SECTION_PRIORITY.STAGE_STATE,
     },
     {
       key: 'attachments',
       heading: '## Documents the user supplied',
       body: renderAttachments(sources.attachments),
-      fixed: false,
+      priority: SECTION_PRIORITY.SUPPLIED,
     },
     {
       key: 'approved-specs',
       heading: '## Specification files already approved',
       body: renderSpecs(sources.approvedSpecs),
-      fixed: false,
+      priority: SECTION_PRIORITY.STAGE_STATE,
     },
   ];
 
   /*
    * Documents the user pointed at with `@` (task 121).
    *
-   * A separate section from «already approved», and a **fixed** one, because it answers a different
-   * question. The approved bundle is background the model may consult; a reference is the thing the
-   * message is *about*, and it is the one section a length budget must not quietly shorten — a
-   * truncated reference would answer a question about half a document without saying so.
+   * A separate section from «already approved», because it answers a different question: the
+   * approved bundle is background the model may consult, while a reference is the thing the message
+   * is *about*. Task 121 made it inviolable for that reason. А-8 groups it with attachments instead
+   * — «supplied documents» — because on a window that cannot hold them a section nothing may shorten
+   * is not a protected section, it is a prompt that cannot be made to fit. What task 121 was
+   * defending survives in the mechanism rather than the rank: a shortened reference says so, in the
+   * text, where the model reads it.
    */
   const references = sources.references ?? [];
 
@@ -348,7 +476,7 @@ export function assembleContext(
       key: 'references',
       heading: '## Documents this message refers to',
       body: renderReferences(references),
-      fixed: true,
+      priority: SECTION_PRIORITY.SUPPLIED,
     });
   }
 
@@ -359,7 +487,7 @@ export function assembleContext(
       key: 'research',
       heading: '## Pages read during live research',
       body: renderResearch(research),
-      fixed: false,
+      priority: SECTION_PRIORITY.RESEARCH,
     });
   }
 
@@ -370,7 +498,7 @@ export function assembleContext(
       key: 'feedback',
       heading: '## Review feedback the user chose to apply',
       body: renderFeedback(feedback),
-      fixed: false,
+      priority: SECTION_PRIORITY.STAGE_STATE,
     });
   }
 
@@ -378,39 +506,48 @@ export function assembleContext(
   const bodyBudget = Math.max(budget.totalChars - overhead, 0);
 
   const truncated: TruncationNote[] = [];
+  const packing: PackingEntry[] = [];
   const used = sections.reduce((total, section) => total + section.body.length, 0);
+  const shares = used > bodyBudget ? allocate(sections, bodyBudget) : null;
 
-  if (used > bodyBudget) {
-    /*
-     * Trim the longest trimmable section first, repeatedly, until the whole fits. Longest-first is
-     * what keeps a single enormous approved spec from starving the interview answers — the opposite
-     * order would shorten every small section to nothing and still not fit.
-     */
-    const trimmable = sections.filter((section) => !section.fixed);
-    const fixedChars = sections
-      .filter((section) => section.fixed)
-      .reduce((total, section) => total + section.body.length, 0);
-    let remaining = Math.max(bodyBudget - fixedChars, 0);
+  for (const section of sections) {
+    const full = section.body.length;
+    const share = shares?.get(section.key) ?? full;
 
-    // Give every trimmable section an equal share, then hand back what the short ones do not use.
-    const shares = new Map<string, number>();
-    const pending = [...trimmable].sort((a, b) => a.body.length - b.body.length);
-
-    for (const [index, section] of pending.entries()) {
-      const share = Math.floor(remaining / (pending.length - index));
-      const take = Math.min(section.body.length, share);
-      shares.set(section.key, take);
-      remaining -= take;
+    if (share >= full) {
+      packing.push({
+        section: section.key,
+        priority: section.priority,
+        keptChars: full,
+        omittedChars: 0,
+        dropped: false,
+      });
+      continue;
     }
 
-    for (const section of sections) {
-      const share = shares.get(section.key);
-      if (share === undefined || share >= section.body.length) continue;
-
-      const omitted = section.body.length - section.body.slice(0, share).trimEnd().length;
-      section.body = truncateBody(section.body, share);
-      truncated.push({ section: section.key, omittedChars: omitted });
+    if (share < MIN_KEPT_CHARS) {
+      section.body = droppedBody(full);
+      truncated.push({ section: section.key, omittedChars: full });
+      packing.push({
+        section: section.key,
+        priority: section.priority,
+        keptChars: 0,
+        omittedChars: full,
+        dropped: true,
+      });
+      continue;
     }
+
+    const kept = section.body.slice(0, share).trimEnd().length;
+    section.body = truncateBody(section.body, share);
+    truncated.push({ section: section.key, omittedChars: full - kept });
+    packing.push({
+      section: section.key,
+      priority: section.priority,
+      keptChars: kept,
+      omittedChars: full - kept,
+      dropped: false,
+    });
   }
 
   const text = sections
@@ -418,5 +555,5 @@ export function assembleContext(
     .join('\n\n')
     .trim();
 
-  return { text, truncated };
+  return { text, truncated, packing };
 }

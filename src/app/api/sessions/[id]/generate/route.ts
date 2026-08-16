@@ -10,11 +10,7 @@ import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
 import type { EditDocument } from '@/modules/agents/edit/edit-agent';
 import { runEdit } from '@/modules/agents/edit/run-edit';
 import { createDefaultResearch } from '@/modules/adapters/research';
-import {
-  assembleContext,
-  selectedFeedback,
-  type ContextFeedback,
-} from '@/modules/agents/context-assembler';
+import { selectedFeedback, type ContextFeedback } from '@/modules/agents/context-assembler';
 import { performResearch } from '@/modules/agents/spec/research-step';
 import { reviseInstruction } from '@/modules/agents/revision/revision-agent';
 import { createRevisionNoteAgent } from '@/modules/agents/revision/revision-note';
@@ -505,9 +501,15 @@ export async function POST(
         });
         send({ type: 'research', status: 'finished' });
 
-        const context = assembleContext(
-          found.pages.length === 0 ? sources : { ...sources, research: found.pages },
-        );
+        /*
+         * The sources travel unassembled from here (А-8; task 130). Assembling them at this point
+         * would mean packing to a budget chosen before anyone knows which provider will answer —
+         * which is exactly the assumption that let a 22 000-token prompt reach a 16 384-token
+         * window, lose its head to the runtime's own truncation, and come back as a summary of the
+         * web pages (D-146). The research joins the sources; what fits is decided per attempt.
+         */
+        const generationSources =
+          found.pages.length === 0 ? sources : { ...sources, research: found.pages };
 
         const outcome = await runGeneration({
           db,
@@ -521,7 +523,7 @@ export async function POST(
           initialPrompt: session.initialPrompt,
           // У-1: documents are written in the language the user described the product in (task 108).
           contentLanguage: session.contentLanguage,
-          context: context.text,
+          sources: generationSources,
           // What the prompt was built from, recorded on the revision this run writes (DR-12).
           contextAttachmentIds: collected.contextAttachmentIds,
           // And which chat wrote it (task 118): a project holds several now (А-6).

@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
+import { validateAgainstSections } from '@/modules/specs/validate-structure';
+
 import { renderVendoredModule } from '../../../../scripts/build-methodology-templates.mjs';
 
 import { templateSections, templateText } from './sections';
@@ -120,5 +122,69 @@ describe('vendored methodology templates (task 116)', () => {
     // OpenSpec's task list is `## 1. <Task Group Name>` — numbered groups the change names. There is
     // no heading to require, and inventing one would be exactly what vendoring exists to avoid.
     expect(templateSections('openspec/tasks')).toBeNull();
+  });
+});
+
+/**
+ * **The document a faithful writer produces from these templates passes the check** (M9п, round 4).
+ *
+ * The gate found this the expensive way. The extractor strips `*(mandatory)*` from a template's
+ * headings; the writer is shown the template *itself*, annotation included, and reproduces it — that
+ * is what spec-kit's own output looks like. The check then rejected `## Requirements *(mandatory)*`
+ * for want of `## Requirements`, three attempts running, and the walk stopped on a specification
+ * that was correct in every respect. One rule with two spellings is how the two halves of a contract
+ * come apart; `stripTemplateAnnotation` is now the one rule, and this is the test that says so.
+ */
+describe('a document that keeps the template’s annotations (round 4)', () => {
+  const speckitSpec = () => {
+    const sections = templateSections('speckit/spec-template');
+    if (sections === null) throw new Error('the SpecKit spec template lost its headings');
+
+    return sections;
+  };
+
+  const documentWith = (suffix: string) =>
+    [
+      '# Feature Specification: Grant reminders',
+      '',
+      ...speckitSpec().map((section) => `${'#'.repeat(section.level)} ${section.heading}${suffix}`),
+    ].join('\n\n');
+
+  it('accepts the headings exactly as the vendored template writes them', () => {
+    const verdict = validateAgainstSections(documentWith(' *(mandatory)*'), speckitSpec(), {
+      ignoreTemplateAnnotations: true,
+    });
+
+    expect(verdict.violations).toEqual([]);
+    expect(verdict.valid).toBe(true);
+  });
+
+  it('still accepts them without the annotation, which is the other faithful reading', () => {
+    const verdict = validateAgainstSections(documentWith(''), speckitSpec(), {
+      ignoreTemplateAnnotations: true,
+    });
+
+    expect(verdict.valid).toBe(true);
+  });
+
+  it('leaves the parity comparison exact: an annotation is not forgiven by default (D-40)', () => {
+    const verdict = validateAgainstSections(documentWith(' *(mandatory)*'), speckitSpec());
+
+    expect(verdict.valid).toBe(false);
+    expect(verdict.violations.map((violation) => violation.code)).toContain('MISSING_HEADING');
+  });
+
+  it('forgives the annotation, not the heading: a missing section is still missing', () => {
+    const [, ...rest] = speckitSpec();
+    const partial = [
+      '# Feature Specification: Grant reminders',
+      ...rest.map((section) => `${'#'.repeat(section.level)} ${section.heading} *(mandatory)*`),
+    ].join('\n\n');
+
+    const verdict = validateAgainstSections(partial, speckitSpec(), {
+      ignoreTemplateAnnotations: true,
+    });
+
+    expect(verdict.valid).toBe(false);
   });
 });

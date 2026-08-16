@@ -4,18 +4,26 @@ import {
   createStreamRecorder,
   type GenerationStore,
   type LlmAdapter,
+  type ModelMessage,
   type ProviderId,
 } from '@/modules/adapters/llm';
-import { templateText, type StageDocument } from '@/modules/methodologies';
-import {
-  methodologyGenerationPrompt,
-  specGenerationPrompt,
-} from '@/modules/prompts/assets/spec-generation';
+import type { StageDocument } from '@/modules/methodologies';
+import type { AssembledPrompt } from '@/modules/prompts';
 import type { CoreSpecType } from '@/modules/specs/model/spec-files';
 import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
 
+import type { ContextSources } from '../context-assembler';
+import { describePacking, packPrompt } from '../pack-prompt';
 import { documentStructureVerdict } from './document-structure';
+import { specPromptBuilder } from './spec-agent';
 import { describeViolations, parseHeadings } from '@/modules/specs/validate-structure';
+
+function messagesOf(prompt: AssembledPrompt): readonly ModelMessage[] {
+  return [
+    { role: 'system', content: prompt.system },
+    { role: 'user', content: prompt.user },
+  ];
+}
 
 /**
  * One generation run, end to end (task 45; solution.md — Generation Sequence).
@@ -54,8 +62,13 @@ export interface RunGenerationInput {
   /** What the methodology calls this document — «Plan», «Proposal». Defaults to the spec type. */
   documentLabel?: string;
   initialPrompt: string;
-  /** Assembled generation context (task 50). */
-  context?: string;
+  /**
+   * Everything the document is generated from (task 50), **unassembled** (А-8).
+   *
+   * The sources rather than a finished context string: the chain is a chain of different windows, so
+   * the packing is decided once per attempt, against the provider that is about to read it.
+   */
+  sources?: ContextSources;
   /**
    * The attachments available when this context was assembled, recorded on the revision (DR-12).
    *
@@ -111,35 +124,35 @@ export async function runGeneration(input: RunGenerationInput): Promise<Generati
   });
 
   const document = input.document ?? null;
+  const build = specPromptBuilder({
+    specType,
+    document,
+    ...(input.documentLabel === undefined ? {} : { documentLabel: input.documentLabel }),
+    initialPrompt: input.initialPrompt,
+    ...(input.changeInstruction === undefined
+      ? {}
+      : { changeInstruction: input.changeInstruction }),
+    contentLanguage: input.contentLanguage,
+  });
 
-  const prompt =
-    document === null || document.structure.kind === 'parity'
-      ? specGenerationPrompt({
-          specType,
-          initialPrompt: input.initialPrompt,
-          context: input.context,
-          changeInstruction: input.changeInstruction,
-          contentLanguage: input.contentLanguage,
-        })
-      : methodologyGenerationPrompt({
-          documentLabel: input.documentLabel ?? specType,
-          template: document.templateId === null ? '' : templateText(document.templateId),
-          requiredSections:
-            document.structure.kind === 'declared' ? document.structure.sections : [],
-          initialPrompt: input.initialPrompt,
-          context: input.context,
-          changeInstruction: input.changeInstruction,
-          contentLanguage: input.contentLanguage,
-        });
-
+  const sources = input.sources;
   let attempts = 1;
 
   try {
     const result = await adapter.generateStreaming({
-      messages: [
-        { role: 'system', content: prompt.system },
-        { role: 'user', content: prompt.user },
-      ],
+      /*
+       * Packed for whichever provider the chain reaches, once per attempt (А-8; task 130). The
+       * instruction, the vendored template and the required-section list are byte-intact in every
+       * one of them; what varies is how much of the context fits around them.
+       */
+      messages:
+        sources === undefined
+          ? messagesOf(build(''))
+          : (target) => {
+              const packed = packPrompt({ build, sources, target, label: specType });
+              console.info(describePacking(packed.record));
+              return packed.messages;
+            },
       runId,
       signal,
       onChunk: (text) => {

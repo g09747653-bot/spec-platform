@@ -5,7 +5,12 @@ import type * as EnvModule from '@/config/env';
 import { OwnerScope } from '@/db/owner-scope';
 import { projects, sessions, users, workflowState } from '@/db/schema';
 import { createMigratedDatabase, type TestDatabase } from '@/db/testing/migrated-database';
-import { AllProvidersFailedError, stubInterviewRoundDocument } from '@/modules/adapters/llm';
+import {
+  AllProvidersFailedError,
+  promptMessages,
+  stubInterviewRoundDocument,
+  UNPACKED_TARGET,
+} from '@/modules/adapters/llm';
 import type * as AdapterModule from '@/modules/adapters/llm/default-adapter';
 import { createInterviewRepository } from '@/modules/projects/repositories/interview';
 
@@ -316,10 +321,10 @@ describe('POST /api/sessions/:id/rounds', () => {
       let seen = '';
 
       vi.mocked(createDefaultAdapter).mockReturnValue({
-        generateStreaming: (request: {
-          messages: readonly { role: string; content: unknown }[];
-        }) => {
-          const system = request.messages.find((message) => message.role === 'system')?.content;
+        generateStreaming: (request) => {
+          const system = promptMessages(request, UNPACKED_TARGET).find(
+            (message) => message.role === 'system',
+          )?.content;
           seen = typeof system === 'string' ? system : '';
 
           return Promise.resolve({

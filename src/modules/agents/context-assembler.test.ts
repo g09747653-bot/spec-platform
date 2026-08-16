@@ -162,14 +162,114 @@ describe('the size budget (AC-3)', () => {
     expect(assembled.text).not.toContain('characters omitted');
   });
 
-  it('spends the budget on the sections that need it, not equally', () => {
-    // The tiny attachment section survives whole; the enormous spec section is what gets cut.
+  it('spends a level of the budget on the sections that need it, not equally', () => {
+    // Within one priority level the tiny section survives whole and the enormous one is what gets
+    // cut. Across levels this is not the rule — that is what the А-8 suite below is about.
     const assembled = assembleContext(
-      { ...sources, approvedSpecs: [{ specType: 'constitution', content: 'C'.repeat(20_000) }] },
+      {
+        initialPrompt: sources.initialPrompt,
+        answers: sources.answers,
+        attachments: [],
+        approvedSpecs: [{ specType: 'constitution', content: 'C'.repeat(20_000) }],
+      },
       { totalChars: 3_000 },
     );
 
-    expect(assembled.text).toContain('no life stories');
+    expect(assembled.text).toContain('and small teams');
     expect(assembled.truncated.map((note) => note.section)).toEqual(['approved-specs']);
+  });
+});
+
+/**
+ * Priority packing (task 130; амендмент А-8).
+ *
+ * The order below is not a preference, it is the correction of a measured defect: the local runtime
+ * used to make the prompt fit by itself and kept the *tail*, so the web research survived and the
+ * system instruction did not (D-146). These tests assert the inverse, level by level, because the
+ * failure they prevent is silent — a document written from research nobody meant to be the brief.
+ */
+describe('priority packing (А-8)', () => {
+  const big = (size: number) => 'x'.repeat(size);
+
+  /**
+   * Sized so the four levels are separated by a wide margin, and the assertions are about which
+   * level gave way rather than about arithmetic: research 60k, the two documents 5k each, the
+   * answers and the grounding input a few hundred between them.
+   */
+  const everything: ContextSources = {
+    initialPrompt: 'A grant reminder tool for a small charity.',
+    answers: sources.answers,
+    attachments: [{ id: 'att-1', fileName: 'brief.pdf', text: big(5_000) }],
+    approvedSpecs: [{ specType: 'constitution', content: big(5_000) }],
+    research: [
+      { url: 'https://example.test/a', title: 'A', text: big(30_000), truncated: false },
+      { url: 'https://example.test/b', title: 'B', text: big(30_000), truncated: false },
+    ],
+  };
+
+  const entryFor = (assembled: ReturnType<typeof assembleContext>, section: string) =>
+    assembled.packing.find((item) => item.section === section);
+
+  it('shortens the web research before it touches anything else', () => {
+    const assembled = assembleContext(everything, { totalChars: 30_000 });
+
+    expect(entryFor(assembled, 'research')?.omittedChars).toBeGreaterThan(0);
+    expect(entryFor(assembled, 'attachments')?.omittedChars).toBe(0);
+    expect(entryFor(assembled, 'approved-specs')?.omittedChars).toBe(0);
+    expect(entryFor(assembled, 'answers')?.omittedChars).toBe(0);
+  });
+
+  it('drops the research entirely before it shortens a supplied document', () => {
+    const assembled = assembleContext(everything, { totalChars: 11_000 });
+
+    expect(entryFor(assembled, 'research')?.dropped).toBe(true);
+    expect(entryFor(assembled, 'attachments')?.omittedChars).toBe(0);
+    expect(entryFor(assembled, 'approved-specs')?.omittedChars).toBe(0);
+  });
+
+  it('shortens the supplied documents before the stage state', () => {
+    const assembled = assembleContext(everything, { totalChars: 8_000 });
+
+    expect(entryFor(assembled, 'research')?.dropped).toBe(true);
+    expect(entryFor(assembled, 'attachments')?.omittedChars).toBeGreaterThan(0);
+    expect(entryFor(assembled, 'approved-specs')?.omittedChars).toBe(0);
+  });
+
+  it('keeps the grounding input whole when every other level is gone', () => {
+    const assembled = assembleContext(everything, { totalChars: 500 });
+
+    expect(assembled.text).toContain('A grant reminder tool for a small charity.');
+    expect(entryFor(assembled, 'prompt')?.omittedChars).toBe(0);
+    expect(entryFor(assembled, 'research')?.dropped).toBe(true);
+    expect(entryFor(assembled, 'attachments')?.dropped).toBe(true);
+  });
+
+  it('states a dropped section rather than removing it, so the model can say what it lacks', () => {
+    const assembled = assembleContext(everything, { totalChars: 11_000 });
+
+    expect(assembled.text).toContain('## Pages read during live research');
+    expect(assembled.text).toContain('did not fit the context budget');
+    expect(assembled.text).not.toContain('https://example.test/a');
+  });
+
+  it('records every section, including the ones that survived whole', () => {
+    const assembled = assembleContext(everything, { totalChars: 30_000 });
+
+    expect(assembled.packing.map((item) => item.section).sort()).toEqual([
+      'answers',
+      'approved-specs',
+      'attachments',
+      'prompt',
+      'research',
+    ]);
+    expect(entryFor(assembled, 'answers')?.dropped).toBe(false);
+  });
+
+  it('packs deterministically: the same sources and budget give the same text', () => {
+    const once = assembleContext(everything, { totalChars: 30_000 });
+    const twice = assembleContext(everything, { totalChars: 30_000 });
+
+    expect(once.text).toBe(twice.text);
+    expect(once.packing).toEqual(twice.packing);
   });
 });

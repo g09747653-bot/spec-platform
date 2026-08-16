@@ -95,7 +95,7 @@ describe('buildProviderRegistry', () => {
     const registry = buildProviderRegistry(envWith('google'));
 
     for (const entry of registry) {
-      expect(Object.keys(entry).sort()).toEqual(['id', 'model', 'priority', 'stream']);
+      expect(Object.keys(entry).sort()).toEqual(['capacity', 'id', 'model', 'priority', 'stream']);
       expect(entry.model).not.toBe('');
     }
   });

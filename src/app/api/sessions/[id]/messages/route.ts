@@ -5,8 +5,9 @@ import { z } from 'zod';
 import { getDatabase } from '@/db/client';
 import { AllProvidersFailedError } from '@/modules/adapters/llm';
 import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
-import { assembleContext, type ContextReference } from '@/modules/agents/context-assembler';
+import type { ContextReference } from '@/modules/agents/context-assembler';
 import { resolveDecisionIntent } from '@/modules/agents/decision-intent/resolve';
+import { describePacking, packPrompt } from '@/modules/agents/pack-prompt';
 import { collectContextSources } from '@/modules/agents/spec/collect-context';
 import { assemblePrompt } from '@/modules/prompts';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
@@ -254,29 +255,32 @@ async function answer(
   });
   // Answering a question writes no revision, so the context set is not recorded anywhere here.
   const references = await resolveReferences(db, scope, session, referenceIds);
-  const context = assembleContext(
-    references.length === 0 ? collected.sources : { ...collected.sources, references },
-  );
+  const sources =
+    references.length === 0 ? collected.sources : { ...collected.sources, references };
 
-  const prompt = assemblePrompt(
-    'chat.answer.v1',
-    {
-      message: text,
-      pendingDescription: describePending(pending),
-      context: context.text,
-    },
-    // У-1: an answer in the conversation is in the language of the conversation (task 108).
-    { contentLanguage: session.contentLanguage },
-  );
+  const build = (context: string) =>
+    assemblePrompt(
+      'chat.answer.v1',
+      {
+        message: text,
+        pendingDescription: describePending(pending),
+        context,
+      },
+      // У-1: an answer in the conversation is in the language of the conversation (task 108).
+      { contentLanguage: session.contentLanguage },
+    );
 
   try {
     const result = await createDefaultAdapter(undefined, {
       modelId: session.modelId,
     }).generateStreaming({
-      messages: [
-        { role: 'system', content: prompt.system },
-        { role: 'user', content: prompt.user },
-      ],
+      // Packed for the provider that answers (А-8): a chat reply carries the same session state a
+      // generation does, so the same window is the same problem.
+      messages: (target) => {
+        const packed = packPrompt({ build, sources, target, label: 'chat-answer' });
+        console.info(describePacking(packed.record));
+        return packed.messages;
+      },
       runId: randomUUID(),
       onChunk: onDelta,
     });

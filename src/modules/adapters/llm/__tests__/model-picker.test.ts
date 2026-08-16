@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { Env } from '@/config/env';
 
+import { UNPACKED_TARGET } from '../capacity';
 import {
   AUTO_MODEL,
   createDefaultAdapter,
@@ -33,6 +34,7 @@ function spyRegistry(order: readonly ProviderId[]) {
     id,
     model: `${id}-model`,
     priority: index + 1,
+    capacity: UNPACKED_TARGET.capacity,
     stream: vi.fn(async (input: { onDelta: (text: string) => void }) => {
       calls.push(id);
       input.onDelta(id);
