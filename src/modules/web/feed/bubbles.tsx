@@ -2,7 +2,7 @@ import { stageLabel } from '../session/stage-display';
 
 import { FeedItem } from './feed-item';
 import { positionLabel } from './labels';
-import type { CompletionBlock, MessageBlock, SeedBlock, TransitionBlock } from './model';
+import type { MessageBlock, SeedBlock, TransitionBlock } from './model';
 
 /**
  * The prose blocks of the conversation (task 105; Эталон §1.1, block types 1 and 3).
@@ -94,38 +94,6 @@ export function StageChip({ block }: { block: TransitionBlock }) {
         </span>
         <span className="text-foreground font-medium">{positionLabel(block.to)}</span>
       </span>
-    </FeedItem>
-  );
-}
-
-/** The sealed session (FR-020 AC-3). The export controls live beside the feed, not inside it. */
-export function CompletionPanel({
-  block,
-  fileCount,
-}: {
-  block: CompletionBlock;
-  fileCount: number;
-}) {
-  return (
-    <FeedItem block={block}>
-      <div
-        className="border-border-subtle bg-surface w-full max-w-[46rem] rounded-xl border p-4"
-        data-testid="session-complete"
-      >
-        <p className="text-sm font-medium">Session completed</p>
-        <p className="text-foreground-muted mt-1 text-sm">
-          {fileCount} spec {fileCount === 1 ? 'file' : 'files'} generated. Every file in the bundle
-          has an approved revision and the workflow is sealed here — no stage reopens (FR-020 AC-9).
-          Download it beside the conversation, or keep refining any file: a refinement produces a
-          new revision without moving the session (FR-020 AC-4).
-        </p>
-        {block.completionCount > 1 && (
-          <p className="text-foreground-muted mt-1 text-xs">
-            Sealed {block.completionCount} times — the session has been re-opened and completed
-            again.
-          </p>
-        )}
-      </div>
     </FeedItem>
   );
 }

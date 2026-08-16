@@ -1591,7 +1591,7 @@ Goal: the visual layer with our own tint, the completion surface, structured loc
   - Acceptance Criteria: killing the dev server mid-session raises the surface, restarting it reconnects and the feed resumes (existing resume tests reused); loader never traps the page (liveness invariant applies); toasts are announced accessibly (aria-live).
   - _Dependencies: 124_ · _Requirements: Эталон §1.5_ · _Touches: `src/modules/web/**`_ · _Complexity: Medium_ · _Parallel-safe: yes_
 
-- [ ] 126\. Completion panel and «Build with your favourite tool»
+- [x] 126. Completion panel and «Build with your favourite tool»
   - Session completed panel at terminal: bundle name, file count, Edit and Download actions. Below it — «Build with your favourite tool»: **Generate AI Prompt** produces a prompt that references the approved revisions and instructs the coding agent to follow the bundle (per Эталон §5.1 handoff pattern); platform buttons (Lovable/Bolt/Replit) copy that prompt and open the platform — no fake deeplinks: what we cannot integrate honestly is a copy-and-open, stated as such in the UI.
   - Acceptance Criteria: panel renders only at Complete; the generated prompt names the actual approved revisions of THIS bundle and its methodology's file names; Download from the panel equals the export contract byte-for-byte; copy-and-open behaviour is honest (no claim of direct import).
   - _Dependencies: 124_ · _Requirements: Эталон §1.1 (финал ленты), §5.1_ · _Touches: `src/modules/web/feed/**`, `src/modules/specs/export/**`_ · _Complexity: Large_ · _Parallel-safe: yes_

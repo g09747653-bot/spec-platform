@@ -5,8 +5,9 @@ import { useState } from 'react';
 
 import { useChatDecision } from '../session/useChatDecision';
 
-import { CompletionPanel, MessageBubble, SeedBubble, StageChip } from './bubbles';
+import { MessageBubble, SeedBubble, StageChip } from './bubbles';
 import { appendChatTurns } from './chat-turns';
+import { CompletionPanel, type CompletionModel } from './completion-panel';
 import { Composer } from './composer';
 import type { ReferenceTarget, SlashCommand } from './composer-menus';
 import { DocumentBlock } from './document-block';
@@ -54,8 +55,8 @@ export interface SessionFeedProps {
   describePrefill: string | null;
   /** A run the server reported in flight when this page rendered (round 5, Р-3). */
   activeRun: { runId: string; attempt: number } | null;
-  /** How many files the bundle currently holds, for the completion panel. */
-  bundleFileCount: number;
+  /** Everything the completion panel needs: the bundle, its files, and where to export it. */
+  completion: CompletionModel;
   /** What an `@` may name in this chat: the bundle's files and the session's documents (task 121). */
   references: readonly ReferenceTarget[];
   /** Auto plus each configured model. A model whose key is absent is not in this list. */
@@ -76,7 +77,7 @@ export function SessionFeed({
   canGenerate,
   describePrefill,
   activeRun,
-  bundleFileCount,
+  completion,
   references,
   models,
   selectedModel,
@@ -226,7 +227,7 @@ export function SessionFeed({
         );
 
       case 'completion':
-        return <CompletionPanel key={block.id} block={block} fileCount={bundleFileCount} />;
+        return <CompletionPanel key={block.id} block={block} completion={completion} />;
     }
   }
 

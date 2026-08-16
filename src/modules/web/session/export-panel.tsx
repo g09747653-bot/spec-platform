@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { z } from 'zod';
 
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { showToast } from '../ui/toast';
+
+import { downloadBundle, type ExportManifest } from './download-bundle';
 
 /**
  * The export panel (tasks 22, 73; FR-015 AC-4/AC-6/AC-7/AC-8).
@@ -39,58 +40,6 @@ export interface ExportPanelProps {
   mode: string;
 }
 
-/** The manifest, as the export endpoint reports it. Parsed, because headers are a boundary. */
-const FileList = z
-  .string()
-  .nullable()
-  .transform((raw) =>
-    (raw ?? '')
-      .split(',')
-      .map((name) => name.trim())
-      .filter((name) => name !== ''),
-  );
-
-const ErrorBody = z.object({
-  error: z.object({ code: z.string(), message: z.string() }),
-});
-
-interface Manifest {
-  mode: string;
-  included: string[];
-  omitted: string[];
-}
-
-function readManifest(response: Response): Manifest {
-  return {
-    mode: response.headers.get('X-Spec-Export-Mode') ?? 'default',
-    included: FileList.parse(response.headers.get('X-Spec-Export-Included')),
-    omitted: FileList.parse(response.headers.get('X-Spec-Export-Omitted')),
-  };
-}
-
-/**
- * Hands the archive to the browser.
- *
- * An object URL rather than a navigation, because the bytes are already in hand: the response had to
- * be read to learn what is in it, and downloading it a second time would be a second export — a
- * second `ExportRecord`, and a second chance for the two answers to differ.
- */
-function saveArchive(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-
-  // Freed on the next tick: revoking synchronously races the browser's read of the URL.
-  setTimeout(() => {
-    URL.revokeObjectURL(url);
-  }, 0);
-}
-
 /**
  * The clipboard copy of one file (task 74; FR-016).
  *
@@ -107,12 +56,12 @@ type CopyState =
   | { kind: 'failed'; specFileId: string };
 
 export function ExportPanel({ projectId, files, omittedFiles, mode }: ExportPanelProps) {
-  const [manifest, setManifest] = useState<Manifest | null>(null);
+  const [manifest, setManifest] = useState<ExportManifest | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [copy, setCopy] = useState<CopyState>({ kind: 'idle' });
 
-  const shown: Manifest = manifest ?? {
+  const shown: ExportManifest = manifest ?? {
     mode,
     included: files.map((file) => file.fileName),
     omitted: [...omittedFiles],
@@ -168,33 +117,20 @@ export function ExportPanel({ projectId, files, omittedFiles, mode }: ExportPane
     setBusy(true);
     setFailure(null);
 
-    try {
-      const response = await fetch(`/api/projects/${projectId}/export?mode=${mode}`, {
-        cache: 'no-store',
-      });
+    const outcome = await downloadBundle(projectId, mode);
 
-      if (!response.ok) {
-        const parsed = ErrorBody.safeParse(await response.json());
-        setFailure(
-          parsed.success ? parsed.data.error.message : 'The export could not be produced.',
-        );
-        showToast('The export could not be produced.', 'danger');
-        return;
-      }
-
-      const produced = readManifest(response);
-      saveArchive(await response.blob(), `${projectId}-specs.zip`);
-      setManifest(produced);
+    if (!outcome.ok) {
+      setFailure(outcome.message);
+      showToast(outcome.message, 'danger');
+    } else {
+      setManifest(outcome.manifest);
       showToast(
-        `Downloaded ${String(produced.included.length)} ${produced.included.length === 1 ? 'file' : 'files'} in ${produced.mode} mode.`,
+        `Downloaded ${String(outcome.manifest.included.length)} ${outcome.manifest.included.length === 1 ? 'file' : 'files'} in ${outcome.manifest.mode} mode.`,
         'success',
       );
-    } catch {
-      setFailure('The download did not start. Check your connection and try again.');
-      showToast('The download did not start.', 'danger');
-    } finally {
-      setBusy(false);
     }
+
+    setBusy(false);
   }
 
   return (
