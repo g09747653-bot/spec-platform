@@ -926,6 +926,7 @@ Generation streams over a single HTTP response using the AI SDK stream, with new
 | `run` | `{ runId, stage }` | Stream opened; client stores `runId` for resume. |
 | `delta` | `{ sequence, text }` | Incremental markdown. |
 | `research` | `{ status: 'started' \| 'finished' }` | Drives the research activity indicator (FR-019 AC-2). |
+| `heartbeat` | `{}` | Connection liveness while the producer has nothing else to emit (quota back-off, prompt reading, model reasoning). Emitted at the transport layer roughly every 15 s of silence; **never persisted to the durable journal** and never advances `(attempt, sequence)`. The reader counts ANY event — including this one — as liveness, so its idle deadline keeps its original meaning: a dead connection, not a quiet model (амендмент А-9; Р-2 preserved). While only heartbeats arrive, the page shows an honest waiting status instead of an error. |
 | `restart` | `{ reason: 'provider_failover' }` | Discard rendered text; a new attempt begins at sequence 0. |
 | `complete` | `{ specFileId, revisionNumber }` | Revision persisted; render the approval card. |
 | `error` | `{ code, message, retryable }` | Sanitised failure; render retry. |

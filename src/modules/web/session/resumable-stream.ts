@@ -84,6 +84,18 @@ export function applyEvent(state: StreamState, event: GenerationEvent): StreamSt
     case 'research':
       return { ...state, researching: event.status === 'started' };
 
+    /*
+     * Deliberately nothing (round 5, Р-4; А-9).
+     *
+     * A heartbeat has done its entire job by arriving: the read that received it reset the idle
+     * deadline, which is what the producer sent it for. Changing rendered state here is exactly
+     * what it must not do — it carries no text, belongs to no sequence, and is not in the durable
+     * journal, so a reader that resumed at this moment must find the run in the position it was in
+     * before the beat (Р-2; D-95).
+     */
+    case 'heartbeat':
+      return state;
+
     case 'restart':
       // Never concatenate two providers' output: the rendered text goes, and numbering starts again.
       return { ...state, status: 'streaming', text: '', sequence: -1, attempt: event.attempt };
@@ -116,7 +128,13 @@ export interface ResumableStreamOptions {
   /** Reconnect delays in milliseconds. Running out of them ends the stream in `failed`. */
   backoff?: readonly number[];
   /**
-   * How long a connection may deliver nothing before it is treated as dropped.
+   * How long a connection may deliver **nothing at all** before it is treated as dropped.
+   *
+   * "Nothing at all" is the operative phrase, and since round 5 it is a decision rather than an
+   * accident of implementation (Р-4; А-9): idleness is the absence of *any* event, not the absence
+   * of rendered text. A producer with nothing to say says `heartbeat` every 15 seconds, so silence
+   * for the whole deadline now means what it says — no producer — while a local model thinking for
+   * two minutes keeps its connection and is waited for.
    *
    * Without this the reader waits on `reader.read()` forever: a server holding the response open —
    * a provider stalled inside its own timeout, a proxy that keeps the socket but forwards nothing —
@@ -132,7 +150,13 @@ export interface ResumableStreamOptions {
    * expected within 3s (NFR-001). A local model breaks that assumption — it can spend a minute on a
    * long prompt before the first token — and for one round the deadline was fatal, because dropping
    * the read aborted the run server-side. It no longer does: the run streams on, and a reconnect
-   * finds a producer that is still going. Firing early now costs one reconnect, not a generation.
+   * finds a producer that is still going.
+   *
+   * Round 5 removed the last of the damage. Firing early cost a reconnect rather than a generation,
+   * but a run silent for longer than the whole backoff ladder still ended on an error card in front
+   * of a user whose edit was being written — which is what the gate saw. The heartbeat means the
+   * deadline no longer fires on that run at all, and the value stays 45 s because what it now
+   * measures — three missed beats — is genuinely a dead connection.
    */
   idleTimeoutMs?: number;
 }

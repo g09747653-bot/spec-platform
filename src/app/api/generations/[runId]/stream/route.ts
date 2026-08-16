@@ -4,6 +4,7 @@ import { currentOwnerScope } from '@/modules/projects/auth/scope';
 import { createSpecFileRepository } from '@/modules/specs/repositories/spec-files';
 import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
 import { isCoreSpecType } from '@/modules/specs/model/spec-files';
+import { withHeartbeat } from '@/modules/web/api/heartbeat';
 import { errorResponse } from '@/modules/web/api/responses';
 import {
   encodeEvent,
@@ -73,7 +74,7 @@ export async function GET(
        * earlier line says nothing about its value now. */
       const isOpen = () => open;
 
-      const send = (event: GenerationEvent) => {
+      const emit = (event: GenerationEvent) => {
         if (!open) return;
         try {
           controller.enqueue(encoder.encode(encodeEvent(event)));
@@ -81,6 +82,16 @@ export async function GET(
           open = false;
         }
       };
+
+      /*
+       * A resume connection is silent for exactly as long as the run it is following is (round 5,
+       * Р-4; А-9): the loop below polls the durable log every 250 ms and sends nothing at all while
+       * there is nothing new in it. Without a heartbeat that is indistinguishable from a dead
+       * socket, and the reader that reconnected here would drop this connection too — spending its
+       * backoff ladder on a run that is producing perfectly well, just slowly.
+       */
+      const beat = withHeartbeat(emit);
+      const send = beat.send;
 
       /**
        * The completed run's card.
@@ -160,6 +171,7 @@ export async function GET(
           await sleep(POLL_MS);
         }
       } finally {
+        beat.stop();
         open = false;
         controller.close();
       }

@@ -42,6 +42,25 @@ const ResearchEvent = z.object({
   status: z.enum(['started', 'finished']),
 });
 
+/**
+ * Proof that there is still a producer at the other end (round 5, Р-4; амендмент А-9).
+ *
+ * Purely transport. It carries no content, is **never written to the durable journal**, and never
+ * advances `(attempt, sequence)` — so the resume contract is exactly what it was, byte for byte
+ * (Р-2; D-95). Its only job is to arrive: the reader treats the absence of *any* event as a dead
+ * connection, and there are three ordinary stretches of a live run that produce no other event —
+ * a provider's quota back-off ladder, a local model reading a long prompt, and a local model
+ * reasoning before the first token of prose. Each of those can outlast the idle deadline while
+ * nothing at all is wrong.
+ *
+ * With this in the protocol the deadline gets its original meaning back: it detects a dead
+ * connection, not a quiet model. What bounds a genuinely hung provider is what always bounded it —
+ * the chain's own server-side budget.
+ */
+const HeartbeatEvent = z.object({
+  type: z.literal('heartbeat'),
+});
+
 const RestartEvent = z.object({
   type: z.literal('restart'),
   reason: z.literal('provider_failover'),
@@ -66,6 +85,7 @@ export const generationEventSchema = z.discriminatedUnion('type', [
   RunEvent,
   DeltaEvent,
   ResearchEvent,
+  HeartbeatEvent,
   RestartEvent,
   CompleteEvent,
   ErrorEvent,
