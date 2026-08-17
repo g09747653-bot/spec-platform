@@ -49,6 +49,14 @@ export interface FeedBlockBase {
   substage: string | null;
   /** When the underlying row happened, ISO-8601. The ordering key, and never re-derived. */
   at: string;
+  /**
+   * A one-line plain-text gist, for `data-msg-snippet` (task 134; Эталон §1.1).
+   *
+   * The fifth of the reference's navigation attributes, and the one we did not carry: id, role,
+   * stage and substage say *where* a message is, and the snippet says *what* it is, which is what
+   * an anchor preview or a jump list needs. Derived in the projection (`snippetOf`), never stored.
+   */
+  snippet?: string;
 }
 
 /** The templated opening bubble: «I want to build {name}. My project description is: {prompt}». */
@@ -96,6 +104,8 @@ export interface FeedOption {
   description?: string | undefined;
   /** The model's single suggestion for this question, if it made one (Эталон §1.1). */
   recommended?: boolean | undefined;
+  /** Short tags the model attached to this option, when it did (task 134; Эталон §1.1). */
+  tags?: readonly string[] | undefined;
 }
 
 export interface FeedQuestion {

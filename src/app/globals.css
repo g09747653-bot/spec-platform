@@ -96,3 +96,52 @@
     }
   }
 }
+
+/**
+ * The conversation's own typography and motion (task 134; Эталон §1.1).
+ *
+ * Two utilities the components could not express with Tailwind alone, and neither names a colour —
+ * they read the same tokens `brand.css` declares, so the theme still has one home.
+ */
+@layer components {
+  /*
+   * Prose the model wrote (row `1.5-11`).
+   *
+   * The reference gives every AI turn a typographic wrapper; ours had none, so an answer was set in
+   * the same 14px as a control label. This is the body scale from the token set, with the measure
+   * and rhythm a paragraph needs — nothing bespoke, just the scale actually applied.
+   */
+  .chat-prose {
+    font-size: var(--text-body);
+    line-height: 1.65;
+    max-width: 46rem;
+  }
+
+  .chat-prose > * + * {
+    margin-top: 0.75rem;
+  }
+
+  /*
+   * The stage chip's dashes flow (row `1.1-10`). Slow and low-contrast: it marks the connector as a
+   * connector, and it is identical on every chip, so it cannot read as "this step is running".
+   */
+  .dash-flow {
+    animation: dash-flow 2.4s linear infinite;
+  }
+
+  @keyframes dash-flow {
+    0%,
+    100% {
+      opacity: 0.45;
+    }
+    50% {
+      opacity: 0.9;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dash-flow {
+      animation: none;
+    }
+  }
+}

@@ -44,6 +44,15 @@ export const QuestionOption = z.object({
    * every existing session unreadable — and the rounds are what the interview gate counts.
    */
   recommended: z.boolean().optional(),
+  /**
+   * Short tags the model may attach to an option (task 134; row `1.1-6`; Эталон §1.1).
+   *
+   * **Optional, and it stays optional** — the same compatibility contract `recommended` carries.
+   * Every round drafted before this is a valid draft with no tags and renders as it always did, and
+   * a model that supplies none is not doing anything wrong. Bounded because a chip row is a chip
+   * row: four short words, not a paragraph broken into pieces.
+   */
+  tags: z.array(z.string().min(1).max(24)).max(4).optional(),
 });
 
 export const Question = z

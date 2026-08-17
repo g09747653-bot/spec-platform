@@ -101,10 +101,8 @@ export function MessageBubble({ block }: { block: MessageBlock }) {
 
   return (
     <FeedItem block={block}>
-      <div
-        className="max-w-[46rem] text-sm leading-relaxed whitespace-pre-wrap"
-        data-testid={testId}
-      >
+      {/* `chat-prose` is the typographic wrapper the reference gives AI prose (task 134; `1.5-11`). */}
+      <div className="chat-prose whitespace-pre-wrap" data-testid={testId}>
         {block.text}
         {block.streaming && <span className="text-foreground-muted"> ▌</span>}
       </div>
@@ -115,9 +113,19 @@ export function MessageBubble({ block }: { block: MessageBlock }) {
 /**
  * The stage chip: where the session moved, and where it moved to (Эталон §1.1, block type 3).
  *
- * Derived, never stored — see `build-feed.ts`. The dashes are animated in the reference; here they
- * are a static rule of the same width, because a chip that animates for ever is a page that looks
- * like it is still working when it is not, and round 5 was entirely about that distinction.
+ * Derived, never stored — see `build-feed.ts`. All four of the reference's traits are here now
+ * (task 134; row `1.1-10`): the order and the arrow, the **target in primary**, a **gradient
+ * border** in primary, and dashes that **flow**.
+ *
+ * The animation was previously left out on the grounds that "a chip that animates for ever looks
+ * like a page still working". That worry belongs to the drafting surface, not here: every chip in
+ * the feed animates identically, including the ones from stages finished an hour ago, so nothing
+ * about the motion singles out a step as in progress — and `prefers-reduced-motion` turns it off
+ * for anyone who asked, which the previous version had no way to honour either way.
+ *
+ * The gradient border is a one-pixel gradient behind an opaque pill rather than a `border-image`:
+ * it is the only way to get a gradient stroke on a fully-rounded shape that every engine draws the
+ * same, and the inner fill is the canvas token, so the chip still reads as sitting on the feed.
  */
 export function StageChip({ block }: { block: TransitionBlock }) {
   const methodologyId = useMethodologyId();
@@ -125,17 +133,19 @@ export function StageChip({ block }: { block: TransitionBlock }) {
   return (
     <FeedItem block={block} align="center">
       <span
-        className="border-border-subtle text-foreground-muted inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs"
+        className="from-primary/20 via-brand/20 to-primary/20 inline-flex rounded-full bg-gradient-to-r p-px"
         data-testid="stage-chip"
         data-from={`${block.from.stage}${block.from.substage === null ? '' : `.${block.from.substage}`}`}
         data-to={`${block.to.stage}${block.to.substage === null ? '' : `.${block.to.substage}`}`}
       >
-        <span>{positionLabel(block.from, methodologyId)}</span>
-        <span aria-hidden className="opacity-50">
-          ──▶
-        </span>
-        <span className="text-foreground font-medium">
-          {positionLabel(block.to, methodologyId)}
+        <span className="bg-background text-foreground-muted inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs">
+          <span>{positionLabel(block.from, methodologyId)}</span>
+          <span aria-hidden className="dash-flow opacity-60">
+            ──▶
+          </span>
+          <span className="text-primary-ink font-medium">
+            {positionLabel(block.to, methodologyId)}
+          </span>
         </span>
       </span>
     </FeedItem>
@@ -163,12 +173,29 @@ export function BundleCreated({ block }: { block: BundleBlock }) {
   );
 }
 
-/** The small caption above a card, naming the stage it belongs to — in its methodology's words. */
-export function BlockCaption({ stage, trailing }: { stage: string; trailing?: string }) {
+/**
+ * The small caption above a card, naming the stage it belongs to — in its methodology's words.
+ *
+ * `tone="primary"` is the document card's (task 134; row `1.1-11`; Эталон §1.1): the reference gives
+ * a document card exactly one colour accent and puts it on the stage name, and ours was the same
+ * muted grey as everything else on an otherwise achromatic card. `primary-ink` rather than
+ * `primary` because this is small text and the ink token is the one contrast-checked for it.
+ */
+export function BlockCaption({
+  stage,
+  trailing,
+  tone = 'muted',
+}: {
+  stage: string;
+  trailing?: string;
+  tone?: 'muted' | 'primary';
+}) {
   const methodologyId = useMethodologyId();
 
   return (
-    <p className="text-foreground-muted text-label uppercase">
+    <p
+      className={`text-label uppercase ${tone === 'primary' ? 'text-primary-ink' : 'text-foreground-muted'}`}
+    >
       {stageLabel(stage, methodologyId)}
       {trailing !== undefined && ` · ${trailing}`}
     </p>

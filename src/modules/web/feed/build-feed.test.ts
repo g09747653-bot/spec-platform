@@ -820,3 +820,63 @@ describe('persisted messages (task 132)', () => {
     });
   });
 });
+
+/**
+ * Task 134 — `data-msg-snippet`, the fifth of the reference's navigation attributes (row `1.1-3`).
+ *
+ * The red-team's finding about this row was not really about the missing attribute: it was that the
+ * walk had checked the *names* of four attributes on one block out of nine kinds. So the assertion
+ * here is per kind, and it is about the value.
+ */
+describe('every block says what it is (task 134)', () => {
+  it('gives each kind a one-line gist', () => {
+    const feed = buildFeed({
+      ...walkedToReview(),
+      proposals: [proposal()],
+      messages: [
+        {
+          messageId: 'm1',
+          role: 'user',
+          origin: 'chat',
+          stage: 'constitution',
+          substage: 'review',
+          body: 'what should I pick?',
+          createdAt: T.chat,
+        },
+      ],
+    });
+
+    const snippet = (id: string): string =>
+      feed.blocks.find((block) => block.id === id)?.snippet ?? '';
+
+    expect(snippet('seed')).toBe('A voice assistant that runs on my laptop');
+    expect(snippet('message:m1')).toBe('what should I pick?');
+    expect(snippet('round:r1')).toBe('Round 1 — Who is this for?');
+    expect(snippet('bundle-created')).toBe('Project bundle created: local-voice-assistant');
+    expect(snippet('revision:rev-1')).toBe('constitution.md — Rev 1');
+    expect(snippet('review:review-1')).toContain('Needs revision');
+    expect(snippet('proposal:proposal-1')).toBe('Tighten the scope section');
+
+    // Every block carries one — the claim is "each message", not "most of them".
+    for (const block of feed.blocks) {
+      expect(block.snippet, `${block.id} has no snippet`).not.toBe('');
+    }
+  });
+
+  it('collapses whitespace and clips a long one', () => {
+    const feed = buildFeed(
+      source({
+        session: {
+          ...source().session,
+          initialPrompt: `a\n\n  very ${'long '.repeat(60)}prompt`,
+        },
+      }),
+    );
+
+    const seed = feed.blocks.find((block) => block.id === 'seed');
+
+    expect(seed?.snippet).toMatch(/^a very long/);
+    expect(seed?.snippet).toHaveLength(120);
+    expect(seed?.snippet?.endsWith('…')).toBe(true);
+  });
+});

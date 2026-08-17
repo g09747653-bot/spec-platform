@@ -511,6 +511,54 @@ function computeTail(source: FeedSource, blocks: readonly FeedBlock[]): FeedTail
   return { kind: 'open' };
 }
 
+/** One line of plain text, collapsed and clipped — what `data-msg-snippet` carries. */
+function gist(text: string): string {
+  const collapsed = text.replace(/\s+/g, ' ').trim();
+
+  return collapsed.length <= SNIPPET_CHARS
+    ? collapsed
+    : `${collapsed.slice(0, SNIPPET_CHARS - 1)}…`;
+}
+
+const SNIPPET_CHARS = 120;
+
+/**
+ * What a block says, in one line (task 134; row `1.1-3`).
+ *
+ * Every kind answers, because "each message carries a snippet" is the reference's claim and a card
+ * is a message here too. What each one answers is the thing a reader scanning the conversation
+ * would use to recognise it: prose gives its opening words, a round its first question, a card the
+ * file it is about, a board its verdict.
+ */
+function snippetOf(block: FeedBlock, source: FeedSource): string {
+  switch (block.kind) {
+    case 'seed':
+      return gist(block.prompt);
+    case 'message':
+      return gist(block.text);
+    case 'round':
+      return gist(
+        `Round ${String(block.roundNumber)} — ${block.questions[0]?.text ?? 'no questions'}`,
+      );
+    case 'transition':
+      return gist(`${positionKey(block.from)} → ${positionKey(block.to)}`);
+    case 'bundle':
+      return gist(`Project bundle created: ${block.bundleName}`);
+    case 'generation':
+      return gist(`Drafting ${block.stage} — attempt ${String(block.attempt)}, ${block.status}`);
+    case 'document':
+      return gist(`${block.fileName} — Rev ${String(block.revisionNumber)}`);
+    case 'review':
+      return gist(
+        `${block.outcome === 'pass' ? 'Pass' : 'Needs revision'} — ${block.summary ?? `${String(block.items.length)} points`}`,
+      );
+    case 'proposal':
+      return gist(block.instruction);
+    case 'completion':
+      return gist(`Session completed: ${source.session.projectName}`);
+  }
+}
+
 export function buildFeed(source: FeedSource): Feed {
   const unordered: FeedBlock[] = [
     seedBlock(source),
@@ -607,10 +655,16 @@ export function buildFeed(source: FeedSource): Feed {
     blocks.push(transitionBlock(current, position, 'tail', last?.at ?? source.session.createdAt));
   }
 
+  /*
+   * The snippet, last (task 134). After the chip pass, because a block's stage is settled by then
+   * and a transition's snippet names both ends of a move the pass is what decides.
+   */
+  const described = blocks.map((block) => ({ ...block, snippet: snippetOf(block, source) }));
+
   return {
-    blocks,
+    blocks: described,
     position,
-    tail: computeTail(source, blocks),
+    tail: computeTail(source, described),
     revisionOwed: computeRevisionOwed(source),
   };
 }

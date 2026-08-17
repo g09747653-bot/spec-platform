@@ -1,0 +1,47 @@
+/**
+ * The handful of icons the surface needs, drawn inline (task 134).
+ *
+ * No icon package: three paths do not justify a runtime dependency, and a vendored SVG follows the
+ * theme by construction — `currentColor` means the icon is whatever colour its text is, so it
+ * cannot be the one element that ignores a theme switch.
+ *
+ * `aria-hidden` on every one of them, always. Each is drawn beside a word that already says what
+ * the control does; an icon that announced itself as well would make a screen reader say it twice.
+ */
+export function EyeIcon({ open = false, className }: { open?: boolean; className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className={className ?? 'h-3.5 w-3.5'}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M1.5 8s2.4-4 6.5-4 6.5 4 6.5 4-2.4 4-6.5 4-6.5-4-6.5-4Z" />
+      <circle cx="8" cy="8" r="1.9" />
+      {/* The struck-through eye is «hide», so the control's two states differ at a glance. */}
+      {open && <path d="M2.5 13.5 13.5 2.5" />}
+    </svg>
+  );
+}
+
+/** The paperclip on the composer's attach control (row `1.5-2`). */
+export function PaperclipIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className={className ?? 'h-4 w-4'}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M11.5 6.5 6.9 11.1a2.1 2.1 0 0 1-3-3l5-5a3.3 3.3 0 0 1 4.7 4.7l-5 5a4.5 4.5 0 0 1-6.4-6.4l4.6-4.6" />
+    </svg>
+  );
+}

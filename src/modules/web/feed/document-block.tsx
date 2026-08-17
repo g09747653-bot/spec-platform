@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { Button } from '../ui/button';
+import { EyeIcon } from '../ui/icons';
 import { Label, Textarea } from '../ui/field';
 import { WaitingOn } from '../session/waiting-on';
 import { useSessionRequest } from '../session/useSessionRequest';
@@ -111,7 +112,8 @@ export function DocumentBlock({
       >
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div className="flex flex-col gap-0.5">
-            <BlockCaption stage={block.specType} />
+            {/* The card's one colour accent, where the reference puts it (task 134; `1.1-11`). */}
+            <BlockCaption stage={block.specType} tone="primary" />
             <span className="text-foreground-muted font-mono text-xs" data-testid="document-path">
               {block.path}
             </span>
@@ -155,11 +157,13 @@ export function DocumentBlock({
           <button
             type="button"
             data-testid="document-preview-toggle"
-            className="text-foreground-muted self-start text-xs underline underline-offset-2"
+            className="text-foreground-muted inline-flex items-center gap-1.5 self-start text-xs underline underline-offset-2"
             onClick={() => {
               void togglePreview();
             }}
           >
+            {/* The eye the reference draws on this control (task 134; row `1.1-11`). */}
+            <EyeIcon open={previewOpen} />
             {previewOpen ? 'Hide preview' : 'Preview'}
           </button>
         )}

@@ -34,6 +34,13 @@ export function FeedItem({
       data-msg-role={block.role}
       data-msg-stage={block.stage}
       data-msg-substage={block.substage ?? ''}
+      /*
+       * The fifth attribute of the reference's contract (task 134; row `1.1-3`): a short plain-text
+       * gist of the block, so a scroll list or an anchor preview can name a message without
+       * re-deriving what is inside it. Computed by the projection — `snippetOf` in `build-feed.ts` —
+       * because what a block *says* is a fact about the row, not about how it is drawn.
+       */
+      data-msg-snippet={block.snippet ?? ''}
       data-msg-kind={block.kind}
       data-testid={`feed-block-${block.kind}`}
       className={cn(

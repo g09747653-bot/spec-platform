@@ -1637,7 +1637,7 @@ Goal: close every gap the red-team confirmed, so the stage-1 seal is earned, not
   - Acceptance Criteria: each item's checklist row flips to «парити» with evidence; the completion panel is the last block in a completed session's feed; composer shows attach and the gradient send in both themes.
   - _Dependencies: 132_ · _Requirements: CHECKLIST §Разрывы (поверхностные)_ · _Touches: `src/modules/web/**`_ · _Complexity: Large_ · _Parallel-safe: no_
 
-- [ ] 134\. Cosmetic gaps (7)
+- [x] 134\. Cosmetic gaps (7)
   - `1.1-3` `data-msg-snippet`, `1.1-6` tag-chips on options (when the model supplies them; schema stays optional), `1.1-10` transition chip: all four reference traits, `1.1-11` card caption in primary + Preview icon, `1.3-4` review item header = section path (title moves into the body line), `1.4-1` full methodology name visible without tooltip, `1.5-11` AI prose typography per reference scale.
   - Acceptance Criteria: each row flips with evidence; no token-gate violations introduced.
   - _Dependencies: 133_ · _Requirements: CHECKLIST §Разрывы (косметические)_ · _Touches: `src/modules/web/**`_ · _Complexity: Medium_ · _Parallel-safe: yes_

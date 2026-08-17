@@ -477,7 +477,7 @@ const INTERVIEW_QUESTIONS: PromptAsset = {
     '',
     'Draft the next round as JSON only — no prose, no code fence. Shape:',
     '{"stage": "<stage>", "questions": [{"id", "text", "type": "single"|"multiple",',
-    '"options": [{"id", "label", "description", "recommended?"}], "allowOther": true,',
+    '"options": [{"id", "label", "description", "recommended?", "tags?"}], "allowOther": true,',
     '"informationNeeds": ["<need>"]}]}.',
     /*
      * The sizes are interpolated, not written (task 133; row `1.2-2`). "Ask at most three questions"
@@ -489,6 +489,8 @@ const INTERVIEW_QUESTIONS: PromptAsset = {
     'allowOther: true and names the information needs it is meant to satisfy. Ask at most',
     '{{maxQuestions}} questions in a round.',
     'Give every option a one-line "description" saying what choosing it would mean in practice.',
+    'You may add "tags": up to four one-or-two-word labels naming what an option implies — "faster",',
+    '"needs a server", "no cost". Leave them out when they would only repeat the description.',
     'Mark at most ONE option per question with "recommended": true — the one you would advise for',
     'this product — and leave the flag off entirely when no option is clearly better.',
     'Return {"stage": "<stage>", "questions": []} when nothing further is worth asking.',

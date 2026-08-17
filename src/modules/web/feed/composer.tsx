@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/field';
+import { PaperclipIcon } from '../ui/icons';
 
 import {
   applyReference,
@@ -218,7 +219,7 @@ export function Composer({
           disabled={busy}
           onClick={onAttach}
         >
-          <span aria-hidden>📎</span>
+          <PaperclipIcon />
         </Button>
 
         <Button

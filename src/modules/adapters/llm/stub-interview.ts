@@ -21,6 +21,7 @@ interface StubOption {
   label: string;
   description?: string;
   recommended?: boolean;
+  tags?: string[];
 }
 
 interface StubQuestion {
@@ -50,6 +51,18 @@ const recommend = (id: string, label: string, description: string): StubOption =
   recommended: true,
 });
 
+/**
+ * An option carrying tag chips (task 134; row `1.1-6`).
+ *
+ * One option of the curriculum has them, for the same reason exactly one carries a recommendation:
+ * the chips have to be provably absent where the model supplied none, and a fixture that tagged
+ * everything could not show that.
+ */
+const tagged = (id: string, label: string, description: string, tags: string[]): StubOption => ({
+  ...option(id, label, description),
+  tags,
+});
+
 function roundOne(stage: string): StubQuestion[] {
   if (stage === 'interview') {
     return [
@@ -58,7 +71,10 @@ function roundOne(stage: string): StubQuestion[] {
         text: 'Who is this primarily for?',
         type: 'single',
         options: [
-          option('solo-devs', 'Solo developers and indie hackers', 'One person, many projects'),
+          tagged('solo-devs', 'Solo developers and indie hackers', 'One person, many projects', [
+            'fastest to ship',
+            'no team setup',
+          ]),
           recommend('teams', 'Small development teams', 'Two to ten people sharing a backlog'),
           option('founders', 'Non-technical founders', 'People who describe, but do not build'),
         ],

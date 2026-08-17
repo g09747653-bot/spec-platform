@@ -247,6 +247,19 @@ export function NewProjectForm() {
               <span className="font-medium">
                 {config.badge.vendor} · {config.badge.flavour} · {config.badge.version}
               </span>
+              {/*
+                The methodology's full name, on the surface where it is chosen (task 134; row
+                `1.4-1`; Эталон §1.4). `config.name` existed in the data and reached a screen by
+                exactly one route — the `title` of a badge, i.e. a tooltip, which a person choosing
+                between «SpecKit · Greenfield · V1» and «OpenSpec · Brownfield · V1» has no reason
+                to hover for. Эталон lists these workflows by their full names.
+              */}
+              <span
+                className="text-foreground-muted block text-xs"
+                data-testid={`methodology-name-${config.id}`}
+              >
+                {config.name}
+              </span>
               <span className="text-foreground-muted block text-xs">{config.summary}</span>
               <span className="text-foreground-muted mt-1 block font-mono text-[11px]">
                 {config.steps.map((step) => step.label).join(' → ')}

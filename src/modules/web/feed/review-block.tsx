@@ -80,14 +80,25 @@ function ItemRow({
   onToggle: ((id: string) => void) | null;
   testIdPrefix: string;
 }) {
+  /*
+   * The section path is the heading, and the title opens the body (task 134; row `1.3-4`).
+   *
+   * The reference heads each finding with «Section — subsection», because what a reader scanning a
+   * board is doing is finding the part of the document a point is about. Ours led with `title` and
+   * dropped the path into a small grey line beneath — our own field where the reference has the
+   * document's own address. Both texts were always here; this is the order and the weight.
+   */
   const body = (
     <span className="flex flex-col gap-1">
       <span className="flex flex-wrap items-baseline gap-2">
-        <span className="font-medium">{item.title}</span>
+        <span className="font-medium" data-testid={`review-item-section-${item.id}`}>
+          {item.sectionPath}
+        </span>
         <ConfidenceBadge item={item} />
       </span>
-      <span className="text-foreground-muted block text-xs">{item.sectionPath}</span>
-      <span className="block">{item.body}</span>
+      <span className="block">
+        <span className="font-medium">{item.title}</span> — {item.body}
+      </span>
       <span className="block text-xs italic" data-testid={`review-item-suggestion-${item.id}`}>
         Suggestion: {item.suggestion}
       </span>

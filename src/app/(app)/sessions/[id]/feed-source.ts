@@ -56,6 +56,8 @@ function toQuestions(payload: unknown): FeedQuestion[] {
       ...(option.description === undefined ? {} : { description: option.description }),
       // v3 (task 106). Absent on every round drafted before it, which renders as a plain option.
       ...(option.recommended === undefined ? {} : { recommended: option.recommended }),
+      // Task 134, row `1.1-6`: the same optional-by-construction treatment.
+      ...(option.tags === undefined ? {} : { tags: option.tags }),
     })),
     allowOther: question.allowOther,
     /*
