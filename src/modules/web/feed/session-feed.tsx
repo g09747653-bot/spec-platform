@@ -1,9 +1,22 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
+import { GenerationStreamProvider } from '../session/generation-context';
+import {
+  isTypingTarget,
+  setShortcutsOpen,
+  shortcutFor,
+  shortcutsOpen,
+  type ShortcutId,
+} from '../session/shortcuts';
 import { useChatDecision } from '../session/useChatDecision';
+import { sidebarCollapsedValue, viewerViewValue } from '../state/ui-state';
+import { useUiState } from '../state/use-ui-state';
+import { ChevronDownIcon } from '../ui/icons';
+import { ViewerControlProvider } from '../viewer/viewer-control';
+import { ViewerPane, type ViewerTarget } from '../viewer/viewer-pane';
 
 import { BundleCreated, MessageBubble, SeedBubble, StageChip } from './bubbles';
 import { appendChatTurns } from './chat-turns';
@@ -22,7 +35,7 @@ import { RoundBlock } from './round-block';
 import { StageActions, type StageActionsModel } from './stage-actions';
 
 /**
- * The session, as one conversation (task 105; Эталон §1.1).
+ * The session surface: one conversation, a docked composer, and a right-hand pane (tasks 105, 137).
  *
  * There are no stage pages any more. Everything the session has done is a block of this feed, in the
  * order it happened, and everything it is waiting on is the tail of it. The page above builds the
@@ -32,6 +45,12 @@ import { StageActions, type StageActionsModel } from './stage-actions';
  * **The tail decides where controls live.** A card renders its decision only when the feed says the
  * session is waiting on that card — so an older review keeps its verdict without keeping its
  * buttons, and there is never a second Approve on screen for a revision that has been superseded.
+ *
+ * **What M12п changed is the frame around all that** (tasks 136, 137, 141). The conversation scrolls
+ * inside itself, between a header and a composer that do not move, rather than being one long page
+ * that carries its header and its controls out of reach as it grows. The right dock holds the
+ * sidebar or — when a document is opened — the viewer, which is wider, because a document is the
+ * thing this product makes and a 300-pixel well was never a way to read one.
  */
 export interface SessionFeedProps {
   sessionId: string;
@@ -69,9 +88,33 @@ export interface SessionFeedProps {
   models: readonly { id: string; label: string }[];
   /** The chat's stored choice, `auto` when it has made none. */
   selectedModel: string;
+  /** The session header — rendered by the page, pinned by this component (task 137). */
+  header: ReactNode;
+  /** The sidebar's panels. Rendered in the dock, and displaced by the viewer when one is open. */
+  sidebar: ReactNode;
 }
 
-export function SessionFeed({
+export function SessionFeed(props: SessionFeedProps) {
+  /*
+   * The reader is provided here, outside everything that uses it: the drafting card writes the
+   * streamed document into the feed and the viewer pane shows the same words, and there is exactly
+   * one run and one reader behind both (task 138).
+   */
+  return (
+    <GenerationStreamProvider>
+      <SessionSurface {...props} />
+    </GenerationStreamProvider>
+  );
+}
+
+const VIEW_KEYS: Readonly<Record<string, string>> = {
+  'view-outline': 'outline',
+  'view-preview': 'preview',
+  'view-raw': 'raw',
+  'view-diff': 'diff',
+};
+
+function SessionSurface({
   sessionId,
   feed,
   methodologyId,
@@ -89,10 +132,27 @@ export function SessionFeed({
   references,
   models,
   selectedModel,
+  header,
+  sidebar,
 }: SessionFeedProps) {
   const router = useRouter();
   const { state: chat, send } = useChatDecision(sessionId);
   const [draft, setDraft] = useState('');
+  const [viewer, setViewer] = useState<ViewerTarget | null>(null);
+  const [collapsed, setCollapsed] = useUiState(sidebarCollapsedValue);
+  const [, setViewerView] = useUiState(viewerViewValue);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const [atBottom, setAtBottom] = useState(true);
+
+  const openViewer = useCallback((target: ViewerTarget) => {
+    setViewer(target);
+  }, []);
+
+  const closeViewer = useCallback(() => {
+    setViewer(null);
+  }, []);
 
   /**
    * A slash command presses **the control itself** (task 121).
@@ -172,6 +232,108 @@ export function SessionFeed({
   const generationAtTail =
     tail.kind !== 'generating' && tail.kind !== 'pending-approval' && (canGenerate || blocked);
 
+  /** The newest document card, which is what the `V` shortcut means by «the document» (task 141). */
+  const newestDocument = [...body]
+    .reverse()
+    .find((block): block is Extract<FeedBlock, { kind: 'document' }> => block.kind === 'document');
+
+  /*
+   * Keyboard shortcuts (task 141).
+   *
+   * One listener on the surface rather than one per control: what a key means depends on what is
+   * open, and that is knowledge this component has and its children do not. `shortcutFor` decides
+   * *which* shortcut a press is — including the rule that a plain letter typed into the composer is
+   * a letter — so the mapping is unit-testable without a browser and this only performs it.
+   */
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      const id: ShortcutId | null = shortcutFor({
+        key: event.key,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        altKey: event.altKey,
+        typing: isTypingTarget(event.target),
+      });
+
+      // `send` is the composer's own binding, and it has to work with the caret inside the box.
+      if (id === null || id === 'send') return;
+
+      // Escape closes the topmost thing that is open, and nothing when nothing is.
+      if (id === 'close') {
+        if (shortcutsOpen()) setShortcutsOpen(false);
+        else if (viewer !== null) closeViewer();
+        else return;
+
+        event.preventDefault();
+        return;
+      }
+
+      if (id === 'shortcuts') {
+        setShortcutsOpen(true);
+        event.preventDefault();
+        return;
+      }
+
+      if (id === 'toggle-sidebar') {
+        setCollapsed(!collapsed);
+        event.preventDefault();
+        return;
+      }
+
+      if (id === 'focus-composer' || id === 'slash') {
+        composerRef.current?.focus();
+        if (id === 'slash') setDraft((current) => (current === '' ? '/' : current));
+        event.preventDefault();
+        return;
+      }
+
+      if (id === 'open-viewer') {
+        if (newestDocument === undefined) return;
+
+        openViewer({
+          kind: 'revision',
+          specFileId: newestDocument.specFileId,
+          fileName: newestDocument.fileName,
+          stage: newestDocument.stage,
+          revisionNumber: newestDocument.revisionNumber,
+          approved: newestDocument.approved,
+        });
+        event.preventDefault();
+        return;
+      }
+
+      /*
+       * The four view keys belong to the pane, and a pane that is not open has no view to switch.
+       * The pane reads the stored view, so setting it here is how the key reaches it — one value,
+       * one home (task 141's single persistence module).
+       */
+      const view = VIEW_KEYS[id];
+      if (viewer !== null && view !== undefined) {
+        setViewerView(view);
+        event.preventDefault();
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [collapsed, setCollapsed, viewer, closeViewer, openViewer, newestDocument, setViewerView]);
+
+  /** Whether the conversation is scrolled to its end, which decides the jump control (task 137). */
+  const onScroll = useCallback(() => {
+    const node = scrollRef.current;
+    if (node === null) return;
+
+    setAtBottom(node.scrollHeight - node.scrollTop - node.clientHeight < 64);
+  }, []);
+
+  function jumpToEnd() {
+    const node = scrollRef.current;
+    node?.scrollTo({ top: node.scrollHeight });
+  }
+
   function renderBlock(block: FeedBlock) {
     const isTail = tail.kind !== 'open' && tail.blockId === block.id;
 
@@ -226,10 +388,7 @@ export function SessionFeed({
 
         return (
           <FeedItem key={block.id} block={block}>
-            <p
-              className="text-foreground-muted max-w-[46rem] text-xs"
-              data-testid="generation-marker"
-            >
+            <p className="text-foreground-muted w-full text-xs" data-testid="generation-marker">
               {block.status === 'failed'
                 ? 'That generation did not complete. Nothing was lost.'
                 : `Drafted on attempt ${String(block.attempt)} — an earlier provider did not answer.`}
@@ -264,89 +423,143 @@ export function SessionFeed({
 
   return (
     <MethodologyNaming methodologyId={methodologyId}>
-      <div className="flex min-h-0 flex-1 flex-col">
-        {/* `pb-28` keeps the last block clear of the sticky composer, which floats over the feed. */}
-        <ol className="flex flex-col gap-4 px-4 pt-6 pb-28" data-testid="feed">
-          {body.map((block) => (
-            <li key={block.id} className="contents">
-              {renderBlock(block)}
-            </li>
-          ))}
+      <ViewerControlProvider value={{ open: openViewer, openTarget: viewer }}>
+        <div className="flex min-h-0 flex-1" data-testid="session-panes">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {/* Pinned: the title, the pills and the collapse control never scroll away. */}
+            <div className="border-border-subtle bg-surface shrink-0 border-b px-4 py-2.5">
+              {header}
+            </div>
 
-          {generationAtTail && (
-            <li className="flex w-full">
-              <GenerationSurface
-                sessionId={sessionId}
-                stage={feed.position.stage}
-                activeRun={null}
-                canGenerate={canGenerate}
-                blocked={blocked}
-                revisionOwed={feed.revisionOwed}
-              />
-            </li>
-          )}
+            <div
+              ref={scrollRef}
+              onScroll={onScroll}
+              className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain"
+              data-testid="feed-scroll"
+            >
+              <ol className="feed-measure flex flex-col gap-4 px-4 pt-6 pb-8" data-testid="feed">
+                {body.map((block) => (
+                  <li key={block.id} className="contents">
+                    {renderBlock(block)}
+                  </li>
+                ))}
 
-          <li className="flex w-full">
-            <StageActions
-              sessionId={sessionId}
-              actions={actions}
-              awaitingRound={blocked}
-              deadlineMs={deadlineMs}
+                {generationAtTail && (
+                  <li className="flex w-full">
+                    <GenerationSurface
+                      sessionId={sessionId}
+                      stage={feed.position.stage}
+                      activeRun={null}
+                      canGenerate={canGenerate}
+                      blocked={blocked}
+                      revisionOwed={feed.revisionOwed}
+                    />
+                  </li>
+                )}
+
+                <li className="flex w-full">
+                  <StageActions
+                    sessionId={sessionId}
+                    actions={actions}
+                    awaitingRound={blocked}
+                    deadlineMs={deadlineMs}
+                  />
+                </li>
+
+                {refineFileId !== null && proposal === null && (
+                  <li className="flex w-full">
+                    <RefineBox specFileId={refineFileId} />
+                  </li>
+                )}
+
+                {revert !== null && proposal === null && (
+                  <li className="flex w-full">
+                    <RevertCard sessionId={sessionId} revert={revert} />
+                  </li>
+                )}
+
+                {/*
+                  The end of the feed, and it means it (task 133; row `1.1-13`; Эталон §1.1).
+
+                  The panel was already the last *block*, but four surfaces render after the block
+                  list — the drafting card, the stage bar, Refine, the revert offer — and a chat
+                  reply appended during a completed session landed below all of them. So the
+                  reference's "final panel" was a panel with a working stage bar underneath it. Held
+                  back to here instead: nothing is hidden, everything that was offered is still
+                  offered, and the session ends where it says it ends.
+                */}
+                {tailPanel !== undefined && (
+                  <li key={tailPanel.id} className="contents">
+                    {renderBlock(tailPanel)}
+                  </li>
+                )}
+              </ol>
+
+              {/*
+                «You are not at the end» (Эталон §1.1). Sticky inside the scroller, so it rides the
+                bottom edge of the conversation rather than the bottom of the document — and it is
+                absent when there is nothing below, because a control that does nothing is noise.
+              */}
+              {!atBottom && (
+                <button
+                  type="button"
+                  data-testid="jump-to-end"
+                  aria-label="Jump to the end of the conversation"
+                  onClick={jumpToEnd}
+                  className="border-border-subtle bg-surface text-foreground-muted hover:text-foreground sticky bottom-4 left-full z-10 mr-4 -mt-2 inline-flex h-9 w-9 items-center justify-center rounded-full border shadow-lg"
+                >
+                  <ChevronDownIcon />
+                </button>
+              )}
+            </div>
+
+            <Composer
+              value={draft}
+              onChange={setDraft}
+              inputRef={composerRef}
+              onSend={(referenceIds) => {
+                const outgoing = draft;
+                setDraft('');
+                void send(outgoing, referenceIds);
+              }}
+              busy={chat.busy}
+              error={chat.error}
+              hasPendingDecision={tail.kind !== 'open'}
+              references={references}
+              models={models}
+              selectedModel={selectedModel}
+              onSelectModel={(modelId) => {
+                void selectModel(modelId);
+              }}
+              onCommand={pressControl}
+              onAttach={() => {
+                press('attachment-input');
+              }}
             />
-          </li>
-
-          {refineFileId !== null && proposal === null && (
-            <li className="flex w-full">
-              <RefineBox specFileId={refineFileId} />
-            </li>
-          )}
-
-          {revert !== null && proposal === null && (
-            <li className="flex w-full">
-              <RevertCard sessionId={sessionId} revert={revert} />
-            </li>
-          )}
+          </div>
 
           {/*
-            The end of the feed, and it means it (task 133; row `1.1-13`; Эталон §1.1).
+            One dock, two possible occupants. A document displaces the panels rather than squeezing
+            in beside them: at any width this product has to work at, three columns leave none of
+            them wide enough to be the reason it exists.
 
-            The panel was already the last *block*, but four surfaces render after the block list —
-            the drafting card, the stage bar, Refine, the revert offer — and a chat reply appended
-            during a completed session landed below all of them. So the reference's "final panel"
-            was a panel with a working stage bar underneath it. Held back to here instead: nothing
-            is hidden, everything that was offered is still offered, and the session ends where it
-            says it ends.
+            The sidebar stays mounted while the viewer is open — hidden, not unmounted — because its
+            file input is the one upload path, and the composer's attach button presses it.
           */}
-          {tailPanel !== undefined && (
-            <li key={tailPanel.id} className="contents">
-              {renderBlock(tailPanel)}
-            </li>
-          )}
-        </ol>
+          {viewer !== null && <ViewerPane target={viewer} onClose={closeViewer} />}
+          {/*
+            `display: contents`, so the pane itself is the row's flex child and its `max-w-[40%]`
+            resolves against the row. A wrapper box in between would have been the flex child, and
+            the cap would have measured forty per cent of a box the pane itself sizes.
 
-        <Composer
-          value={draft}
-          onChange={setDraft}
-          onSend={(referenceIds) => {
-            const outgoing = draft;
-            setDraft('');
-            void send(outgoing, referenceIds);
-          }}
-          busy={chat.busy}
-          error={chat.error}
-          hasPendingDecision={tail.kind !== 'open'}
-          references={references}
-          models={models}
-          selectedModel={selectedModel}
-          onSelectModel={(modelId) => {
-            void selectModel(modelId);
-          }}
-          onCommand={pressControl}
-          onAttach={() => {
-            press('attachment-input');
-          }}
-        />
-      </div>
+            `hidden` rather than not rendering it: the pane holds the session's one file input, and
+            the composer's attach button presses exactly that control.
+          */}
+          <div className="contents" hidden={viewer !== null}>
+            {sidebar}
+          </div>
+        </div>
+      </ViewerControlProvider>
     </MethodologyNaming>
   );
 }

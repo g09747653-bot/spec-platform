@@ -57,7 +57,12 @@ export function ConnectionBanner({ stamp }: { stamp: string }) {
       role="alert"
       data-testid="connection-lost"
       data-connection-state={state}
-      className="border-warning-ink/40 bg-warning-soft text-warning-ink sticky top-0 z-30 flex flex-wrap items-center gap-3 rounded-md border px-4 py-2"
+      /*
+        A band across the frame rather than a floating card (task 137): it now sits between the
+        application header and the panes, where nothing scrolls, so `sticky` has nothing left to do
+        and a rounded box would read as content rather than as chrome.
+      */
+      className="border-warning-ink/40 bg-warning-soft text-warning-ink z-30 flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-2"
     >
       <span className="text-caption">
         {state === 'checking'

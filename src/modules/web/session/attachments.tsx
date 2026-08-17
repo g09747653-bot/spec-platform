@@ -5,7 +5,8 @@ import { useRef, useState } from 'react';
 import { z } from 'zod';
 
 import { Button } from '../ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+
+import { SidePanel } from './side-panel';
 
 /**
  * The attachments panel (task 68; FR-004 AC-1/AC-2/AC-6/AC-7).
@@ -220,17 +221,35 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
   }
 
   return (
-    <Card data-testid="attachments-panel">
-      <CardHeader>
-        <CardTitle>Attachments</CardTitle>
-        <CardDescription>
-          Attach anything the agents should read as grounding context — now or at any later stage.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
+    <SidePanel
+      title="Attachments"
+      testId="attachments-panel"
+      action={
+        /*
+          The native file input is the one upload path (task 133), so it stays — out of sight rather
+          than out of the document, because the composer's paperclip and the slash command both
+          press *this* control. What the eye gets instead is a button in the panel's own idiom; a
+          bare «Choose File / No file chosen» was the one piece of unstyled browser chrome left on
+          the surface.
+        */
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          data-testid="attachment-add"
+          className="text-foreground-muted h-6 px-2 text-xs"
+          onClick={() => {
+            inputRef.current?.click();
+          }}
+        >
+          {busy ? 'Adding…' : 'Add'}
+        </Button>
+      }
+    >
+      <div className="flex flex-col gap-3">
         {attachments.length === 0 ? (
-          <p className="text-foreground-muted text-sm" data-testid="attachments-empty">
-            No documents attached.
+          <p className="text-foreground-muted text-xs" data-testid="attachments-empty">
+            Nothing attached. Anything you add here grounds every later stage.
           </p>
         ) : (
           <ul className="flex flex-col gap-2" data-testid="attachments-list">
@@ -322,13 +341,13 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
           type="file"
           data-testid="attachment-input"
           disabled={busy}
-          className="text-sm"
+          className="sr-only"
           onChange={(event) => {
             const file = event.target.files?.[0];
             if (file !== undefined) void upload(file);
           }}
         />
-      </CardContent>
-    </Card>
+      </div>
+    </SidePanel>
   );
 }

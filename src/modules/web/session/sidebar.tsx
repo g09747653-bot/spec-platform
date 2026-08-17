@@ -1,92 +1,66 @@
 'use client';
 
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 import { cn } from '../lib/cn';
+import {
+  clampSidebarWidth,
+  sidebarCollapsedValue,
+  sidebarWidthValue,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+} from '../state/ui-state';
+import { useUiState } from '../state/use-ui-state';
+import { PanelIcon } from '../ui/icons';
+
+import { SidePanel } from './side-panel';
 
 /**
- * The session sidebar — Specs, Local Workspace, Attachments (task 119; Эталон §1.5).
+ * The session sidebar — Specs, Local Workspace, Attachments (task 119; Эталон §1.5), rebuilt as a
+ * **pane** in the application frame (tasks 136, 137, 141).
  *
- * **Width is client state, and stays client state.** It is a property of this browser window, not of
- * the session: the same bundle opened on a laptop and on a wide monitor wants two different widths,
- * and persisting it on the server would make one of them wrong. `localStorage`, therefore, and the
- * initial render is the default width on both sides so hydration has nothing to disagree about
- * (the lesson of D-28 read the other way round: the way to avoid a mismatch is to render the same
- * thing, then correct after mount).
+ * Three things changed, and all three were defects the customer met:
+ *
+ * 1. **The collapse control is not in here any more.** It was, at the top of a column as tall as the
+ *    conversation, so on a session of any length it was scrolled off the screen — collapse it once
+ *    and «press it again» is not an available move. It now lives in the session header, which does
+ *    not scroll, and is exported as {@link SidebarToggle} for the header to render.
+ * 2. **Collapsed is remembered** (`ui-state`), so the state survives a reload instead of being undone
+ *    by one.
+ * 3. **The width can no longer starve the feed.** The stored value is clamped, and the pane is
+ *    additionally capped at a share of the frame in CSS, so no width — dragged, stored by an older
+ *    build, or typed into `localStorage` by hand — can leave the conversation column too narrow to
+ *    use. That was the other half of the squashed-composer report: the composer was as wide as its
+ *    column, and its column was whatever the sidebar had left.
+ *
+ * Width stays *device* state and not session state: the same bundle opened on a laptop and on a wide
+ * monitor wants two different widths, and persisting it on the server would make one of them wrong.
  *
  * The drag handle is a `separator` with keyboard control, because a resize that only a mouse can
  * perform is a feature half the users do not have.
- *
- * **The column track follows this width** (task 133; row `1.5-3`). It used to be a fixed `20rem`, so
- * the handle could shrink the panel inside its track and could not widen it past the edge: half a
- * control, and the walk could not tell because it read the `data-width` the component writes about
- * itself. The default is the reference's own ~280px rather than the 320 that happened to equal the
- * old track.
  */
-const STORAGE_KEY = 'spec-platform:sidebar-width';
-const DEFAULT_WIDTH = 280;
-const MIN_WIDTH = 220;
-const MAX_WIDTH = 560;
 const KEYBOARD_STEP = 16;
-
-function clampWidth(value: number): number {
-  if (!Number.isFinite(value)) return DEFAULT_WIDTH;
-  return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(value)));
-}
 
 export interface SessionSidebarProps {
   children: ReactNode;
 }
 
-/**
- * The stored width, as an external store (D-28's pattern, applied the other way round).
- *
- * `useSyncExternalStore` rather than "read `localStorage` in an effect and set state": the server
- * snapshot is the default width and the client snapshot is what is stored, and React reconciles the
- * two itself at hydration. Setting state from an effect would do the same thing a frame later and
- * with a lint rule against it — and this way the value is also shared by every sidebar on the page
- * without one of them being the owner.
- */
-const listeners = new Set<() => void>();
-let cachedWidth: number | null = null;
-
-function subscribeWidth(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-function widthSnapshot(): number {
-  cachedWidth ??= clampWidth(Number(window.localStorage.getItem(STORAGE_KEY) ?? DEFAULT_WIDTH));
-  return cachedWidth;
-}
-
-/** The server has no stored width, and must render what the client's first paint renders. */
-const serverWidthSnapshot = (): number => DEFAULT_WIDTH;
-
-function storeWidth(next: number): void {
-  cachedWidth = clampWidth(next);
-  window.localStorage.setItem(STORAGE_KEY, String(cachedWidth));
-  for (const listener of listeners) listener();
-}
-
 export function SessionSidebar({ children }: SessionSidebarProps) {
-  const width = useSyncExternalStore(subscribeWidth, widthSnapshot, serverWidthSnapshot);
-  const [collapsed, setCollapsed] = useState(false);
+  const [width, setWidth] = useUiState(sidebarWidthValue);
+  const [collapsed] = useUiState(sidebarCollapsedValue);
   const dragging = useRef(false);
-
-  const setWidth = (next: number) => {
-    storeWidth(next);
-  };
 
   useEffect(() => {
     function onMove(event: MouseEvent) {
       if (!dragging.current) return;
       // The sidebar is on the right, so the width grows as the pointer moves left.
-      setWidth(clampWidth(window.innerWidth - event.clientX));
+      setWidth(clampSidebarWidth(window.innerWidth - event.clientX));
     }
 
     function onUp() {
+      if (!dragging.current) return;
       dragging.current = false;
+      document.body.style.removeProperty('user-select');
     }
 
     window.addEventListener('mousemove', onMove);
@@ -96,54 +70,91 @@ export function SessionSidebar({ children }: SessionSidebarProps) {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, []);
+  }, [setWidth]);
+
+  if (collapsed) {
+    /*
+     * Nothing at all, rather than a zero-width shell. The pane's contents are server-rendered inside
+     * it, and leaving them mounted at width zero would keep their file input and their links in the
+     * tab order behind an invisible edge — a keyboard trap that a mouse user cannot see.
+     */
+    return <div data-testid="session-sidebar" data-collapsed="true" hidden />;
+  }
 
   return (
-    <div className="flex min-h-0" data-testid="session-sidebar" data-collapsed={String(collapsed)}>
+    <div
+      /*
+        The width is stored and clamped; the *share of the frame* it may take is capped by the
+        surface that docks it (see `session-feed.tsx`), because a clamp in pixels cannot know how
+        wide the window is — 480 px is a third of a 1440 monitor and half of a 1000-pixel one. Both
+        halves together are what make «the conversation always keeps most of the frame» a property
+        of the layout rather than of every code path that can set a width.
+      */
+      className="flex min-h-0 max-w-[40%] shrink-0"
+      data-testid="session-sidebar"
+      data-collapsed="false"
+      style={{ width: `${String(width)}px` }}
+    >
       <div
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize the sidebar"
         aria-valuenow={width}
-        aria-valuemin={MIN_WIDTH}
-        aria-valuemax={MAX_WIDTH}
+        aria-valuemin={SIDEBAR_MIN_WIDTH}
+        aria-valuemax={SIDEBAR_MAX_WIDTH}
         tabIndex={0}
         data-testid="sidebar-resize"
-        className={cn(
-          'hover:bg-primary/40 focus-visible:bg-primary/60 w-1 shrink-0 cursor-col-resize rounded-full',
-          collapsed && 'hidden',
-        )}
+        className="hover:bg-primary/40 focus-visible:bg-primary/60 border-border-subtle w-1.5 shrink-0 cursor-col-resize border-l"
         onMouseDown={() => {
           dragging.current = true;
+          // Without this a drag selects the conversation text it passes over.
+          document.body.style.setProperty('user-select', 'none');
         }}
         onKeyDown={(event) => {
-          if (event.key === 'ArrowLeft') setWidth(width + KEYBOARD_STEP);
-          if (event.key === 'ArrowRight') setWidth(width - KEYBOARD_STEP);
+          if (event.key === 'ArrowLeft') setWidth(clampSidebarWidth(width + KEYBOARD_STEP));
+          if (event.key === 'ArrowRight') setWidth(clampSidebarWidth(width - KEYBOARD_STEP));
         }}
       />
 
       <aside
-        className="flex min-h-0 flex-col gap-4 overflow-y-auto pl-3"
-        style={collapsed ? undefined : { width: `${String(width)}px` }}
+        className="bg-surface flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-3"
         data-testid="sidebar-panel"
         data-width={String(width)}
-        hidden={collapsed}
+        aria-label="Session panels"
       >
         {children}
       </aside>
-
-      <button
-        type="button"
-        data-testid="sidebar-toggle"
-        aria-expanded={!collapsed}
-        className="border-border-subtle text-foreground-muted hover:bg-background h-8 shrink-0 self-start rounded-md border px-2 text-xs"
-        onClick={() => {
-          setCollapsed((current) => !current);
-        }}
-      >
-        {collapsed ? '‹' : '›'}
-      </button>
     </div>
+  );
+}
+
+/**
+ * The collapse control, for the session header to render (task 136).
+ *
+ * Separate from the pane on purpose: a control that hides something must not live inside the thing
+ * it hides, or its second press has nowhere to happen. The header is the only part of the session
+ * surface guaranteed to be on screen, which makes it the only correct home for this.
+ */
+export function SidebarToggle({ className }: { className?: string }) {
+  const [collapsed, setCollapsed] = useUiState(sidebarCollapsedValue);
+
+  return (
+    <button
+      type="button"
+      data-testid="sidebar-toggle"
+      aria-expanded={!collapsed}
+      aria-label={collapsed ? 'Show the sidebar' : 'Hide the sidebar'}
+      title={`${collapsed ? 'Show' : 'Hide'} the sidebar (B)`}
+      className={cn(
+        'border-border-subtle text-foreground-muted hover:bg-background hover:text-foreground inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors',
+        className,
+      )}
+      onClick={() => {
+        setCollapsed(!collapsed);
+      }}
+    >
+      <PanelIcon open={!collapsed} />
+    </button>
   );
 }
 
@@ -157,16 +168,12 @@ export function SessionSidebar({ children }: SessionSidebarProps) {
  */
 export function LocalWorkspace() {
   return (
-    <section
-      className="border-border-subtle flex flex-col gap-2 rounded-lg border p-3"
-      data-testid="local-workspace"
-    >
-      <h2 className="text-sm font-medium">Local Workspace</h2>
+    <SidePanel title="Local Workspace" testId="local-workspace">
       <button
         type="button"
         disabled
         data-testid="mount-folder"
-        className="border-border-subtle text-foreground-muted cursor-not-allowed rounded-md border px-3 py-1.5 text-sm opacity-60"
+        className="border-border-subtle text-foreground-muted cursor-not-allowed rounded-md border border-dashed px-3 py-1.5 text-sm opacity-60"
       >
         Mount folder
       </button>
@@ -174,6 +181,6 @@ export function LocalWorkspace() {
         Mounting a folder from this machine is not built yet. Nothing here reads or writes your
         files.
       </p>
-    </section>
+    </SidePanel>
   );
 }

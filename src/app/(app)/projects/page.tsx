@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
   NewProjectForm,
+  PageBody,
   ProjectList,
 } from '@/modules/web';
 import { stageLabel } from '@/modules/web/session/stage-display';
@@ -22,6 +23,7 @@ export default async function ProjectsPage() {
   const projects = await createProjectRepository(getDatabase()).list(scope);
 
   return (
+    <PageBody>
     <section className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
         <h1 className="text-h1">Projects</h1>
@@ -60,5 +62,6 @@ export default async function ProjectsPage() {
         }))}
       />
     </section>
+    </PageBody>
   );
 }

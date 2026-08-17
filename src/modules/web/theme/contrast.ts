@@ -18,14 +18,32 @@ export interface Oklch {
   readonly c: number;
   /** Hue angle in degrees. */
   readonly h: number;
+  /** 0…1, present only on a token authored translucent (the modal scrim). */
+  readonly alpha?: number;
 }
 
-/** Parses the `oklch(62.3% 0.14 252)` spelling used in the brand file. */
+/**
+ * Parses the `oklch(62.3% 0.14 252)` spelling used in the brand file, and the
+ * `oklch(24% 0.03 255 / 45%)` spelling used by the one token that is deliberately translucent.
+ *
+ * The alpha is carried rather than dropped so that a caller can tell a wash from a colour. Contrast
+ * is not defined for a translucent value — what it lands on decides — so `contrastRatio` is only
+ * ever asked about the opaque tokens, and the brand test's pair list is what enumerates those.
+ */
 export function parseOklch(value: string): Oklch | null {
-  const match = /^oklch\(\s*([\d.]+)%\s+([\d.]+)\s+([\d.]+)\s*\)$/.exec(value.trim());
+  const match = /^oklch\(\s*([\d.]+)%\s+([\d.]+)\s+([\d.]+)\s*(?:\/\s*([\d.]+)%\s*)?\)$/.exec(
+    value.trim(),
+  );
   if (!match) return null;
 
-  return { l: Number(match[1]) / 100, c: Number(match[2]), h: Number(match[3]) };
+  const alpha = match[4];
+
+  return {
+    l: Number(match[1]) / 100,
+    c: Number(match[2]),
+    h: Number(match[3]),
+    ...(alpha === undefined ? {} : { alpha: Number(alpha) / 100 }),
+  };
 }
 
 /** OKLCH → linear-light sRGB, clipped to the displayable cube. */

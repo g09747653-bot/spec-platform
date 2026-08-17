@@ -54,3 +54,8 @@ artifacts/**/trace.zip
 # …except a light one. M7п's trace carries the action and network log with per-action screenshots
 # and DOM snapshots off, which is 88 KB rather than 107 MB — and task 110 asks for it to be kept.
 !artifacts/gate-M7/trace.zip
+
+# The etalon pages unpack from `.specs/research/etalon-design.zip` (committed beside it). Three
+# megabytes of saved HTML that any reader can reproduce with one `unzip` is not history worth
+# keeping twice.
+.specs/research/etalon-design/

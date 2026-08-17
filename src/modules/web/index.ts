@@ -8,7 +8,7 @@
  */
 export const MODULE_ID = 'web';
 
-export { AppShell } from './layouts/app-shell';
+export { AppShell, PageBody } from './layouts/app-shell';
 export { NewProjectForm } from './projects/new-project-form';
 export { ProjectList, type ProjectListItem } from './projects/project-list';
 export { Button, buttonVariants, type ButtonProps } from './ui/button';

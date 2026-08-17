@@ -7,6 +7,7 @@ import { requireOwnerScope } from '@/modules/projects/auth/scope';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
 import { createSessionRepository } from '@/modules/projects/repositories/sessions';
 import { createSpecFileRepository } from '@/modules/specs/repositories/spec-files';
+import { PageBody } from '@/modules/web';
 import { ChatList, type ChatListItem } from '@/modules/web/projects/chat-list';
 import { McpCard } from '@/modules/web/projects/mcp-card';
 import { NewEditChat } from '@/modules/web/projects/new-edit-chat';
@@ -118,6 +119,7 @@ export default async function ProjectPage({
   });
 
   return (
+    <PageBody>
     <section className="flex flex-col gap-6" data-testid="project-page">
       <div className="flex flex-col gap-1">
         <h1 className="text-h1" data-testid="project-page-name">
@@ -228,5 +230,6 @@ export default async function ProjectPage({
         </div>
       </div>
     </section>
+    </PageBody>
   );
 }

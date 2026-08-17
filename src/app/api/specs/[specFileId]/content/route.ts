@@ -38,13 +38,35 @@ export async function GET(
   const file = await createSpecFileRepository(db).findById(scope, specFileId);
   if (file === null) return errorResponse('NOT_FOUND');
 
-  const requested = new URL(request.url).searchParams.get('mode') ?? '';
+  const query = new URL(request.url).searchParams;
+  const requested = query.get('mode') ?? '';
   const mode = resolveExportMode(
     isExportMode(requested) ? requested : 'default',
     qualityExportPort(),
   );
 
-  const revision = await createRevisionRepository(db).latestApprovedForMode(file.id, mode);
+  const revisions = createRevisionRepository(db);
+
+  /*
+   * **`?rev=N` names one revision by number** (task 138).
+   *
+   * The viewer pane opens a document at whichever revision the card it was opened from is about,
+   * and that card is very often a draft — the whole point of «the card is a door» is that a document
+   * can be read *before* it is approved. Resolving by export mode cannot answer that question: it
+   * answers «which bytes would be exported», which for an unapproved file is «none».
+   *
+   * Without the parameter nothing changes, and that is deliberate: the clipboard path (FR-016 AC-5)
+   * and the archive still agree by construction, because they still go through the same mode
+   * resolution. This adds a second question to the endpoint, not a second answer to the first one —
+   * and every revision it can name belongs to a file the owner predicate has already admitted.
+   */
+  const asked = query.get('rev');
+  const numbered = asked === null ? Number.NaN : Number(asked);
+  const revision =
+    Number.isInteger(numbered) && numbered > 0
+      ? await revisions.findByNumber(file.id, numbered)
+      : await revisions.latestApprovedForMode(file.id, mode);
+
   if (revision === null) return errorResponse('NOT_FOUND');
 
   return new Response(revision.content, {

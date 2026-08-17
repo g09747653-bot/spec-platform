@@ -99,7 +99,7 @@ export function ProposalBlockCard({
     return (
       <FeedItem block={block}>
         <div
-          className="border-border-subtle bg-surface flex w-full max-w-[46rem] flex-col gap-1 rounded-xl border p-4"
+          className="border-border-subtle bg-surface flex w-full flex-col gap-1 rounded-xl border p-4"
           data-testid="proposal-decided"
         >
           <BlockCaption stage={block.stage} trailing={label} />
@@ -120,7 +120,7 @@ export function ProposalBlockCard({
   return (
     <FeedItem block={block}>
       <div
-        className="border-border-subtle bg-surface flex w-full max-w-[46rem] flex-col gap-3 rounded-xl border p-4"
+        className="border-border-subtle bg-surface flex w-full flex-col gap-3 rounded-xl border p-4"
         data-testid={edit ? 'edit-card' : 'diff-card'}
       >
         <BlockCaption stage={block.stage} trailing={label} />
@@ -252,7 +252,7 @@ export function RefineBox({ specFileId }: { specFileId: string }) {
 
   return (
     <div
-      className="border-border-subtle flex w-full max-w-[46rem] flex-col gap-2 rounded-xl border border-dashed p-4"
+      className="border-border-subtle flex w-full flex-col gap-2 rounded-xl border border-dashed p-4"
       data-testid="refine-card"
     >
       <Label htmlFor="refine-instruction">Refine a file — say what should change</Label>

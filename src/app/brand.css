@@ -70,6 +70,16 @@
    * is what lets the gradient exist on a control rather than only inside an SVG.
    */
   --palette-brand-strong: oklch(52% 0.13 78);
+
+  /*
+   * The scrim behind a modal surface (task 141).
+   *
+   * A token rather than `bg-black/40`, for the reason the whole palette is tokens: a fixed black
+   * wash sits differently on a near-white page than on a near-black one, and the dark theme wants
+   * *more* of it, not the same amount. Authored with alpha here because a scrim is a colour with an
+   * opacity — expressing the opacity as a utility would put half of it outside this file.
+   */
+  --palette-scrim: oklch(24% 0.03 255 / 45%);
 }
 
 :root[data-theme='dark'] {
@@ -112,6 +122,8 @@
   --palette-brand-accent: oklch(80% 0.13 78);
   /* In the dark theme the foreground is near-black, so the far stop stays bright — see the note above. */
   --palette-brand-strong: oklch(80% 0.13 78);
+
+  --palette-scrim: oklch(10% 0.01 258 / 62%);
 }
 
 /*
@@ -155,6 +167,8 @@
   --color-brand: var(--palette-brand);
   --color-brand-accent: var(--palette-brand-accent);
   --color-brand-strong: var(--palette-brand-strong);
+
+  --color-scrim: var(--palette-scrim);
 }
 
 /*

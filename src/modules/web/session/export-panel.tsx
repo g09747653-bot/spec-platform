@@ -3,10 +3,10 @@
 import { useState } from 'react';
 
 import { Button } from '../ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { showToast } from '../ui/toast';
 
 import { downloadBundle, type ExportManifest } from './download-bundle';
+import { SidePanel } from './side-panel';
 
 /**
  * The export panel (tasks 22, 73; FR-015 AC-4/AC-6/AC-7/AC-8).
@@ -141,9 +141,8 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
   }
 
   return (
-    <Card data-testid="export-panel">
-      <CardHeader>
-        <CardTitle>Export the bundle</CardTitle>
+    <SidePanel title="Export the bundle" testId="export-panel">
+      <div className="flex flex-col gap-2">
         {/*
           The count comes from the plan, not from a literal (task 133; row `1.4-8`).
 
@@ -152,15 +151,13 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
           of this product has any reason to know. The list below was always derived correctly from
           `bundlePlan`; only the sentence above it was guessing.
         */}
-        <CardDescription>
+        <p className="text-foreground-muted text-xs">
           Mode: <span data-testid="export-mode">{shown.mode}</span> —{' '}
           {shown.mode === 'default'
             ? `this workflow's ${String(planned)} spec ${planned === 1 ? 'file' : 'files'}, each at its most recent pre-enrichment revision.`
             : 'the enriched files plus quality.md.'}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        <p className="text-sm" data-testid="export-included">
+        </p>
+        <p className="text-xs" data-testid="export-included">
           {shown.included.length === 0
             ? 'Nothing is approved yet, so the archive would be empty.'
             : `Included: ${shown.included.join(', ')}`}
@@ -218,7 +215,7 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
         )}
 
         {shown.omitted.length > 0 && (
-          <p className="text-foreground-muted text-sm" data-testid="export-omitted">
+          <p className="text-foreground-muted text-xs" data-testid="export-omitted">
             Omitted for want of an approved revision: {shown.omitted.join(', ')}
           </p>
         )}
@@ -251,7 +248,7 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
         >
           {busy ? 'Preparing…' : 'Download ZIP'}
         </Button>
-      </CardContent>
-    </Card>
+      </div>
+    </SidePanel>
   );
 }

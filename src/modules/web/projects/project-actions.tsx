@@ -81,8 +81,15 @@ export function ProjectActions({ projectId, name }: ProjectActionsProps) {
     <div className="flex flex-col gap-2" data-testid="project-actions">
       {mode === 'renaming' ? (
         <div className="flex items-center gap-2">
+          {/*
+            `min-w-0` (task 136, sibling audit): a field sharing a flex row with buttons that will
+            not shrink is the shape the composer failed in. An `<input>` cannot collapse to nothing
+            the way a `<textarea>` can — its automatic minimum is its intrinsic width — but without
+            this the row overflows instead, which on a narrow window pushes Save off the edge.
+          */}
           <Input
             aria-label="Project name"
+            className="min-w-0"
             data-testid="rename-input"
             value={draftName}
             onChange={(event) => {

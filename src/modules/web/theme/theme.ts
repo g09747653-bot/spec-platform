@@ -1,3 +1,5 @@
+import { UI_STATE_KEYS } from '../state/ui-state';
+
 /**
  * Theme vocabulary (task 124; Эталон §1.5 — dark/light through client-side storage).
  *
@@ -10,8 +12,14 @@ export const THEMES = ['light', 'dark'] as const;
 
 export type Theme = (typeof THEMES)[number];
 
-/** `localStorage` key. Client-side by design: the theme is a device preference, not account data. */
-export const THEME_STORAGE_KEY = 'spec-platform-theme';
+/**
+ * `localStorage` key. Client-side by design: the theme is a device preference, not account data.
+ *
+ * Taken from the device-state inventory (task 141) rather than spelled here: the theme is one of
+ * the four things this application remembers per device, and a desktop wrapper has to be able to
+ * find all four in one place. The spelling itself is unchanged — see the note on `UI_STATE_KEYS`.
+ */
+export const THEME_STORAGE_KEY = UI_STATE_KEYS.theme;
 
 /** Attribute on `<html>`; `brand.css` keys the dark palette off `:root[data-theme='dark']`. */
 export const THEME_ATTRIBUTE = 'data-theme';

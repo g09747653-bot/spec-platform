@@ -8,6 +8,7 @@ import { diffLines, formatUnifiedDiff } from '@/modules/specs/diff';
 import { createReviewRepository } from '@/modules/specs/repositories/reviews';
 import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
 import { createSpecFileRepository } from '@/modules/specs/repositories/spec-files';
+import { PageBody } from '@/modules/web';
 import {
   DocumentViewer,
   isViewerView,
@@ -92,7 +93,8 @@ export default async function SpecViewerPage({
   const diff = previous === null ? null : diffLines(previous.content, current.content);
 
   return (
-    <DocumentViewer
+    <PageBody>
+      <DocumentViewer
       specFileId={file.id}
       fileName={fileName}
       sessionHref={`/sessions/${project?.sessionId ?? ''}`}
@@ -104,7 +106,8 @@ export default async function SpecViewerPage({
           ? null
           : { revisionNumber: previous.revisionNumber, content: previous.content }
       }
-      unifiedDiff={diff === null ? null : formatUnifiedDiff(diff, fileName)}
-    />
+        unifiedDiff={diff === null ? null : formatUnifiedDiff(diff, fileName)}
+      />
+    </PageBody>
   );
 }

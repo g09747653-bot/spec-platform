@@ -154,7 +154,7 @@ export function CompletionPanel({
 
   return (
     <FeedItem block={block}>
-      <div className="flex w-full max-w-[46rem] flex-col gap-3">
+      <div className="flex w-full flex-col gap-3">
         <div
           className="border-border-subtle bg-surface rounded-xl border p-4"
           data-testid="session-complete"

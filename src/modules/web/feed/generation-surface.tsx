@@ -1,10 +1,12 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
+import { useGenerationStream } from '../session/generation-context';
 import { Button } from '../ui/button';
-import { useResumableStream } from '../session/useResumableStream';
+import { EyeIcon } from '../ui/icons';
+import { useViewerControl } from '../viewer/viewer-control';
 
 import { BlockCaption } from './bubbles';
 
@@ -55,8 +57,13 @@ export function GenerationSurface({
   revisionOwed = null,
 }: GenerationSurfaceProps) {
   const router = useRouter();
-  const { state: stream, start, resume, stop } = useResumableStream();
-  const [detached, setDetached] = useState(false);
+  /*
+   * The session's reader, not one of this card's own (task 138). Lifting it to the surface is what
+   * lets the viewer pane show the same words as they arrive without opening a second stream — and
+   * what makes `Stop` here and `Stop` there the same control over the same run.
+   */
+  const { state: stream, start, resume, detached, detach } = useGenerationStream();
+  const viewerControl = useViewerControl();
 
   const generating = stream.status === 'streaming' || stream.status === 'reconnecting';
   const runId = activeRun?.runId ?? null;
@@ -87,11 +94,6 @@ export function GenerationSurface({
     };
   }, [runId, attempt, detached, stream.status, resume, router]);
 
-  function stopFollowing() {
-    setDetached(true);
-    stop();
-  }
-
   async function generate() {
     const outcome = await start(sessionId);
 
@@ -117,10 +119,33 @@ export function GenerationSurface({
 
   return (
     <div
-      className="border-border-subtle bg-surface flex w-full max-w-[46rem] flex-col gap-3 rounded-xl border p-4"
+      className="border-border-subtle bg-surface flex w-full flex-col gap-3 rounded-xl border p-4"
       data-testid="generation-surface"
     >
-      <BlockCaption stage={stage} trailing="drafting" />
+      <div className="flex items-center justify-between gap-2">
+        <BlockCaption stage={stage} trailing="drafting" />
+
+        {/*
+          The eye, on a document that is still being written (task 138 AC — «generating» is one of
+          the three states). It opens the same reader in the pane, so a person can watch the
+          document take shape at reading width instead of through the card's excerpt.
+        */}
+        {viewerControl !== null && (generating || stream.text !== '') && (
+          <button
+            type="button"
+            data-testid="open-viewer-live"
+            aria-label="Open this document in the viewer"
+            title="Open in the viewer"
+            className="text-foreground-muted hover:text-foreground inline-flex items-center gap-1.5 text-xs"
+            onClick={() => {
+              viewerControl.open({ kind: 'live', stage, fileName: 'Draft in progress' });
+            }}
+          >
+            <EyeIcon />
+            Open
+          </button>
+        )}
+      </div>
 
       {stream.error !== null && (
         <p role="alert" data-testid="generation-error" className="text-sm text-danger-ink">
@@ -172,7 +197,7 @@ export function GenerationSurface({
 
       {(generating || runInFlight) && (
         <div className="flex items-center gap-2">
-          <Button variant="secondary" data-testid="stop-generation" onClick={stopFollowing}>
+          <Button variant="secondary" data-testid="stop-generation" onClick={detach}>
             Stop
           </Button>
           <span className="text-foreground-muted text-xs">
