@@ -543,17 +543,15 @@ async function SessionBody({ session, scope }: { session: SessionDetail; scope: 
 
       <Attachments
         sessionId={session.id}
-        attachments={attachments.map(
-          (attachment): AttachmentModel => ({
-            id: attachment.id,
-            fileName: attachment.fileName,
-            mimeType: attachment.mimeType,
-            sizeBytes: attachment.sizeBytes,
-            parseStatus: attachment.parseStatus,
-            parseReason: attachment.parseReason,
-            attachedAtStage: attachment.attachedAtStage,
-          }),
-        )}
+        attachments={attachments.map((attachment): AttachmentModel => ({
+          id: attachment.id,
+          fileName: attachment.fileName,
+          mimeType: attachment.mimeType,
+          sizeBytes: attachment.sizeBytes,
+          parseStatus: attachment.parseStatus,
+          parseReason: attachment.parseReason,
+          attachedAtStage: attachment.attachedAtStage,
+        }))}
       />
 
       <ExportPanel
@@ -573,58 +571,58 @@ async function SessionBody({ session, scope }: { session: SessionDetail; scope: 
         header={header}
         sidebar={sidebar}
         sessionId={session.id}
-          feed={feed}
-          methodologyId={session.methodologyId}
-          deadlineMs={requestDeadlineMs()}
-          actions={actions}
-          primaryRevisionId={latest?.id ?? null}
-          primaryContent={latest?.content ?? null}
-          proposal={proposalModel}
-          refineFileId={latest === null ? null : (currentFile?.id ?? null)}
-          revert={revert}
-          canGenerate={position.substage === 'generate'}
-          describePrefill={editChat ? session.initialPrompt : null}
-          /*
-           * What an `@` may name (task 121): the bundle's promised files and this chat's documents.
-           * The plan rather than the written files, so a document that does not exist yet is
-           * offered and honestly labelled — the alternative is a menu that changes shape as the
-           * session goes on, where the absence of a name reads as "there is no such document".
-           */
-          references={[
-            ...plan.map((entry) => {
-              const file = bundleFiles.find((candidate) => candidate.specType === entry.specType);
+        feed={feed}
+        methodologyId={session.methodologyId}
+        deadlineMs={requestDeadlineMs()}
+        actions={actions}
+        primaryRevisionId={latest?.id ?? null}
+        primaryContent={latest?.content ?? null}
+        proposal={proposalModel}
+        refineFileId={latest === null ? null : (currentFile?.id ?? null)}
+        revert={revert}
+        canGenerate={position.substage === 'generate'}
+        describePrefill={editChat ? session.initialPrompt : null}
+        /*
+         * What an `@` may name (task 121): the bundle's promised files and this chat's documents.
+         * The plan rather than the written files, so a document that does not exist yet is
+         * offered and honestly labelled — the alternative is a menu that changes shape as the
+         * session goes on, where the absence of a name reads as "there is no such document".
+         */
+        references={[
+          ...plan.map((entry) => {
+            const file = bundleFiles.find((candidate) => candidate.specType === entry.specType);
 
-              return {
-                id: `spec:${file?.specFileId ?? entry.specType}`,
-                name: entry.fileName,
-                kind: 'spec' as const,
-                ...(file === undefined ? { empty: true } : {}),
-              };
-            }),
-            ...attachments.map((attachment) => ({
-              id: `attachment:${attachment.id}`,
-              name: attachment.fileName,
-              kind: 'attachment' as const,
-            })),
-          ]}
-          models={modelRegistry()}
-          selectedModel={session.modelId ?? AUTO_MODEL}
-          activeRun={
-            activeRun === null ? null : { runId: activeRun.runId, attempt: activeRun.attempt }
-          }
-          /*
-           * The completion panel's model (task 126). Every field is the bundle's own: the slug the
-           * document cards already print, the badge parts of the session's methodology, and the
-           * files with the revisions the export would resolve to — so the handoff prompt describes
-           * this bundle and no other.
-           */
-          completion={{
-            projectId: session.projectId,
-            bundleName: bundleSlug(session.projectName),
-            methodologyLabel: methodologyLabel(bundleMethodologyId),
-            files: handoffFiles,
-            omittedFiles,
-            exportMode,
+            return {
+              id: `spec:${file?.specFileId ?? entry.specType}`,
+              name: entry.fileName,
+              kind: 'spec' as const,
+              ...(file === undefined ? { empty: true } : {}),
+            };
+          }),
+          ...attachments.map((attachment) => ({
+            id: `attachment:${attachment.id}`,
+            name: attachment.fileName,
+            kind: 'attachment' as const,
+          })),
+        ]}
+        models={modelRegistry()}
+        selectedModel={session.modelId ?? AUTO_MODEL}
+        activeRun={
+          activeRun === null ? null : { runId: activeRun.runId, attempt: activeRun.attempt }
+        }
+        /*
+         * The completion panel's model (task 126). Every field is the bundle's own: the slug the
+         * document cards already print, the badge parts of the session's methodology, and the
+         * files with the revisions the export would resolve to — so the handoff prompt describes
+         * this bundle and no other.
+         */
+        completion={{
+          projectId: session.projectId,
+          bundleName: bundleSlug(session.projectName),
+          methodologyLabel: methodologyLabel(bundleMethodologyId),
+          files: handoffFiles,
+          omittedFiles,
+          exportMode,
         }}
       />
     </div>

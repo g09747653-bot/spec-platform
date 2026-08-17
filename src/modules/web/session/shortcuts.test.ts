@@ -80,9 +80,9 @@ describe('isTypingTarget', () => {
       expect(isTypingTarget({ tagName } as unknown as EventTarget)).toBe(true);
     }
 
-    expect(isTypingTarget({ tagName: 'DIV', isContentEditable: true } as unknown as EventTarget)).toBe(
-      true,
-    );
+    expect(
+      isTypingTarget({ tagName: 'DIV', isContentEditable: true } as unknown as EventTarget),
+    ).toBe(true);
   });
 
   it('does not treat an ordinary element, or nothing at all, as a field', () => {

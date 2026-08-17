@@ -92,8 +92,12 @@ test.describe('the document viewer pane', () => {
     const expectedLines = exported.replace(/\n$/u, '').split('\n').length;
     const expectedWords = exported.trim().split(/\s+/u).length;
 
-    await expect(page.getByTestId('viewer-metric-lines')).toHaveText(`${String(expectedLines)} lines`);
-    await expect(page.getByTestId('viewer-metric-words')).toHaveText(`${String(expectedWords)} words`);
+    await expect(page.getByTestId('viewer-metric-lines')).toHaveText(
+      `${String(expectedLines)} lines`,
+    );
+    await expect(page.getByTestId('viewer-metric-words')).toHaveText(
+      `${String(expectedWords)} words`,
+    );
   });
 
   test('opens on a document still being written, and Stop stays reachable', async ({

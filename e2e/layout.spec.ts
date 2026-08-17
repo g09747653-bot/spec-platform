@@ -112,12 +112,9 @@ test.describe('the session shell', () => {
      * absorbed every pixel the row was short. It now has a row to itself.
      */
     for (const stored of ['300', '5600']) {
-      await page.evaluate(
-        (value) => {
-          window.localStorage.setItem('spec-platform:sidebar-width', value);
-        },
-        stored,
-      );
+      await page.evaluate((value) => {
+        window.localStorage.setItem('spec-platform:sidebar-width', value);
+      }, stored);
       await page.reload();
       await expect(page.getByTestId('composer')).toBeVisible();
 
@@ -274,9 +271,9 @@ test.describe('the session shell', () => {
      * Every documented shortcut is a row, and every row is exercised below. A list that promised a
      * key nothing performs would be worse than no list.
      */
-    const listed = await page.getByTestId('shortcut-row').evaluateAll((rows) =>
-      rows.map((row) => row.getAttribute('data-shortcut')),
-    );
+    const listed = await page
+      .getByTestId('shortcut-row')
+      .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-shortcut')));
     expect(listed).toEqual(
       expect.arrayContaining([
         'shortcuts',
