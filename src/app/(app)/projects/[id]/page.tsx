@@ -108,7 +108,9 @@ export default async function ProjectPage({
       title: chat.title,
       archived: chat.archived,
       badge: `${config.badge.vendor} · ${config.badge.flavour} · ${config.badge.version}`,
-      stageLabel: stageLabel(chat.stage),
+      // The chat's own methodology names its position (task 132), so the list agrees with the
+      // header of the conversation it links to rather than printing the canonical seven at it.
+      stageLabel: stageLabel(chat.stage, chat.methodologyId),
       completed: chat.completionCount > 0,
       bundleLabel: `${String(approved.length)}/${String(bundleConfig.stages.filter((stage) => stage.document !== null && !stage.optional).length)} approved`,
       ageSeconds: chat.ageSeconds,

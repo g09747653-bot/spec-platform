@@ -232,3 +232,33 @@ export function stubSessionSummaryDocument(topic: string): string {
     'constraints and success criteria are recorded with the answers.',
   ].join(' ');
 }
+
+/**
+ * The analytical bridge (task 132; Эталон §1.2).
+ *
+ * Recognised by the sentinel the prompt asks a declining model to answer with, which appears in no
+ * other asset. The stub never declines: a walk that has to *see* a bridge cannot assert on one the
+ * double decided to skip, and the declining branch is exercised in the agent's own unit test.
+ */
+export function looksLikeInterviewBridgePrompt(prompt: string): boolean {
+  return prompt.includes('NOTHING TO FLAG');
+}
+
+/**
+ * The stub's comment between two rounds — deterministic, visibly synthetic, and **naming an answer**.
+ *
+ * Naming one matters: the acceptance criterion for the bridge is that it builds on what was chosen,
+ * and a canned sentence that could have been written before the interview started would let a walk
+ * pass while the prompt was going out empty.
+ */
+export function stubInterviewBridgeDocument(prompt: string): string {
+  const chosen =
+    /^- [a-z]+\/[^:]+: (.+)$/m.exec(prompt)?.[1]?.split(';')[0]?.trim() ??
+    'what you have chosen so far';
+
+  return [
+    `Noted: you chose ${chosen}.`,
+    'That sits awkwardly beside the rest of this round, so the next questions will pin down which of',
+    'the two matters more. (Produced by the deterministic stub, not by a model.)',
+  ].join(' ');
+}

@@ -56,6 +56,7 @@ export function audienceRules(audience: string): string {
 
 export const REPLY_ASSESSMENT_PROMPT_ID = 'interview.reply-assessment.skeleton.v1';
 export const SESSION_SUMMARY_PROMPT_ID = 'interview.summary.skeleton.v1';
+export const INTERVIEW_BRIDGE_PROMPT_ID = 'interview.bridge.v1';
 
 export interface InterviewQuestionsPromptInput {
   /**
@@ -150,6 +151,31 @@ export function sessionSummaryPrompt(input: SessionSummaryPromptInput): Assemble
       initialPrompt: input.initialPrompt,
       answered:
         input.answeredHighlights.length > 0 ? input.answeredHighlights.join('\n') : '(nothing yet)',
+    },
+    { contentLanguage: input.contentLanguage },
+  );
+}
+
+export interface InterviewBridgePromptInput {
+  /** The assembled context: the product idea and the answers given so far (А-8). */
+  context: string;
+  unmetNeeds: readonly string[];
+  /**
+   * See `InterviewQuestionsPromptInput.contentLanguage` (У-1; task 108).
+   *
+   * Load-bearing here rather than incidental: the bridge is the interviewer speaking, and an
+   * English paragraph between two Russian rounds is exactly the reference product's own weakness
+   * that У-1 was written to beat.
+   */
+  contentLanguage?: string | null | undefined;
+}
+
+export function interviewBridgePrompt(input: InterviewBridgePromptInput): AssembledPrompt {
+  return assemblePrompt(
+    'interview.bridge.v1',
+    {
+      context: input.context,
+      unmetNeeds: input.unmetNeeds.length > 0 ? input.unmetNeeds.join(', ') : '(nothing)',
     },
     { contentLanguage: input.contentLanguage },
   );

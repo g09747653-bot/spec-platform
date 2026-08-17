@@ -1619,6 +1619,36 @@ Goal: the visual layer with our own tint, the completion surface, structured loc
   - After the Architect accepts: tag `m10p-accepted` and release tag `stage1-complete` — Этап 1 закрыт.
   - _Dependencies: 128_ · _Requirements: А-2.1_ · _Touches: `e2e/gate-M10.live.ts`, `artifacts/gate-M10/**`_ · _Complexity: Large_ · _Parallel-safe: no_
 
+### Milestone 11п — Parity gaps (Architect, 2026-08-17; по итогам red-team задачи 128)
+
+Goal: close every gap the red-team confirmed, so the stage-1 seal is earned, not declared. Source of truth: `artifacts/parity-M10/CHECKLIST.md` (verdicts as amended by А-12: gap `1.2-4`-persistence returned from «своё отличие» to gaps). One session expected.
+
+- [x] 132\. Substantive gaps (behaviour)
+  - `1.2-3` **Analytical bridge between rounds**: after a round's answers are submitted, the interviewer writes a short in-feed commentary before the next round — naming contradictions between answers, physical impossibilities, and what the next round will therefore probe (Эталон §1.2, Часть 6 слой 1). Prompt-level, persisted as an ordinary feed message; language follows У-1; non-technical profile keeps У-5 rules; on the local provider the bridge is budgeted by А-8 packing like any message.
+  - `1.2-4a` **Chat reply position**: replies stop being re-stamped to the current position — each carries the stage/substage it was answered in, per `feed-item.tsx`'s own docblock.
+  - `1.2-4b` **Chat replies persist** (returned to gaps by А-12): free-chat exchanges are persisted and project into the feed after reload — the reference dump's saved session contains its chat verbatim, so ephemerality is a parity gap, not a tint. No new write path beyond the chat store that already exists for decisions; the projection reads it.
+  - `1.4-6` **One methodology vocabulary**: stage names from the config reach the proceed button, the transition chip, and card captions (D-119 promised exactly this).
+  - `1.4-7` **Round budget reaches the surface**: `roundBudgetFor` is called and displayed (rounds used/remaining on the round card), and the exhausted state names the methodology's own budget.
+  - Acceptance Criteria: bridge appears between every pair of rounds on a live two-round stage and names at least the chosen options it builds on (fixture asserts the prompt receives prior answers); reload reproduces chat replies byte-for-byte in their original positions; a non-default methodology walk shows its own names in all three surfaces and its budget on the card; e2e green.
+  - _Dependencies: 131_ · _Requirements: Эталон §1.2, §1.4; D-119; А-12_ · _Touches: `src/modules/agents/interview/**`, `src/modules/web/feed/**`, chat store_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [ ] 133\. Surface gaps (11)
+  - The six cheap fixes named in CHECKLIST §«Что чинится»: `1.1-2` (bubble fill token), `1.1-13` (completion copy sentence), `1.4-5` (call the computed `substageLabel`), `1.4-8` (export copy line), `1.5-3` (panel title), `1.2-1` (seed template does not duplicate the description) — plus the remaining five: `1.1-13` completion panel becomes the feed's true tail (stage bar and Refine render above it, chat pins below nothing), `1.2-2` one source for «how many rounds», `1.2-5` bundle-created event block in the feed, `1.4-4` Edit template de-duplication, `1.5-2` attach control in the composer + brand gradient on the send button, `1.5-4` project description surfaced.
+  - Acceptance Criteria: each item's checklist row flips to «парити» with evidence; the completion panel is the last block in a completed session's feed; composer shows attach and the gradient send in both themes.
+  - _Dependencies: 132_ · _Requirements: CHECKLIST §Разрывы (поверхностные)_ · _Touches: `src/modules/web/**`_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [ ] 134\. Cosmetic gaps (7)
+  - `1.1-3` `data-msg-snippet`, `1.1-6` tag-chips on options (when the model supplies them; schema stays optional), `1.1-10` transition chip: all four reference traits, `1.1-11` card caption in primary + Preview icon, `1.3-4` review item header = section path (title moves into the body line), `1.4-1` full methodology name visible without tooltip, `1.5-11` AI prose typography per reference scale.
+  - Acceptance Criteria: each row flips with evidence; no token-gate violations introduced.
+  - _Dependencies: 133_ · _Requirements: CHECKLIST §Разрывы (косметические)_ · _Touches: `src/modules/web/**`_ · _Complexity: Medium_ · _Parallel-safe: yes_
+
+- [ ] 135\. M11п gate — checklist re-walk and the stage-1 seal (self-run, А-2.1)
+  - Re-run `parity-M10.spec.ts` with the updated expectations; re-issue the checklist with new verdicts (target: 0 unowned gaps — every row is парити or an Architect-confirmed difference); one short live walk (default methodology, both themes) proving the bridge, persistent chat, and surfaces live; gate profile as in 129.
+  - Acceptance Criteria: checklist has zero undispositioned rows; live walk GREEN (zero truncations, zero structural rejections); CI green; artifacts `artifacts/gate-M11/`.
+  - After the Architect's acceptance: tags `m11p-accepted` and `stage1-complete`.
+  - _Dependencies: 132–134_ · _Requirements: А-2 (финальный парити-вердикт), А-2.1_ · _Touches: `e2e/**`, `artifacts/gate-M11/**`_ · _Complexity: Large_ · _Parallel-safe: no_
+
+
 ## Requirement Coverage
 
 Every functional requirement maps to at least one task.

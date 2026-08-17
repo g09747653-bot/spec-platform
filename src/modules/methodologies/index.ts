@@ -34,6 +34,7 @@ export {
   assertMethodologyConfig,
   configEntryPosition,
   methodologyIssues,
+  stageNameFor,
   stepCoversPosition,
   visitsSpecStage,
   MethodologyConfigError,

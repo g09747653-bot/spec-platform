@@ -31,6 +31,15 @@ const ChatResult = z.object({
   result: z.unknown().optional(),
   /** The assistant's answer, complete — the deltas above are the same text arriving in pieces. */
   reply: z.string().optional(),
+  /**
+   * The `session_messages` rows this exchange became, in order (task 132).
+   *
+   * The user's message, then the assistant's answer where there was one. The client draws both
+   * optimistically while the request is in flight and needs their ids to recognise its own turns in
+   * the persisted feed on the next render — otherwise every reply would appear twice for as long as
+   * the visit lasted. Absent on a client that does not ask, and ignorable by one that does not care.
+   */
+  messageIds: z.array(z.string()).optional(),
   /** What is pending *now*, so the client re-renders the card the server sees (FR-017 AC-4). */
   pendingAction: z.union([z.record(z.string(), z.unknown()), z.null()]),
 });

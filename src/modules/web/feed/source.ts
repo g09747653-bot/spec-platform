@@ -105,6 +105,23 @@ export interface FeedSourceProposal {
   createdAt: string;
 }
 
+/**
+ * A persisted turn of the conversation — a free-chat message or an analytical bridge (task 132).
+ *
+ * `stage`/`substage` come from the row, not from the session's current position: the whole point of
+ * `session_messages` is that a message records where it was written, so a reply given during a
+ * review still reads `review` after the session has sealed (checklist row `1.2-4`).
+ */
+export interface FeedSourceMessage {
+  messageId: string;
+  role: 'user' | 'assistant';
+  origin: 'chat' | 'bridge';
+  stage: string;
+  substage: string | null;
+  body: string;
+  createdAt: string;
+}
+
 export interface FeedSource {
   session: FeedSourceSession;
   rounds: readonly FeedSourceRound[];
@@ -112,4 +129,6 @@ export interface FeedSource {
   revisions: readonly FeedSourceRevision[];
   reviews: readonly FeedSourceReview[];
   proposals: readonly FeedSourceProposal[];
+  /** Free-chat turns and analytical bridges, oldest first (task 132). */
+  messages: readonly FeedSourceMessage[];
 }

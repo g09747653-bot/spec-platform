@@ -94,9 +94,20 @@ export function StageActions({
         </p>
       )}
 
+      {/*
+        The budget the **gate** enforces, said out loud (task 132; checklist row `1.4-7`).
+
+        `roundBudget` now arrives from `roundBudgetFor` rather than from the environment default, so
+        this line and the refusal behind it finally quote one number. "N left" is the half a person
+        actually acts on — how many more questions there are to sit through — and it is printed as
+        its own element so a walk can read the methodology's budget rather than infer it from prose.
+      */}
       {asking && (
         <p className="text-foreground-muted text-xs">
           {actions.answeredRounds} of {actions.roundBudget} question rounds answered
+          <span data-testid="round-budget-remaining">
+            {` · ${String(Math.max(actions.roundBudget - actions.answeredRounds, 0))} left`}
+          </span>
           {actions.askingStage === 'interview' &&
             (actions.summaryPersisted ? ' · summary saved' : ' · no summary yet')}
         </p>

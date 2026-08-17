@@ -24,6 +24,7 @@ import { createSpecFileRepository } from '@/modules/specs/repositories/spec-file
 import { registeredCapabilityIds } from '@/modules/workflow/capabilities';
 import { qualityExportPort } from '@/modules/workflow/quality-port';
 import { canAskAnotherRound, evaluateTransition } from '@/modules/workflow/evaluate-transition';
+import { roundBudgetFor } from '@/modules/workflow/gates/round-budget';
 import { isAskingStage, type StagePosition } from '@/modules/workflow/model/stages';
 import { forwardDoors, nextPosition } from '@/modules/workflow/next-position';
 import { assembleWorkflowSnapshot } from '@/modules/workflow/snapshot-assembler';
@@ -69,7 +70,11 @@ import { assembleFeedSource } from './feed-source';
  * The position itself comes from `nextPosition` in `workflow`, which is the same forward map the
  * engine's table describes; only the wording is decided here, because wording is presentation.
  */
-function labelFor(from: StagePosition, to: StagePosition): string {
+function labelFor(
+  from: StagePosition,
+  to: StagePosition,
+  methodologyId: string | null | undefined,
+): string {
   if (to.stage === 'complete') return 'Finish and seal the session';
   if (to.substage === 'generate') return 'Proceed to drafting';
   // Approval permits this move (FR-009 AC-3) and entering it is what produces the review
@@ -77,7 +82,13 @@ function labelFor(from: StagePosition, to: StagePosition): string {
   if (to.substage === 'review') return 'Proceed to review';
   if (from.stage === 'complete') return 'Re-open for the Quality stage';
 
-  return `Proceed to ${stageLabel(to.stage)}`;
+  /*
+   * The methodology's own name for the door (task 132; checklist row `1.4-6`). Until now this was
+   * the canonical seven, so a brownfield session offered «Proceed to Constitution» under a step pill
+   * reading «Proposal» — two names for one position, and the louder of them ours rather than the
+   * workflow's.
+   */
+  return `Proceed to ${stageLabel(to.stage, methodologyId, to.substage)}`;
 }
 
 /**
@@ -92,7 +103,7 @@ function nextTarget(snapshot: WorkflowSnapshot): TransitionTargetModel | null {
   const to = nextPosition(snapshot);
   if (to === null) return null;
 
-  return targetModel(snapshot, to, labelFor(snapshot.position, to));
+  return targetModel(snapshot, to, labelFor(snapshot.position, to, snapshot.methodologyId));
 }
 
 /** One door, with the gate's current verdict on it. Presentation only — the server re-decides. */
@@ -439,7 +450,19 @@ async function SessionBody({ session, scope }: { session: SessionDetail; scope: 
       canAskAnotherRound(snapshot, askingStage).allowed,
     answeredRounds:
       snapshot !== null && askingStage !== null ? snapshot.answeredRounds[askingStage] : 0,
-    roundBudget: snapshot?.roundBudget ?? 0,
+    /*
+     * **The number the gate enforces**, not the environment default (task 132; checklist row
+     * `1.4-7`). `roundBudgetFor` was exported for exactly this and never called from a surface, so a
+     * brownfield session — budget 2 in its configuration — printed «0 of 3 question rounds
+     * answered» and then found the third ask refused. That is D-97 verbatim, one milestone later.
+     *
+     * Away from an asking position there is no stage to be budgeted, and the panel prints neither
+     * line; the environment default is what it falls back to, exactly as before.
+     */
+    roundBudget:
+      snapshot !== null && askingStage !== null
+        ? roundBudgetFor(snapshot, askingStage)
+        : (snapshot?.roundBudget ?? 0),
     unmetNeeds:
       snapshot !== null && askingStage !== null ? unmetNeedNames(snapshot, askingStage) : [],
     summaryPersisted: snapshot?.summaryPersisted ?? false,
@@ -498,6 +521,7 @@ async function SessionBody({ session, scope }: { session: SessionDetail; scope: 
         <SessionFeed
           sessionId={session.id}
           feed={feed}
+          methodologyId={session.methodologyId}
           deadlineMs={requestDeadlineMs()}
           actions={actions}
           primaryRevisionId={latest?.id ?? null}

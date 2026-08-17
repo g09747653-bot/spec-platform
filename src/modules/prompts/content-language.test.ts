@@ -71,6 +71,10 @@ const VARIABLES: { [Id in PromptId]: PromptVariables[Id] } = {
     initialPrompt: 'A tool for writing specs.',
     answered: '- audience: solo developers',
   },
+  'interview.bridge.v1': {
+    context: '## Answers given during the interview\n- interview/q-audience: solo developers',
+    unmetNeeds: 'budget',
+  },
 };
 
 const ALL_IDS = Object.keys(promptRegistry) as PromptId[];

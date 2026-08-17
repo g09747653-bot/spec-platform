@@ -43,7 +43,8 @@ export default async function ProjectsPage() {
         projects={projects.map((project) => ({
           id: project.id,
           name: project.name,
-          stageLabel: stageLabel(project.stage),
+          // The primary chat's own methodology names the position (task 132; row `1.4-6`).
+          stageLabel: stageLabel(project.stage, project.methodologyId),
           updatedAt: project.updatedAt,
           /*
            * Where the row's name goes (А-6). A project with one chat opens **in that chat**, so

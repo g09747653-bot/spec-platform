@@ -336,6 +336,32 @@ function revisionNoteBlocks(source: FeedSource): MessageBlock[] {
 }
 
 /**
+ * The conversation's own turns — free chat and the analytical bridge (task 132).
+ *
+ * The last of the feed's sources, and the only one written *for* the feed. Everything else here
+ * projects a row that exists because the workflow needed it; a chat exchange and a bridge exist
+ * because somebody said something, and until M11п the first of them was thrown away on reload
+ * (checklist row `1.2-4`) and the second did not exist at all (`1.2-3`).
+ *
+ * `positionRecorded` is what stops the chip pass below from overwriting the position the row
+ * carries. A message knows where it was written; nothing else here does.
+ */
+function messageBlocks(source: FeedSource): MessageBlock[] {
+  return source.messages.map((message) => ({
+    kind: 'message',
+    id: `message:${message.messageId}`,
+    role: message.role,
+    stage: message.stage,
+    substage: message.substage,
+    at: message.createdAt,
+    origin: message.origin,
+    text: message.body,
+    streaming: false,
+    positionRecorded: true,
+  }));
+}
+
+/**
  * Proposals, grouped into the cards a person decides on (task 118).
  *
  * A cross-file edit is stored as one row per file — that is what makes it applicable atomically and
@@ -490,6 +516,7 @@ export function buildFeed(source: FeedSource): Feed {
     ...reviewBlocks(source),
     ...revisionNoteBlocks(source),
     ...proposalBlocks(source),
+    ...messageBlocks(source),
   ];
 
   const summary = summaryBlock(source);
@@ -516,6 +543,13 @@ export function buildFeed(source: FeedSource): Feed {
    * emits a chip wherever the evidenced position changes, and it stamps every block — including the
    * ones that evidence nothing — with the position it belongs to. A chat reply typed during a review
    * therefore carries `review` without anyone having to remember to stamp it (task 109).
+   *
+   * **Unless the block recorded its own** (task 132). A persisted message carries the position it
+   * was written at, and the running position is only the same thing while the walk happens to be
+   * there: after a request-changes the session goes back to `generate`, after sealing to `complete`,
+   * and a stamp applied here would rewrite history to match the present. So a block that says its
+   * position is recorded keeps it — which is what makes `data-msg-stage` answer "what was the
+   * session doing when this was written?", the question `feed-item.tsx` says it answers.
    */
   const blocks: FeedBlock[] = [];
   let current = START;
@@ -528,7 +562,9 @@ export function buildFeed(source: FeedSource): Feed {
       current = evidenced;
     }
 
-    blocks.push({ ...block, stage: current.stage, substage: current.substage });
+    const recorded = block.kind === 'message' && block.positionRecorded === true;
+
+    blocks.push(recorded ? block : { ...block, stage: current.stage, substage: current.substage });
   }
 
   /*

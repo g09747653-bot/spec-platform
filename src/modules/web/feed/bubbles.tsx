@@ -1,16 +1,23 @@
+'use client';
+
 import { stageLabel } from '../session/stage-display';
 
 import { FeedItem } from './feed-item';
 import { positionLabel } from './labels';
+import { useMethodologyId } from './methodology-naming';
 import type { MessageBlock, SeedBlock, TransitionBlock } from './model';
 
 /**
  * The prose blocks of the conversation (task 105; Эталон §1.1, block types 1 and 3).
  *
- * Presentational and server-renderable: nothing here fetches, decides or holds state, so these
- * blocks are part of the first paint rather than something that appears once the page's JavaScript
- * has run. That matters for the invariant round 5 established — a page that has not hydrated yet
- * still shows where the session is and what it has been told.
+ * Presentational: nothing here fetches, decides or holds state, so these blocks are part of the
+ * first paint rather than something that appears once the page's JavaScript has run. That matters
+ * for the invariant round 5 established — a page that has not hydrated yet still shows where the
+ * session is and what it has been told.
+ *
+ * The one thing they read from outside their props is the methodology in scope (task 132), which
+ * decides what a position is *called*: a chip and a caption in a SpecKit session say «Specify» where
+ * ours say «Requirements». It arrives by context because this is the only file that needs it.
  */
 
 /**
@@ -51,13 +58,18 @@ export function MessageBubble({ block }: { block: MessageBlock }) {
    * A revision note is prose like any other assistant turn, and reads as one on purpose (task 113;
    * Эталон §1.3): the writer saying what it is folding in and what it decided for itself is a turn
    * of the conversation, not a system notice. Only its test id differs, so a walk can find it.
+   *
+   * The same is true of the analytical bridge (task 132): the interviewer noticing that two answers
+   * disagree is the interviewer talking, not the system reporting.
    */
   const testId =
     block.origin === 'chat'
       ? 'chat-turn-assistant'
       : block.origin === 'revision-note'
         ? 'revision-note'
-        : 'session-summary';
+        : block.origin === 'bridge'
+          ? 'interview-bridge'
+          : 'session-summary';
 
   return (
     <FeedItem block={block}>
@@ -80,6 +92,8 @@ export function MessageBubble({ block }: { block: MessageBlock }) {
  * like it is still working when it is not, and round 5 was entirely about that distinction.
  */
 export function StageChip({ block }: { block: TransitionBlock }) {
+  const methodologyId = useMethodologyId();
+
   return (
     <FeedItem block={block} align="center">
       <span
@@ -88,21 +102,25 @@ export function StageChip({ block }: { block: TransitionBlock }) {
         data-from={`${block.from.stage}${block.from.substage === null ? '' : `.${block.from.substage}`}`}
         data-to={`${block.to.stage}${block.to.substage === null ? '' : `.${block.to.substage}`}`}
       >
-        <span>{positionLabel(block.from)}</span>
+        <span>{positionLabel(block.from, methodologyId)}</span>
         <span aria-hidden className="opacity-50">
           ──▶
         </span>
-        <span className="text-foreground font-medium">{positionLabel(block.to)}</span>
+        <span className="text-foreground font-medium">
+          {positionLabel(block.to, methodologyId)}
+        </span>
       </span>
     </FeedItem>
   );
 }
 
-/** The small caption above a card, naming the stage it belongs to. */
+/** The small caption above a card, naming the stage it belongs to — in its methodology's words. */
 export function BlockCaption({ stage, trailing }: { stage: string; trailing?: string }) {
+  const methodologyId = useMethodologyId();
+
   return (
     <p className="text-foreground-muted text-label uppercase">
-      {stageLabel(stage)}
+      {stageLabel(stage, methodologyId)}
       {trailing !== undefined && ` · ${trailing}`}
     </p>
   );

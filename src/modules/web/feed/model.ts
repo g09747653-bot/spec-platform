@@ -61,21 +61,32 @@ export interface SeedBlock extends FeedBlockBase {
 /**
  * Ordinary prose.
  *
- * `origin` says where the text came from, because the two are persisted very differently: a
- * `summary` is a column on the session and survives a reload, a `chat` turn lives in the client's
- * own store for the length of the visit (task 104 — free chat keeps its existing store). Marking it
- * is what stops the two from being confused for one another when a reload silently drops half of them.
+ * `origin` says where the text came from, and every one of them is now persisted somewhere: a
+ * `summary` is a column on the session, a `revision-note` is a column on the board whose decision it
+ * explains (task 113), and `chat`/`bridge` are rows of `session_messages` (task 132). Marking the
+ * origin is what lets the feed give each its own test id and its own placement without four block
+ * kinds that render identically.
+ *
+ * A `chat` block is the one case with a transient twin: the turn drawn optimistically while the
+ * request is in flight carries no id from the server yet, and is replaced by the persisted block on
+ * the next render — see `chat-turns.ts`.
  */
 export interface MessageBlock extends FeedBlockBase {
   kind: 'message';
-  /**
-   * `revision-note` is the writer's paragraph before Rev N+1 (task 113): persisted on the board
-   * whose decision it explains, so it survives a reload like a summary and unlike a chat turn.
-   */
-  origin: 'summary' | 'chat' | 'revision-note';
+  /** `bridge` is the interviewer's commentary between two rounds (task 132; Эталон §1.2). */
+  origin: 'summary' | 'chat' | 'revision-note' | 'bridge';
   text: string;
   /** True while an assistant reply is still being written into the feed (task 109). */
   streaming: boolean;
+  /**
+   * Whether this block's position was **recorded** rather than derived (task 132).
+   *
+   * The chip pass stamps every block with the position the walk is currently in, which is right for
+   * everything derived from a row that has no position of its own. A persisted message has one: it
+   * was written at a place in the workflow, and re-stamping it would make `data-msg-stage` say where
+   * the session is now instead of what it was doing then — the second half of checklist row `1.2-4`.
+   */
+  positionRecorded?: boolean;
 }
 
 export interface FeedOption {

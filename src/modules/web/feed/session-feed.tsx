@@ -13,6 +13,7 @@ import type { ReferenceTarget, SlashCommand } from './composer-menus';
 import { DocumentBlock } from './document-block';
 import { FeedItem } from './feed-item';
 import { GenerationSurface } from './generation-surface';
+import { MethodologyNaming } from './methodology-naming';
 import type { Feed, FeedBlock } from './model';
 import { ProposalBlockCard, RefineBox, type PendingProposalModel } from './proposal-block';
 import { RevertCard, type RevertModel } from './revert-card';
@@ -35,6 +36,8 @@ import { StageActions, type StageActionsModel } from './stage-actions';
 export interface SessionFeedProps {
   sessionId: string;
   feed: Feed;
+  /** Whose vocabulary the chips and captions speak (task 132) — the session's own methodology. */
+  methodologyId: string;
   deadlineMs: number;
   actions: StageActionsModel;
   /** The primary document — the newest revision of the file the session is working on. */
@@ -71,6 +74,7 @@ export interface SessionFeedProps {
 export function SessionFeed({
   sessionId,
   feed,
+  methodologyId,
   deadlineMs,
   actions,
   primaryRevisionId,
@@ -236,69 +240,71 @@ export function SessionFeed({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {/* `pb-28` keeps the last block clear of the sticky composer, which floats over the feed. */}
-      <ol className="flex flex-col gap-4 px-4 pt-6 pb-28" data-testid="feed">
-        {withChat.blocks.map((block) => (
-          <li key={block.id} className="contents">
-            {renderBlock(block)}
-          </li>
-        ))}
+    <MethodologyNaming methodologyId={methodologyId}>
+      <div className="flex min-h-0 flex-1 flex-col">
+        {/* `pb-28` keeps the last block clear of the sticky composer, which floats over the feed. */}
+        <ol className="flex flex-col gap-4 px-4 pt-6 pb-28" data-testid="feed">
+          {withChat.blocks.map((block) => (
+            <li key={block.id} className="contents">
+              {renderBlock(block)}
+            </li>
+          ))}
 
-        {generationAtTail && (
+          {generationAtTail && (
+            <li className="flex w-full">
+              <GenerationSurface
+                sessionId={sessionId}
+                stage={feed.position.stage}
+                activeRun={null}
+                canGenerate={canGenerate}
+                blocked={blocked}
+                revisionOwed={feed.revisionOwed}
+              />
+            </li>
+          )}
+
           <li className="flex w-full">
-            <GenerationSurface
+            <StageActions
               sessionId={sessionId}
-              stage={feed.position.stage}
-              activeRun={null}
-              canGenerate={canGenerate}
-              blocked={blocked}
-              revisionOwed={feed.revisionOwed}
+              actions={actions}
+              awaitingRound={blocked}
+              deadlineMs={deadlineMs}
             />
           </li>
-        )}
 
-        <li className="flex w-full">
-          <StageActions
-            sessionId={sessionId}
-            actions={actions}
-            awaitingRound={blocked}
-            deadlineMs={deadlineMs}
-          />
-        </li>
+          {refineFileId !== null && proposal === null && (
+            <li className="flex w-full">
+              <RefineBox specFileId={refineFileId} />
+            </li>
+          )}
 
-        {refineFileId !== null && proposal === null && (
-          <li className="flex w-full">
-            <RefineBox specFileId={refineFileId} />
-          </li>
-        )}
+          {revert !== null && proposal === null && (
+            <li className="flex w-full">
+              <RevertCard sessionId={sessionId} revert={revert} />
+            </li>
+          )}
+        </ol>
 
-        {revert !== null && proposal === null && (
-          <li className="flex w-full">
-            <RevertCard sessionId={sessionId} revert={revert} />
-          </li>
-        )}
-      </ol>
-
-      <Composer
-        value={draft}
-        onChange={setDraft}
-        onSend={(referenceIds) => {
-          const outgoing = draft;
-          setDraft('');
-          void send(outgoing, referenceIds);
-        }}
-        busy={chat.busy}
-        error={chat.error}
-        hasPendingDecision={tail.kind !== 'open'}
-        references={references}
-        models={models}
-        selectedModel={selectedModel}
-        onSelectModel={(modelId) => {
-          void selectModel(modelId);
-        }}
-        onCommand={pressControl}
-      />
-    </div>
+        <Composer
+          value={draft}
+          onChange={setDraft}
+          onSend={(referenceIds) => {
+            const outgoing = draft;
+            setDraft('');
+            void send(outgoing, referenceIds);
+          }}
+          busy={chat.busy}
+          error={chat.error}
+          hasPendingDecision={tail.kind !== 'open'}
+          references={references}
+          models={models}
+          selectedModel={selectedModel}
+          onSelectModel={(modelId) => {
+            void selectModel(modelId);
+          }}
+          onCommand={pressControl}
+        />
+      </div>
+    </MethodologyNaming>
   );
 }

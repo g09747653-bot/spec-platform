@@ -1,9 +1,11 @@
 import {
+  looksLikeInterviewBridgePrompt,
   looksLikeInterviewRoundPrompt,
   looksLikeReplyAssessmentPrompt,
   looksLikeSummaryPrompt,
   roundNumberFromInterviewPrompt,
   stageFromInterviewPrompt,
+  stubInterviewBridgeDocument,
   stubInterviewRoundDocument,
   stubReplyAssessmentDocument,
   stubSessionSummaryDocument,
@@ -212,7 +214,9 @@ export function createStubProviderStream(): (input: {
                 ? stubSessionSummaryDocument(prompt)
                 : looksLikeReplyAssessmentPrompt(prompt)
                   ? stubReplyAssessmentDocument()
-                  : documentFromPrompt(prompt);
+                  : looksLikeInterviewBridgePrompt(prompt)
+                    ? stubInterviewBridgeDocument(prompt)
+                    : documentFromPrompt(prompt);
 
     for (const chunk of chunkDocument(document, DEFAULT_WORDS_PER_CHUNK)) {
       signal?.throwIfAborted();

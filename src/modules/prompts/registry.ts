@@ -147,6 +147,18 @@ export interface PromptVariables {
     initialPrompt: string;
     answered: string;
   };
+  'interview.bridge.v1': {
+    /**
+     * The assembled context — the product idea and the answers given so far (А-8).
+     *
+     * The bridge is prose *about* what was answered, so the answers are the whole of its material;
+     * carrying them through the assembler is what makes them shrink to a small local window instead
+     * of pushing the instruction out of it.
+     */
+    context: string;
+    /** What this stage still has not established, so the bridge can say what comes next. */
+    unmetNeeds: string;
+  };
 }
 
 export type PromptId = keyof PromptVariables;
@@ -557,6 +569,45 @@ const SESSION_SUMMARY: PromptAsset = {
 };
 
 /**
+ * The analytical bridge between two rounds (task 132; Эталон §1.2, Часть 6 слой 1).
+ *
+ * The reference product's most distinctive interview move, and the one the red-team named as a
+ * content gap rather than a cosmetic one: between rounds the interviewer stops and *thinks out
+ * loud* — it names where two answers pull against each other, where something asked for is not
+ * physically possible together with something else, and says what it will therefore probe next.
+ * That is what makes the interview feel like being interviewed rather than filling in a form.
+ *
+ * Three rules carry it, and all three are about restraint. **Say nothing when there is nothing** —
+ * an invented contradiction is worse than silence, because it teaches the reader to skim the
+ * bridges. **Quote their own words** rather than paraphrasing into our vocabulary, so the person
+ * recognises the answer being referred to. And **stay short**: this is a paragraph between two
+ * cards, not a summary — `interview.summary.skeleton.v1` already writes the summary, and a bridge
+ * that repeats it wastes the one place the interview has to sound like it is listening.
+ *
+ * It writes prose, not JSON: nothing machine-reads a bridge, so constraining it would buy nothing
+ * and cost the register. The empty answer is a literal the caller checks for and drops.
+ */
+const INTERVIEW_BRIDGE: PromptAsset = {
+  id: 'interview.bridge.v1',
+  system: [
+    'You are interviewing someone about a product they want built, and they have just answered a',
+    'round of questions. Write a SHORT comment — two or three sentences — before the next round.',
+    '',
+    'Say only what the answers themselves support: where two of their answers pull against each',
+    'other, where something they asked for is hard or impossible together with something else they',
+    'asked for, and what you will therefore ask about next. Refer to their choices in their own',
+    'words so they recognise what you mean.',
+    '',
+    'Do not summarise the interview, do not congratulate, do not list what they said back to them,',
+    'and never mention documents, specifications, sections or the process you are part of.',
+    'If the answers hold together and nothing needs flagging, reply with exactly: NOTHING TO FLAG.',
+    'Return the comment text only.',
+  ].join(' '),
+  user: ['{{context}}', '', 'Still open for this part of the interview: {{unmetNeeds}}'].join('\n'),
+  variables: ['context', 'unmetNeeds'],
+};
+
+/**
  * The Edit workflow's Review step (task 118; Эталон §1.4, §5.1).
  *
  * Its difference from `refinement.propose.v1` is the whole reason it is a separate asset: refinement
@@ -611,6 +662,7 @@ export const promptRegistry: Readonly<Record<PromptId, PromptAsset>> = Object.fr
   'methodology.classify.v1': METHODOLOGY_CLASSIFY,
   'interview.reply-assessment.skeleton.v1': REPLY_ASSESSMENT,
   'interview.summary.skeleton.v1': SESSION_SUMMARY,
+  'interview.bridge.v1': INTERVIEW_BRIDGE,
 });
 
 export const PROMPT_IDS = Object.keys(promptRegistry) as PromptId[];
