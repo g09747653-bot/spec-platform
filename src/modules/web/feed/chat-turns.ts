@@ -1,39 +1,60 @@
 import type { Feed, FeedBlock, MessageBlock } from './model';
 
 /**
- * Free-chat turns, woven into the feed tail (tasks 104, 109).
+ * Free-chat turns, woven into the feed tail (tasks 104, 109; persisted in task 132).
  *
- * Chat is the one thing in the conversation that is **not** persisted: the messages endpoint answers
- * a question or dispatches a decision and stores no transcript, so the turns live in the client's own
- * store for the length of the visit. Task 104 keeps it that way deliberately — a durable transcript
- * is a new write path, and the feed exists to prove that none was needed.
+ * Chat used to be the one thing in the conversation that was **not** persisted: the messages
+ * endpoint answered a question, stored no transcript, and the turns lived in the client's own store
+ * for the length of the visit. Task 104 kept it that way deliberately — a durable transcript was a
+ * new write path, and the feed existed to prove none was needed.
  *
- * The consequence is visible and should be: a reload keeps every persisted block and drops the chat
- * turns, exactly as the reference product's own reload does not resurrect an unsent draft. What a
- * reload never drops is a decision, because a decision is a row.
+ * А-12 overturned that, and correctly: the reference product's saved session contains its chat
+ * verbatim, so a reload that drops half the conversation is a parity gap rather than a tint. The
+ * endpoint now appends to `session_messages` and the projection reads it like any other source.
  *
- * Appending is a separate pure function rather than a branch inside `buildFeed` so that the server
- * can build the durable feed once and the client can layer its own turns on top without re-deriving
- * anything — and so that both halves stay testable without a renderer.
+ * What is left here is the **optimistic half**, and it is still worth having: a turn appears the
+ * moment it is sent and the reply grows a piece at a time, rather than the conversation waiting for
+ * a round trip and a re-render to show that anything happened. Once the server has persisted a turn
+ * it hands back the row's id, and a turn whose id already appears in the feed is dropped — so the
+ * moment `router.refresh()` brings the persisted blocks, the local copies stop being rendered
+ * without a flicker in between and without a second copy of the sentence.
  */
 export interface ChatTurn {
   role: 'user' | 'assistant';
   text: string;
   /** True while the assistant's reply is still arriving (task 109). */
   streaming?: boolean | undefined;
+  /**
+   * The `session_messages` row this turn became, once the server said so (task 132).
+   *
+   * Absent while the request is in flight — there is no row yet — which is exactly when the turn
+   * must be drawn from the local copy.
+   */
+  messageId?: string | undefined;
 }
 
 export function appendChatTurns(feed: Feed, turns: readonly ChatTurn[]): Feed {
   if (turns.length === 0) return feed;
 
+  const persisted = new Set(feed.blocks.map((block) => block.id));
+  const pending = turns.filter(
+    (turn) => turn.messageId === undefined || !persisted.has(`message:${turn.messageId}`),
+  );
+
+  if (pending.length === 0) return feed;
+
   const last = feed.blocks[feed.blocks.length - 1];
   const at = last?.at ?? new Date(0).toISOString();
 
-  const appended: MessageBlock[] = turns.map((turn, index) => ({
+  const appended: MessageBlock[] = pending.map((turn, index) => ({
     kind: 'message',
-    id: `chat:${String(index)}`,
+    id: turn.messageId === undefined ? `chat:${String(index)}` : `message:${turn.messageId}`,
     role: turn.role,
-    // The position the session is in *now* — what a message asked mid-review is stamped with.
+    /*
+     * The position the session is in **now**, which is where this turn is being written — the same
+     * position the server stamped on the row it just stored. The two agree because they describe
+     * the same instant; the persisted block is the one that keeps agreeing tomorrow.
+     */
     stage: feed.position.stage,
     substage: feed.position.substage,
     at,

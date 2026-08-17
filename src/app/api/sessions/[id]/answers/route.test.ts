@@ -7,6 +7,8 @@ import {
   answers as answersTable,
   informationNeeds,
   projects,
+  questionRounds,
+  sessionMessages,
   sessions,
   users,
   workflowState,
@@ -393,6 +395,67 @@ describe('POST /api/sessions/:id/answers', () => {
     const second = await ask();
     const declared = second.questions.questions.flatMap((question) => question.informationNeeds);
     expect(declared.sort()).toEqual(['constraints', 'success-criteria']);
+  });
+
+  /**
+   * Task 132 — the analytical bridge (Эталон §1.2; checklist row `1.2-3`).
+   *
+   * Two claims. It is written between rounds, at the position the round was answered at; and it is
+   * **not** written where there is no next round to introduce, because its whole content is what
+   * the next round will probe.
+   */
+  describe('the analytical bridge (task 132)', () => {
+    const bridges = async () =>
+      (await database.db.select().from(sessionMessages)).filter((row) => row.origin === 'bridge');
+
+    it('writes a comment after an answered round, before the next one is asked', async () => {
+      await answerCard(await ask());
+
+      const written = await bridges();
+
+      expect(written).toHaveLength(1);
+      expect(written[0]).toMatchObject({
+        role: 'assistant',
+        origin: 'bridge',
+        stage: 'interview',
+        substage: null,
+      });
+
+      // It names something that was chosen — the AC's "builds on the answers", not filler.
+      expect(written[0]?.body).toMatch(/Noted: you chose \S/);
+
+      // …and it sits between the round it follows and the round that follows it.
+      const next = await ask();
+      const [round] = await database.db
+        .select()
+        .from(questionRounds)
+        .orderBy(questionRounds.roundNumber);
+
+      expect(round?.presentedAt.getTime()).toBeLessThan(
+        written[0]?.createdAt.getTime() ?? Number.NaN,
+      );
+      expect(next.roundNumber).toBe(2);
+    });
+
+    it('says nothing once the stage has no round left to introduce', async () => {
+      /*
+       * A brownfield session, whose configuration budgets the interview at two rounds (task 116).
+       * The budget is what decides here, so this also exercises `roundBudgetFor` from the other
+       * side: the same number that stops the third ask stops the second bridge.
+       */
+      await database.db
+        .update(sessions)
+        .set({ methodologyId: 'myspec-brownfield-v1' })
+        .where(eq(sessions.id, sessionId));
+
+      await answerCard(await ask());
+      expect(await bridges()).toHaveLength(1);
+
+      await answerCard(await ask());
+
+      // The budget is spent: there is no next round, so there is nothing for a bridge to introduce.
+      expect(await bridges()).toHaveLength(1);
+    });
   });
 
   it('answers 404 for a round of another session and 401 unauthenticated', async () => {

@@ -237,3 +237,63 @@ describe('question set v3 (task 106)', () => {
     expect(result.ok).toBe(true);
   });
 });
+
+/**
+ * Task 134 — tag chips on options (row `1.1-6`; Эталон §1.1).
+ *
+ * Optional by construction, like `recommended` before it: the schema's job here is to accept a
+ * draft that has none, accept a draft that has a few, and refuse a draft that would turn a chip row
+ * into an essay.
+ */
+describe('option tags (task 134)', () => {
+  const withTags = (tags: unknown) => ({
+    stage: 'interview',
+    questions: [
+      {
+        id: 'q-tags',
+        text: 'Who is this for?',
+        type: 'single' as const,
+        options: [
+          { id: 'a', label: 'Solo developers', tags },
+          { id: 'b', label: 'Teams' },
+        ],
+        allowOther: true as const,
+        informationNeeds: ['target-users'],
+      },
+    ],
+  });
+
+  it('accepts a draft with none — every round drafted before this is still valid', () => {
+    const result = validateQuestionSetDraft({
+      stage: 'interview',
+      questions: [
+        {
+          id: 'q-plain',
+          text: 'Who is this for?',
+          type: 'single',
+          options: [
+            { id: 'a', label: 'Solo developers' },
+            { id: 'b', label: 'Teams' },
+          ],
+          allowOther: true,
+          informationNeeds: ['target-users'],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.set.questions[0]?.options[0]?.tags).toBeUndefined();
+  });
+
+  it('keeps up to four short tags', () => {
+    const result = validateQuestionSetDraft(withTags(['faster', 'no cost']));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.set.questions[0]?.options[0]?.tags).toEqual(['faster', 'no cost']);
+  });
+
+  it('refuses five tags, and one that is a sentence', () => {
+    expect(validateQuestionSetDraft(withTags(['a', 'b', 'c', 'd', 'e'])).ok).toBe(false);
+    expect(validateQuestionSetDraft(withTags(['x'.repeat(25)])).ok).toBe(false);
+  });
+});

@@ -64,9 +64,15 @@ export function StepPills({
                   {index + 1}
                 </span>
                 <span data-testid={isCurrent ? 'stage-current' : undefined}>{step.label}</span>
+                {/*
+                  The word, not the token (task 133; row `1.4-5`). `substageLabel` was computed one
+                  line above and used only as a condition, so the pill printed the machine's
+                  `collect` while the chip two blocks below printed «Collecting» — one position,
+                  two spellings, and the raw one in the header.
+                */}
                 {isCurrent && substage !== null && (
                   <span className="opacity-80" data-testid="stage-substage">
-                    · {currentSubstage}
+                    · {substage}
                   </span>
                 )}
               </span>

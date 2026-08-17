@@ -26,6 +26,7 @@ export type FeedBlockKind =
   | 'message'
   | 'round'
   | 'transition'
+  | 'bundle'
   | 'generation'
   | 'document'
   | 'review'
@@ -48,6 +49,14 @@ export interface FeedBlockBase {
   substage: string | null;
   /** When the underlying row happened, ISO-8601. The ordering key, and never re-derived. */
   at: string;
+  /**
+   * A one-line plain-text gist, for `data-msg-snippet` (task 134; Эталон §1.1).
+   *
+   * The fifth of the reference's navigation attributes, and the one we did not carry: id, role,
+   * stage and substage say *where* a message is, and the snippet says *what* it is, which is what
+   * an anchor preview or a jump list needs. Derived in the projection (`snippetOf`), never stored.
+   */
+  snippet?: string;
 }
 
 /** The templated opening bubble: «I want to build {name}. My project description is: {prompt}». */
@@ -61,21 +70,32 @@ export interface SeedBlock extends FeedBlockBase {
 /**
  * Ordinary prose.
  *
- * `origin` says where the text came from, because the two are persisted very differently: a
- * `summary` is a column on the session and survives a reload, a `chat` turn lives in the client's
- * own store for the length of the visit (task 104 — free chat keeps its existing store). Marking it
- * is what stops the two from being confused for one another when a reload silently drops half of them.
+ * `origin` says where the text came from, and every one of them is now persisted somewhere: a
+ * `summary` is a column on the session, a `revision-note` is a column on the board whose decision it
+ * explains (task 113), and `chat`/`bridge` are rows of `session_messages` (task 132). Marking the
+ * origin is what lets the feed give each its own test id and its own placement without four block
+ * kinds that render identically.
+ *
+ * A `chat` block is the one case with a transient twin: the turn drawn optimistically while the
+ * request is in flight carries no id from the server yet, and is replaced by the persisted block on
+ * the next render — see `chat-turns.ts`.
  */
 export interface MessageBlock extends FeedBlockBase {
   kind: 'message';
-  /**
-   * `revision-note` is the writer's paragraph before Rev N+1 (task 113): persisted on the board
-   * whose decision it explains, so it survives a reload like a summary and unlike a chat turn.
-   */
-  origin: 'summary' | 'chat' | 'revision-note';
+  /** `bridge` is the interviewer's commentary between two rounds (task 132; Эталон §1.2). */
+  origin: 'summary' | 'chat' | 'revision-note' | 'bridge';
   text: string;
   /** True while an assistant reply is still being written into the feed (task 109). */
   streaming: boolean;
+  /**
+   * Whether this block's position was **recorded** rather than derived (task 132).
+   *
+   * The chip pass stamps every block with the position the walk is currently in, which is right for
+   * everything derived from a row that has no position of its own. A persisted message has one: it
+   * was written at a place in the workflow, and re-stamping it would make `data-msg-stage` say where
+   * the session is now instead of what it was doing then — the second half of checklist row `1.2-4`.
+   */
+  positionRecorded?: boolean;
 }
 
 export interface FeedOption {
@@ -84,6 +104,8 @@ export interface FeedOption {
   description?: string | undefined;
   /** The model's single suggestion for this question, if it made one (Эталон §1.1). */
   recommended?: boolean | undefined;
+  /** Short tags the model attached to this option, when it did (task 134; Эталон §1.1). */
+  tags?: readonly string[] | undefined;
 }
 
 export interface FeedQuestion {
@@ -213,6 +235,22 @@ export interface ProposalBlock extends FeedBlockBase {
   editBatchId: string | null;
 }
 
+/**
+ * «Project bundle created» — the session leaving the interview (task 133; Эталон §1.2).
+ *
+ * Derived at the one transition out of the entry stage rather than stored, like every other block
+ * here: the bundle has no row of its own, and the moment it comes into existence is the moment the
+ * first document has somewhere to go.
+ */
+export interface BundleBlock extends FeedBlockBase {
+  kind: 'bundle';
+  role: 'system';
+  /** The folder the document cards print in their paths — `bundleSlug` of the project's name. */
+  bundleName: string;
+  /** What this methodology's bundle will contain, in graph order. */
+  fileNames: readonly string[];
+}
+
 /** The sealed session (FR-020 AC-3). */
 export interface CompletionBlock extends FeedBlockBase {
   kind: 'completion';
@@ -226,6 +264,7 @@ export type FeedBlock =
   | MessageBlock
   | RoundBlock
   | TransitionBlock
+  | BundleBlock
   | GenerationBlock
   | DocumentBlock
   | ReviewBlock

@@ -93,6 +93,13 @@ const PAIRS: readonly (readonly [string, string, number])[] = [
   ['border-strong', 'surface', WCAG_AA_LARGE],
   ['border-strong', 'background', WCAG_AA_LARGE],
   ['primary', 'surface', WCAG_AA_LARGE],
+  /*
+   * The brand gradient on the send button (task 133; row `1.5-2`). Both stops carry the label, so
+   * both are text-contrast pairs — the reason `brand-strong` exists at all is that `brand-accent`
+   * does not clear this bar in the light theme.
+   */
+  ['primary-foreground', 'brand', WCAG_AA_TEXT],
+  ['primary-foreground', 'brand-strong', WCAG_AA_TEXT],
 ];
 
 describe('brand palette', () => {

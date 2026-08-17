@@ -6,6 +6,7 @@ import { OwnerScope } from '@/db/owner-scope';
 import {
   projects,
   proposedChanges,
+  sessionMessages,
   reviewFeedback,
   sessions,
   specFiles,
@@ -478,6 +479,60 @@ describe('POST /api/sessions/:id/messages (task 62)', () => {
 
       const rows = await database.db.select().from(specRevisions);
       expect(rows[0]?.approved).toBe(true);
+    });
+  });
+
+  /**
+   * Task 132 — the exchange survives the visit (checklist row `1.2-4`; А-12).
+   *
+   * The reference product's saved session contains its chat verbatim, so a reload that keeps the
+   * decisions and drops the conversation is a parity gap. Two halves are asserted: both turns become
+   * rows, and each row records **where it was written** rather than where the session ends up.
+   */
+  describe('the exchange is persisted (task 132)', () => {
+    it('stores the question and the answer, at the position they were written at', async () => {
+      const response = await chat(fixture.sessionId, 'what does this file do?');
+      const body = await asJson(response);
+
+      const rows = await database.db
+        .select()
+        .from(sessionMessages)
+        .orderBy(sessionMessages.createdAt);
+
+      expect(rows.map((row) => [row.role, row.origin, row.body])).toEqual([
+        ['user', 'chat', 'what does this file do?'],
+        ['assistant', 'chat', ANSWER],
+      ]);
+
+      // The session sits at `constitution.generate` throughout this fixture.
+      expect(rows.map((row) => [row.stage, row.substage])).toEqual([
+        ['constitution', 'generate'],
+        ['constitution', 'generate'],
+      ]);
+
+      // The ids come back so the client can recognise its own optimistic turns in the next render.
+      expect(body.messageIds).toEqual(rows.map((row) => row.id));
+    });
+
+    it('keeps the sentence that decided, as a turn of the conversation', async () => {
+      await chat(fixture.sessionId, 'approve it');
+
+      const rows = await database.db.select().from(sessionMessages);
+
+      // One row, not two: an applied decision has no reply to store, and inventing one would put
+      // words in the assistant's mouth that nobody wrote.
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        role: 'user',
+        origin: 'chat',
+        stage: 'constitution',
+        substage: 'generate',
+        body: 'approve it',
+      });
+
+      // …and the decision itself still landed, which is the point of the sentence being kept.
+      const revisions = await database.db.select().from(specRevisions);
+      expect(revisions[0]?.approved).toBe(true);
     });
   });
 });

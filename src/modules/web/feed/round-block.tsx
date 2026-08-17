@@ -93,6 +93,23 @@ function OptionBody({ option }: { option: FeedQuestion['options'][number] }) {
       {option.description !== undefined && (
         <span className="text-foreground-muted block text-xs">{option.description}</span>
       )}
+      {/*
+        Tag chips, when the model supplies them (task 134; row `1.1-6`; Эталон §1.1).
+        Optional in the schema and absent from every round drafted before this, which renders
+        exactly as it did — a plain option. Nothing here invents a tag.
+      */}
+      {option.tags !== undefined && option.tags.length > 0 && (
+        <span className="mt-1 flex flex-wrap gap-1" data-testid={`mcq-tags-${option.id}`}>
+          {option.tags.map((tag) => (
+            <span
+              key={tag}
+              className="border-border-subtle text-foreground-muted rounded-full border px-1.5 py-0.5 text-[10px] leading-none"
+            >
+              {tag}
+            </span>
+          ))}
+        </span>
+      )}
     </span>
   );
 }

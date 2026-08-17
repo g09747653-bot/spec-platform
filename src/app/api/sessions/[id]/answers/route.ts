@@ -6,9 +6,11 @@ import { getEnv } from '@/config/env';
 import { getDatabase } from '@/db/client';
 import { AllProvidersFailedError } from '@/modules/adapters/llm';
 import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
+import { createBridgeAgent } from '@/modules/agents/interview/bridge-agent';
 import { createInterviewAgent } from '@/modules/agents/interview/interview-agent';
 import { createReplyAssessor } from '@/modules/agents/interview/reply-assessment';
 import { createSummaryAgent } from '@/modules/agents/interview/summary-agent';
+import { collectContextSources } from '@/modules/agents/spec/collect-context';
 import {
   QuestionSetSchema,
   type QuestionSet,
@@ -22,6 +24,7 @@ import {
   type StoredRound,
 } from '@/modules/projects/repositories/interview';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
+import { createSessionMessageRepository } from '@/modules/projects/repositories/session-messages';
 import {
   createSessionRepository,
   type OwnedSession,
@@ -200,6 +203,90 @@ async function refreshInterviewSummary(
   if (summary === null) return false;
 
   return createSessionRepository(db).updateSummary(scope, session.id, summary);
+}
+
+/**
+ * The interviewer's comment between two rounds (task 132; Эталон §1.2; checklist row `1.2-3`).
+ *
+ * Written **after** the answers are durable and treated as optional throughout: a failed model call,
+ * an exhausted chain, or a model that finds nothing to flag all end the same way — no message, and
+ * the interview carries on. The answers are already stored by the time this runs (NFR-003 AC-1), so
+ * there is nothing here worth failing a request over (round 2, Д-6).
+ *
+ * It is written only where a **next round can still be asked**: the bridge's job is to say what the
+ * next round will probe, and a stage whose budget is spent has no next round to describe. That is
+ * also what keeps it out of the way at the end of a stage, where the panel is already explaining
+ * that questioning has finished.
+ *
+ * Persisted as an ordinary feed message at the position it was written, like a chat turn — the
+ * projection reads both from the same table and neither needed a block kind of its own.
+ */
+async function writeBridge(
+  db: SchemaDatabase,
+  scope: OwnerScope,
+  session: OwnedSession,
+  stage: AskingStage,
+  position: { stage: string; substage: string | null },
+  unmetNeeds: readonly string[],
+  /**
+   * The round just answered, in the user's own words (`question — chosen labels`).
+   *
+   * The assembled context renders answers as `stage/questionId: <option id>`, which is right for a
+   * document generator — it is reading facts — and wrong for this one, which is asked to refer to
+   * the person's choices *in their own words*. Given ids it says «you chose solo-devs», which is
+   * our slug rather than anything they read. So the card path hands the labels it already computed
+   * for the summary, and they replace the id-shaped rendering for this call only.
+   */
+  highlights: readonly string[] = [],
+): Promise<void> {
+  const agent = createBridgeAgent(createDefaultAdapter(undefined, { modelId: session.modelId }));
+
+  let comment: string | null;
+
+  try {
+    const collected = await collectContextSources(db, scope, {
+      sessionId: session.id,
+      projectId: session.projectId,
+      initialPrompt: session.initialPrompt,
+    });
+
+    comment = await agent.write({
+      sources:
+        highlights.length === 0
+          ? collected.sources
+          : {
+              ...collected.sources,
+              answers: highlights.map((line, index) => ({
+                stage,
+                roundNumber: index + 1,
+                questionId: null,
+                selectedOptions: [],
+                freeText: line,
+              })),
+            },
+      unmetNeeds,
+      contentLanguage: session.contentLanguage,
+      runId: randomUUID(),
+    });
+  } catch (error) {
+    if (!(error instanceof AllProvidersFailedError)) throw error;
+    comment = null;
+  }
+
+  if (comment === null) return;
+
+  await createSessionMessageRepository(db).append({
+    sessionId: session.id,
+    role: 'assistant',
+    origin: 'bridge',
+    stage: position.stage,
+    substage: position.substage,
+    body: comment,
+  });
+
+  // Server-side only: a bridge that is written on every round and never appears is a defect that
+  // otherwise shows up as "the model is quiet today".
+  console.info('interview bridge written', { stage, length: comment.length });
 }
 
 /** The round named by the body, provably belonging to this session and currently pending. */
@@ -390,6 +477,14 @@ export async function POST(
       return jsonResponse({ kind: 'limit', unmetNeeds: unmetNow, summaryPersisted });
     }
 
+    /*
+     * The bridge, before the follow-up it introduces (task 132). Ordering matters here in a way it
+     * does not on the card path: this branch drafts the next round in the same request, so a
+     * comment written afterwards would be timestamped after the round it is supposed to precede,
+     * and the feed orders by timestamp.
+     */
+    await writeBridge(db, scope, session, stage, position, unmetNow);
+
     const nextRoundNumber = round.roundNumber + 1;
     const agent = createInterviewAgent(
       createDefaultAdapter(undefined, { modelId: session.modelId }),
@@ -489,6 +584,24 @@ export async function POST(
   const freshState = await workflowStateRepository.find(session.id);
   if (freshState !== null && pendingRoundId(freshState.pendingAction) === round.id) {
     await workflowStateRepository.setPendingAction(session.id, null, freshState.version);
+  }
+
+  /*
+   * The bridge to the next round (task 132). Everything above is persisted; this is prose about it,
+   * and it is written only where the stage may still ask.
+   */
+  const afterCard = await assembleWorkflowSnapshot(db, session.id, snapshotOptions);
+
+  if (afterCard !== null && canAskAnotherRound(afterCard.snapshot, stage).allowed) {
+    await writeBridge(
+      db,
+      scope,
+      session,
+      stage,
+      position,
+      unmetNeedNames(afterCard.snapshot, stage),
+      highlightAnswers(set, matched.items),
+    );
   }
 
   await projectRepository.touch(scope, session.projectId);

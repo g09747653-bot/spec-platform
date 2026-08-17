@@ -23,10 +23,17 @@ export function substageLabel(substage: string | null): string | null {
   return isSubstage(substage) ? SUBSTAGE_LABELS[substage] : substage;
 }
 
-/** `Constitution · Collecting`, or just `Interview` where a stage has no substages. */
-export function positionLabel(position: StagePosition): string {
+/**
+ * `Constitution · Collecting`, or just `Interview` where a stage has no substages.
+ *
+ * The stage half is the methodology's own name for the position (task 132; row `1.4-6`), so the
+ * chip and the step pill above it print the same word — «Proposal · Collecting» under brownfield,
+ * «Specify · Generating» under SpecKit. The substage half stays canonical: `collect` is *Collecting*
+ * in every methodology, because it is a property of the machine rather than of the workflow.
+ */
+export function positionLabel(position: StagePosition, methodologyId?: string | null): string {
   const substage = substageLabel(position.substage);
-  const stage = stageLabel(position.stage);
+  const stage = stageLabel(position.stage, methodologyId, position.substage);
 
   return substage === null ? stage : `${stage} · ${substage}`;
 }

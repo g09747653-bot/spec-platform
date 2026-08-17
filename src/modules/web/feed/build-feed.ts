@@ -1,4 +1,4 @@
-import { methodologyConfig } from '@/modules/methodologies';
+import { bundlePlan, methodologyConfig } from '@/modules/methodologies';
 import {
   isSpecStage,
   positionKey,
@@ -6,8 +6,9 @@ import {
   type StagePosition,
 } from '@/modules/workflow/model/stages';
 
-import { specPath } from './labels';
+import { bundleSlug, specPath } from './labels';
 import type {
+  BundleBlock,
   CompletionBlock,
   DocumentBlock,
   Feed,
@@ -61,11 +62,12 @@ const KIND_RANK: Record<FeedBlock['kind'], number> = {
   round: 1,
   message: 2,
   transition: 3,
-  generation: 4,
-  document: 5,
-  review: 6,
-  proposal: 7,
-  completion: 8,
+  bundle: 4,
+  generation: 5,
+  document: 6,
+  review: 7,
+  proposal: 8,
+  completion: 9,
 };
 
 function compare(a: FeedBlock, b: FeedBlock): number {
@@ -111,6 +113,8 @@ function evidencedPosition(block: FeedBlock): StagePosition | null {
       return { stage: 'complete', substage: null };
     case 'transition':
     case 'proposal':
+    case 'bundle':
+      // `bundle` is emitted by the chip pass at the transition it belongs to, already positioned.
       return null;
   }
 }
@@ -336,6 +340,32 @@ function revisionNoteBlocks(source: FeedSource): MessageBlock[] {
 }
 
 /**
+ * The conversation's own turns — free chat and the analytical bridge (task 132).
+ *
+ * The last of the feed's sources, and the only one written *for* the feed. Everything else here
+ * projects a row that exists because the workflow needed it; a chat exchange and a bridge exist
+ * because somebody said something, and until M11п the first of them was thrown away on reload
+ * (checklist row `1.2-4`) and the second did not exist at all (`1.2-3`).
+ *
+ * `positionRecorded` is what stops the chip pass below from overwriting the position the row
+ * carries. A message knows where it was written; nothing else here does.
+ */
+function messageBlocks(source: FeedSource): MessageBlock[] {
+  return source.messages.map((message) => ({
+    kind: 'message',
+    id: `message:${message.messageId}`,
+    role: message.role,
+    stage: message.stage,
+    substage: message.substage,
+    at: message.createdAt,
+    origin: message.origin,
+    text: message.body,
+    streaming: false,
+    positionRecorded: true,
+  }));
+}
+
+/**
  * Proposals, grouped into the cards a person decides on (task 118).
  *
  * A cross-file edit is stored as one row per file — that is what makes it applicable atomically and
@@ -481,6 +511,54 @@ function computeTail(source: FeedSource, blocks: readonly FeedBlock[]): FeedTail
   return { kind: 'open' };
 }
 
+/** One line of plain text, collapsed and clipped — what `data-msg-snippet` carries. */
+function gist(text: string): string {
+  const collapsed = text.replace(/\s+/g, ' ').trim();
+
+  return collapsed.length <= SNIPPET_CHARS
+    ? collapsed
+    : `${collapsed.slice(0, SNIPPET_CHARS - 1)}…`;
+}
+
+const SNIPPET_CHARS = 120;
+
+/**
+ * What a block says, in one line (task 134; row `1.1-3`).
+ *
+ * Every kind answers, because "each message carries a snippet" is the reference's claim and a card
+ * is a message here too. What each one answers is the thing a reader scanning the conversation
+ * would use to recognise it: prose gives its opening words, a round its first question, a card the
+ * file it is about, a board its verdict.
+ */
+function snippetOf(block: FeedBlock, source: FeedSource): string {
+  switch (block.kind) {
+    case 'seed':
+      return gist(block.prompt);
+    case 'message':
+      return gist(block.text);
+    case 'round':
+      return gist(
+        `Round ${String(block.roundNumber)} — ${block.questions[0]?.text ?? 'no questions'}`,
+      );
+    case 'transition':
+      return gist(`${positionKey(block.from)} → ${positionKey(block.to)}`);
+    case 'bundle':
+      return gist(`Project bundle created: ${block.bundleName}`);
+    case 'generation':
+      return gist(`Drafting ${block.stage} — attempt ${String(block.attempt)}, ${block.status}`);
+    case 'document':
+      return gist(`${block.fileName} — Rev ${String(block.revisionNumber)}`);
+    case 'review':
+      return gist(
+        `${block.outcome === 'pass' ? 'Pass' : 'Needs revision'} — ${block.summary ?? `${String(block.items.length)} points`}`,
+      );
+    case 'proposal':
+      return gist(block.instruction);
+    case 'completion':
+      return gist(`Session completed: ${source.session.projectName}`);
+  }
+}
+
 export function buildFeed(source: FeedSource): Feed {
   const unordered: FeedBlock[] = [
     seedBlock(source),
@@ -490,6 +568,7 @@ export function buildFeed(source: FeedSource): Feed {
     ...reviewBlocks(source),
     ...revisionNoteBlocks(source),
     ...proposalBlocks(source),
+    ...messageBlocks(source),
   ];
 
   const summary = summaryBlock(source);
@@ -516,19 +595,65 @@ export function buildFeed(source: FeedSource): Feed {
    * emits a chip wherever the evidenced position changes, and it stamps every block — including the
    * ones that evidence nothing — with the position it belongs to. A chat reply typed during a review
    * therefore carries `review` without anyone having to remember to stamp it (task 109).
+   *
+   * **Unless the block recorded its own** (task 132). A persisted message carries the position it
+   * was written at, and the running position is only the same thing while the walk happens to be
+   * there: after a request-changes the session goes back to `generate`, after sealing to `complete`,
+   * and a stamp applied here would rewrite history to match the present. So a block that says its
+   * position is recorded keeps it — which is what makes `data-msg-stage` answer "what was the
+   * session doing when this was written?", the question `feed-item.tsx` says it answers.
    */
   const blocks: FeedBlock[] = [];
   let current = START;
+
+  /*
+   * «Project bundle created» — the moment the session stops being an interview (task 133; row
+   * `1.2-5`; Эталон §1.2).
+   *
+   * Derived, like everything else here: leaving `interview` is *when* the bundle comes into
+   * existence, because that is when the first document acquires somewhere to be written. There is
+   * no bundle row to project — the name is computed from the project (labels.ts) — so the event is
+   * emitted wherever the evidence for the crossing is, which is **either** kind of chip: the one a
+   * later block evidences, or the tail chip into a stage nothing has happened in yet. A session
+   * that has this second only just proceeded, and that is exactly when the reference shows it.
+   */
+  const crossing = (from: StagePosition, to: StagePosition, at: string): BundleBlock | null =>
+    from.stage === 'interview' && to.stage !== 'interview'
+      ? {
+          kind: 'bundle',
+          id: 'bundle-created',
+          role: 'system',
+          stage: to.stage,
+          substage: to.substage,
+          at,
+          bundleName: bundleSlug(source.session.projectName),
+          /*
+           * The **default-mode** plan (task 135 walk finding). `bundleFileNames` answers "every file
+           * this bundle may ever contain", which includes the optional Quality stage — so the feed
+           * announced five files at the moment the export panel beside it promised four. What the
+           * session is about to write is what a person is being told here.
+           */
+          fileNames: bundlePlan(methodologyConfig(source.session.methodologyId), 'default').map(
+            (entry) => entry.fileName,
+          ),
+        }
+      : null;
 
   for (const block of ordered) {
     const evidenced = evidencedPosition(block);
 
     if (evidenced !== null && !samePosition(evidenced, current)) {
       blocks.push(transitionBlock(current, evidenced, block.id, block.at));
+
+      const created = crossing(current, evidenced, block.at);
+      if (created !== null) blocks.push(created);
+
       current = evidenced;
     }
 
-    blocks.push({ ...block, stage: current.stage, substage: current.substage });
+    const recorded = block.kind === 'message' && block.positionRecorded === true;
+
+    blocks.push(recorded ? block : { ...block, stage: current.stage, substage: current.substage });
   }
 
   /*
@@ -541,13 +666,24 @@ export function buildFeed(source: FeedSource): Feed {
 
   if (!samePosition(position, current)) {
     const last = blocks[blocks.length - 1];
-    blocks.push(transitionBlock(current, position, 'tail', last?.at ?? source.session.createdAt));
+    const at = last?.at ?? source.session.createdAt;
+
+    blocks.push(transitionBlock(current, position, 'tail', at));
+
+    const created = crossing(current, position, at);
+    if (created !== null) blocks.push(created);
   }
 
+  /*
+   * The snippet, last (task 134). After the chip pass, because a block's stage is settled by then
+   * and a transition's snippet names both ends of a move the pass is what decides.
+   */
+  const described = blocks.map((block) => ({ ...block, snippet: snippetOf(block, source) }));
+
   return {
-    blocks,
+    blocks: described,
     position,
-    tail: computeTail(source, blocks),
+    tail: computeTail(source, described),
     revisionOwed: computeRevisionOwed(source),
   };
 }

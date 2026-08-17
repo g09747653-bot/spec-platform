@@ -27,6 +27,8 @@ export interface ChatTurn {
   text: string;
   /** True while this turn is still being written into the feed. */
   streaming?: boolean;
+  /** The persisted row this turn became (task 132) — set once the server reports it. */
+  messageId?: string;
 }
 
 export interface ChatDecisionState {
@@ -56,20 +58,41 @@ export function useChatDecision(sessionId: string) {
     });
   }
 
-  /** Replaces the streamed turn with the server's own complete text, and settles it. */
-  function settle(reply: string | undefined): void {
+  /**
+   * Replaces the streamed turn with the server's own complete text, and settles it.
+   *
+   * `messageIds` are the rows the server persisted, in order — the user's turn, then the reply
+   * (task 132). They are stamped onto the local turns here so that the next render, which arrives
+   * with those same rows projected into the feed, can recognise the local copies and drop them.
+   * Without the ids the two would be indistinguishable and every exchange would show twice.
+   */
+  function settle(reply: string | undefined, messageIds: readonly string[] | undefined): void {
+    const [userId, assistantId] = messageIds ?? [];
+
     setTurns((previous) => {
       const last = previous[previous.length - 1];
       const streaming = last?.role === 'assistant' && last.streaming === true;
+      const settled = streaming ? previous.slice(0, -1) : previous;
 
-      if (reply === undefined) {
-        // A decision was applied: there is no answer, so an unfinished streamed turn is dropped.
-        return streaming ? previous.slice(0, -1) : previous;
-      }
+      // The user's turn is the last one that is not the streaming reply; it is the message the
+      // server stored first, so it takes the first id.
+      const stamped = settled.map((turn, index) =>
+        index === settled.length - 1 && turn.role === 'user' && userId !== undefined
+          ? { ...turn, messageId: userId }
+          : turn,
+      );
 
-      const settled: ChatTurn = { role: 'assistant', text: reply, streaming: false };
+      if (reply === undefined) return stamped;
 
-      return streaming ? [...previous.slice(0, -1), settled] : [...previous, settled];
+      return [
+        ...stamped,
+        {
+          role: 'assistant' as const,
+          text: reply,
+          streaming: false,
+          ...(assistantId === undefined ? {} : { messageId: assistantId }),
+        },
+      ];
     });
   }
 
@@ -122,17 +145,22 @@ export function useChatDecision(sessionId: string) {
       // No result event means the stream ended before the server had an answer — a dropped
       // connection, not a decision. The card is untouched either way; say so and stop.
       if (outcome === null) {
-        settle(undefined);
+        settle(undefined, undefined);
         setError(FAILURE);
         return;
       }
 
-      settle(outcome.reply);
+      settle(outcome.reply, outcome.messageIds);
 
-      // Only an applied decision changed persisted state; an answer changed nothing to refresh.
-      if (outcome.applied !== null) router.refresh();
+      /*
+       * **Always refresh** (task 132). It used to be "only an applied decision changed persisted
+       * state"; an answer now does too — both halves of the exchange are rows of `session_messages`
+       * — so the page re-reads and the persisted blocks replace the local turns. The turns stay on
+       * screen until they do, because they carry the ids of the very rows that are arriving.
+       */
+      router.refresh();
     } catch {
-      settle(undefined);
+      settle(undefined, undefined);
       setError(FAILURE);
     } finally {
       setBusy(false);

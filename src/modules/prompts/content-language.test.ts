@@ -39,6 +39,9 @@ const VARIABLES: { [Id in PromptId]: PromptVariables[Id] } = {
     satisfiedNeeds: '(none)',
     unmetNeeds: '(none declared yet)',
     replyBlock: '',
+    minOptions: '2',
+    maxOptions: '8',
+    maxQuestions: '5',
   },
   'review.board.v2': { specType: 'constitution', specContent: '# Constitution', verification: '' },
   'revision.note.v1': {
@@ -70,6 +73,10 @@ const VARIABLES: { [Id in PromptId]: PromptVariables[Id] } = {
   'interview.summary.skeleton.v1': {
     initialPrompt: 'A tool for writing specs.',
     answered: '- audience: solo developers',
+  },
+  'interview.bridge.v1': {
+    context: '## Answers given during the interview\n- interview/q-audience: solo developers',
+    unmetNeeds: 'budget',
   },
 };
 

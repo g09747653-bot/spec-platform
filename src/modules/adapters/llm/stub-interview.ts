@@ -21,6 +21,7 @@ interface StubOption {
   label: string;
   description?: string;
   recommended?: boolean;
+  tags?: string[];
 }
 
 interface StubQuestion {
@@ -50,6 +51,18 @@ const recommend = (id: string, label: string, description: string): StubOption =
   recommended: true,
 });
 
+/**
+ * An option carrying tag chips (task 134; row `1.1-6`).
+ *
+ * One option of the curriculum has them, for the same reason exactly one carries a recommendation:
+ * the chips have to be provably absent where the model supplied none, and a fixture that tagged
+ * everything could not show that.
+ */
+const tagged = (id: string, label: string, description: string, tags: string[]): StubOption => ({
+  ...option(id, label, description),
+  tags,
+});
+
 function roundOne(stage: string): StubQuestion[] {
   if (stage === 'interview') {
     return [
@@ -58,7 +71,10 @@ function roundOne(stage: string): StubQuestion[] {
         text: 'Who is this primarily for?',
         type: 'single',
         options: [
-          option('solo-devs', 'Solo developers and indie hackers', 'One person, many projects'),
+          tagged('solo-devs', 'Solo developers and indie hackers', 'One person, many projects', [
+            'fastest to ship',
+            'no team setup',
+          ]),
           recommend('teams', 'Small development teams', 'Two to ten people sharing a backlog'),
           option('founders', 'Non-technical founders', 'People who describe, but do not build'),
         ],
@@ -230,5 +246,38 @@ export function stubSessionSummaryDocument(topic: string): string {
     `Building: ${headline}.`,
     'Target users and the core problem were captured in the interview;',
     'constraints and success criteria are recorded with the answers.',
+  ].join(' ');
+}
+
+/**
+ * The analytical bridge (task 132; Эталон §1.2).
+ *
+ * Recognised by the sentinel the prompt asks a declining model to answer with, which appears in no
+ * other asset. The stub never declines: a walk that has to *see* a bridge cannot assert on one the
+ * double decided to skip, and the declining branch is exercised in the agent's own unit test.
+ */
+export function looksLikeInterviewBridgePrompt(prompt: string): boolean {
+  return prompt.includes('NOTHING TO FLAG');
+}
+
+/**
+ * The stub's comment between two rounds — deterministic, visibly synthetic, and **naming an answer**.
+ *
+ * Naming one matters: the acceptance criterion for the bridge is that it builds on what was chosen,
+ * and a canned sentence that could have been written before the interview started would let a walk
+ * pass while the prompt was going out empty.
+ */
+export function stubInterviewBridgeDocument(prompt: string): string {
+  /*
+   * The first answered line of the assembled context, whichever shape it takes: the card path hands
+   * the bridge «question — chosen labels» (task 135), the reply path hands the reply itself.
+   */
+  const chosen =
+    /^- .*?: (.+)$/m.exec(prompt)?.[1]?.split(';')[0]?.trim() ?? 'what you have chosen so far';
+
+  return [
+    `Noted: you chose ${chosen}.`,
+    'That sits awkwardly beside the rest of this round, so the next questions will pin down which of',
+    'the two matters more. (Produced by the deterministic stub, not by a model.)',
   ].join(' ');
 }

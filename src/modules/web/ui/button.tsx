@@ -17,6 +17,14 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary: 'bg-primary text-primary-foreground hover:opacity-90',
+        /*
+         * The brand gradient, for the one control the reference paints with it — Send (task 133;
+         * row `1.5-2`; Эталон §1.5). Both stops are contrast-checked against the label in
+         * `brand.test.ts`, which is why the far stop is `brand-strong` rather than the mark's
+         * brighter `brand-accent`.
+         */
+        brand:
+          'bg-gradient-to-r from-brand to-brand-strong text-primary-foreground hover:opacity-90',
         secondary: 'bg-surface text-foreground border border-border-subtle hover:bg-background',
         ghost: 'text-foreground hover:bg-background',
         danger: 'bg-danger text-primary-foreground hover:opacity-90',

@@ -38,6 +38,13 @@ export interface ExportPanelProps {
   files: readonly ExportFileModel[];
   omittedFiles: readonly string[];
   mode: string;
+  /**
+   * How many files this **methodology's** bundle plans to hold (task 133; row `1.4-8`).
+   *
+   * Included and omitted together — the plan, not the progress — because the sentence describes
+   * what a default-mode export *is*, and that does not change as documents are approved.
+   */
+  planned: number;
 }
 
 /**
@@ -55,7 +62,7 @@ type CopyState =
   | { kind: 'manual'; specFileId: string; fileName: string; content: string }
   | { kind: 'failed'; specFileId: string };
 
-export function ExportPanel({ projectId, files, omittedFiles, mode }: ExportPanelProps) {
+export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: ExportPanelProps) {
   const [manifest, setManifest] = useState<ExportManifest | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -137,10 +144,18 @@ export function ExportPanel({ projectId, files, omittedFiles, mode }: ExportPane
     <Card data-testid="export-panel">
       <CardHeader>
         <CardTitle>Export the bundle</CardTitle>
+        {/*
+          The count comes from the plan, not from a literal (task 133; row `1.4-8`).
+
+          «the four parity files» was printed for every methodology, so a brownfield bundle of three
+          announced four of them — and «parity» is our word for our baseline, not something a user
+          of this product has any reason to know. The list below was always derived correctly from
+          `bundlePlan`; only the sentence above it was guessing.
+        */}
         <CardDescription>
           Mode: <span data-testid="export-mode">{shown.mode}</span> —{' '}
           {shown.mode === 'default'
-            ? 'the four parity files, each at its most recent pre-enrichment revision.'
+            ? `this workflow's ${String(planned)} spec ${planned === 1 ? 'file' : 'files'}, each at its most recent pre-enrichment revision.`
             : 'the enriched files plus quality.md.'}
         </CardDescription>
       </CardHeader>

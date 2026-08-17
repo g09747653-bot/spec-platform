@@ -7,6 +7,7 @@ import { appendChatTurns } from './chat-turns';
 import type { FeedBlock, FeedQuestion } from './model';
 import type {
   FeedSource,
+  FeedSourceMessage,
   FeedSourceProposal,
   FeedSourceReview,
   FeedSourceRevision,
@@ -34,6 +35,10 @@ const T = {
   review: '2026-08-15T09:07:00.000Z',
   decided: '2026-08-15T09:08:00.000Z',
   revision2: '2026-08-15T09:09:00.000Z',
+  /** Task 132: a bridge is written when a round is answered, before the next one is presented. */
+  bridge: '2026-08-15T09:02:30.000Z',
+  /** A chat turn, after everything else — it is the tail of the conversation. */
+  chat: '2026-08-15T09:10:00.000Z',
 } as const;
 
 const QUESTIONS: readonly FeedQuestion[] = [
@@ -70,6 +75,7 @@ function source(overrides: Partial<FeedSource> = {}): FeedSource {
     revisions: overrides.revisions ?? [],
     reviews: overrides.reviews ?? [],
     proposals: overrides.proposals ?? [],
+    messages: overrides.messages ?? [],
   };
 }
 
@@ -241,12 +247,45 @@ describe('block kinds', () => {
         'round',
         'message',
         'transition',
+        // Task 133, row `1.2-5`: leaving the interview is when the bundle comes into existence.
+        'bundle',
         'generation',
         'document',
         'review',
         'proposal',
       ]),
     );
+  });
+
+  /**
+   * «Project bundle created», at the one transition out of the entry stage (task 133; Эталон §1.2).
+   *
+   * Derived rather than stored, so the assertions are about *where* it is: after the interview's
+   * last round, before the first thing the next stage does, and exactly once however many stages
+   * the session goes on to visit.
+   */
+  it('marks the bundle’s creation once, where the interview ends', () => {
+    const feed = buildFeed(walkedToReview());
+    const order = ids(feed.blocks);
+    const bundle = feed.blocks.filter((block) => block.kind === 'bundle');
+
+    expect(bundle).toHaveLength(1);
+    expect(bundle[0]).toMatchObject({
+      kind: 'bundle',
+      bundleName: 'local-voice-assistant',
+      // The default-mode plan: the optional Quality stage is not something this session will write,
+      // and the export panel beside the feed counts four (task 135 walk finding).
+      fileNames: ['constitution.md', 'requirements.md', 'solution.md', 'tasks.md'],
+    });
+
+    expect(order.indexOf('bundle-created')).toBeGreaterThan(order.indexOf('round:r1'));
+    expect(order.indexOf('bundle-created')).toBeLessThan(order.indexOf('run:run-1'));
+  });
+
+  it('marks nothing while the session is still in the interview', () => {
+    const feed = buildFeed(source({ rounds: [round({ answeredAt: T.answered1 })] }));
+
+    expect(feed.blocks.some((block) => block.kind === 'bundle')).toBe(false);
   });
 
   /**
@@ -661,5 +700,218 @@ describe('free chat rides on the tail', () => {
     const feed = buildFeed(walkedToReview());
 
     expect(appendChatTurns(feed, [])).toBe(feed);
+  });
+
+  /**
+   * Task 132 — the optimistic turn steps aside for the persisted one.
+   *
+   * Once the exchange is a row, the next render brings it back through the projection, and the
+   * local copy has to stop being drawn or the sentence appears twice for the rest of the visit.
+   * The id the server handed back is what makes that recognisable.
+   */
+  it('drops a turn the feed already holds as a persisted message', () => {
+    const feed = buildFeed({
+      ...walkedToReview(),
+      messages: [
+        {
+          messageId: 'm1',
+          role: 'user',
+          origin: 'chat',
+          stage: 'constitution',
+          substage: 'review',
+          body: 'what should I pick?',
+          createdAt: T.chat,
+        },
+      ],
+    });
+
+    const withLocal = appendChatTurns(feed, [
+      { role: 'user', text: 'what should I pick?', messageId: 'm1' },
+    ]);
+
+    expect(withLocal).toBe(feed);
+    expect(withLocal.blocks.filter((block) => block.id === 'message:m1')).toHaveLength(1);
+  });
+});
+
+/**
+ * Task 132 — the conversation's own turns (checklist rows `1.2-3`, `1.2-4`).
+ *
+ * Two claims, and both are about *when*: a persisted message lands where its timestamp puts it, and
+ * carries the position it was written at rather than the one the walk is standing in when it gets
+ * there.
+ */
+describe('persisted messages (task 132)', () => {
+  const message = (over: Partial<FeedSourceMessage> = {}): FeedSourceMessage => ({
+    messageId: 'm1',
+    role: 'user',
+    origin: 'chat',
+    stage: 'constitution',
+    substage: 'review',
+    body: 'what should I pick?',
+    createdAt: T.chat,
+    ...over,
+  });
+
+  it('keeps the position the message recorded, on a session that has since moved on', () => {
+    const walked = walkedToReview();
+
+    const feed = buildFeed({
+      ...walked,
+      // The session sealed after the question was asked — the exact case the red-team screenshotted.
+      session: { ...walked.session, position: { stage: 'complete', substage: null } },
+      messages: [message()],
+    });
+
+    expect(feed.blocks.find((block) => block.id === 'message:m1')).toMatchObject({
+      kind: 'message',
+      origin: 'chat',
+      role: 'user',
+      stage: 'constitution',
+      substage: 'review',
+    });
+  });
+
+  it('orders a bridge between the round it follows and the round it introduces', () => {
+    const feed = buildFeed(
+      source({
+        rounds: [
+          round({ answeredAt: T.answered1 }),
+          round({ roundId: 'r2', roundNumber: 2, presentedAt: T.round2 }),
+        ],
+        messages: [
+          message({
+            messageId: 'b1',
+            role: 'assistant',
+            origin: 'bridge',
+            stage: 'interview',
+            substage: null,
+            body: 'You want it offline and you want it to search the web — those pull apart.',
+            createdAt: T.bridge,
+          }),
+        ],
+      }),
+    );
+
+    const order = ids(feed.blocks);
+
+    expect(order.indexOf('message:b1')).toBeGreaterThan(order.indexOf('round:r1'));
+    expect(order.indexOf('message:b1')).toBeLessThan(order.indexOf('round:r2'));
+  });
+
+  it('renders a bridge as assistant prose, so the feed needs no block kind for it', () => {
+    const feed = buildFeed(
+      source({
+        messages: [
+          message({
+            messageId: 'b1',
+            role: 'assistant',
+            origin: 'bridge',
+            stage: 'interview',
+            substage: null,
+          }),
+        ],
+      }),
+    );
+
+    expect(feed.blocks.find((block) => block.id === 'message:b1')).toMatchObject({
+      kind: 'message',
+      origin: 'bridge',
+      role: 'assistant',
+      streaming: false,
+    });
+  });
+});
+
+/**
+ * Task 134 — `data-msg-snippet`, the fifth of the reference's navigation attributes (row `1.1-3`).
+ *
+ * The red-team's finding about this row was not really about the missing attribute: it was that the
+ * walk had checked the *names* of four attributes on one block out of nine kinds. So the assertion
+ * here is per kind, and it is about the value.
+ */
+describe('every block says what it is (task 134)', () => {
+  it('gives each kind a one-line gist', () => {
+    const feed = buildFeed({
+      ...walkedToReview(),
+      proposals: [proposal()],
+      messages: [
+        {
+          messageId: 'm1',
+          role: 'user',
+          origin: 'chat',
+          stage: 'constitution',
+          substage: 'review',
+          body: 'what should I pick?',
+          createdAt: T.chat,
+        },
+      ],
+    });
+
+    const snippet = (id: string): string =>
+      feed.blocks.find((block) => block.id === id)?.snippet ?? '';
+
+    expect(snippet('seed')).toBe('A voice assistant that runs on my laptop');
+    expect(snippet('message:m1')).toBe('what should I pick?');
+    expect(snippet('round:r1')).toBe('Round 1 — Who is this for?');
+    expect(snippet('bundle-created')).toBe('Project bundle created: local-voice-assistant');
+    expect(snippet('revision:rev-1')).toBe('constitution.md — Rev 1');
+    expect(snippet('review:review-1')).toContain('Needs revision');
+    expect(snippet('proposal:proposal-1')).toBe('Tighten the scope section');
+
+    // Every block carries one — the claim is "each message", not "most of them".
+    for (const block of feed.blocks) {
+      expect(block.snippet, `${block.id} has no snippet`).not.toBe('');
+    }
+  });
+
+  it('collapses whitespace and clips a long one', () => {
+    const feed = buildFeed(
+      source({
+        session: {
+          ...source().session,
+          initialPrompt: `a\n\n  very ${'long '.repeat(60)}prompt`,
+        },
+      }),
+    );
+
+    const seed = feed.blocks.find((block) => block.id === 'seed');
+
+    expect(seed?.snippet).toMatch(/^a very long/);
+    expect(seed?.snippet).toHaveLength(120);
+    expect(seed?.snippet?.endsWith('…')).toBe(true);
+  });
+});
+
+/**
+ * The bundle event at the **tail** crossing (task 135 walk finding).
+ *
+ * A session that has only just pressed «Proceed» has no block evidencing the new position yet, so
+ * the only chip is the tail one — and the first edition of the event was emitted inside the block
+ * loop, which meant the moment the reference actually shows it was the one moment ours did not.
+ * The parity walk found this on its first run.
+ */
+describe('the bundle event and the tail chip (task 133)', () => {
+  it('marks the crossing when nothing has happened in the new stage yet', () => {
+    const feed = buildFeed(
+      source({
+        session: {
+          ...source().session,
+          position: { stage: 'constitution', substage: 'collect' },
+        },
+        rounds: [round({ answeredAt: T.answered1 })],
+      }),
+    );
+
+    const order = ids(feed.blocks);
+
+    expect(feed.blocks.filter((block) => block.kind === 'bundle')).toHaveLength(1);
+    expect(order.indexOf('bundle-created')).toBeGreaterThan(order.indexOf('round:r1'));
+  });
+
+  it('still marks it exactly once when the stage has since produced blocks', () => {
+    expect(
+      buildFeed(walkedToReview()).blocks.filter((block) => block.kind === 'bundle'),
+    ).toHaveLength(1);
   });
 });

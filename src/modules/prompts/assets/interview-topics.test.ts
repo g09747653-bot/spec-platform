@@ -62,6 +62,10 @@ describe('interview topics (round 2, Д-3)', () => {
   describe('the assembled prompt', () => {
     const prompt = (stage: string) =>
       interviewQuestionsPrompt({
+        // Literals, not the schema's constants: `prompts` may not import `agents` (A1), and what
+        // this suite asserts is the topic block, not the round's size.
+        questionsPerRound: { max: 5 },
+        optionsPerQuestion: { min: 2, max: 8 },
         stage,
         audience: 'non-technical',
         roundNumber: 1,
@@ -104,6 +108,10 @@ describe('interview topics (round 2, Д-3)', () => {
       expect(prompt('solution').system).toContain('They are not technical');
 
       const technical = interviewQuestionsPrompt({
+        // Literals, not the schema's constants: `prompts` may not import `agents` (A1), and what
+        // this suite asserts is the topic block, not the round's size.
+        questionsPerRound: { max: 5 },
+        optionsPerQuestion: { min: 2, max: 8 },
         stage: 'solution',
         audience: 'technical',
         roundNumber: 1,
@@ -122,6 +130,10 @@ describe('interview topics (round 2, Д-3)', () => {
 
     it('falls back to the plain register for a profile it does not recognise', () => {
       const unknown = interviewQuestionsPrompt({
+        // Literals, not the schema's constants: `prompts` may not import `agents` (A1), and what
+        // this suite asserts is the topic block, not the round's size.
+        questionsPerRound: { max: 5 },
+        optionsPerQuestion: { min: 2, max: 8 },
         stage: 'solution',
         audience: 'martian',
         roundNumber: 1,
@@ -136,6 +148,10 @@ describe('interview topics (round 2, Д-3)', () => {
 
     it('still carries the needs bookkeeping the gates depend on', () => {
       const assembled = interviewQuestionsPrompt({
+        // Literals, not the schema's constants: `prompts` may not import `agents` (A1), and what
+        // this suite asserts is the topic block, not the round's size.
+        questionsPerRound: { max: 5 },
+        optionsPerQuestion: { min: 2, max: 8 },
         stage: 'requirements',
         audience: 'non-technical',
         roundNumber: 2,

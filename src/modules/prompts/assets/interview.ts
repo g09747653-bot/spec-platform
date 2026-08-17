@@ -56,6 +56,7 @@ export function audienceRules(audience: string): string {
 
 export const REPLY_ASSESSMENT_PROMPT_ID = 'interview.reply-assessment.skeleton.v1';
 export const SESSION_SUMMARY_PROMPT_ID = 'interview.summary.skeleton.v1';
+export const INTERVIEW_BRIDGE_PROMPT_ID = 'interview.bridge.v1';
 
 export interface InterviewQuestionsPromptInput {
   /**
@@ -85,6 +86,15 @@ export interface InterviewQuestionsPromptInput {
   /** Set when the user replied in chat instead of submitting the card — ask narrower (FR-005 AC-6). */
   freeTextReply?: string;
   /**
+   * The bounds the draft will be validated against (task 133; row `1.2-2`).
+   *
+   * Passed in rather than imported: they live in `agents/schemas/question-set.ts`, which this module
+   * may not import (A1), and the point of passing them is that the instruction and the check are the
+   * same numbers rather than two opinions about one rule.
+   */
+  questionsPerRound: { readonly max: number };
+  optionsPerQuestion: { readonly min: number; readonly max: number };
+  /**
    * The session's content language (У-1; task 108) — an ISO 639-1 code, or `null`/absent when
    * detection could not tell. Forwarded to the single assembly point, never acted on here.
    */
@@ -107,6 +117,15 @@ export function interviewQuestionsPrompt(input: InterviewQuestionsPromptInput): 
       summaryBlock: input.summary === null ? '' : `\nSession summary so far:\n${input.summary}`,
       satisfiedNeeds: input.satisfiedNeeds.length > 0 ? input.satisfiedNeeds.join(', ') : '(none)',
       unmetNeeds: input.unmetNeeds.length > 0 ? input.unmetNeeds.join(', ') : '(none declared yet)',
+      /*
+       * The round's size, from the schema that enforces it (task 133; row `1.2-2`).
+       *
+       * `prompts` may import `specs` and nothing else (constitution A1), so the numbers arrive from
+       * the caller rather than being read here — the agent owns the schema and is allowed to know it.
+       */
+      minOptions: String(input.optionsPerQuestion.min),
+      maxOptions: String(input.optionsPerQuestion.max),
+      maxQuestions: String(input.questionsPerRound.max),
       replyBlock:
         input.freeTextReply === undefined
           ? ''
@@ -150,6 +169,31 @@ export function sessionSummaryPrompt(input: SessionSummaryPromptInput): Assemble
       initialPrompt: input.initialPrompt,
       answered:
         input.answeredHighlights.length > 0 ? input.answeredHighlights.join('\n') : '(nothing yet)',
+    },
+    { contentLanguage: input.contentLanguage },
+  );
+}
+
+export interface InterviewBridgePromptInput {
+  /** The assembled context: the product idea and the answers given so far (А-8). */
+  context: string;
+  unmetNeeds: readonly string[];
+  /**
+   * See `InterviewQuestionsPromptInput.contentLanguage` (У-1; task 108).
+   *
+   * Load-bearing here rather than incidental: the bridge is the interviewer speaking, and an
+   * English paragraph between two Russian rounds is exactly the reference product's own weakness
+   * that У-1 was written to beat.
+   */
+  contentLanguage?: string | null | undefined;
+}
+
+export function interviewBridgePrompt(input: InterviewBridgePromptInput): AssembledPrompt {
+  return assemblePrompt(
+    'interview.bridge.v1',
+    {
+      context: input.context,
+      unmetNeeds: input.unmetNeeds.length > 0 ? input.unmetNeeds.join(', ') : '(nothing)',
     },
     { contentLanguage: input.contentLanguage },
   );

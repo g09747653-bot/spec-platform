@@ -12,6 +12,7 @@ import { collectContextSources } from '@/modules/agents/spec/collect-context';
 import { assemblePrompt } from '@/modules/prompts';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
 import { createAttachmentRepository } from '@/modules/projects/repositories/attachments';
+import { createSessionMessageRepository } from '@/modules/projects/repositories/session-messages';
 import { createSessionRepository } from '@/modules/projects/repositories/sessions';
 import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
 import { createSpecFileRepository } from '@/modules/specs/repositories/spec-files';
@@ -365,6 +366,30 @@ export async function POST(
     });
   }
 
+  /*
+   * The position this exchange happens at, read **before** anything is dispatched (task 132).
+   *
+   * A typed decision moves the session, and a message stamped afterwards would carry the position
+   * the decision produced rather than the one the user was looking at when they wrote it. The
+   * question "what was on screen when this was asked?" has one right answer and this is where it is
+   * still true.
+   */
+  const messages = createSessionMessageRepository(db);
+  const writtenAt = await createWorkflowStateRepository(db).find(session.id);
+  const at = {
+    stage: writtenAt?.stage ?? 'interview',
+    substage: writtenAt?.substage ?? null,
+  };
+
+  const userMessage = await messages.append({
+    sessionId: session.id,
+    role: 'user',
+    origin: 'chat',
+    stage: at.stage,
+    substage: at.substage,
+    body: parsed.data.text,
+  });
+
   const pending = await currentPending(db, scope, session);
 
   /*
@@ -405,6 +430,9 @@ export async function POST(
         type: 'result',
         applied: { kind: pending.kind, action: resolution.intent.action },
         result,
+        // The sentence that decided is a turn of the conversation like any other, and it stays in
+        // the feed after a reload — the card it decided is a row too, and both are history now.
+        messageIds: [userMessage.id],
         // Re-derived after the decision, so the client learns what is pending *now* (AC-4).
         pendingAction: pendingActionOf(await currentPending(db, scope, session)),
       },
@@ -416,10 +444,8 @@ export async function POST(
    * this card cannot take from chat. Both leave the card exactly as it was, which is the abstaining
    * outcome, and both get an answer (FR-009 AC-6).
    */
-  return chatStream([], async (send) => ({
-    type: 'result',
-    applied: null,
-    reply: await answer(
+  return chatStream([], async (send) => {
+    const reply = await answer(
       db,
       scope,
       session,
@@ -429,8 +455,34 @@ export async function POST(
       (piece) => {
         send({ type: 'delta', text: piece });
       },
-    ),
-    // Unchanged, and stated so the client re-renders exactly what it had (AC-2).
-    pendingAction: pendingActionOf(pending),
-  }));
+    );
+
+    /*
+     * The answer is persisted **inside** the stream, which is the one write here that is (task 132).
+     *
+     * The rule above — every write finished before the body opens — is about the *decision*: an
+     * outcome that depends on somebody reading a response is not an outcome. This is the opposite
+     * case. The text does not exist until the model has finished writing it, and a reader who walks
+     * away costs exactly the answer, which is what P5 already accepts about a chat reply. The
+     * alternative is buffering the whole reply before sending a byte, and that is the spinner A5
+     * forbids.
+     */
+    const assistantMessage = await messages.append({
+      sessionId: session.id,
+      role: 'assistant',
+      origin: 'chat',
+      stage: at.stage,
+      substage: at.substage,
+      body: reply,
+    });
+
+    return {
+      type: 'result',
+      applied: null,
+      reply,
+      messageIds: [userMessage.id, assistantMessage.id],
+      // Unchanged, and stated so the client re-renders exactly what it had (AC-2).
+      pendingAction: pendingActionOf(pending),
+    };
+  });
 }

@@ -202,6 +202,40 @@ export function stepCoversPosition(
   return substage !== null && step.substages.some((candidate) => candidate === substage);
 }
 
+/**
+ * What **this methodology** calls a position, or `null` when its steps do not name it (task 132).
+ *
+ * D-119 said a configuration declares "how each position is called to the user", and until now only
+ * the step pills and the picker read that declaration: the proceed button, the stage chip and every
+ * card caption printed the canonical seven, so an OpenSpec session showed a pill reading «Explore»
+ * beside a button reading «Proceed to Constitution». One screen, two vocabularies — the red-team
+ * finding behind checklist row `1.4-6`.
+ *
+ * The lookup goes narrowest-first on purpose. A step that covers *part* of a stage is the most
+ * specific name the configuration has for that position — Edit's `Describe` is the `collect` of its
+ * working stage — so when a substage is supplied it wins. A step covering the whole stage answers
+ * everything else. And when the only steps naming a stage are substage-narrowed, the answer is
+ * `null` rather than the first of them: a document card in an Edit chat is about the bundle's
+ * `constitution.md`, and captioning it «Describe» would name a step that did not write it. The
+ * caller then falls back to the canonical label, which is at least true.
+ */
+export function stageNameFor(
+  config: MethodologyConfig,
+  stage: string,
+  substage: string | null = null,
+): string | null {
+  if (substage !== null) {
+    const narrowed = config.steps.find(
+      (step) => step.substages !== null && stepCoversPosition(step, stage, substage),
+    );
+    if (narrowed !== undefined) return narrowed.label;
+  }
+
+  return (
+    config.steps.find((step) => step.stage === stage && step.substages === null)?.label ?? null
+  );
+}
+
 /** The position a session on this config starts at. */
 export function configEntryPosition(config: MethodologyConfig): StagePosition {
   const first = config.stages[0];

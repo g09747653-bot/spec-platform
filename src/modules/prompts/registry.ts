@@ -91,6 +91,16 @@ export interface PromptVariables {
     satisfiedNeeds: string;
     unmetNeeds: string;
     replyBlock: string;
+    /**
+     * How large a round may be, rendered by the caller from `question-set.ts` (task 133).
+     *
+     * Supplied rather than written into the template for the same reason `requiredSections` is
+     * derived: the bound that the answer is *checked* against and the bound the model is *asked*
+     * for have to be one number, or the prompt is a second opinion nothing enforces.
+     */
+    minOptions: string;
+    maxOptions: string;
+    maxQuestions: string;
   };
   'review.board.v2': {
     /** Named in the instruction only — the review does not derive a section list (see below). */
@@ -146,6 +156,18 @@ export interface PromptVariables {
   'interview.summary.skeleton.v1': {
     initialPrompt: string;
     answered: string;
+  };
+  'interview.bridge.v1': {
+    /**
+     * The assembled context — the product idea and the answers given so far (А-8).
+     *
+     * The bridge is prose *about* what was answered, so the answers are the whole of its material;
+     * carrying them through the assembler is what makes them shrink to a small local window instead
+     * of pushing the instruction out of it.
+     */
+    context: string;
+    /** What this stage still has not established, so the bridge can say what comes next. */
+    unmetNeeds: string;
   };
 }
 
@@ -455,11 +477,20 @@ const INTERVIEW_QUESTIONS: PromptAsset = {
     '',
     'Draft the next round as JSON only — no prose, no code fence. Shape:',
     '{"stage": "<stage>", "questions": [{"id", "text", "type": "single"|"multiple",',
-    '"options": [{"id", "label", "description", "recommended?"}], "allowOther": true,',
+    '"options": [{"id", "label", "description", "recommended?", "tags?"}], "allowOther": true,',
     '"informationNeeds": ["<need>"]}]}.',
-    'Between 2 and 8 options per question; every question carries allowOther: true and names the',
-    'information needs it is meant to satisfy. Ask at most three questions in a round.',
+    /*
+     * The sizes are interpolated, not written (task 133; row `1.2-2`). "Ask at most three questions"
+     * lived here as a literal while the schema allowed five and the repair trimmed to five — three
+     * numbers for one rule, and the one the model obeyed was the one nothing enforced. The caller
+     * renders both from `question-set.ts`, which is where the rule is enforced.
+     */
+    'Between {{minOptions}} and {{maxOptions}} options per question; every question carries',
+    'allowOther: true and names the information needs it is meant to satisfy. Ask at most',
+    '{{maxQuestions}} questions in a round.',
     'Give every option a one-line "description" saying what choosing it would mean in practice.',
+    'You may add "tags": up to four one-or-two-word labels naming what an option implies — "faster",',
+    '"needs a server", "no cost". Leave them out when they would only repeat the description.',
     'Mark at most ONE option per question with "recommended": true — the one you would advise for',
     'this product — and leave the flag off entirely when no option is clearly better.',
     'Return {"stage": "<stage>", "questions": []} when nothing further is worth asking.',
@@ -492,6 +523,9 @@ const INTERVIEW_QUESTIONS: PromptAsset = {
     'satisfiedNeeds',
     'unmetNeeds',
     'replyBlock',
+    'minOptions',
+    'maxOptions',
+    'maxQuestions',
   ],
 };
 
@@ -557,6 +591,45 @@ const SESSION_SUMMARY: PromptAsset = {
 };
 
 /**
+ * The analytical bridge between two rounds (task 132; Эталон §1.2, Часть 6 слой 1).
+ *
+ * The reference product's most distinctive interview move, and the one the red-team named as a
+ * content gap rather than a cosmetic one: between rounds the interviewer stops and *thinks out
+ * loud* — it names where two answers pull against each other, where something asked for is not
+ * physically possible together with something else, and says what it will therefore probe next.
+ * That is what makes the interview feel like being interviewed rather than filling in a form.
+ *
+ * Three rules carry it, and all three are about restraint. **Say nothing when there is nothing** —
+ * an invented contradiction is worse than silence, because it teaches the reader to skim the
+ * bridges. **Quote their own words** rather than paraphrasing into our vocabulary, so the person
+ * recognises the answer being referred to. And **stay short**: this is a paragraph between two
+ * cards, not a summary — `interview.summary.skeleton.v1` already writes the summary, and a bridge
+ * that repeats it wastes the one place the interview has to sound like it is listening.
+ *
+ * It writes prose, not JSON: nothing machine-reads a bridge, so constraining it would buy nothing
+ * and cost the register. The empty answer is a literal the caller checks for and drops.
+ */
+const INTERVIEW_BRIDGE: PromptAsset = {
+  id: 'interview.bridge.v1',
+  system: [
+    'You are interviewing someone about a product they want built, and they have just answered a',
+    'round of questions. Write a SHORT comment — two or three sentences — before the next round.',
+    '',
+    'Say only what the answers themselves support: where two of their answers pull against each',
+    'other, where something they asked for is hard or impossible together with something else they',
+    'asked for, and what you will therefore ask about next. Refer to their choices in their own',
+    'words so they recognise what you mean.',
+    '',
+    'Do not summarise the interview, do not congratulate, do not list what they said back to them,',
+    'and never mention documents, specifications, sections or the process you are part of.',
+    'If the answers hold together and nothing needs flagging, reply with exactly: NOTHING TO FLAG.',
+    'Return the comment text only.',
+  ].join(' '),
+  user: ['{{context}}', '', 'Still open for this part of the interview: {{unmetNeeds}}'].join('\n'),
+  variables: ['context', 'unmetNeeds'],
+};
+
+/**
  * The Edit workflow's Review step (task 118; Эталон §1.4, §5.1).
  *
  * Its difference from `refinement.propose.v1` is the whole reason it is a separate asset: refinement
@@ -611,6 +684,7 @@ export const promptRegistry: Readonly<Record<PromptId, PromptAsset>> = Object.fr
   'methodology.classify.v1': METHODOLOGY_CLASSIFY,
   'interview.reply-assessment.skeleton.v1': REPLY_ASSESSMENT,
   'interview.summary.skeleton.v1': SESSION_SUMMARY,
+  'interview.bridge.v1': INTERVIEW_BRIDGE,
 });
 
 export const PROMPT_IDS = Object.keys(promptRegistry) as PromptId[];

@@ -160,12 +160,19 @@ export function CompletionPanel({
           data-testid="session-complete"
         >
           <p className="text-h3">Session completed</p>
+          {/*
+            Task 133, row `1.1-13`. This paragraph used to print requirement identifiers at the
+            person reading it — «no stage reopens (FR-020 AC-9)» — and the paraphrase was wrong
+            besides: AC-9 forbids every re-entry *except* the Quality one, which is the button
+            immediately below. The identifiers were the only ones anywhere in user-facing JSX, so
+            this was a leak rather than a house style. Said plainly, and true.
+          */}
           <p className="text-foreground-muted mt-1 text-sm">
             Bundle: <span data-testid="completion-bundle">{completion.bundleName}</span> —{' '}
             <span data-testid="completion-file-count">{fileCount}</span> spec{' '}
-            {fileCount === 1 ? 'file' : 'files'} generated. Every file has an approved revision and
-            the workflow is sealed here — no stage reopens (FR-020 AC-9). Keep refining any file if
-            you like: a refinement produces a new revision without moving the session (FR-020 AC-4).
+            {fileCount === 1 ? 'file' : 'files'} generated. Every file has an approved revision, and
+            the session is sealed: no stage goes back. You can still refine any file — a refinement
+            adds a new revision and leaves the session where it is.
           </p>
 
           {block.completionCount > 1 && (

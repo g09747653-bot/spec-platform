@@ -61,6 +61,15 @@
   /* The mark and the loader (task 125). */
   --palette-brand: oklch(48% 0.17 245);
   --palette-brand-accent: oklch(72% 0.15 78);
+  /*
+   * The far stop of the brand gradient behind a control (task 133; row `1.5-2`).
+   *
+   * `brand-accent` is the mark's gold and is deliberately bright; white text on it reaches 2.5:1,
+   * so a Send button painted brand → brand-accent would be the brand at the cost of the AA rule
+   * task 124 set. This is the same hue taken down to where `primary-foreground` clears 4.5:1, which
+   * is what lets the gradient exist on a control rather than only inside an SVG.
+   */
+  --palette-brand-strong: oklch(52% 0.13 78);
 }
 
 :root[data-theme='dark'] {
@@ -101,6 +110,8 @@
 
   --palette-brand: oklch(70% 0.15 245);
   --palette-brand-accent: oklch(80% 0.13 78);
+  /* In the dark theme the foreground is near-black, so the far stop stays bright — see the note above. */
+  --palette-brand-strong: oklch(80% 0.13 78);
 }
 
 /*
@@ -143,6 +154,7 @@
 
   --color-brand: var(--palette-brand);
   --color-brand-accent: var(--palette-brand-accent);
+  --color-brand-strong: var(--palette-brand-strong);
 }
 
 /*

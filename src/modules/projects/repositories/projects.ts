@@ -27,6 +27,8 @@ export interface ProjectSummary {
   name: string;
   stage: string;
   substage: string | null;
+  /** The primary chat's methodology (task 132), so the list names its position as that graph does. */
+  methodologyId: string;
   updatedAt: Date;
   /**
    * The project's primary chat — its earliest session, which is the Generate conversation that
@@ -55,8 +57,6 @@ export interface ProjectDetail extends ProjectSummary {
   initialPrompt: string;
   summary: string | null;
   qualityEnabled: boolean;
-  /** The methodology whose graph this session walks (task 117). */
-  methodologyId: string;
   /** The primary chat's model choice (task 121); `null` is Auto — the failover chain (А-3). */
   modelId: string | null;
   /** How many times the session has reached `complete` (FR-020) — the feed's sealing count. */
@@ -99,6 +99,7 @@ const ProjectSummaryRow = z.object({
   session_id: z.uuid(),
   stage: z.string(),
   substage: z.string().nullable(),
+  methodology_id: z.string(),
   session_count: z.union([z.number(), z.string()]),
 });
 
@@ -107,7 +108,6 @@ const ProjectDetailRow = ProjectSummaryRow.extend({
   initial_prompt: z.string(),
   summary: z.string().nullable(),
   quality_enabled: z.boolean(),
-  methodology_id: z.string(),
   model_id: z.string().nullable(),
   completion_count: z.number().int(),
   content_language: z.string().nullable(),
@@ -144,6 +144,7 @@ export function createProjectRepository(db: SchemaDatabase) {
             primary_session.id AS session_id,
             ${workflowState}.stage,
             ${workflowState}.substage,
+            primary_session.methodology_id,
             (SELECT count(*) FROM ${sessions} WHERE ${sessions}.project_id = ${projects}.id)
               AS session_count
           FROM ${projects}
@@ -160,6 +161,7 @@ export function createProjectRepository(db: SchemaDatabase) {
         name: row.name,
         stage: row.stage,
         substage: row.substage,
+        methodologyId: row.methodology_id,
         updatedAt: row.updated_at,
         sessionId: row.session_id,
         sessionCount: Number(row.session_count),

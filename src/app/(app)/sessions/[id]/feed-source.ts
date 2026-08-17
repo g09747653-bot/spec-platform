@@ -8,6 +8,7 @@ import {
   FALLBACK_QUESTION_ID_PREFIX,
   type AnsweredRound,
 } from '@/modules/projects/repositories/interview';
+import { createSessionMessageRepository } from '@/modules/projects/repositories/session-messages';
 import type { SessionDetail } from '@/modules/projects/repositories/sessions';
 import { createProposedChangeService } from '@/modules/specs/proposed-changes/proposed-change-service';
 import { createReviewRepository } from '@/modules/specs/repositories/reviews';
@@ -55,6 +56,8 @@ function toQuestions(payload: unknown): FeedQuestion[] {
       ...(option.description === undefined ? {} : { description: option.description }),
       // v3 (task 106). Absent on every round drafted before it, which renders as a plain option.
       ...(option.recommended === undefined ? {} : { recommended: option.recommended }),
+      // Task 134, row `1.1-6`: the same optional-by-construction treatment.
+      ...(option.tags === undefined ? {} : { tags: option.tags }),
     })),
     allowOther: question.allowOther,
     /*
@@ -150,12 +153,15 @@ export async function assembleFeedSource(
   scope: OwnerScope,
   session: SessionDetail,
 ): Promise<FeedSource> {
-  const [rounds, runs, revisions, reviews, proposals] = await Promise.all([
+  const [rounds, runs, revisions, reviews, proposals, messages] = await Promise.all([
     createInterviewRepository(db).roundHistory(session.id),
     createGenerationStore(db).runsForSession(session.id),
     createRevisionRepository(db).projectHistory(scope, session.projectId),
     createReviewRepository(db).projectHistory(scope, session.projectId),
     createProposedChangeService(db).historyForProject(scope, session.projectId),
+    // Session-keyed, like rounds and runs: a chat exchange belongs to the conversation it happened
+    // in, and nothing about it is shared with the project's other chats (task 132; А-6).
+    createSessionMessageRepository(db).listForSession(session.id),
   ]);
 
   const mine = (sourceSessionId: string | null): boolean =>
@@ -225,5 +231,14 @@ export async function assembleFeedSource(
         editBatchId: proposal.editBatchId,
         createdAt: iso(proposal.createdAt),
       })),
+    messages: messages.map((message) => ({
+      messageId: message.id,
+      role: message.role,
+      origin: message.origin,
+      stage: message.stage,
+      substage: message.substage,
+      body: message.body,
+      createdAt: iso(message.createdAt),
+    })),
   };
 }
