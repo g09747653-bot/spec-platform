@@ -105,15 +105,25 @@ export function toSdkTools(tools: readonly ToolDefinition[] | undefined): ToolSe
  * **Re-measured for the M9п gate (round 3, D-144), by the same method and on the same machine.** The
  * customer's choice, `qwen3.8:27b`, writes a conformant SpecKit constitution but needs 474 s for it —
  * 16.8 GB of weights do not fit 16 GiB of VRAM, and a third of the model runs on the CPU. That is
- * past the 300 s per-provider budget, so the documented fallback applies: `qwen3:14b`, which is
- * conformant on the same prompt in 32.4 s and stays wholly on the GPU. D-91's objection to it was the
- * 60-second timeout of its day; the gate's budget has been 300 s since D-90.
+ * past the 300 s per-provider budget, so the documented fallback applied: `qwen3:14b`, which was
+ * conformant on the same prompt in 32.4 s and stayed wholly on the GPU.
+ *
+ * **Re-measured again for the M10п gate**, by the profile the customer set on 2026-08-16: the local
+ * fallback is the *smallest* model that passes the pre-flight, and `qwen3:8b` passes all three parts
+ * of it — a structurally conformant constitution on the packed run-2 state in 23.3 s with zero
+ * truncations, three usable question rounds out of three on first samples, and three constrained Edit
+ * proposals out of three (`artifacts/gate-M10/preflight/`).
+ *
+ * The measurement also retired its predecessor. `qwen3:14b` needs 11.1 GiB of a 16 GiB card and this
+ * machine has ~9.6 GiB free once its desktop is running, so the driver spills it: **0.65 tokens per
+ * second** against 68 for the 8B, and five minutes to read a 7 800-token prompt. A model that no
+ * longer fits is not a slower fallback, it is an absent one (D-176).
  */
 export const DEFAULT_MODELS: Readonly<Record<ProviderId, string>> = Object.freeze({
   anthropic: 'claude-sonnet-5',
   openai: 'gpt-5.2',
   google: 'gemini-3.5-flash',
-  ollama: 'qwen3:14b',
+  ollama: 'qwen3:8b',
   stub: 'deterministic-stub',
 });
 

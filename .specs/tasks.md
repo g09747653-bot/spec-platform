@@ -1601,19 +1601,19 @@ Goal: the visual layer with our own tint, the completion surface, structured loc
   - Acceptance Criteria: diff colors come from tokens (both themes); revert produces Rev N+1 byte-equal to Rev N-1 with the edit chat as source; history shows all three revisions.
   - _Dependencies: 124_ · _Requirements: Эталон §5.1 (Diff Preview, «Go back»)_ · _Touches: `src/modules/web/**`, `src/modules/specs/**`_ · _Complexity: Medium_ · _Parallel-safe: yes_
 
-- [ ] 131\. Structured local output — grammar-constrained JSON (вердикт Архитектора по D-161)
+- [x] 131\. Structured local output — grammar-constrained JSON (вердикт Архитектора по D-161)
   - The local adapter requests grammar/schema-constrained output (Ollama `format` with the JSON schema) for structured calls — Edit proposal, review.v2, interview drafts — so valid JSON does not depend on model obedience. Cloud path unchanged byte-for-byte (snapshot). Р-1 layers stay as the outer guard.
   - Pre-flight proves the whole-bundle Edit proposal on the gate's local model; if the model still cannot deliver under constraint, that is reported as a named limitation of local mode — not silently rerouted to cloud.
   - The recommendation-repair (`atMostOneRecommended`) logs one line when it fires, so future gates can tell «repair worked» from «model complied» (вердикт по §7.1 рапорта р.5).
   - Acceptance Criteria: constrained Edit call returns parseable JSON on the pre-flight state that failed in D-161 (three-for-three); cloud snapshot unchanged; repair emits a log line covered by a test; `GATE_EDIT_LOCAL=1` walk segment passes with the constraint on.
   - _Dependencies: 130_ · _Requirements: D-161; А-7 (основной режим — локальный); А-8_ · _Touches: `src/modules/adapters/llm/**`, `src/modules/agents/**`_ · _Complexity: Large_ · _Parallel-safe: no_
 
-- [ ] 128\. Parity checklist walk (ultracode red-team)
+- [x] 128\. Parity checklist walk (ultracode red-team)
   - Build the checklist from Эталон Часть 1 (§1.1–1.5, every observable behaviour and surface); walk our product item-by-item with screenshots ours-vs-dump; produce the gap list with a verdict per item (parity / deliberate own-tint difference / gap). Then ONE ultracode red-team pass adversarially hunting for missed discrepancies (mode map §3-bis).
   - Acceptance Criteria: every checklist item carries a verdict and evidence; gaps are enumerated with owners (fix in 129 or recorded as accepted difference by the Architect); the red-team pass found-items are all dispositioned; artifacts in `artifacts/parity-M10/`.
   - _Dependencies: 124–127, 131_ · _Requirements: А-2 (финальный парити-вердикт)_ · _Touches: `artifacts/parity-M10/**`, `e2e/**`_ · _Complexity: Large_ · _Parallel-safe: no_
 
-- [ ] 129\. M10п gate — final walk and stage-1 seal (self-run, А-2.1)
+- [x] 129\. M10п gate — final walk and stage-1 seal (self-run, А-2.1)
   - Pre-flight per the gate profile: fresh key check, `qwen3:8b` measured (document structure + JSON round + constrained Edit); the smallest passing model becomes the walk's local fallback. Full live walk on the final visual layer, both themes smoked; fix-worthy gaps from 128 closed and re-walked.
   - Acceptance Criteria: walk GREEN with zero truncations and zero structural rejections; parity checklist verdicts all dispositioned; CI green; artifacts `artifacts/gate-M10/`.
   - After the Architect accepts: tag `m10p-accepted` and release tag `stage1-complete` — Этап 1 закрыт.
