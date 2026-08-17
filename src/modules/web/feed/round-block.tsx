@@ -348,7 +348,29 @@ export function RoundBlock({
             </button>
           ) : (
             <div className="flex flex-col gap-2">
-              <Label htmlFor={`reply-${block.roundId}`}>Your answer, in free text</Label>
+              {/*
+                The way back (task 136, sibling audit).
+
+                This disclosure used to be one-way: pressing «Answer in your own words instead»
+                replaced the control with the box, and nothing turned it off again. That is the same
+                shape as the collapse the customer reported — a state you can enter and not leave —
+                and it was found by auditing every toggle on the surface rather than by meeting it.
+                The typed text is kept rather than cleared: changing your mind twice should not cost
+                you a paragraph.
+              */}
+              <div className="flex items-baseline justify-between gap-2">
+                <Label htmlFor={`reply-${block.roundId}`}>Your answer, in free text</Label>
+                <button
+                  type="button"
+                  data-testid="mcq-reply-cancel"
+                  className="text-foreground-muted shrink-0 text-xs underline underline-offset-2"
+                  onClick={() => {
+                    setReplyMode(false);
+                  }}
+                >
+                  Use the options instead
+                </button>
+              </div>
               <Textarea
                 id={`reply-${block.roundId}`}
                 data-testid="mcq-reply-text"
@@ -389,7 +411,7 @@ export function RoundBlock({
 
   return (
     <FeedItem block={block}>
-      <div className="border-border-subtle bg-surface flex w-full max-w-[46rem] flex-col gap-3 rounded-xl border p-4">
+      <div className="border-border-subtle bg-surface flex w-full flex-col gap-3 rounded-xl border p-4">
         <BlockCaption stage={block.stage} />
         <RoundHeading block={block} />
         {body}

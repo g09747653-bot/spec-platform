@@ -28,6 +28,62 @@ export function EyeIcon({ open = false, className }: { open?: boolean; className
   );
 }
 
+/** The side-panel glyph on the sidebar's collapse control (task 136). */
+export function PanelIcon({ open = true, className }: { open?: boolean; className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className={className ?? 'h-4 w-4'}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1.8" />
+      <path d="M10 2.5v11" />
+      {/* Filled when the pane is showing, hollow when it is hidden — two states, one glyph. */}
+      {open && <path d="M10 2.5h4.5v11H10z" fill="currentColor" opacity="0.35" stroke="none" />}
+    </svg>
+  );
+}
+
+/** A downward chevron — «you are not at the end of this conversation» (task 137). */
+export function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className={className ?? 'h-4 w-4'}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M4 6.5 8 10.5l4-4" />
+    </svg>
+  );
+}
+
+/** The close glyph on a pane header (task 138). */
+export function CloseIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className={className ?? 'h-4 w-4'}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden
+    >
+      <path d="M4 4l8 8M12 4l-8 8" />
+    </svg>
+  );
+}
+
 /** The paperclip on the composer's attach control (row `1.5-2`). */
 export function PaperclipIcon({ className }: { className?: string }) {
   return (

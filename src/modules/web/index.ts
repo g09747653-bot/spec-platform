@@ -8,7 +8,7 @@
  */
 export const MODULE_ID = 'web';
 
-export { AppShell } from './layouts/app-shell';
+export { AppShell, PageBody } from './layouts/app-shell';
 export { NewProjectForm } from './projects/new-project-form';
 export { ProjectList, type ProjectListItem } from './projects/project-list';
 export { Button, buttonVariants, type ButtonProps } from './ui/button';
@@ -19,6 +19,7 @@ export { ToastViewport } from './ui/toast-viewport';
 export { BrandLoader } from './theme/brand-loader';
 export { BrandMark } from './theme/brand-mark';
 export { ThemeScript } from './theme/theme-script';
+export { UiStateScript } from './state/ui-state-script';
 export { ThemeToggle } from './theme/theme-toggle';
 export { SERVER_DEFAULT_THEME, THEME_ATTRIBUTE, THEME_STORAGE_KEY } from './theme/theme';
 export { ConnectionBanner } from './session/connection-banner';

@@ -7,6 +7,7 @@ import { requireOwnerScope } from '@/modules/projects/auth/scope';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
 import { createSessionRepository } from '@/modules/projects/repositories/sessions';
 import { createSpecFileRepository } from '@/modules/specs/repositories/spec-files';
+import { PageBody } from '@/modules/web';
 import { ChatList, type ChatListItem } from '@/modules/web/projects/chat-list';
 import { McpCard } from '@/modules/web/projects/mcp-card';
 import { NewEditChat } from '@/modules/web/projects/new-edit-chat';
@@ -118,12 +119,13 @@ export default async function ProjectPage({
   });
 
   return (
-    <section className="flex flex-col gap-6" data-testid="project-page">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-h1" data-testid="project-page-name">
-          {project.name}
-        </h1>
-        {/*
+    <PageBody>
+      <section className="flex flex-col gap-6" data-testid="project-page">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-h1" data-testid="project-page-name">
+            {project.name}
+          </h1>
+          {/*
           The project's own description (task 133; row `1.5-3`… `1.5-4`; Эталон §1.5).
 
           It was loaded and thrown away: the page printed the name and a sentence about archiving,
@@ -132,101 +134,102 @@ export default async function ProjectPage({
           the words the user typed — clamped to two lines with the whole of it in `title`, which is
           the reference's own tooltip.
         */}
-        <p
-          className="text-foreground-muted line-clamp-2 max-w-[60rem] text-sm"
-          data-testid="project-description"
-          title={project.initialPrompt}
-        >
-          {project.initialPrompt}
-        </p>
-        <p className="text-foreground-muted text-xs">
-          Every conversation about this bundle. Archiving hides a chat from Active and changes
-          nothing else.
-        </p>
-      </div>
-
-      <nav className="flex flex-wrap items-center gap-4" aria-label="Chat class">
-        <span className="flex gap-2">
-          {TABS.map((entry) => (
-            <Link
-              key={entry.key}
-              href={linkTo(project.id, { tab: entry.key, show: filter, q: search })}
-              data-testid={`tab-${entry.key}`}
-              data-state={tab === entry.key ? 'current' : 'available'}
-              className={
-                tab === entry.key
-                  ? 'border-border bg-surface rounded-md border px-3 py-1.5 text-sm font-medium'
-                  : 'text-foreground-muted rounded-md px-3 py-1.5 text-sm hover:underline'
-              }
-            >
-              {entry.label}
-            </Link>
-          ))}
-        </span>
-
-        <span className="flex gap-2" data-testid="chat-filters">
-          {FILTERS.map((entry) => (
-            <Link
-              key={entry.key}
-              href={linkTo(project.id, { tab, show: entry.key, q: search })}
-              data-testid={`filter-${entry.key}`}
-              data-state={filter === entry.key ? 'current' : 'available'}
-              className={
-                filter === entry.key
-                  ? 'border-border bg-surface rounded-md border px-3 py-1.5 text-xs font-medium'
-                  : 'text-foreground-muted rounded-md px-3 py-1.5 text-xs hover:underline'
-              }
-            >
-              {entry.label}
-            </Link>
-          ))}
-        </span>
-
-        {/*
-         * A GET form, so the search is a URL. That is what lets it compose with the tab and the
-         * filter — they are hidden fields of the same form — and what makes a searched view
-         * something a person can reload, bookmark or come back to.
-         */}
-        <form method="GET" action={`/projects/${project.id}`} className="flex items-center gap-2">
-          <input type="hidden" name="tab" value={tab} />
-          <input type="hidden" name="show" value={filter} />
-          <label className="sr-only" htmlFor="chat-search">
-            Search chats
-          </label>
-          <input
-            id="chat-search"
-            name="q"
-            defaultValue={search}
-            placeholder="Search by name"
-            data-testid="chat-search"
-            className="border-border-subtle bg-surface rounded-md border px-3 py-1.5 text-sm"
-          />
-          <button
-            type="submit"
-            data-testid="chat-search-submit"
-            className="border-border-subtle rounded-md border px-3 py-1.5 text-sm"
+          <p
+            className="text-foreground-muted line-clamp-2 max-w-[60rem] text-sm"
+            data-testid="project-description"
+            title={project.initialPrompt}
           >
-            Search
-          </button>
-        </form>
-      </nav>
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <ChatList chats={rows} />
-
-        <div className="flex flex-col gap-4">
-          <NewEditChat
-            projectId={project.id}
-            files={approved.map((file) => ({
-              specFileId: file.specFileId,
-              fileName: exportedName(file.specType),
-              revisionNumber: file.revisionNumber,
-            }))}
-          />
-
-          <McpCard />
+            {project.initialPrompt}
+          </p>
+          <p className="text-foreground-muted text-xs">
+            Every conversation about this bundle. Archiving hides a chat from Active and changes
+            nothing else.
+          </p>
         </div>
-      </div>
-    </section>
+
+        <nav className="flex flex-wrap items-center gap-4" aria-label="Chat class">
+          <span className="flex gap-2">
+            {TABS.map((entry) => (
+              <Link
+                key={entry.key}
+                href={linkTo(project.id, { tab: entry.key, show: filter, q: search })}
+                data-testid={`tab-${entry.key}`}
+                data-state={tab === entry.key ? 'current' : 'available'}
+                className={
+                  tab === entry.key
+                    ? 'border-border bg-surface rounded-md border px-3 py-1.5 text-sm font-medium'
+                    : 'text-foreground-muted rounded-md px-3 py-1.5 text-sm hover:underline'
+                }
+              >
+                {entry.label}
+              </Link>
+            ))}
+          </span>
+
+          <span className="flex gap-2" data-testid="chat-filters">
+            {FILTERS.map((entry) => (
+              <Link
+                key={entry.key}
+                href={linkTo(project.id, { tab, show: entry.key, q: search })}
+                data-testid={`filter-${entry.key}`}
+                data-state={filter === entry.key ? 'current' : 'available'}
+                className={
+                  filter === entry.key
+                    ? 'border-border bg-surface rounded-md border px-3 py-1.5 text-xs font-medium'
+                    : 'text-foreground-muted rounded-md px-3 py-1.5 text-xs hover:underline'
+                }
+              >
+                {entry.label}
+              </Link>
+            ))}
+          </span>
+
+          {/*
+           * A GET form, so the search is a URL. That is what lets it compose with the tab and the
+           * filter — they are hidden fields of the same form — and what makes a searched view
+           * something a person can reload, bookmark or come back to.
+           */}
+          <form method="GET" action={`/projects/${project.id}`} className="flex items-center gap-2">
+            <input type="hidden" name="tab" value={tab} />
+            <input type="hidden" name="show" value={filter} />
+            <label className="sr-only" htmlFor="chat-search">
+              Search chats
+            </label>
+            <input
+              id="chat-search"
+              name="q"
+              defaultValue={search}
+              placeholder="Search by name"
+              data-testid="chat-search"
+              className="border-border-subtle bg-surface rounded-md border px-3 py-1.5 text-sm"
+            />
+            <button
+              type="submit"
+              data-testid="chat-search-submit"
+              className="border-border-subtle rounded-md border px-3 py-1.5 text-sm"
+            >
+              Search
+            </button>
+          </form>
+        </nav>
+
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <ChatList chats={rows} />
+
+          <div className="flex flex-col gap-4">
+            <NewEditChat
+              projectId={project.id}
+              files={approved.map((file) => ({
+                specFileId: file.specFileId,
+                fileName: exportedName(file.specType),
+                revisionNumber: file.revisionNumber,
+              }))}
+            />
+
+            <McpCard />
+          </div>
+        </div>
+      </section>
+    </PageBody>
   );
 }

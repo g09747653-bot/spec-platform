@@ -40,7 +40,7 @@ import { Attachments, type AttachmentModel } from '@/modules/web/session/attachm
 import { CONDITION_COPY, STILL_NEEDED } from '@/modules/web/session/gate-copy';
 import { stageLabel } from '@/modules/web/session/stage-display';
 import { ExportPanel } from '@/modules/web/session/export-panel';
-import { LocalWorkspace, SessionSidebar } from '@/modules/web/session/sidebar';
+import { LocalWorkspace, SessionSidebar, SidebarToggle } from '@/modules/web/session/sidebar';
 import { BrandLoader } from '@/modules/web/theme/brand-loader';
 import { SpecsPanel, type SpecFileModel } from '@/modules/web/session/specs-panel';
 
@@ -486,127 +486,145 @@ async function SessionBody({ session, scope }: { session: SessionDetail; scope: 
             }),
   };
 
-  return (
-    <section className="flex min-h-0 flex-col gap-4" data-testid="session">
-      <header className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-h2" data-testid="session-project-name">
+  /*
+   * The session header, handed to the surface rather than rendered above it (task 137).
+   *
+   * It is pinned there — it does not scroll with the conversation — and it is where the sidebar's
+   * collapse control now lives, because the header is the only part of this surface guaranteed to be
+   * on screen. That is the whole of the customer's first defect: the control used to sit at the top
+   * of a page-height column, and a session of any length carried it out of reach.
+   */
+  const header = (
+    <div className="relative">
+      {/* Aligned with the conversation below it, so the surface reads as one column. */}
+      <div className="feed-measure flex flex-col gap-2 pr-10">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h1 className="text-h3 truncate" data-testid="session-project-name">
             {session.projectName}
           </h1>
           {/*
            * The chat's own name beside the project's (А-6). A project holds several conversations
            * now, so a header that named only the project would be the same header on all of them.
            */}
-          <span className="text-foreground-muted text-sm" data-testid="session-title">
+          <span className="text-foreground-muted truncate text-sm" data-testid="session-title">
             {session.title}
           </span>
           <MethodologyBadge methodologyId={session.methodologyId} />
           <Link
             href={`/projects/${session.projectId}`}
-            className="text-foreground-muted text-xs hover:underline"
+            className="text-foreground-muted shrink-0 text-xs hover:underline"
             data-testid="back-to-project"
           >
             All chats
           </Link>
         </div>
+
         <StepPills
           currentStage={session.stage}
           currentSubstage={session.substage}
           qualityEnabled={session.qualityEnabled}
           methodologyId={session.methodologyId}
         />
-      </header>
+      </div>
 
       {/*
-        `auto` rather than a fixed `20rem` (task 133; row `1.5-3`): the sidebar owns its width, and a
-        track that did not follow it made the resize handle work in one direction only.
-      */}
-      <div className="grid min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_auto]">
-        <SessionFeed
-          sessionId={session.id}
-          feed={feed}
-          methodologyId={session.methodologyId}
-          deadlineMs={requestDeadlineMs()}
-          actions={actions}
-          primaryRevisionId={latest?.id ?? null}
-          primaryContent={latest?.content ?? null}
-          proposal={proposalModel}
-          refineFileId={latest === null ? null : (currentFile?.id ?? null)}
-          revert={revert}
-          canGenerate={position.substage === 'generate'}
-          describePrefill={editChat ? session.initialPrompt : null}
-          /*
-           * What an `@` may name (task 121): the bundle's promised files and this chat's documents.
-           * The plan rather than the written files, so a document that does not exist yet is
-           * offered and honestly labelled — the alternative is a menu that changes shape as the
-           * session goes on, where the absence of a name reads as "there is no such document".
-           */
-          references={[
-            ...plan.map((entry) => {
-              const file = bundleFiles.find((candidate) => candidate.specType === entry.specType);
+       * Pinned to the pane's own right edge rather than to the conversation's measure: it is a
+       * control over the *layout*, and it belongs beside the thing it opens and closes.
+       */}
+      <SidebarToggle className="absolute top-0 right-0" />
+    </div>
+  );
 
-              return {
-                id: `spec:${file?.specFileId ?? entry.specType}`,
-                name: entry.fileName,
-                kind: 'spec' as const,
-                ...(file === undefined ? { empty: true } : {}),
-              };
-            }),
-            ...attachments.map((attachment) => ({
-              id: `attachment:${attachment.id}`,
-              name: attachment.fileName,
-              kind: 'attachment' as const,
-            })),
-          ]}
-          models={modelRegistry()}
-          selectedModel={session.modelId ?? AUTO_MODEL}
-          activeRun={
-            activeRun === null ? null : { runId: activeRun.runId, attempt: activeRun.attempt }
-          }
-          /*
-           * The completion panel's model (task 126). Every field is the bundle's own: the slug the
-           * document cards already print, the badge parts of the session's methodology, and the
-           * files with the revisions the export would resolve to — so the handoff prompt describes
-           * this bundle and no other.
-           */
-          completion={{
-            projectId: session.projectId,
-            bundleName: bundleSlug(session.projectName),
-            methodologyLabel: methodologyLabel(bundleMethodologyId),
-            files: handoffFiles,
-            omittedFiles,
-            exportMode,
-          }}
-        />
+  const sidebar = (
+    <SessionSidebar>
+      <SpecsPanel plan={plan} files={specsPanelFiles(bundleRevisions)} />
 
-        <SessionSidebar>
-          <SpecsPanel plan={plan} files={specsPanelFiles(bundleRevisions)} />
+      <LocalWorkspace />
 
-          <LocalWorkspace />
+      <Attachments
+        sessionId={session.id}
+        attachments={attachments.map((attachment): AttachmentModel => ({
+          id: attachment.id,
+          fileName: attachment.fileName,
+          mimeType: attachment.mimeType,
+          sizeBytes: attachment.sizeBytes,
+          parseStatus: attachment.parseStatus,
+          parseReason: attachment.parseReason,
+          attachedAtStage: attachment.attachedAtStage,
+        }))}
+      />
 
-          <Attachments
-            sessionId={session.id}
-            attachments={attachments.map((attachment): AttachmentModel => ({
-              id: attachment.id,
-              fileName: attachment.fileName,
-              mimeType: attachment.mimeType,
-              sizeBytes: attachment.sizeBytes,
-              parseStatus: attachment.parseStatus,
-              parseReason: attachment.parseReason,
-              attachedAtStage: attachment.attachedAtStage,
-            }))}
-          />
+      <ExportPanel
+        projectId={session.projectId}
+        mode={exportMode}
+        files={exportFiles}
+        omittedFiles={omittedFiles}
+        // The methodology's own plan, so the panel's sentence counts this bundle (task 133).
+        planned={plan.length}
+      />
+    </SessionSidebar>
+  );
 
-          <ExportPanel
-            projectId={session.projectId}
-            mode={exportMode}
-            files={exportFiles}
-            omittedFiles={omittedFiles}
-            // The methodology's own plan, so the panel's sentence counts this bundle (task 133).
-            planned={plan.length}
-          />
-        </SessionSidebar>
-      </div>
-    </section>
+  return (
+    <div className="flex min-h-0 flex-1" data-testid="session">
+      <SessionFeed
+        header={header}
+        sidebar={sidebar}
+        sessionId={session.id}
+        feed={feed}
+        methodologyId={session.methodologyId}
+        deadlineMs={requestDeadlineMs()}
+        actions={actions}
+        primaryRevisionId={latest?.id ?? null}
+        primaryContent={latest?.content ?? null}
+        proposal={proposalModel}
+        refineFileId={latest === null ? null : (currentFile?.id ?? null)}
+        revert={revert}
+        canGenerate={position.substage === 'generate'}
+        describePrefill={editChat ? session.initialPrompt : null}
+        /*
+         * What an `@` may name (task 121): the bundle's promised files and this chat's documents.
+         * The plan rather than the written files, so a document that does not exist yet is
+         * offered and honestly labelled — the alternative is a menu that changes shape as the
+         * session goes on, where the absence of a name reads as "there is no such document".
+         */
+        references={[
+          ...plan.map((entry) => {
+            const file = bundleFiles.find((candidate) => candidate.specType === entry.specType);
+
+            return {
+              id: `spec:${file?.specFileId ?? entry.specType}`,
+              name: entry.fileName,
+              kind: 'spec' as const,
+              ...(file === undefined ? { empty: true } : {}),
+            };
+          }),
+          ...attachments.map((attachment) => ({
+            id: `attachment:${attachment.id}`,
+            name: attachment.fileName,
+            kind: 'attachment' as const,
+          })),
+        ]}
+        models={modelRegistry()}
+        selectedModel={session.modelId ?? AUTO_MODEL}
+        activeRun={
+          activeRun === null ? null : { runId: activeRun.runId, attempt: activeRun.attempt }
+        }
+        /*
+         * The completion panel's model (task 126). Every field is the bundle's own: the slug the
+         * document cards already print, the badge parts of the session's methodology, and the
+         * files with the revisions the export would resolve to — so the handoff prompt describes
+         * this bundle and no other.
+         */
+        completion={{
+          projectId: session.projectId,
+          bundleName: bundleSlug(session.projectName),
+          methodologyLabel: methodologyLabel(bundleMethodologyId),
+          files: handoffFiles,
+          omittedFiles,
+          exportMode,
+        }}
+      />
+    </div>
   );
 }

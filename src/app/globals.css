@@ -10,6 +10,18 @@
  */
 
 @layer base {
+  /*
+   * The sidebar's painted width (task 141).
+   *
+   * Declared here so the very first paint has a value even with JavaScript disabled; the pre-paint
+   * script in `<head>` replaces it with this device's stored width, and `setSidebarWidth` keeps it
+   * in step from then on. A length, not a colour — the brand file remains the only place a colour
+   * is named.
+   */
+  :root {
+    --sidebar-width: 300px;
+  }
+
   * {
     box-sizing: border-box;
   }
@@ -105,6 +117,24 @@
  */
 @layer components {
   /*
+   * The conversation's measure — one number, one home (task 137).
+   *
+   * Every surface of the session that has to line up with the conversation reads this: the feed, the
+   * composer, and the header above them. Before this milestone the number was written twelve times
+   * as `max-w-[46rem]` on individual cards, which is why the composer's panel and the cards it sat
+   * under were the same width by coincidence rather than by construction — and why widening the
+   * column would have meant twelve edits and a walk to find the one that was missed.
+   *
+   * 56rem, not the reference's 72: their content column runs to about 125 characters a line, and we
+   * are free to be better at reading comfort while staying at least as roomy as we were (46rem).
+   */
+  .feed-measure {
+    width: 100%;
+    max-width: 56rem;
+    margin-inline: auto;
+  }
+
+  /*
    * Prose the model wrote (row `1.5-11`).
    *
    * The reference gives every AI turn a typographic wrapper; ours had none, so an answer was set in
@@ -114,7 +144,8 @@
   .chat-prose {
     font-size: var(--text-body);
     line-height: 1.65;
-    max-width: 46rem;
+    /* The column already sets the measure; a second, narrower one here would set prose ragged. */
+    max-width: 100%;
   }
 
   .chat-prose > * + * {

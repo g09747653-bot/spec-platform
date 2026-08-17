@@ -7,6 +7,7 @@ import { EyeIcon } from '../ui/icons';
 import { Label, Textarea } from '../ui/field';
 import { WaitingOn } from '../session/waiting-on';
 import { useSessionRequest } from '../session/useSessionRequest';
+import { useViewerControl } from '../viewer/viewer-control';
 
 import { BlockCaption } from './bubbles';
 import { FeedItem } from './feed-item';
@@ -69,6 +70,7 @@ export function DocumentBlock({
   const [preview, setPreview] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const { state: request, elapsedSeconds, send, abandon } = useSessionRequest(deadlineMs);
+  const viewerControl = useViewerControl();
 
   const busy = request.running;
   const error = localError ?? request.notice;
@@ -76,6 +78,23 @@ export function DocumentBlock({
   /* Inline on the card the session is working on; behind Preview otherwise (see the note above). */
   const inline = primary && content !== null;
   const canPreview = !inline && block.approved;
+
+  const openInViewer = () => {
+    viewerControl?.open({
+      kind: 'revision',
+      specFileId: block.specFileId,
+      fileName: block.fileName,
+      stage: block.specType,
+      revisionNumber: block.revisionNumber,
+      approved: block.approved,
+    });
+  };
+
+  const openTarget = viewerControl?.openTarget ?? null;
+  const isOpen =
+    openTarget?.kind === 'revision' &&
+    openTarget.specFileId === block.specFileId &&
+    openTarget.revisionNumber === block.revisionNumber;
 
   async function togglePreview() {
     setPreviewOpen((open) => !open);
@@ -107,7 +126,7 @@ export function DocumentBlock({
   return (
     <FeedItem block={block}>
       <div
-        className="border-border-subtle bg-surface flex w-full max-w-[46rem] flex-col gap-3 rounded-xl border p-4"
+        className="border-border-subtle bg-surface flex w-full flex-col gap-3 rounded-xl border p-4"
         {...(primary ? { 'data-testid': 'spec-card' } : { 'data-testid': 'document-card' })}
       >
         <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -119,6 +138,31 @@ export function DocumentBlock({
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {/*
+              **The door** (task 138). Present on every card, in every state — drafted, approved, and
+              (on the drafting surface) while the words are still arriving — because the customer's
+              complaint was precisely that a generated file had nowhere to be *read*. The excerpt
+              below stays an excerpt; this is the way to the whole document.
+            */}
+            {viewerControl !== null && (
+              <button
+                type="button"
+                data-testid="open-viewer"
+                data-state={isOpen ? 'open' : 'closed'}
+                aria-label={`Open ${block.fileName} in the viewer`}
+                title="Open in the viewer (V)"
+                className={
+                  isOpen
+                    ? 'border-primary text-primary-ink inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs'
+                    : 'border-border-subtle text-foreground-muted hover:text-foreground inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs'
+                }
+                onClick={openInViewer}
+              >
+                <EyeIcon />
+                Open
+              </button>
+            )}
+
             {block.approved && (
               <span
                 className="rounded-full border border-success-ink/40 px-2 py-0.5 text-xs text-success-ink"
@@ -169,12 +213,30 @@ export function DocumentBlock({
         )}
 
         {shown !== null && (
-          <pre
-            data-testid={primary ? 'spec-content' : 'document-content'}
-            className="bg-background border-border-subtle max-h-72 overflow-auto rounded-md border p-3 text-xs whitespace-pre-wrap"
-          >
-            {shown}
-          </pre>
+          /*
+           * **An excerpt, not a well** (task 138).
+           *
+           * This used to be `max-h-72 overflow-auto`: a document read through a 288-pixel window
+           * with its own scrollbar, inside a card, inside the conversation's scroller. Three nested
+           * scrollers is the shape the customer called «a small window», and it is also why the
+           * card never felt like a way *to* the document — the document was already, badly, here.
+           *
+           * Clipped rather than scrollable now, with the fade saying there is more, and the eye in
+           * the card's header being the way to read it. Every byte is still in the DOM, so a search
+           * on the page still finds it.
+           */
+          <div className="relative">
+            <pre
+              data-testid={primary ? 'spec-content' : 'document-content'}
+              className="bg-background border-border-subtle max-h-44 overflow-hidden rounded-md border p-3 text-xs whitespace-pre-wrap"
+            >
+              {shown}
+            </pre>
+            <div
+              aria-hidden
+              className="from-background pointer-events-none absolute inset-x-px bottom-px h-10 rounded-b-md bg-gradient-to-t to-transparent"
+            />
+          </div>
         )}
 
         {error !== null && (

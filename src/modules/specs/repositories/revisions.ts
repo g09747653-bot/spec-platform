@@ -202,6 +202,41 @@ export function createRevisionRepository(db: SchemaDatabase) {
           };
     },
 
+    /**
+     * One revision of a file, named by its number (task 138).
+     *
+     * Approved or not: the viewer opens a document at the revision the card it came from is about,
+     * and a draft is exactly the case where reading it matters most. Ownership is not this method's
+     * business — the file was resolved through the owner predicate before its id reached here, which
+     * is the same arrangement `latest` and `history` already rely on.
+     */
+    async findByNumber(specFileId: string, revisionNumber: number): Promise<SpecRevision | null> {
+      const rows = await db
+        .select()
+        .from(specRevisions)
+        .where(
+          and(
+            eq(specRevisions.specFileId, specFileId),
+            eq(specRevisions.revisionNumber, revisionNumber),
+          ),
+        )
+        .limit(1);
+
+      const row = rows[0];
+      return row === undefined
+        ? null
+        : {
+            id: row.id,
+            specFileId: row.specFileId,
+            revisionNumber: row.revisionNumber,
+            content: row.content,
+            approved: row.approved,
+            origin: row.origin === 'enrichment' ? 'enrichment' : 'parity',
+            derivedFrom: row.derivedFrom,
+            createdAt: row.createdAt,
+          };
+    },
+
     /** The newest **approved** revision — what an export may contain (FR-015 AC-2). */
     async latestApproved(specFileId: string): Promise<SpecRevision | null> {
       const rows = await queryRows(

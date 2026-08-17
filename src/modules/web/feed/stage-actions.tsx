@@ -84,7 +84,7 @@ export function StageActions({
 
   return (
     <div
-      className="border-border-subtle bg-surface flex w-full max-w-[46rem] flex-col gap-3 rounded-xl border p-4"
+      className="border-border-subtle bg-surface flex w-full flex-col gap-3 rounded-xl border p-4"
       data-testid="interview-panel"
     >
       {awaitingRound && (

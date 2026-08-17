@@ -295,7 +295,7 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
     return (
       <FeedItem block={block}>
         <div
-          className="border-border-subtle bg-surface flex w-full max-w-[46rem] flex-col gap-3 rounded-xl border p-4"
+          className="border-border-subtle bg-surface flex w-full flex-col gap-3 rounded-xl border p-4"
           data-testid="review-board-decided"
         >
           {header}
@@ -337,7 +337,7 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
   return (
     <FeedItem block={block}>
       <div
-        className="border-border-subtle bg-surface flex w-full max-w-[46rem] flex-col gap-4 rounded-xl border p-4"
+        className="border-border-subtle bg-surface flex w-full flex-col gap-4 rounded-xl border p-4"
         data-testid="review-board"
       >
         {header}
