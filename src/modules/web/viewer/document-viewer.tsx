@@ -1,5 +1,7 @@
 import Link from 'next/link';
 
+import { DiffBody } from '../ui/diff-body';
+
 import { Markdown } from './markdown';
 import { outlineOf } from './outline';
 import { RawPane } from './raw-pane';
@@ -77,33 +79,6 @@ function Tabs({
         </Link>
       ))}
     </nav>
-  );
-}
-
-/** Colours a unified diff by line marker — the same renderer the refinement card uses (M4). */
-function DiffBody({ unifiedDiff }: { unifiedDiff: string }) {
-  return (
-    <pre
-      data-testid="viewer-diff"
-      className="bg-background border-border-subtle overflow-auto rounded-md border p-3 text-xs whitespace-pre"
-    >
-      {unifiedDiff.split('\n').map((line, index) => (
-        <span
-          key={`${String(index)}-${line}`}
-          className={
-            line.startsWith('+') && !line.startsWith('+++')
-              ? 'block text-diff-added-ink'
-              : line.startsWith('-') && !line.startsWith('---')
-                ? 'block text-diff-removed-ink'
-                : line.startsWith('@@')
-                  ? 'text-foreground-muted block'
-                  : 'block'
-          }
-        >
-          {line === '' ? ' ' : line}
-        </span>
-      ))}
-    </pre>
   );
 }
 
@@ -201,7 +176,7 @@ export function DocumentViewer({
             <p className="text-foreground-muted text-xs" data-testid="viewer-diff-caption">
               Rev {previous.revisionNumber} → Rev {current.revisionNumber}
             </p>
-            <DiffBody unifiedDiff={unifiedDiff} />
+            <DiffBody unifiedDiff={unifiedDiff} testId="viewer-diff" />
           </div>
         ))}
     </section>
