@@ -85,7 +85,12 @@ jobs:
   e2e:
     name: End-to-end (Chromium, Firefox, WebKit)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Raised from 45 in M12п. The last green run took 36 minutes, so 45 was nine minutes of
+    # headroom on a suite that grows every milestone — and M12п's fifteen new tests across three
+    # engines spent it, which reads as a red gate rather than as a suite that outgrew its box.
+    # Sixty is headroom again; if it is ever spent, the answer is to split the matrix by engine
+    # rather than to keep adding minutes.
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v5

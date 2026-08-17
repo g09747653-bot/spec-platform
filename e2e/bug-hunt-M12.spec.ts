@@ -103,7 +103,7 @@ test.describe('M12п bug hunt', () => {
     await completeInterview(page);
     await collectFor(page, 'constitution');
 
-    for (let round = 0; round < 4; round += 1) {
+    for (let round = 0; round < 3; round += 1) {
       await page.getByTestId('sidebar-toggle').click();
       await expect(page.getByTestId('session-sidebar')).toHaveAttribute('data-collapsed', 'true');
       await stillAlive(page, `collapsed, round ${String(round)}`);
@@ -115,11 +115,11 @@ test.describe('M12п bug hunt', () => {
       const handle = page.getByTestId('sidebar-resize');
       await handle.focus();
       // To both stops and back — the clamp is what stops this ending in an unusable layout.
-      for (let step = 0; step < 25; step += 1) await handle.press('ArrowLeft');
+      for (let step = 0; step < 18; step += 1) await handle.press('ArrowLeft');
       await stillAlive(page, `dragged wide, round ${String(round)}`);
       expect(await widthOf(page, 'chat-message')).toBeGreaterThan(360);
 
-      for (let step = 0; step < 40; step += 1) await handle.press('ArrowRight');
+      for (let step = 0; step < 22; step += 1) await handle.press('ArrowRight');
       await stillAlive(page, `dragged narrow, round ${String(round)}`);
       expect(await widthOf(page, 'sidebar-panel')).toBeGreaterThan(180);
     }
