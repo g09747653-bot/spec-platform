@@ -5,11 +5,16 @@ import {
 } from '@/modules/prompts/assets/interview';
 import type { AskingStage } from '@/modules/workflow/model/stages';
 
+import { constrainedOutput } from '../schemas/constrained-output';
 import {
+  QuestionSetSchema,
   validateQuestionSetDraft,
   type QuestionSet,
   type QuestionSetRepair,
 } from '../schemas/question-set';
+
+/** A round's shape, stated to a runtime that can be constrained to it (А-10; task 131). */
+const QUESTION_SET_OUTPUT = constrainedOutput('question_set', QuestionSetSchema);
 
 /**
  * The interview questioner (task 33; FR-005; solution.md — `InterviewAgent`).
@@ -147,19 +152,29 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * the order is the model's and it put that option first among the ones it liked. A draft that marked
  * none is left exactly as it is: no recommendation is a legitimate answer, and inventing one here
  * would be inventing content.
+ *
+ * It reports how many flags it cleared, because the count is the only thing that distinguishes
+ * «the repair worked» from «the model complied» after the fact — see the log line below.
  */
-function atMostOneRecommended(options: readonly unknown[]): unknown[] {
+export function atMostOneRecommended(options: readonly unknown[]): {
+  options: unknown[];
+  cleared: number;
+} {
   let kept = false;
+  let cleared = 0;
 
-  return options.map((option) => {
+  const repaired = options.map((option) => {
     if (!isRecord(option) || option.recommended !== true) return option;
     if (!kept) {
       kept = true;
       return option;
     }
 
+    cleared += 1;
     return { ...option, recommended: false };
   });
+
+  return { options: repaired, cleared };
 }
 
 export function repairQuestionSetDraft(expectedStage: string): QuestionSetRepair {
@@ -167,6 +182,8 @@ export function repairQuestionSetDraft(expectedStage: string): QuestionSetRepair
     if (!isRecord(draft)) return draft;
 
     const questions = Array.isArray(draft.questions) ? draft.questions : [];
+    let cleared = 0;
+    let questionsTouched = 0;
 
     const repairedQuestions = questions
       .filter(isRecord)
@@ -182,11 +199,33 @@ export function repairQuestionSetDraft(expectedStage: string): QuestionSetRepair
         ({ needs, options }) => options.length >= 2 && Array.isArray(needs) && needs.length > 0,
       )
       .slice(0, 5)
-      .map(({ question, options }) => ({
-        ...question,
-        allowOther: true,
-        options: atMostOneRecommended(options),
-      }));
+      .map(({ question, options }) => {
+        const recommendation = atMostOneRecommended(options);
+
+        if (recommendation.cleared > 0) {
+          cleared += recommendation.cleared;
+          questionsTouched += 1;
+        }
+
+        return { ...question, allowOther: true, options: recommendation.options };
+      });
+
+    /*
+     * One line, and only when the repair actually removed a flag (вердикт по §7.1 рапорта M9п р.5).
+     *
+     * Constrained decoding (А-10) makes a draft *parseable*; it does not make the model recommend
+     * once. So the two explanations for a green interview — «the model complied» and «we quietly
+     * fixed it» — stay indistinguishable in a gate transcript unless the repair says so itself. This
+     * is the same class of evidence as the packing record of А-8, and it is logged the same way:
+     * server-side, `info`, counts only, no draft content.
+     */
+    if (cleared > 0) {
+      console.info('interview repair: cleared extra recommendations', {
+        stage: expectedStage,
+        questions: questionsTouched,
+        cleared,
+      });
+    }
 
     return { ...draft, stage: expectedStage, questions: repairedQuestions };
   };
@@ -216,6 +255,7 @@ export function createInterviewAgent(adapter: LlmAdapter) {
         { role: 'system', content: prompt.system },
         { role: 'user', content: prompt.user },
       ],
+      structuredOutput: QUESTION_SET_OUTPUT,
       runId: input.runId,
       signal: input.signal,
     });

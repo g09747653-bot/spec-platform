@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   createTestDoubleAdapter,
@@ -401,5 +401,64 @@ describe('at most one recommendation (round 4)', () => {
     expect(result.set.questions[0]?.options.some((option) => option.recommended === true)).toBe(
       false,
     );
+  });
+
+  /**
+   * **The repair says so when it fires** (task 131; вердикт по §7.1 рапорта M9п р.5).
+   *
+   * Constrained decoding (А-10) makes a local draft parseable; it does not make a model recommend
+   * once. So a green interview in a gate transcript has two explanations — the model complied, or we
+   * quietly removed two flags — and without this line they are indistinguishable after the fact.
+   * That is the whole reason it exists, so it is asserted rather than left to inspection.
+   */
+  describe('the repair leaves evidence (task 131)', () => {
+    it('logs one line with the counts when it clears a flag', () => {
+      const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+      try {
+        expect(repaired([true, true, true]).ok).toBe(true);
+
+        expect(info).toHaveBeenCalledTimes(1);
+        expect(info).toHaveBeenCalledWith('interview repair: cleared extra recommendations', {
+          stage: 'requirements',
+          questions: 1,
+          cleared: 2,
+        });
+      } finally {
+        info.mockRestore();
+      }
+    });
+
+    it('stays quiet when the repair ran for some other reason', () => {
+      const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+      try {
+        // A ninth option is dropped by the same pass; no recommendation is touched, so nothing is
+        // claimed. A line here would be evidence of a repair that did not happen.
+        const oversized = {
+          stage: 'requirements',
+          questions: [
+            {
+              id: 'main_actions',
+              text: 'What should it do first?',
+              type: 'single',
+              allowOther: true,
+              informationNeeds: ['scope'],
+              options: Array.from({ length: 9 }, (_, index) => ({
+                id: `o${String(index)}`,
+                label: `Option ${String(index)}`,
+              })),
+            },
+          ],
+        };
+
+        const result = validateQuestionSetDraft(oversized, repairQuestionSetDraft('requirements'));
+
+        expect(result.ok).toBe(true);
+        expect(info).not.toHaveBeenCalled();
+      } finally {
+        info.mockRestore();
+      }
+    });
   });
 });

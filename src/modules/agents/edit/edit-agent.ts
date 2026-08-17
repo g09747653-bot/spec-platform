@@ -4,6 +4,7 @@ import type { LlmAdapter, ProviderId } from '@/modules/adapters/llm';
 import { assemblePrompt } from '@/modules/prompts';
 
 import { parseJsonDocument } from '../interview/interview-agent';
+import { constrainedOutput } from '../schemas/constrained-output';
 
 /**
  * The edit agent (task 118; Эталон §1.4 «Edit», §5.1 «Vibe Specify'ing»).
@@ -37,6 +38,15 @@ const EditResult = z.object({
     }),
   ),
 });
+
+/**
+ * The shape a runtime that can be constrained is held to (А-10; task 131).
+ *
+ * This is the call D-161 was measured on: a whole bundle restated as JSON strings is the longest,
+ * most escape-heavy answer the product asks of a model, and the local one could not hold it — three
+ * unparseable drafts in a row, six samples, with the prompt read whole and no deadline in sight.
+ */
+const EDIT_OUTPUT = constrainedOutput('edit_proposal', EditResult);
 
 /** One document as the agent is shown it, and as its answer refers back to it. */
 export interface EditDocument {
@@ -123,6 +133,7 @@ export function createEditAgent(adapter: LlmAdapter) {
         { role: 'system', content: prompt.system },
         { role: 'user', content: prompt.user },
       ],
+      structuredOutput: EDIT_OUTPUT,
       runId: input.runId,
       signal: input.signal,
     });

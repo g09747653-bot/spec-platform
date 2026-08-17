@@ -202,6 +202,7 @@ export function createFailoverClient(options: FailoverClientOptions): LlmAdapter
           const text = await provider.stream({
             messages,
             tools: request.tools,
+            structuredOutput: request.structuredOutput,
             signal: controller.signal,
             onDelta: (delta) => {
               streamedHere = true;
