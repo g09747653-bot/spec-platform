@@ -105,12 +105,33 @@ export interface PromptTarget {
  */
 export type PromptForTarget = (target: PromptTarget) => readonly ModelMessage[];
 
+/**
+ * The answer is a machine-read artifact of this shape, not prose (амендмент А-10; task 131).
+ *
+ * A caller states this when what comes back will be parsed rather than shown: a question round, a
+ * review board, an edit proposal. It is a **statement about the answer**, not an instruction to a
+ * vendor — which is what keeps it on this side of the boundary (P7). Whether a provider can hold the
+ * model to it, and how, is the adapter's business: one constrains decoding to a grammar, another
+ * would ignore it entirely, and no caller learns which happened.
+ *
+ * Deriving the schema from the same Zod object that validates the answer is the point of the
+ * exercise; a hand-written copy here would be a second structural truth, and the one that drifts.
+ */
+export interface StructuredOutput {
+  /** Names the artifact for providers that use it as guidance. */
+  name: string;
+  /** JSON Schema the answer must conform to. */
+  schema: Record<string, unknown>;
+}
+
 export interface GenerateOptions {
   messages: readonly ModelMessage[] | PromptForTarget;
   /** Correlates the call with its `generation_runs` row; used by the durable chunk log (task 44). */
   runId: string;
   /** Tools the model may call during generation. */
   tools?: readonly ToolDefinition[];
+  /** Declares the answer a JSON artifact of a stated shape (А-10; task 131). */
+  structuredOutput?: StructuredOutput;
   /** Called for every incremental piece of text, in order (A5; FR-008 AC-2). */
   onChunk?: (text: string) => void;
   /** Called as each attempt begins, including the first — the restart signal of D-9. */

@@ -1,10 +1,23 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
-import { jsonSchema, streamText, tool, type ToolSet } from 'ai';
+import {
+  defaultSettingsMiddleware,
+  jsonSchema,
+  streamText,
+  tool,
+  wrapLanguageModel,
+  type ToolSet,
+} from 'ai';
 
 import { generationAllowance } from './capacity';
-import type { ModelMessage, ProviderCapacity, ProviderId, ToolDefinition } from './types';
+import type {
+  ModelMessage,
+  ProviderCapacity,
+  ProviderId,
+  StructuredOutput,
+  ToolDefinition,
+} from './types';
 
 /**
  * The vendor edge (task 42; constitution P7, A3; D-6).
@@ -29,6 +42,8 @@ export interface ProviderStreamInput {
   messages: readonly ModelMessage[];
   /** Tools the model may call, described in JSON Schema rather than any vendor's format. */
   tools?: readonly ToolDefinition[];
+  /** The answer is a JSON artifact of this shape (А-10; task 131). */
+  structuredOutput?: StructuredOutput;
   /** Called for each incremental piece of text, in order. */
   onDelta: (text: string) => void;
   /** Cancels the provider call when the caller gives up — a timeout, or a disconnected client. */
@@ -215,6 +230,50 @@ function generationBound(
 }
 
 /**
+ * Constrained decoding, and why only the local provider gets it (амендмент А-10; task 131).
+ *
+ * The same predicate as `generationBound`, for a related reason: a model reached by **address** is a
+ * runtime we are driving directly, and a runtime can be told to sample only tokens a grammar allows.
+ * `responseFormat` is the SDK's vendor-neutral spelling of that; against Ollama's OpenAI-compatible
+ * surface it arrives as `response_format: {type: "json_schema"}` and is applied as the native
+ * `format` field — a GBNF grammar compiled from the schema. Valid JSON then stops being something
+ * the model agrees to and starts being something it cannot avoid.
+ *
+ * D-161 is what asked for it: `qwen3:14b` returned «the draft is not parseable JSON» three times in
+ * a row on a whole-bundle edit proposal, with the prompt read whole and no timeout in sight — the
+ * limit of the model, not of the plumbing.
+ *
+ * **A hosted provider is deliberately left alone**, and that is the compatibility contract of А-10:
+ * the cloud request is byte-identical with and without this argument, so a schema stated by a caller
+ * changes nothing about the chain the deployment runs. Its models hold a JSON contract from the
+ * prompt, and the three layers of Р-1 remain the outer guard either way — a grammar guarantees a
+ * *parseable* answer, never a *valid* one, and the schema layer above still has to say so.
+ *
+ * The middleware supplies a default rather than an override (`mergeObjects(settings, params)`), so a
+ * future caller that states its own response format keeps it.
+ */
+function constrainedModel(
+  model: ReturnType<typeof languageModel>,
+  connection: ProviderConnection,
+  structuredOutput: StructuredOutput | undefined,
+): ReturnType<typeof languageModel> {
+  if (structuredOutput === undefined || !('baseUrl' in connection)) return model;
+
+  return wrapLanguageModel({
+    model,
+    middleware: defaultSettingsMiddleware({
+      settings: {
+        responseFormat: {
+          type: 'json',
+          name: structuredOutput.name,
+          schema: structuredOutput.schema,
+        },
+      },
+    }),
+  });
+}
+
+/**
  * Builds the streaming call for one provider.
  *
  * Two details here are load-bearing and easy to get wrong:
@@ -233,13 +292,17 @@ export function createProviderStream(
   model: string,
   capacity?: ProviderCapacity,
 ): ProviderStream {
-  return async ({ messages, tools, onDelta, signal }) => {
+  return async ({ messages, tools, structuredOutput, onDelta, signal }) => {
     const { system, turns } = splitMessages(messages);
     const toolSet = toSdkTools(tools);
 
     try {
       const result = streamText({
-        model: languageModel(provider, model, connection),
+        model: constrainedModel(
+          languageModel(provider, model, connection),
+          connection,
+          structuredOutput,
+        ),
         ...(system === undefined ? {} : { system }),
         ...(toolSet === undefined ? {} : { tools: toolSet }),
         ...generationBound(connection, capacity, messages),

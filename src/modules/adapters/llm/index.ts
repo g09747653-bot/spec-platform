@@ -13,6 +13,7 @@ export {
   type PromptTarget,
   type ProviderCapacity,
   type ProviderId,
+  type StructuredOutput,
   type ToolDefinition,
 } from './types';
 export {

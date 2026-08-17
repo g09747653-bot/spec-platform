@@ -2,13 +2,18 @@ import type { LlmAdapter } from '@/modules/adapters/llm';
 import { reviewBoardPrompt, type ReviewVerificationItem } from '@/modules/prompts/assets/review';
 
 import { parseJsonDocument } from '../interview/interview-agent';
+import { constrainedOutput } from '../schemas/constrained-output';
 import {
   flattenReviewItems,
   repairReviewDraft,
+  ReviewArtifact,
   validateReviewDraft,
   type PersistedFeedbackItem,
   type ReviewArtifactValue,
 } from '../schemas/review-artifact';
+
+/** The board's shape, stated to a runtime that can be constrained to it (А-10; task 131). */
+const REVIEW_OUTPUT = constrainedOutput('review_board', ReviewArtifact);
 
 /**
  * The ReviewAgent (task 54, review.v2 by task 111; FR-010 AC-1..AC-3; solution.md — `agents`).
@@ -81,6 +86,7 @@ export function createReviewAgent(adapter: LlmAdapter) {
         { role: 'system', content: prompt.system },
         { role: 'user', content: prompt.user },
       ],
+      structuredOutput: REVIEW_OUTPUT,
       runId: input.runId,
       signal: input.signal,
     });

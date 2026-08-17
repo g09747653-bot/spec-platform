@@ -907,6 +907,7 @@ All endpoints are Next.js route handlers under `/api`. Every handler resolves th
 | `POST` | `/api/sessions/:id/generate` | Start a generation; opens a streaming response | 200 (stream) |
 | `GET` | `/api/generations/:runId/stream?from=<seq>` | Resume an in-flight stream | 200 (stream) |
 | `POST` | `/api/specs/:specFileId/decision` | Approve or request changes | 200 |
+| `POST` | `/api/sessions/:id/revert` | Append a revision restoring the previous content («go back»); source stamped from the session in the URL — a fact, not a client claim (амендмент А-11; immutability preserved: revert is an append) | 200 / 409 |
 | `POST` | `/api/specs/:specFileId/proposed-changes` | Create a refinement proposal | 201 |
 | `POST` | `/api/proposed-changes/:id/decision` | Accept or reject the diff | 200 |
 | `POST` | `/api/reviews/:id/decision` | Accept / ignore / request changes with selected items | 200 |
