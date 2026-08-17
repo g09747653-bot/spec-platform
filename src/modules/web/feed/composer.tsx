@@ -46,6 +46,7 @@ export function Composer({
   selectedModel,
   onSelectModel,
   onCommand,
+  onAttach,
 }: {
   value: string;
   onChange: (text: string) => void;
@@ -61,6 +62,8 @@ export function Composer({
   onSelectModel: (modelId: string) => void;
   /** Presses the control a slash command names. Returns false when the control is not on the page. */
   onCommand: (command: SlashCommand) => boolean;
+  /** Opens the attachment picker — the sidebar's input, pressed (task 133; row `1.5-2`). */
+  onAttach: () => void;
 }) {
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -199,7 +202,31 @@ export function Composer({
               : 'Ask anything about this session. / for commands, @ for a document.'
           }
         />
-        <Button data-testid="chat-send" disabled={busy || value.trim() === ''} onClick={send}>
+        {/*
+          Attach, in the composer where the reference puts it (task 133; row `1.5-2`; Эталон §1.5).
+
+          It presses the sidebar's own file input rather than owning a second one — the same move a
+          slash command makes, and for the same reason: one upload path, one set of size and type
+          rules, one place a failure is reported. A composer with its own `<input type="file">`
+          would be a second write path for attachments, which is exactly what task 63 avoided.
+        */}
+        <Button
+          variant="secondary"
+          aria-label="Attach a document"
+          title="Attach a document"
+          data-testid="composer-attach"
+          disabled={busy}
+          onClick={onAttach}
+        >
+          <span aria-hidden>📎</span>
+        </Button>
+
+        <Button
+          variant="brand"
+          data-testid="chat-send"
+          disabled={busy || value.trim() === ''}
+          onClick={send}
+        >
           {busy ? 'Sending…' : 'Send'}
         </Button>
       </div>

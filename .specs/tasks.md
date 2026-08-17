@@ -1632,7 +1632,7 @@ Goal: close every gap the red-team confirmed, so the stage-1 seal is earned, not
   - Acceptance Criteria: bridge appears between every pair of rounds on a live two-round stage and names at least the chosen options it builds on (fixture asserts the prompt receives prior answers); reload reproduces chat replies byte-for-byte in their original positions; a non-default methodology walk shows its own names in all three surfaces and its budget on the card; e2e green.
   - _Dependencies: 131_ · _Requirements: Эталон §1.2, §1.4; D-119; А-12_ · _Touches: `src/modules/agents/interview/**`, `src/modules/web/feed/**`, chat store_ · _Complexity: Large_ · _Parallel-safe: no_
 
-- [ ] 133\. Surface gaps (11)
+- [x] 133\. Surface gaps (11)
   - The six cheap fixes named in CHECKLIST §«Что чинится»: `1.1-2` (bubble fill token), `1.1-13` (completion copy sentence), `1.4-5` (call the computed `substageLabel`), `1.4-8` (export copy line), `1.5-3` (panel title), `1.2-1` (seed template does not duplicate the description) — plus the remaining five: `1.1-13` completion panel becomes the feed's true tail (stage bar and Refine render above it, chat pins below nothing), `1.2-2` one source for «how many rounds», `1.2-5` bundle-created event block in the feed, `1.4-4` Edit template de-duplication, `1.5-2` attach control in the composer + brand gradient on the send button, `1.5-4` project description surfaced.
   - Acceptance Criteria: each item's checklist row flips to «парити» with evidence; the completion panel is the last block in a completed session's feed; composer shows attach and the gradient send in both themes.
   - _Dependencies: 132_ · _Requirements: CHECKLIST §Разрывы (поверхностные)_ · _Touches: `src/modules/web/**`_ · _Complexity: Large_ · _Parallel-safe: no_

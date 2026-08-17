@@ -91,6 +91,16 @@ export interface PromptVariables {
     satisfiedNeeds: string;
     unmetNeeds: string;
     replyBlock: string;
+    /**
+     * How large a round may be, rendered by the caller from `question-set.ts` (task 133).
+     *
+     * Supplied rather than written into the template for the same reason `requiredSections` is
+     * derived: the bound that the answer is *checked* against and the bound the model is *asked*
+     * for have to be one number, or the prompt is a second opinion nothing enforces.
+     */
+    minOptions: string;
+    maxOptions: string;
+    maxQuestions: string;
   };
   'review.board.v2': {
     /** Named in the instruction only — the review does not derive a section list (see below). */
@@ -469,8 +479,15 @@ const INTERVIEW_QUESTIONS: PromptAsset = {
     '{"stage": "<stage>", "questions": [{"id", "text", "type": "single"|"multiple",',
     '"options": [{"id", "label", "description", "recommended?"}], "allowOther": true,',
     '"informationNeeds": ["<need>"]}]}.',
-    'Between 2 and 8 options per question; every question carries allowOther: true and names the',
-    'information needs it is meant to satisfy. Ask at most three questions in a round.',
+    /*
+     * The sizes are interpolated, not written (task 133; row `1.2-2`). "Ask at most three questions"
+     * lived here as a literal while the schema allowed five and the repair trimmed to five — three
+     * numbers for one rule, and the one the model obeyed was the one nothing enforced. The caller
+     * renders both from `question-set.ts`, which is where the rule is enforced.
+     */
+    'Between {{minOptions}} and {{maxOptions}} options per question; every question carries',
+    'allowOther: true and names the information needs it is meant to satisfy. Ask at most',
+    '{{maxQuestions}} questions in a round.',
     'Give every option a one-line "description" saying what choosing it would mean in practice.',
     'Mark at most ONE option per question with "recommended": true — the one you would advise for',
     'this product — and leave the flag off entirely when no option is clearly better.',
@@ -504,6 +521,9 @@ const INTERVIEW_QUESTIONS: PromptAsset = {
     'satisfiedNeeds',
     'unmetNeeds',
     'replyBlock',
+    'minOptions',
+    'maxOptions',
+    'maxQuestions',
   ],
 };
 

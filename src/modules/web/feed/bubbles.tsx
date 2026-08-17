@@ -1,11 +1,13 @@
 'use client';
 
+import { methodologyConfig } from '@/modules/methodologies';
+
 import { stageLabel } from '../session/stage-display';
 
 import { FeedItem } from './feed-item';
 import { positionLabel } from './labels';
 import { useMethodologyId } from './methodology-naming';
-import type { MessageBlock, SeedBlock, TransitionBlock } from './model';
+import type { BundleBlock, MessageBlock, SeedBlock, TransitionBlock } from './model';
 
 /**
  * The prose blocks of the conversation (task 105; Эталон §1.1, block types 1 and 3).
@@ -21,18 +23,47 @@ import type { MessageBlock, SeedBlock, TransitionBlock } from './model';
  */
 
 /**
+ * The fill that tells a user's bubble apart from the page it sits on (task 133; row `1.1-2`).
+ *
+ * `bg-background` was byte-identical to the canvas: the reference calls for a *muted* fill, the
+ * token for it existed, and the bubble was readable only by its border. Written once and shared by
+ * both bubbles, so the seed and a chat turn cannot drift apart.
+ */
+const BUBBLE =
+  'bg-surface-muted border-border-subtle max-w-[34rem] rounded-2xl rounded-tr-sm border px-4 py-3 text-sm';
+
+/**
  * The seed, rendered as the user's own opening message.
  *
  * The wording is the reference product's template (Эталон §1.2), and it is composed here rather than
  * stored: `sessions.initial_prompt` holds what the user actually typed, and wrapping it in a
  * sentence at write time would have made the stored grounding input a presentation decision.
+ *
+ * **The name is printed only when it is a second fact** (task 133; row `1.2-1`). The reference's
+ * two-slot sentence assumes a short generated bundle name beside a longer description; our name is
+ * derived from the prompt's first line (D-20, one field instead of two at creation), so on most
+ * sessions both slots carried the same text — «I want to build A tool that tracks which of a small
+ * charity's grant…. My project description is: A tool that tracks which of a small charity's grant
+ * applications are due». A project the user has renamed still gets the full sentence, because then
+ * the name really is something the description does not say.
+ *
+ * An Edit chat gets neither: its `initial_prompt` **is** a sentence already — «I want to update spec
+ * constitution.md … to» — and wrapping it produced two glued templates in one bubble (row `1.4-4`).
  */
 export function SeedBubble({ block }: { block: SeedBlock }) {
+  const methodologyId = useMethodologyId();
+  const prefilled = methodologyId !== null && methodologyConfig(methodologyId).chatClass === 'edit';
+  const namesMore = !block.prompt.startsWith(block.projectName.replace(/…$/, ''));
+
   return (
     <FeedItem block={block} align="right">
-      <div className="bg-background border-border-subtle max-w-[34rem] rounded-2xl rounded-tr-sm border px-4 py-3 text-sm">
+      <div className={BUBBLE}>
         <p className="whitespace-pre-wrap" data-testid="session-prompt-line">
-          I want to build {block.projectName}. My project description is:{' '}
+          {prefilled ? null : namesMore ? (
+            <>I want to build {block.projectName}. My project description is: </>
+          ) : (
+            <>I want to build: </>
+          )}
           <span data-testid="session-prompt">{block.prompt}</span>
         </p>
       </div>
@@ -44,10 +75,7 @@ export function MessageBubble({ block }: { block: MessageBlock }) {
   if (block.role === 'user') {
     return (
       <FeedItem block={block} align="right">
-        <div
-          className="bg-background border-border-subtle max-w-[34rem] rounded-2xl rounded-tr-sm border px-4 py-3 text-sm whitespace-pre-wrap"
-          data-testid="chat-turn-user"
-        >
+        <div className={`${BUBBLE} whitespace-pre-wrap`} data-testid="chat-turn-user">
           {block.text}
         </div>
       </FeedItem>
@@ -110,6 +138,27 @@ export function StageChip({ block }: { block: TransitionBlock }) {
           {positionLabel(block.to, methodologyId)}
         </span>
       </span>
+    </FeedItem>
+  );
+}
+
+/**
+ * «Project bundle created» (task 133; row `1.2-5`; Эталон §1.2).
+ *
+ * A system line rather than a card: the reference marks the moment the interview turns into a
+ * bundle, and what a reader needs from it is the name the document cards are about to print in
+ * their paths and the files that are coming. Derived — see `build-feed.ts`.
+ */
+export function BundleCreated({ block }: { block: BundleBlock }) {
+  return (
+    <FeedItem block={block} align="center">
+      <p
+        className="border-border-subtle text-foreground-muted rounded-full border px-3 py-1 text-xs"
+        data-testid="bundle-created"
+      >
+        Project bundle created: <span className="font-mono">{block.bundleName}</span> —{' '}
+        {block.fileNames.length} spec {block.fileNames.length === 1 ? 'file' : 'files'} to write
+      </p>
     </FeedItem>
   );
 }

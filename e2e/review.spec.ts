@@ -46,7 +46,7 @@ async function generateApproveAndEnterReview(page: Page): Promise<void> {
 
   await expect(page.getByTestId('proceed')).toBeEnabled();
   await page.getByTestId('proceed').click();
-  await expect(page.getByTestId('stage-substage')).toHaveText(/review/);
+  await expect(page.getByTestId('stage-substage')).toHaveText(/Reviewing/);
 }
 
 const startSession = (page: Page): Promise<string> =>
@@ -137,7 +137,7 @@ test.describe('review board', () => {
     await generateApproveAndEnterReview(page);
 
     await expect(page.getByTestId('review-board')).toBeVisible();
-    await expect(page.getByTestId('stage-substage')).toHaveText(/review/);
+    await expect(page.getByTestId('stage-substage')).toHaveText(/Reviewing/);
 
     // One of the three, and not the two that arrive ticked — the subset is what the endpoint must
     // record (AC-7), and a subset that happened to be the default would prove nothing.
@@ -147,7 +147,7 @@ test.describe('review board', () => {
     await page.getByTestId('review-request-changes').click();
 
     // The stage goes back to drafting (AC-6), and the decided board is no longer pending.
-    await expect(page.getByTestId('stage-substage')).toHaveText(/generate/);
+    await expect(page.getByTestId('stage-substage')).toHaveText(/Generating/);
     await expect(page.getByTestId('review-board')).toHaveCount(0);
 
     /*
@@ -178,7 +178,7 @@ test.describe('review board', () => {
 
     await expect(page.getByTestId('review-board')).toHaveCount(0);
     // The stage stays where it was: a decision opens the gate, it does not walk through it.
-    await expect(page.getByTestId('stage-substage')).toHaveText(/review/);
+    await expect(page.getByTestId('stage-substage')).toHaveText(/Reviewing/);
   });
 
   /**
@@ -204,7 +204,7 @@ test.describe('review board', () => {
     // --- Request changes, with a subset that is not the default ---
     await page.getByTestId('review-item-checkbox-mf-unnamed-actor').uncheck();
     await page.getByTestId('review-request-changes').click();
-    await expect(page.getByTestId('stage-substage')).toHaveText(/generate/);
+    await expect(page.getByTestId('stage-substage')).toHaveText(/Generating/);
 
     // --- Rev 2, and the paragraph that precedes it (Эталон §1.3) ---
     await page.getByTestId('generate-spec').click();

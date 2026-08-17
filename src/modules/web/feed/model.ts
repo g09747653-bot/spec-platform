@@ -26,6 +26,7 @@ export type FeedBlockKind =
   | 'message'
   | 'round'
   | 'transition'
+  | 'bundle'
   | 'generation'
   | 'document'
   | 'review'
@@ -224,6 +225,22 @@ export interface ProposalBlock extends FeedBlockBase {
   editBatchId: string | null;
 }
 
+/**
+ * «Project bundle created» — the session leaving the interview (task 133; Эталон §1.2).
+ *
+ * Derived at the one transition out of the entry stage rather than stored, like every other block
+ * here: the bundle has no row of its own, and the moment it comes into existence is the moment the
+ * first document has somewhere to go.
+ */
+export interface BundleBlock extends FeedBlockBase {
+  kind: 'bundle';
+  role: 'system';
+  /** The folder the document cards print in their paths — `bundleSlug` of the project's name. */
+  bundleName: string;
+  /** What this methodology's bundle will contain, in graph order. */
+  fileNames: readonly string[];
+}
+
 /** The sealed session (FR-020 AC-3). */
 export interface CompletionBlock extends FeedBlockBase {
   kind: 'completion';
@@ -237,6 +254,7 @@ export type FeedBlock =
   | MessageBlock
   | RoundBlock
   | TransitionBlock
+  | BundleBlock
   | GenerationBlock
   | DocumentBlock
   | ReviewBlock

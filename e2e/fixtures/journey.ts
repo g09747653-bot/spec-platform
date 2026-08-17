@@ -112,7 +112,7 @@ export async function collectFor(page: Page, stage: ParityStage): Promise<void> 
 
   await expect(page.getByTestId('interview-panel')).toBeVisible();
   await page.getByTestId('proceed').click();
-  await expect(page.getByTestId('stage-substage')).toHaveText(/generate/);
+  await expect(page.getByTestId('stage-substage')).toHaveText(/Generating/);
 }
 
 /**

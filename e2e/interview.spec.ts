@@ -82,7 +82,7 @@ test.describe('workflow gates and the structured interview', () => {
     // --- The gate that refused now permits (FR-006 AC-3; task 38) ---
     await page.getByTestId('proceed').click();
     await expect(page.getByTestId('stage-current')).toHaveText(/Constitution/);
-    await expect(page.getByTestId('stage-substage')).toHaveText(/collect/);
+    await expect(page.getByTestId('stage-substage')).toHaveText(/Collecting/);
 
     // --- The next stage collects for itself (FR-007 AC-2: rounds are per stage) ---
     await expect(page.getByTestId('gate-unmet')).toContainText('answered question round');
@@ -93,7 +93,7 @@ test.describe('workflow gates and the structured interview', () => {
 
     await expect(page.getByTestId('interview-panel')).toBeVisible();
     await page.getByTestId('proceed').click();
-    await expect(page.getByTestId('stage-substage')).toHaveText(/generate/);
+    await expect(page.getByTestId('stage-substage')).toHaveText(/Generating/);
 
     // --- At generate, the drafting path is open again (no pending card), and it streams ---
     await expect(page.getByTestId('generate-spec')).toBeVisible();

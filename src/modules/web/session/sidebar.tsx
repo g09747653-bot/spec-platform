@@ -16,9 +16,15 @@ import { cn } from '../lib/cn';
  *
  * The drag handle is a `separator` with keyboard control, because a resize that only a mouse can
  * perform is a feature half the users do not have.
+ *
+ * **The column track follows this width** (task 133; row `1.5-3`). It used to be a fixed `20rem`, so
+ * the handle could shrink the panel inside its track and could not widen it past the edge: half a
+ * control, and the walk could not tell because it read the `data-width` the component writes about
+ * itself. The default is the reference's own ~280px rather than the 320 that happened to equal the
+ * old track.
  */
 const STORAGE_KEY = 'spec-platform:sidebar-width';
-const DEFAULT_WIDTH = 320;
+const DEFAULT_WIDTH = 280;
 const MIN_WIDTH = 220;
 const MAX_WIDTH = 560;
 const KEYBOARD_STEP = 16;

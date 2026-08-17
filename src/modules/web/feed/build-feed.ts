@@ -1,4 +1,4 @@
-import { methodologyConfig } from '@/modules/methodologies';
+import { bundleFileNames, methodologyConfig } from '@/modules/methodologies';
 import {
   isSpecStage,
   positionKey,
@@ -6,8 +6,9 @@ import {
   type StagePosition,
 } from '@/modules/workflow/model/stages';
 
-import { specPath } from './labels';
+import { bundleSlug, specPath } from './labels';
 import type {
+  BundleBlock,
   CompletionBlock,
   DocumentBlock,
   Feed,
@@ -61,11 +62,12 @@ const KIND_RANK: Record<FeedBlock['kind'], number> = {
   round: 1,
   message: 2,
   transition: 3,
-  generation: 4,
-  document: 5,
-  review: 6,
-  proposal: 7,
-  completion: 8,
+  bundle: 4,
+  generation: 5,
+  document: 6,
+  review: 7,
+  proposal: 8,
+  completion: 9,
 };
 
 function compare(a: FeedBlock, b: FeedBlock): number {
@@ -111,6 +113,8 @@ function evidencedPosition(block: FeedBlock): StagePosition | null {
       return { stage: 'complete', substage: null };
     case 'transition':
     case 'proposal':
+    case 'bundle':
+      // `bundle` is emitted by the chip pass at the transition it belongs to, already positioned.
       return null;
   }
 }
@@ -559,6 +563,29 @@ export function buildFeed(source: FeedSource): Feed {
 
     if (evidenced !== null && !samePosition(evidenced, current)) {
       blocks.push(transitionBlock(current, evidenced, block.id, block.at));
+
+      /*
+       * «Project bundle created» — the moment the session stops being an interview (task 133; row
+       * `1.2-5`; Эталон §1.2).
+       *
+       * Derived, like everything else here: leaving `interview` is *when* the bundle comes into
+       * existence, because that is when the first document acquires somewhere to be written. There
+       * is no bundle row to project — the name is computed from the project (labels.ts) — so the
+       * event is emitted where the evidence for it is, at the one transition out of the entry stage.
+       */
+      if (current.stage === 'interview' && evidenced.stage !== 'interview') {
+        blocks.push({
+          kind: 'bundle',
+          id: 'bundle-created',
+          role: 'system',
+          stage: evidenced.stage,
+          substage: evidenced.substage,
+          at: block.at,
+          bundleName: bundleSlug(source.session.projectName),
+          fileNames: bundleFileNames(methodologyConfig(source.session.methodologyId)),
+        } satisfies BundleBlock);
+      }
+
       current = evidenced;
     }
 

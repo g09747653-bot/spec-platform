@@ -381,7 +381,7 @@ test.describe('the page always offers a way forward', () => {
     await page.getByTestId('mcq-submit').click();
 
     await proceedAliveInFlight(page, 'constitution collect → generate');
-    await expect(page.getByTestId('stage-substage')).toHaveText(/generate/);
+    await expect(page.getByTestId('stage-substage')).toHaveText(/Generating/);
     await expectAlive(page, 'constitution/generate, nothing drafted');
 
     await page.getByTestId('generate-spec').click();

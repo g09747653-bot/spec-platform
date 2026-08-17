@@ -15,6 +15,22 @@ import { ASKING_STAGES } from '@/modules/workflow/model/stages';
  * set is repaired at most once and then discarded with `DRAFT_INVALID` (never persisted, never
  * shown — NFR-009 AC-2).
  */
+/**
+ * How much a round may ask, written **once** (task 133; checklist row `1.2-2`).
+ *
+ * There were three numbers for one rule: the interviewer's prompt said "at most three questions",
+ * the schema allowed five, and the repair sliced to five — and the observed reference rounds had
+ * five, five and four. Whichever was right, three spellings of one contract is a contract nobody
+ * can change safely, and the red-team found the prompt's number had arrived in a gate-remediation
+ * commit with no reasoning written down anywhere.
+ *
+ * These constants are that rule. The schema enforces them, the repair trims to them, and the prompt
+ * asks for them by interpolation — so the instruction the model reads and the bound its answer is
+ * checked against cannot disagree again (constitution: "no duplicated structural truth").
+ */
+export const QUESTIONS_PER_ROUND = { min: 1, max: 5 } as const;
+export const OPTIONS_PER_QUESTION = { min: 2, max: 8 } as const;
+
 export const QuestionOption = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
@@ -35,7 +51,7 @@ export const Question = z
     id: z.string().min(1),
     text: z.string().min(1),
     type: z.enum(['single', 'multiple']),
-    options: z.array(QuestionOption).min(2).max(8),
+    options: z.array(QuestionOption).min(OPTIONS_PER_QUESTION.min).max(OPTIONS_PER_QUESTION.max),
     /** FR-005 AC-3: the free-text escape is mandatory, not a preference. */
     allowOther: z.literal(true),
     /** The named needs this question exists to satisfy (FR-005 AC-7; DR-13). */
@@ -66,7 +82,7 @@ export const Question = z
 export const QuestionSetSchema = z
   .object({
     stage: z.enum(ASKING_STAGES),
-    questions: z.array(Question).min(1).max(5),
+    questions: z.array(Question).min(QUESTIONS_PER_ROUND.min).max(QUESTIONS_PER_ROUND.max),
   })
   .superRefine((set, ctx) => {
     const ids = new Set(set.questions.map((question) => question.id));

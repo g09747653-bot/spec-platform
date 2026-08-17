@@ -77,6 +77,9 @@ describe('assemblePrompt', () => {
       satisfiedNeeds: '(none)',
       unmetNeeds: '(none declared yet)',
       replyBlock: '',
+      minOptions: '2',
+      maxOptions: '8',
+      maxQuestions: '5',
     });
 
     expect(withoutSummary.user).not.toMatch(/\n{3,}/);

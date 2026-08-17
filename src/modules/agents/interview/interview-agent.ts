@@ -7,6 +7,8 @@ import type { AskingStage } from '@/modules/workflow/model/stages';
 
 import { constrainedOutput } from '../schemas/constrained-output';
 import {
+  OPTIONS_PER_QUESTION,
+  QUESTIONS_PER_ROUND,
   QuestionSetSchema,
   validateQuestionSetDraft,
   type QuestionSet,
@@ -37,7 +39,10 @@ const QUESTION_SET_OUTPUT = constrainedOutput('question_set', QuestionSetSchema)
  * questions means the stage has nothing to ask (which the caller treats as collection complete,
  * FR-005 AC-10). An invalid set is never persisted and never rendered (NFR-009 AC-2).
  */
-export interface InterviewAgentInput extends Omit<InterviewQuestionsPromptInput, 'stage'> {
+export interface InterviewAgentInput extends Omit<
+  InterviewQuestionsPromptInput,
+  'stage' | 'questionsPerRound' | 'optionsPerQuestion'
+> {
   /** Typed here, not in the prompt asset: `prompts` may not import the stage union (A1). */
   stage: AskingStage;
   runId: string;
@@ -190,15 +195,16 @@ export function repairQuestionSetDraft(expectedStage: string): QuestionSetRepair
       .map((question) => {
         const needs = question.informationNeeds;
         const options: unknown[] = Array.isArray(question.options)
-          ? question.options.slice(0, 8)
+          ? question.options.slice(0, OPTIONS_PER_QUESTION.max)
           : [];
 
         return { question, needs, options };
       })
       .filter(
-        ({ needs, options }) => options.length >= 2 && Array.isArray(needs) && needs.length > 0,
+        ({ needs, options }) =>
+          options.length >= OPTIONS_PER_QUESTION.min && Array.isArray(needs) && needs.length > 0,
       )
-      .slice(0, 5)
+      .slice(0, QUESTIONS_PER_ROUND.max)
       .map(({ question, options }) => {
         const recommendation = atMostOneRecommended(options);
 
@@ -248,7 +254,13 @@ function withoutSatisfiedNeeds(set: QuestionSet, satisfied: readonly string[]): 
 export function createInterviewAgent(adapter: LlmAdapter) {
   /** One full draft: prompt, model call, parse, validate. */
   async function attemptDraft(input: InterviewAgentInput): Promise<InterviewAgentOutcome> {
-    const prompt = interviewQuestionsPrompt(input);
+    // The bounds the draft below will be validated against, handed to the prompt that asks for it
+    // (task 133; row `1.2-2`) — one rule, one place, both halves reading it.
+    const prompt = interviewQuestionsPrompt({
+      ...input,
+      questionsPerRound: QUESTIONS_PER_ROUND,
+      optionsPerQuestion: OPTIONS_PER_QUESTION,
+    });
 
     const result = await adapter.generateStreaming({
       messages: [

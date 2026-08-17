@@ -517,7 +517,11 @@ async function SessionBody({ session, scope }: { session: SessionDetail; scope: 
         />
       </header>
 
-      <div className="grid min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      {/*
+        `auto` rather than a fixed `20rem` (task 133; row `1.5-3`): the sidebar owns its width, and a
+        track that did not follow it made the resize handle work in one direction only.
+      */}
+      <div className="grid min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_auto]">
         <SessionFeed
           sessionId={session.id}
           feed={feed}
@@ -598,6 +602,8 @@ async function SessionBody({ session, scope }: { session: SessionDetail; scope: 
             mode={exportMode}
             files={exportFiles}
             omittedFiles={omittedFiles}
+            // The methodology's own plan, so the panel's sentence counts this bundle (task 133).
+            planned={plan.length}
           />
         </SessionSidebar>
       </div>

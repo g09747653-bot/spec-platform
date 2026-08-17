@@ -5,7 +5,7 @@ import { useState } from 'react';
 
 import { useChatDecision } from '../session/useChatDecision';
 
-import { MessageBubble, SeedBubble, StageChip } from './bubbles';
+import { BundleCreated, MessageBubble, SeedBubble, StageChip } from './bubbles';
 import { appendChatTurns } from './chat-turns';
 import { CompletionPanel, type CompletionModel } from './completion-panel';
 import { Composer } from './composer';
@@ -107,7 +107,18 @@ export function SessionFeed({
    * of which commands apply where.
    */
   function pressControl(command: SlashCommand): boolean {
-    const node = document.querySelector<HTMLElement>(`[data-testid="${command.control}"]`);
+    return press(command.control);
+  }
+
+  /**
+   * Presses a control the page already renders, by the test id it already carries.
+   *
+   * Shared by the slash commands and by the composer's attach button (task 133): the file input
+   * lives in the sidebar's Attachments card, and the composer opening *that* input is what keeps
+   * one upload path rather than two.
+   */
+  function press(controlId: string): boolean {
+    const node = document.querySelector<HTMLElement>(`[data-testid="${controlId}"]`);
     if (node === null) return false;
 
     node.scrollIntoView({ block: 'center' });
@@ -134,6 +145,15 @@ export function SessionFeed({
    * with nothing in between (task 109).
    */
   const withChat = appendChatTurns(feed, chat.turns);
+
+  /*
+   * The completion panel is held back to the very end (task 133; row `1.1-13`) — see the note where
+   * it is rendered. Split here rather than in the projection: `buildFeed` is a statement about what
+   * happened and in what order, and the panel *is* the last thing that happened; what this fixes is
+   * the page rendering four more surfaces after the block list.
+   */
+  const tailPanel = withChat.blocks.find((block) => block.kind === 'completion');
+  const body = withChat.blocks.filter((block) => block.kind !== 'completion');
 
   const { tail } = feed;
   const blocked = tail.kind === 'pending-round';
@@ -164,6 +184,9 @@ export function SessionFeed({
 
       case 'transition':
         return <StageChip key={block.id} block={block} />;
+
+      case 'bundle':
+        return <BundleCreated key={block.id} block={block} />;
 
       case 'round':
         return (
@@ -244,7 +267,7 @@ export function SessionFeed({
       <div className="flex min-h-0 flex-1 flex-col">
         {/* `pb-28` keeps the last block clear of the sticky composer, which floats over the feed. */}
         <ol className="flex flex-col gap-4 px-4 pt-6 pb-28" data-testid="feed">
-          {withChat.blocks.map((block) => (
+          {body.map((block) => (
             <li key={block.id} className="contents">
               {renderBlock(block)}
             </li>
@@ -283,6 +306,22 @@ export function SessionFeed({
               <RevertCard sessionId={sessionId} revert={revert} />
             </li>
           )}
+
+          {/*
+            The end of the feed, and it means it (task 133; row `1.1-13`; Эталон §1.1).
+
+            The panel was already the last *block*, but four surfaces render after the block list —
+            the drafting card, the stage bar, Refine, the revert offer — and a chat reply appended
+            during a completed session landed below all of them. So the reference's "final panel"
+            was a panel with a working stage bar underneath it. Held back to here instead: nothing
+            is hidden, everything that was offered is still offered, and the session ends where it
+            says it ends.
+          */}
+          {tailPanel !== undefined && (
+            <li key={tailPanel.id} className="contents">
+              {renderBlock(tailPanel)}
+            </li>
+          )}
         </ol>
 
         <Composer
@@ -303,6 +342,9 @@ export function SessionFeed({
             void selectModel(modelId);
           }}
           onCommand={pressControl}
+          onAttach={() => {
+            press('attachment-input');
+          }}
         />
       </div>
     </MethodologyNaming>

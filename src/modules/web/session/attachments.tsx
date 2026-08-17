@@ -222,7 +222,7 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
   return (
     <Card data-testid="attachments-panel">
       <CardHeader>
-        <CardTitle>Documents</CardTitle>
+        <CardTitle>Attachments</CardTitle>
         <CardDescription>
           Attach anything the agents should read as grounding context — now or at any later stage.
         </CardDescription>

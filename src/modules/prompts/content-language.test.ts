@@ -39,6 +39,9 @@ const VARIABLES: { [Id in PromptId]: PromptVariables[Id] } = {
     satisfiedNeeds: '(none)',
     unmetNeeds: '(none declared yet)',
     replyBlock: '',
+    minOptions: '2',
+    maxOptions: '8',
+    maxQuestions: '5',
   },
   'review.board.v2': { specType: 'constitution', specContent: '# Constitution', verification: '' },
   'revision.note.v1': {

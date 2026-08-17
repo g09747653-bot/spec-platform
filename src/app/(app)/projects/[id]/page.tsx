@@ -123,7 +123,23 @@ export default async function ProjectPage({
         <h1 className="text-h1" data-testid="project-page-name">
           {project.name}
         </h1>
-        <p className="text-foreground-muted text-sm">
+        {/*
+          The project's own description (task 133; row `1.5-3`… `1.5-4`; Эталон §1.5).
+
+          It was loaded and thrown away: the page printed the name and a sentence about archiving,
+          and a visitor with three projects called «A tool that tracks which of a small charity's
+          grant…» had nothing on this page to tell them apart. The text is the grounding prompt —
+          the words the user typed — clamped to two lines with the whole of it in `title`, which is
+          the reference's own tooltip.
+        */}
+        <p
+          className="text-foreground-muted line-clamp-2 max-w-[60rem] text-sm"
+          data-testid="project-description"
+          title={project.initialPrompt}
+        >
+          {project.initialPrompt}
+        </p>
+        <p className="text-foreground-muted text-xs">
           Every conversation about this bundle. Archiving hides a chat from Active and changes
           nothing else.
         </p>

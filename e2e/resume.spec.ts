@@ -213,7 +213,7 @@ test.describe('session resume', () => {
 
     await expect(page.getByTestId('review-board')).toBeVisible();
     expect(await page.getByTestId('review-board').textContent()).toBe(board);
-    await expect(page.getByTestId('stage-substage')).toHaveText(/review/);
+    await expect(page.getByTestId('stage-substage')).toHaveText(/Reviewing/);
   });
 
   /*

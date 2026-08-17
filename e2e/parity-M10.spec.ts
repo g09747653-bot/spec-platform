@@ -250,7 +250,7 @@ test.describe('parity checklist evidence (task 128)', () => {
     await page.getByTestId('mcq-submit').click();
     await expect(page.getByTestId('interview-panel')).toBeVisible();
     await page.getByTestId('proceed').click();
-    await expect(page.getByTestId('stage-substage')).toHaveText(/generate/);
+    await expect(page.getByTestId('stage-substage')).toHaveText(/Generating/);
 
     await page.getByTestId('generate-spec').click();
     await expect(page.getByTestId('spec-card')).toBeVisible({ timeout: 60_000 });

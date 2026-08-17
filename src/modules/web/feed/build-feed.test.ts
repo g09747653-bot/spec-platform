@@ -247,12 +247,43 @@ describe('block kinds', () => {
         'round',
         'message',
         'transition',
+        // Task 133, row `1.2-5`: leaving the interview is when the bundle comes into existence.
+        'bundle',
         'generation',
         'document',
         'review',
         'proposal',
       ]),
     );
+  });
+
+  /**
+   * «Project bundle created», at the one transition out of the entry stage (task 133; Эталон §1.2).
+   *
+   * Derived rather than stored, so the assertions are about *where* it is: after the interview's
+   * last round, before the first thing the next stage does, and exactly once however many stages
+   * the session goes on to visit.
+   */
+  it('marks the bundle’s creation once, where the interview ends', () => {
+    const feed = buildFeed(walkedToReview());
+    const order = ids(feed.blocks);
+    const bundle = feed.blocks.filter((block) => block.kind === 'bundle');
+
+    expect(bundle).toHaveLength(1);
+    expect(bundle[0]).toMatchObject({
+      kind: 'bundle',
+      bundleName: 'local-voice-assistant',
+      fileNames: ['constitution.md', 'requirements.md', 'solution.md', 'tasks.md', 'quality.md'],
+    });
+
+    expect(order.indexOf('bundle-created')).toBeGreaterThan(order.indexOf('round:r1'));
+    expect(order.indexOf('bundle-created')).toBeLessThan(order.indexOf('run:run-1'));
+  });
+
+  it('marks nothing while the session is still in the interview', () => {
+    const feed = buildFeed(source({ rounds: [round({ answeredAt: T.answered1 })] }));
+
+    expect(feed.blocks.some((block) => block.kind === 'bundle')).toBe(false);
   });
 
   /**
