@@ -179,7 +179,14 @@ export function Composer({
           panel rather than to the box, so the whole thing reads as a single object to type into —
           and so the row underneath cannot be mistaken for a separate toolbar floating below it.
         */}
-        <div className="border-border-subtle bg-background focus-within:border-primary/60 flex w-full min-w-0 flex-col rounded-xl border transition-colors">
+        {/*
+          The focus ring is on the panel, not on the box inside it (task 141 — «honest focus»). The
+          textarea has no border of its own, so a ring around the textarea would draw a rectangle
+          inside a rectangle; the panel *is* the control as far as a person is concerned, and it is
+          the panel that should light up. Both halves come from tokens, so it is visible in either
+          theme rather than in the one it was designed in.
+        */}
+        <div className="border-border-subtle bg-background focus-within:border-primary/60 focus-within:ring-primary/25 flex w-full min-w-0 flex-col rounded-xl border transition-colors focus-within:ring-2">
           <textarea
             ref={inputRef}
             id="chat-message"

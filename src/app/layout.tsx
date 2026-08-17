@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
-import { SERVER_DEFAULT_THEME, ThemeScript } from '@/modules/web';
+import { SERVER_DEFAULT_THEME, ThemeScript, UiStateScript } from '@/modules/web';
 
 import './globals.css';
 
@@ -23,6 +23,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" data-theme={SERVER_DEFAULT_THEME} suppressHydrationWarning>
       <head>
         <ThemeScript />
+        <UiStateScript />
       </head>
       <body className="bg-background text-foreground min-h-screen antialiased">{children}</body>
     </html>

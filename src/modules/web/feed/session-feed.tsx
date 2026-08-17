@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
@@ -16,7 +17,19 @@ import { sidebarCollapsedValue, viewerViewValue } from '../state/ui-state';
 import { useUiState } from '../state/use-ui-state';
 import { ChevronDownIcon } from '../ui/icons';
 import { ViewerControlProvider } from '../viewer/viewer-control';
-import { ViewerPane, type ViewerTarget } from '../viewer/viewer-pane';
+import type { ViewerTarget } from '../viewer/viewer-pane';
+
+/**
+ * The viewer arrives when a document is opened, not before (tasks 138, 141).
+ *
+ * It brings the markdown renderer and the diff machinery with it, and a session that never opens a
+ * document should not pay for either — the conversation is what has to be interactive quickly, and
+ * every kilobyte in front of hydration is a click that lands on an unhydrated control. `ssr: false`
+ * because nothing here is on the server's first paint: the pane exists only after a press.
+ */
+const ViewerPane = dynamic(async () => (await import('../viewer/viewer-pane')).ViewerPane, {
+  ssr: false,
+});
 
 import { BundleCreated, MessageBubble, SeedBubble, StageChip } from './bubbles';
 import { appendChatTurns } from './chat-turns';
@@ -143,7 +156,10 @@ function SessionSurface({
   const [, setViewerView] = useUiState(viewerViewValue);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLOListElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  /** Whether the reader is still at the end of the conversation, and should be kept there. */
+  const stuck = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
 
   const openViewer = useCallback((target: ViewerTarget) => {
@@ -326,13 +342,45 @@ function SessionSurface({
     const node = scrollRef.current;
     if (node === null) return;
 
-    setAtBottom(node.scrollHeight - node.scrollTop - node.clientHeight < 64);
+    const ended = node.scrollHeight - node.scrollTop - node.clientHeight < 64;
+    stuck.current = ended;
+    setAtBottom(ended);
   }, []);
 
   function jumpToEnd() {
     const node = scrollRef.current;
+    stuck.current = true;
     node?.scrollTo({ top: node.scrollHeight });
   }
+
+  /*
+   * The conversation stays at its end unless the reader has moved away from it (task 137).
+   *
+   * A conversation that grows while you are reading the middle of it must not yank you to the
+   * bottom — but one you have never left should show what just arrived, and before this a completed
+   * session opened with the review board of two stages ago on screen and the completion panel below
+   * the fold. `stuck` is a ref rather than state because it is read inside the observer and changing
+   * it must not re-render.
+   *
+   * A `ResizeObserver` rather than a dependency on the block count: the document being written grows
+   * the feed continuously without adding a block, and that is exactly when following it matters.
+   */
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    const list = listRef.current;
+    if (scroller === null || list === null) return;
+
+    scroller.scrollTop = scroller.scrollHeight;
+
+    const observer = new ResizeObserver(() => {
+      if (stuck.current) scroller.scrollTop = scroller.scrollHeight;
+    });
+    observer.observe(list);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   function renderBlock(block: FeedBlock) {
     const isTail = tail.kind !== 'open' && tail.blockId === block.id;
@@ -437,7 +485,11 @@ function SessionSurface({
               className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain"
               data-testid="feed-scroll"
             >
-              <ol className="feed-measure flex flex-col gap-4 px-4 pt-6 pb-8" data-testid="feed">
+              <ol
+                ref={listRef}
+                className="feed-measure flex flex-col gap-4 px-4 pt-6 pb-8"
+                data-testid="feed"
+              >
                 {body.map((block) => (
                   <li key={block.id} className="contents">
                     {renderBlock(block)}

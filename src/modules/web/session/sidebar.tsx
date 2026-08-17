@@ -5,10 +5,12 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { cn } from '../lib/cn';
 import {
   clampSidebarWidth,
+  setSidebarWidth,
   sidebarCollapsedValue,
   sidebarWidthValue,
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
+  SIDEBAR_WIDTH_PROPERTY,
 } from '../state/ui-state';
 import { useUiState } from '../state/use-ui-state';
 import { PanelIcon } from '../ui/icons';
@@ -46,9 +48,10 @@ export interface SessionSidebarProps {
 }
 
 export function SessionSidebar({ children }: SessionSidebarProps) {
-  const [width, setWidth] = useUiState(sidebarWidthValue);
+  const [width] = useUiState(sidebarWidthValue);
   const [collapsed] = useUiState(sidebarCollapsedValue);
   const dragging = useRef(false);
+  const setWidth = setSidebarWidth;
 
   useEffect(() => {
     function onMove(event: MouseEvent) {
@@ -93,7 +96,13 @@ export function SessionSidebar({ children }: SessionSidebarProps) {
       className="flex min-h-0 max-w-[40%] shrink-0"
       data-testid="session-sidebar"
       data-collapsed="false"
-      style={{ width: `${String(width)}px` }}
+      /*
+        Painted from the custom property the pre-paint script has already set, not from the number
+        React knows. Server and client therefore render identical markup, and the stored width is on
+        screen at the first paint rather than after hydration — which on WebKit was a visible jump
+        from the default and, measured in between, an honest reading of the wrong width.
+      */
+      style={{ width: `var(${SIDEBAR_WIDTH_PROPERTY})` }}
     >
       <div
         role="separator"

@@ -213,12 +213,30 @@ export function DocumentBlock({
         )}
 
         {shown !== null && (
-          <pre
-            data-testid={primary ? 'spec-content' : 'document-content'}
-            className="bg-background border-border-subtle max-h-72 overflow-auto rounded-md border p-3 text-xs whitespace-pre-wrap"
-          >
-            {shown}
-          </pre>
+          /*
+           * **An excerpt, not a well** (task 138).
+           *
+           * This used to be `max-h-72 overflow-auto`: a document read through a 288-pixel window
+           * with its own scrollbar, inside a card, inside the conversation's scroller. Three nested
+           * scrollers is the shape the customer called «a small window», and it is also why the
+           * card never felt like a way *to* the document — the document was already, badly, here.
+           *
+           * Clipped rather than scrollable now, with the fade saying there is more, and the eye in
+           * the card's header being the way to read it. Every byte is still in the DOM, so a search
+           * on the page still finds it.
+           */
+          <div className="relative">
+            <pre
+              data-testid={primary ? 'spec-content' : 'document-content'}
+              className="bg-background border-border-subtle max-h-44 overflow-hidden rounded-md border p-3 text-xs whitespace-pre-wrap"
+            >
+              {shown}
+            </pre>
+            <div
+              aria-hidden
+              className="from-background pointer-events-none absolute inset-x-px bottom-px h-10 rounded-b-md bg-gradient-to-t to-transparent"
+            />
+          </div>
         )}
 
         {error !== null && (

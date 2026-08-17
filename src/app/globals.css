@@ -10,6 +10,18 @@
  */
 
 @layer base {
+  /*
+   * The sidebar's painted width (task 141).
+   *
+   * Declared here so the very first paint has a value even with JavaScript disabled; the pre-paint
+   * script in `<head>` replaces it with this device's stored width, and `setSidebarWidth` keeps it
+   * in step from then on. A length, not a colour — the brand file remains the only place a colour
+   * is named.
+   */
+  :root {
+    --sidebar-width: 300px;
+  }
+
   * {
     box-sizing: border-box;
   }
@@ -105,13 +117,6 @@
  */
 @layer components {
   /*
-   * Prose the model wrote (row `1.5-11`).
-   *
-   * The reference gives every AI turn a typographic wrapper; ours had none, so an answer was set in
-   * the same 14px as a control label. This is the body scale from the token set, with the measure
-   * and rhythm a paragraph needs — nothing bespoke, just the scale actually applied.
-   */
-  /*
    * The conversation's measure — one number, one home (task 137).
    *
    * Every surface of the session that has to line up with the conversation reads this: the feed, the
@@ -129,6 +134,13 @@
     margin-inline: auto;
   }
 
+  /*
+   * Prose the model wrote (row `1.5-11`).
+   *
+   * The reference gives every AI turn a typographic wrapper; ours had none, so an answer was set in
+   * the same 14px as a control label. This is the body scale from the token set, with the measure
+   * and rhythm a paragraph needs — nothing bespoke, just the scale actually applied.
+   */
   .chat-prose {
     font-size: var(--text-body);
     line-height: 1.65;

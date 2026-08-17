@@ -185,6 +185,53 @@ export const sidebarWidthValue = persistedValue<number>({
 });
 
 /**
+ * The custom property the sidebar's width is actually painted from.
+ *
+ * **Why a CSS variable and not the React value.** The stored width is known to the browser before
+ * React exists, and the server cannot know it at all — so a pane whose width came from state
+ * rendered at the default and jumped to the stored value once hydration finished. On a fast engine
+ * that is a frame; on WebKit it was visible, and a measurement taken in between reported the wrong
+ * width truthfully. This is the same problem the theme has, solved the same way (D-164): a
+ * synchronous script in `<head>` writes the value before the first paint, and the element's style
+ * is the variable rather than a number, so server and client render identical markup.
+ */
+export const SIDEBAR_WIDTH_PROPERTY = '--sidebar-width';
+
+/** Stores the width and paints it, in that order. The only way the sidebar's width changes. */
+export function setSidebarWidth(next: number): void {
+  const width = clampSidebarWidth(next);
+  sidebarWidthValue.set(width);
+  paintSidebarWidth(width);
+}
+
+function paintSidebarWidth(width: number): void {
+  try {
+    document.documentElement.style.setProperty(SIDEBAR_WIDTH_PROPERTY, `${String(width)}px`);
+  } catch {
+    /* No document (a test importing the pure half). The stored value is still the truth. */
+  }
+}
+
+/**
+ * The pre-paint script, as source text.
+ *
+ * Kept as one expression with a `try` around it, like the theme's: a browser with storage disabled
+ * must fall through to the stylesheet's default, not throw while `<head>` is being parsed. The
+ * clamp is repeated here rather than imported because this string runs before any module does — and
+ * the bounds are interpolated from the constants above, so there is still one place to change them.
+ */
+export function uiStateScriptSource(): string {
+  return (
+    '(function(){try{' +
+    `var w=Number(localStorage.getItem(${JSON.stringify(UI_STATE_KEYS.sidebarWidth)}));` +
+    `if(!isFinite(w))return;` +
+    `w=Math.min(${String(SIDEBAR_MAX_WIDTH)},Math.max(${String(SIDEBAR_MIN_WIDTH)},Math.round(w)));` +
+    `document.documentElement.style.setProperty(${JSON.stringify(SIDEBAR_WIDTH_PROPERTY)},w+'px');` +
+    '}catch(e){}})()'
+  );
+}
+
+/**
  * Whether the sidebar is collapsed.
  *
  * Stored, because a collapse that a reload undoes is not a preference — and because the customer's

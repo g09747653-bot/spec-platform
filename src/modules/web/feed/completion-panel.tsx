@@ -140,6 +140,18 @@ export function CompletionPanel({
 
   async function openWith(platform: (typeof PLATFORMS)[number]): Promise<void> {
     const text = prompt ?? generatePrompt();
+
+    /*
+     * **The tab opens first, inside the gesture that asked for it** (found by the M12п bug hunt).
+     *
+     * A popup that arrives after an `await` is no longer attributable to a click, and a browser is
+     * entitled to block it — WebKit does, and did: the button copied the prompt and then opened
+     * nothing. Ordering it this way also puts the two outcomes the right way round. Opening the
+     * platform is the thing the button promises and it cannot fail; reaching the clipboard is the
+     * thing that can, and the toast is where that is reported (the text stays on screen either way).
+     */
+    window.open(platform.url, '_blank', 'noopener,noreferrer');
+
     const copied = await copyPrompt(text);
 
     showToast(
@@ -148,8 +160,6 @@ export function CompletionPanel({
         : `Could not reach the clipboard. Copy the prompt below, then paste it into ${platform.label}.`,
       copied ? 'success' : 'danger',
     );
-
-    window.open(platform.url, '_blank', 'noopener,noreferrer');
   }
 
   return (

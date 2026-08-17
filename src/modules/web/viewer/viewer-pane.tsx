@@ -134,6 +134,7 @@ export function ViewerPane({ target, onClose }: { target: ViewerTarget; onClose:
   const streaming = target.kind === 'live';
   const content = streaming ? stream.state.text : (loaded?.content ?? '');
   const metrics = documentMetrics(content);
+  const counted = content !== '';
   const following = stream.state.status === 'streaming' || stream.state.status === 'reconnecting';
 
   return (
@@ -157,14 +158,23 @@ export function ViewerPane({ target, onClose }: { target: ViewerTarget; onClose:
               <span data-testid="viewer-metric-revision">
                 {revisionNumber === null ? 'Draft in progress' : `Rev ${String(revisionNumber)}`}
               </span>
-              <span aria-hidden>·</span>
-              <span data-testid="viewer-metric-lines">
-                {metrics.lines} {metrics.lines === 1 ? 'line' : 'lines'}
-              </span>
-              <span aria-hidden>·</span>
-              <span data-testid="viewer-metric-words">
-                {metrics.words} {metrics.words === 1 ? 'word' : 'words'}
-              </span>
+              {/*
+                Withheld until there is something to count. «0 lines · 0 words» over a document
+                still being fetched is a measurement of nothing presented as a measurement, and it
+                was on screen for as long as the request took.
+              */}
+              {counted && (
+                <>
+                  <span aria-hidden>·</span>
+                  <span data-testid="viewer-metric-lines">
+                    {metrics.lines} {metrics.lines === 1 ? 'line' : 'lines'}
+                  </span>
+                  <span aria-hidden>·</span>
+                  <span data-testid="viewer-metric-words">
+                    {metrics.words} {metrics.words === 1 ? 'word' : 'words'}
+                  </span>
+                </>
+              )}
               {target.kind === 'revision' && target.approved && (
                 <>
                   <span aria-hidden>·</span>

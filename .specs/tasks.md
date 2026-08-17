@@ -1649,6 +1649,50 @@ Goal: close every gap the red-team confirmed, so the stage-1 seal is earned, not
   - _Dependencies: 132–134_ · _Requirements: А-2 (финальный парити-вердикт), А-2.1_ · _Touches: `e2e/**`, `artifacts/gate-M11/**`_ · _Complexity: Large_ · _Parallel-safe: no_
 
 
+### Milestone 12п — Design finale & bug hunt (Architect, 2026-08-17; личная приёмка заказчика этапа 1)
+
+Goal: the customer personally walked the product end-to-end — mechanics confirmed working, design sent back for a real polish. Mandate (А-14, уточнён 2026-08-17): **the reference is a FUNCTIONAL and UX bar only — «функционально и по удобству не хуже». Its graphics are NOT a target: the visual identity must be our own and deliberately distinct.** Where the reference can do something we cannot, or does it better (the three-view document viewer is the customer's own example), we match or beat it. Where it is merely a look, we go our own way and justify it in one line. The reference material is `.specs/research/etalon-design.zip`: three full page saves in journey order (new chat → mid-journey → completed voxel demo — the customer recreated OUR test prompt on THEIR site, so content matches side-by-side) plus their complete stylesheet `root-CbIPcGKW.css` (Inter, OKLCH palette, radius/type scales). Unpack it to `.specs/research/etalon-design/` first and study all three pages in a browser before writing a line of CSS — read them as a **capability and ergonomics inventory** (what can a user do here, in how many clicks, with what feedback), not as a visual template. Our palette, brand and visual language stay ours (задача 124); this milestone is about capability parity, composition, hierarchy, spacing and finish — expressed in our own identity.
+
+- [x] 136\. Reported defects first — root causes, not cosmetics
+  - **Sidebar collapse is irreversible** (customer repro: the `›` toggle collapses the Specs column, layout squashes, pressing again does not restore). Root-cause the state/width handling; collapse must be a clean two-state toggle that survives reload; the un-collapsed default returns exactly.
+  - **Composer is squashed into a vertical strip** (placeholder «Ask anything» renders one letter per line — the textarea gets ~2ch width). Root-cause the flex/grid constraint; the composer must occupy the feed column's full width at every viewport ≥1024px, with graceful behaviour below.
+  - Sweep for siblings of both bugs: any other collapse/resize control and any other flex child that can be starved (audit every `flex`/`grid` container the two fixes touch).
+  - Acceptance Criteria: both customer repros pass as new e2e tests (collapse → expand → identical layout; composer min-width at three viewports); no other control exhibits the class (audit list in the report).
+  - _Dependencies: 135_ · _Requirements: рекламации заказчика 2026-08-17 (скриншоты 1–2)_ · _Touches: `src/modules/web/**`_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [x] 137\. Composition and layout per the reference journey
+  - Rebuild the page composition so the product reads as one designed application: feed as the centred primary column with a comfortable reading measure, sidebar with its sections, collapse and resize, sticky header whose pills do not fight the title, and a properly docked composer (attach + model picker + Send) rather than a floating fragment.
+  - Use the reference to calibrate **ergonomics** — reading width, density, what stays visible while scrolling, how the composer behaves — then design our own proportions and rhythm on top. Copying their exact paddings is explicitly NOT the goal; being as comfortable to use, or better, is.
+  - Acceptance Criteria: side-by-side screenshots (ours vs reference) for the three journey moments, each annotated with **what we do at least as well and where we deliberately differ** (visual divergence is expected; ergonomic regression is not); no horizontal scroll at 1280/1536/1920; sidebar resize + collapse work; e2e green on both themes.
+  - _Dependencies: 136_ · _Requirements: Эталон §1.1/§1.5; etalon-design pages_ · _Touches: `src/modules/web/**` (layout shell)_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [x] 138\. Document experience — the card is a door, not a box
+  - Every document card in every state opens the full viewer (глаз): during live generation the viewer streams the same content (reuse the resumable reader — no second data path); after approval likewise. The in-card preview stays a bounded excerpt, not a scrollable well.
+  - Viewer header gains the metrics the customer asked for: line count, word count, revision, and per-view (Raw shows line numbers). Copy/Download stay.
+  - Acceptance Criteria: the eye is present and works on a card in `generating`, `drafted`, and `approved` states (e2e covers all three); Raw shows numbered lines; counts match `wc -l`/word count of the exported bytes; streaming into an open viewer keeps the liveness invariant (Stop reachable).
+  - _Dependencies: 136_ · _Requirements: рекламация заказчика (скриншот 3 vs 4–5)_ · _Touches: `src/modules/web/viewer/**`, `src/modules/web/feed/**`_ · _Complexity: Large_ · _Parallel-safe: yes_
+
+- [x] 139\. Polish pass over every surface
+  - With composition fixed, walk every surface against the reference quality bar and finish it: review boards, round forms, chips, completion panel, project page, pickers, empty states, hover/focus states, transitions (respecting `prefers-reduced-motion`), spacing rhythm, icon set consistency.
+  - Creative freedom applies — improve on the reference where we can justify it in one sentence; every deliberate divergence listed in the report.
+  - Acceptance Criteria: a full-journey screenshot set (both themes) attached; token gate and contrast tests still green; zero raw-colour violations; divergence list present.
+  - _Dependencies: 137, 138_ · _Requirements: А-14_ · _Touches: `src/modules/web/**`_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [x] 141\. Desktop-readiness of the shell (заказчик: сайт может стать desktop-приложением)
+  - Design the shell now so a later desktop wrapper is a packaging step, not a rewrite: an **application layout** (fixed viewport height with internally scrolling panes — feed, sidebar, viewer — instead of one long page scroll), no dependence on browser chrome for navigation (in-app affordances where a browser button is the only way today), resilience from ~1000×700 upward, and UI state (sidebar width/collapse, theme, viewer view) persisted through ONE module so it can move to a desktop store later.
+  - Keyboard-first ergonomics as part of it: shortcuts for send, open viewer, switch view (Outline/Preview/Raw/Diff), collapse sidebar — with a discoverable in-app list; visible token-driven focus rings everywhere.
+  - Explicitly OUT of scope: packaging (Electron/Tauri), native menus, auto-update, file-system access. This task only removes future blockers, and says so in the journal.
+  - Acceptance Criteria: no page-level scrollbar on the session surface at 1280×800 — panes scroll internally; fully operable at 1000×700 without horizontal scroll; every shortcut works and is listed in-app; UI state survives reload through a single persistence module; the report names what a desktop wrapper would still need.
+  - _Dependencies: 137_ · _Requirements: А-14.1 (будущая адаптация в desktop)_ · _Touches: `src/modules/web/**` (shell, persistence)_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [ ] 140\. M12п gate — scripted bug hunt + live walk (self-run, А-2.1)
+  - The customer's directive: «сразу протестировать на баги». Beyond the standard walk, run a destructive pass: collapse/expand and resize everything repeatedly, reload at every state, switch themes mid-generation, open/close the viewer during streaming, drive Edit and revert, spam the composer — every found defect is fixed with a regression test, every non-trivial one journaled.
+  - Then the standard short live walk (gate profile: fresh key first, smallest passing local model) on the final visuals.
+  - Acceptance Criteria: bug-hunt log with disposition per finding; live walk GREEN (zero truncations/structural rejections/console errors); artifacts `artifacts/gate-M12/` incl. both-themes screens; CI green.
+  - Final acceptance of this milestone is the **customer's own eyes** — the Architect verifies artifacts, the customer walks the product; tags `m12p-accepted` only after both.
+  - _Dependencies: 136–139, 141_ · _Requirements: А-2.1; А-14_ · _Touches: `e2e/**`, `artifacts/gate-M12/**`_ · _Complexity: Large_ · _Parallel-safe: no_
+
+
 ## Requirement Coverage
 
 Every functional requirement maps to at least one task.
