@@ -249,6 +249,14 @@ test.describe('M12п bug hunt', () => {
       await stillAlive(page, `after message ${String(message)}`);
     }
 
+    /*
+     * Settled before reloading, and this is a Firefox lesson rather than a nicety: a reload issued
+     * while a `fetch` is still open is aborted by Gecko with `NS_BINDING_ABORTED`, so the harness
+     * fails on a navigation the product never refused. The control saying «Send» is the same
+     * evidence a person has that the last message landed.
+     */
+    await expect(page.getByTestId('chat-send')).toHaveText('Send', { timeout: 30_000 });
+
     // Reload at this state and at every state a stage passes through.
     await page.reload();
     await expect(page.getByTestId('session')).toBeVisible();
