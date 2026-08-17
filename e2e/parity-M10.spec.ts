@@ -70,7 +70,10 @@ async function screen(page: Page, label: string): Promise<string> {
 }
 
 /** Every attribute of one element, as a plain record — the fact a data-attribute claim needs. */
-async function attributesOf(page: Page, selector: string): Promise<Record<string, string>> {
+async function attributesOf(
+  page: Page,
+  selector: string,
+): Promise<Partial<Record<string, string>>> {
   return page.evaluate((css: string) => {
     const element = document.querySelector(css);
     if (element === null) return {};
@@ -79,8 +82,49 @@ async function attributesOf(page: Page, selector: string): Promise<Record<string
   }, selector);
 }
 
+/**
+ * Computed style, read off the running page (M11п).
+ *
+ * The red-team's verdict on the first edition of this walk was that its evidence was `count()` of a
+ * test id — «наличие кнопки — не её оформление». Where a row of the checklist is about appearance,
+ * the observation below is now the browser's own answer about that appearance: the colour actually
+ * painted, the gradient actually declared, the animation actually running.
+ */
+async function styleOf(
+  page: Page,
+  selector: string,
+  properties: readonly string[],
+): Promise<Partial<Record<string, string>>> {
+  return page.evaluate(
+    ({ css, wanted }: { css: string; wanted: readonly string[] }) => {
+      const element = document.querySelector(css);
+      if (element === null) return {};
+
+      const computed = window.getComputedStyle(element);
+
+      return Object.fromEntries(wanted.map((name) => [name, computed.getPropertyValue(name)]));
+    },
+    { css: selector, wanted: properties },
+  );
+}
+
+/** The five `data-msg-*` attributes of one block, in the reference's own order. */
+async function msgAttributes(page: Page, kind: string): Promise<string> {
+  const attributes = await attributesOf(page, `[data-msg-kind="${kind}"]`);
+  if (Object.keys(attributes).length === 0) return `${kind}: блока нет на экране`;
+
+  const value = (name: string): string => {
+    const raw = attributes[`data-msg-${name}`];
+    if (raw === undefined) return 'ОТСУТСТВУЕТ';
+    return raw === '' ? '(пусто)' : `«${raw.length > 40 ? `${raw.slice(0, 39)}…` : raw}»`;
+  };
+
+  return `${kind}: id=${value('id')}, role=${value('role')}, stage=${value('stage')}, substage=${value('substage')}, snippet=${value('snippet')}`;
+}
+
 test.describe('parity checklist evidence (task 128)', () => {
-  test.describe.configure({ mode: 'serial', timeout: 240_000 });
+  // M11п: the walk grew a reload, a second methodology and a dozen measured observations.
+  test.describe.configure({ mode: 'serial', timeout: 600_000 });
   test.skip(
     process.env.PARITY_WALK !== '1',
     'the parity walk writes artifacts and is run on demand',
@@ -130,26 +174,45 @@ test.describe('parity checklist evidence (task 128)', () => {
       screen: seeded,
     });
 
-    const seedAttributes = await attributesOf(page, '[data-msg-role="user"]');
-    record({
-      id: '1.1-3',
-      claim:
-        'каждое сообщение несёт data-msg-id, data-msg-role, data-msg-stage, data-msg-substage, data-msg-snippet',
-      observed: `у сообщения пользователя: ${Object.keys(seedAttributes)
-        .filter((name) => name.startsWith('data-'))
-        .map((name) => `\`${name}\``)
-        .join(', ')}`,
-      screen: seeded,
-    });
+    /*
+     * **Values, on every kind of block, not names on one** (M11п). The first edition read the
+     * attribute *names* of the seed and called the row answered; the red-team's point was that
+     * eight other kinds went unchecked and that `substage` was being counted while empty. Each kind
+     * is asked as it appears, and the answers accumulate into one row at the end of the walk.
+     */
+    const attributeReadings: string[] = [await msgAttributes(page, 'seed')];
 
     record({
       id: '1.2-1',
       claim: 'seed-сообщение шаблонное: «I want to build {название}. My project description is: …»',
-      observed: `первое сообщение ленты: «${(
+      observed: `первое сообщение ленты целиком: «${(
         await page.getByTestId('session-prompt-line').first().innerText()
-      )
-        .replace(/\s+/g, ' ')
-        .slice(0, 120)}»`,
+      ).replace(/\s+/g, ' ')}» — описание встречается в нём один раз`,
+      screen: seeded,
+    });
+
+    /*
+     * The bubble's fill, measured rather than asserted (row `1.1-2`). Two colours: the bubble's own
+     * background and the page's. The red-team compared these two pixels and found them identical.
+     */
+    const bubbleFill = await styleOf(page, '[data-testid="session-prompt-line"]', [
+      'background-color',
+    ]).then(async (own) => ({
+      bubble:
+        (await styleOf(page, '[data-msg-kind="seed"] > div', ['background-color']))[
+          'background-color'
+        ] ?? '—',
+      canvas: (await styleOf(page, 'body', ['background-color']))['background-color'] ?? '—',
+      own,
+    }));
+
+    record({
+      id: '1.1-2',
+      claim:
+        'пузырь пользователя справа (rounded-2xl rounded-tl-sm, **приглушённый фон**), проза ИИ слева',
+      observed: `фон пузыря ${bubbleFill.bubble}, фон полотна ${bubbleFill.canvas} — ${
+        bubbleFill.bubble === bubbleFill.canvas ? 'ОДИНАКОВЫ' : 'различаются'
+      }`,
       screen: seeded,
     });
 
@@ -168,6 +231,24 @@ test.describe('parity checklist evidence (task 128)', () => {
       screen: roundShot,
     });
 
+    attributeReadings.push(await msgAttributes(page, 'round'));
+
+    /*
+     * The round card is also where the budget is said out loud (row `1.4-7`): the number the gate
+     * enforces, printed beside the ask button rather than the environment default it used to be.
+     */
+    record({
+      id: '1.4-7',
+      claim: 'бюджет раундов — свойство методологии; поверхность обязана называть число гейта',
+      observed: `панель печатает: «${
+        (await page.getByTestId('interview-panel').innerText())
+          .split('\n')
+          .find((line) => line.includes('question rounds'))
+          ?.replace(/\s+/g, ' ') ?? '(строки нет)'
+      }»`,
+      screen: roundShot,
+    });
+
     const card = await page.getByTestId('mcq-card').innerText();
     record({
       id: '1.1-5',
@@ -182,10 +263,17 @@ test.describe('parity checklist evidence (task 128)', () => {
 
     record({
       id: '1.1-6',
-      claim: 'опция = радио/чекбокс + название + пометка (Recommended) + однострочное описание',
-      observed: card.includes('(Recommended)')
-        ? 'пометка «(Recommended)» присутствует в карточке'
-        : 'пометки «(Recommended)» в этой карточке нет (стаб не помечает)',
+      claim:
+        'опция = радио/чекбокс + название + пометка (Recommended) + описание + (иногда) тег-чипы',
+      observed: `пометка «(Recommended)»: ${card.includes('(Recommended)') ? 'есть' : 'нет'}; опций с тег-чипами: ${String(
+        await page.locator('[data-testid^="mcq-tags-"]').count(),
+      )}, на первой из них чипы ${await page
+        .locator('[data-testid^="mcq-tags-"]')
+        .first()
+        .locator('span')
+        .allInnerTexts()
+        .then((chips) => chips.map((chip) => `«${chip}»`).join(', '))
+        .catch(() => '—')}`,
       screen: roundShot,
     });
 
@@ -223,6 +311,27 @@ test.describe('parity checklist evidence (task 128)', () => {
       screen: answeredShot,
     });
 
+    /* ------------------------------------------------- §1.2 the analytical bridge */
+
+    /*
+     * The interviewer's comment between two rounds (row `1.2-3`) — the content gap the red-team
+     * called «слой 1 из Части 6 эталона». It is written when the answers are stored, so it is on
+     * screen by the time the round above is fixed.
+     */
+    const bridgeShot = await screen(page, 'analytical-bridge');
+    record({
+      id: '1.2-3',
+      claim:
+        'между раундами ИИ пишет аналитический мостик по противоречиям ответов — «это не косметика»',
+      observed: `мостиков в ленте: ${String(await page.getByTestId('interview-bridge').count())}; первый: «${await page
+        .getByTestId('interview-bridge')
+        .first()
+        .innerText()
+        .then((text) => text.replace(/\s+/g, ' ').slice(0, 140))
+        .catch(() => '—')}»`,
+      screen: bridgeShot,
+    });
+
     await page.getByTestId('proceed').click();
     await expect(page.locator('[data-state="current"][data-stage="constitution"]')).toBeVisible();
 
@@ -234,11 +343,58 @@ test.describe('parity checklist evidence (task 128)', () => {
       .first()
       .innerText()
       .catch(() => '(нет чипа)');
+
+    /*
+     * All four traits, measured (row `1.1-10`). The first edition read the chip's text and called
+     * the row parity; the эталон names a *colour* for the target, a *gradient* on the border and
+     * *motion* on the dashes, and none of those is text.
+     */
+    const chipStyle = await styleOf(page, '[data-testid="stage-chip"]', ['background-image']);
+    const chipTarget = await styleOf(page, '[data-testid="stage-chip"] span span:last-child', [
+      'color',
+      'font-weight',
+    ]);
+    const chipDashes = await styleOf(page, '[data-testid="stage-chip"] .dash-flow', [
+      'animation-name',
+      'animation-duration',
+    ]);
+    const primaryInk = await page.evaluate(() =>
+      window.getComputedStyle(document.documentElement).getPropertyValue('--color-primary-ink'),
+    );
+
     record({
       id: '1.1-10',
       claim:
-        'стадийный чип по центру ленты: «Constitution · Collecting ──▶ Constitution · Generating»',
-      observed: `первый чип ленты: «${chip.replace(/\s+/g, ' ')}»`,
+        'pill по центру: слева «откуда», анимированные тире dash-flow, стрелка, справа «куда» в primary; градиентная рамка primary/20',
+      observed: `текст: «${chip.replace(/\s+/g, ' ')}»; цель окрашена ${chipTarget.color ?? '—'} (токен --color-primary-ink = ${primaryInk.trim()}), вес ${chipTarget['font-weight'] ?? '—'}; рамка: ${(chipStyle['background-image'] ?? '—').slice(0, 90)}…; тире: анимация «${chipDashes['animation-name'] ?? '—'}» ${chipDashes['animation-duration'] ?? '—'}`,
+      screen: chipShot,
+    });
+
+    attributeReadings.push(await msgAttributes(page, 'transition'));
+    attributeReadings.push(await msgAttributes(page, 'bundle'));
+
+    record({
+      id: '1.2-5',
+      claim: 'после Interview создаётся бандл («Project bundle created: …»)',
+      observed: `блок в ленте: «${await page
+        .getByTestId('bundle-created')
+        .first()
+        .innerText()
+        .then((text) => text.replace(/\s+/g, ' '))
+        .catch(() => '(блока нет)')}»`,
+      screen: chipShot,
+    });
+
+    // Waited for rather than read on the way past: the pill re-renders with the router, and the
+    // first edition of this row read «—» off a header that had not caught up yet.
+    await expect(page.getByTestId('stage-substage')).toBeVisible({ timeout: 30_000 });
+
+    record({
+      id: '1.4-5',
+      claim: 'step pills из графа; подстадия — в подписи активного шага',
+      observed: `активная пилюля печатает подстадию как «${(
+        await page.getByTestId('stage-substage').innerText()
+      ).replace(/\s+/g, ' ')}», чип рядом — «${chip.replace(/\s+/g, ' ')}»`,
       screen: chipShot,
     });
 
@@ -256,19 +412,23 @@ test.describe('parity checklist evidence (task 128)', () => {
     await expect(page.getByTestId('spec-card')).toBeVisible({ timeout: 60_000 });
     const documentShot = await screen(page, 'document-card');
 
+    const captionStyle = await styleOf(page, '[data-testid="spec-card"] p', ['color']);
+
     record({
       id: '1.1-11',
       claim:
-        'карточка документа: название стадии, путь specs/<bundle>/constitution.md (моно), бейдж Approved, Rev N со второй ревизии, кнопка Preview',
+        'карточка документа: название стадии **в primary**, путь моно, бейдж Approved, Rev N, кнопка Preview **(глаз)**',
       observed: `путь: «${await page.getByTestId('document-path').first().innerText()}»; ревизия: «${await page
         .getByTestId('document-revision')
         .first()
         .innerText()
-        .catch(() => '—')}»; кнопка предпросмотра: ${String(
-        await page.getByTestId('document-preview-toggle').count(),
-      )}`,
+        .catch(
+          () => '—',
+        )}»; подпись стадии окрашена ${captionStyle.color ?? '—'} (токен --color-primary-ink = ${primaryInk.trim()})`,
       screen: documentShot,
     });
+
+    attributeReadings.push(await msgAttributes(page, 'document'));
 
     await page.getByTestId('approve-spec').click();
     await expect(page.getByTestId('spec-card')).toContainText('approved');
@@ -327,13 +487,22 @@ test.describe('parity checklist evidence (task 128)', () => {
     record({
       id: '1.3-4',
       claim:
-        'пункт: чекбокс · «Секция — подсекция» · Confidence score X/10 с тултипом · проблема · курсивное «Suggestion: …»',
-      observed: `в доске встречается: ${['Confidence', 'Suggestion']
+        'пункт: чекбокс · **«Секция — подсекция»** · Confidence score X/10 с тултипом · проблема · курсивное «Suggestion: …»',
+      observed: `заголовок первого пункта: «${await page
+        .locator('[data-testid^="review-item-section-"]')
+        .first()
+        .innerText()
+        .catch(() => '(заголовком служит не путь секции)')}»; в доске встречается: ${[
+        'Confidence',
+        'Suggestion',
+      ]
         .filter((needle) => board.includes(needle))
         .map((needle) => `«${needle}»`)
         .join(', ')}`,
       screen: boardShot,
     });
+
+    attributeReadings.push(await msgAttributes(page, 'review'));
 
     record({
       id: '1.3-5',
@@ -386,15 +555,42 @@ test.describe('parity checklist evidence (task 128)', () => {
       screen: chatShot,
     });
 
+    /*
+     * **Reloaded, then read again** (row `1.2-4`; А-12). The claim А-12 returned to the gap list is
+     * not "a reply arrives" — it is that the reference's saved session contains its chat verbatim.
+     * A walk that reads the attributes in the one second they are true proves nothing about that,
+     * which is exactly what the red-team said about the first edition of this row.
+     */
+    await page.reload();
+    await expect(page.getByTestId('review-board')).toBeVisible({ timeout: 60_000 });
+    const afterReload = await screen(page, 'free-chat-after-reload');
+
+    const survivors = await page.evaluate(() =>
+      [...document.querySelectorAll('[data-msg-kind="message"]')]
+        .filter((node) => node.textContent.includes('Что мне здесь выбрать?'))
+        .map((node) => ({
+          role: node.getAttribute('data-msg-role') ?? '',
+          stage: node.getAttribute('data-msg-stage') ?? '',
+          substage: node.getAttribute('data-msg-substage') ?? '',
+          text: node.textContent.trim(),
+        })),
+    );
+
     record({
       id: '1.2-4',
       claim:
-        'свободный чат работает в любой точке; ответ приходит тем же чатом с data-msg-substage="review", стадия не ломается',
-      observed: `ответ несёт stage=«${replyAttributes['data-msg-stage'] ?? '—'}», substage=«${
+        'свободный чат работает в любой точке; ответ приходит тем же чатом с data-msg-substage="review"; сохранённая сессия эталона содержит свой чат дословно',
+      observed: `до перезагрузки ответ нёс stage=«${replyAttributes['data-msg-stage'] ?? '—'}», substage=«${
         replyAttributes['data-msg-substage'] ?? '—'
-      }»; доска ревью на месте: ${String(await page.getByTestId('review-board').count())}`,
-      screen: chatShot,
+      }»; **после перезагрузки** реплика на месте: ${String(survivors.length)} шт., stage=«${
+        survivors[0]?.stage ?? '—'
+      }», substage=«${survivors[0]?.substage ?? '—'}», текст «${survivors[0]?.text ?? '—'}»; доска ревью на месте: ${String(
+        await page.getByTestId('review-board').count(),
+      )}`,
+      screen: afterReload,
     });
+
+    attributeReadings.push(await msgAttributes(page, 'message'));
 
     const alignment = await page.evaluate(() => {
       const classesOf = (role: string): string =>
@@ -403,14 +599,23 @@ test.describe('parity checklist evidence (task 128)', () => {
       return { user: classesOf('user'), ai: classesOf('assistant') };
     });
 
+    const proseStyle = await styleOf(page, '[data-testid="chat-turn-assistant"]', [
+      'font-size',
+      'line-height',
+      'max-width',
+    ]);
+
     record({
-      id: '1.1-2',
-      claim:
-        'пузырь пользователя справа (rounded-2xl rounded-tl-sm, приглушённый фон), проза ИИ слева',
-      observed: `у блока пользователя выравнивание «${
+      id: '1.5-11',
+      claim: 'проза ИИ несёт типографический класс `chat-prose prose`',
+      observed: `выравнивание пузыря пользователя «${
         alignment.user.includes('justify-end') ? 'justify-end (справа)' : alignment.user
-      }», у блока ИИ «${alignment.ai.includes('justify-end') ? 'justify-end' : 'по левому краю'}»`,
-      screen: chatShot,
+      }», прозы ИИ «${alignment.ai.includes('justify-end') ? 'justify-end' : 'по левому краю'}»; типографика прозы: ${Object.entries(
+        proseStyle,
+      )
+        .map(([name, value]) => `${name}=${value ?? '—'}`)
+        .join(', ')}`,
+      screen: afterReload,
     });
 
     /* ------------------------------------------------------------ to the terminal */
@@ -440,24 +645,37 @@ test.describe('parity checklist evidence (task 128)', () => {
       screen: completeShot,
     });
 
-    record({
-      id: '1.2-5',
-      claim: 'после Interview создаётся бандл («Project bundle created: …»), имя из описания',
-      observed: `имя бандла в панели завершения: «${await page
-        .getByTestId('completion-bundle')
-        .innerText()}»`,
-      screen: completeShot,
+    /*
+     * **The last thing in the feed** (row `1.1-13`). The panel was always the last *block*; what the
+     * red-team screenshotted was four surfaces rendered after the block list. So the question the
+     * walk asks is the positional one the эталон actually makes: what is the feed's final child?
+     */
+    const tail = await page.evaluate(() => {
+      const feed = document.querySelector('[data-testid="feed"]');
+      const children = feed === null ? [] : [...feed.children];
+      const panel = children.findIndex((node) => node.textContent.includes('Session completed'));
+
+      return {
+        last:
+          children.at(-1)?.querySelector('[data-testid]')?.getAttribute('data-testid') ?? '(нет)',
+        below: children
+          .slice(panel + 1)
+          .map((node) => node.querySelector('[data-testid]')?.getAttribute('data-testid') ?? '?')
+          .filter((id) => id !== '?'),
+      };
     });
 
     record({
       id: '1.1-13',
       claim:
-        'финал ленты: панель Session completed (Bundle: имя — N spec files generated; Edit, Download)',
+        '**финал ленты**: панель Session completed (Bundle: имя — N spec files generated; Edit, Download)',
       observed: `бандл: «${await page.getByTestId('completion-bundle').innerText()}»; файлов: «${await page
         .getByTestId('completion-file-count')
-        .innerText()}»; кнопки: ${['completion-edit', 'completion-download']
-        .map((id) => `\`${id}\``)
-        .join(', ')}`,
+        .innerText()}»; последний элемент ленты — \`${tail.last}\`; ниже панели ещё поверхностей: ${
+        tail.below.length === 0 ? 'ноль' : tail.below.map((id) => `\`${id}\``).join(', ')
+      }; копия панели: «${(await page.getByTestId('session-complete').innerText())
+        .replace(/\s+/g, ' ')
+        .slice(0, 260)}»`,
       screen: completeShot,
     });
 
@@ -497,52 +715,118 @@ test.describe('parity checklist evidence (task 128)', () => {
       screen: completeShot,
     });
 
+    /*
+     * Counted **inside the composer**, and the send button's fill read rather than assumed (row
+     * `1.5-2`). The first edition counted `attachment-input` across the whole page — where the
+     * sidebar sits beside the feed — and called the row answered.
+     */
+    const inComposer = async (id: string): Promise<number> =>
+      page.getByTestId('composer').getByTestId(id).count();
+
+    const sendFill = await styleOf(page, '[data-testid="chat-send"]', [
+      'background-image',
+      'background-color',
+    ]);
+
     record({
       id: '1.5-2',
-      claim: 'композер: attach, @-ссылки на файлы, slash-команды, пикер модели, отправка',
-      observed: `${(
-        await Promise.all(
-          ['attachment-input', 'model-picker', 'chat-send'].map(async (id) =>
-            page
-              .getByTestId(id)
-              .count()
-              .then((count) => `${id}=${String(count)}`),
-          ),
-        )
-      ).join(', ')}; меню слэш-команд по «/»: ${slashVisible ? 'открывается' : 'не открылось'}`,
+      claim:
+        'композер: contenteditable, **attach**, @-ссылки, slash, пикер, отправка **с брендовым градиентом**',
+      observed: `внутри композера: attach=${String(await inComposer('composer-attach'))}, model-picker=${String(
+        await inComposer('model-picker'),
+      )}, send=${String(await inComposer('chat-send'))}; меню слэш-команд по «/»: ${
+        slashVisible ? 'открывается' : 'не открылось'
+      }; заливка Send: background-image ${sendFill['background-image'] ?? '—'}`,
       screen: completeShot,
     });
 
-    await page
-      .getByTestId('sidebar-toggle')
-      .click()
-      .catch(() => undefined);
+    /*
+     * **The sidebar is left open** and its width is *measured* (row `1.5-3`). The first edition
+     * clicked `sidebar-toggle` before counting, and the sidebar is open by default — so five panels
+     * were counted on a hidden `<aside>`, and `data-width` was read from the attribute the
+     * component writes about itself rather than from the box the browser drew.
+     */
     const sidebarShot = await screen(page, 'sidebar');
+
+    const widthOf = async (): Promise<number> =>
+      page
+        .getByTestId('sidebar-panel')
+        .boundingBox()
+        .then((box) => Math.round(box?.width ?? 0));
+
+    const restingWidth = await widthOf();
+
+    // Six keyboard steps to the left: the half of the handle's travel that used to do nothing.
+    await page.getByTestId('sidebar-resize').focus();
+    for (let step = 0; step < 6; step += 1) await page.keyboard.press('ArrowLeft');
+    const widenedWidth = await widthOf();
+
     record({
       id: '1.5-3',
-      claim: 'сайдбар (resizable ~280px): Specs, Local Workspace (Mount folder), Attachments',
-      observed: (
+      claim:
+        'сайдбар **resizable ~280px**: Specs (бандлы), Local Workspace (Mount folder), **Attachments**',
+      observed: `панели: ${(
         await Promise.all(
-          [
-            'specs-panel',
-            'local-workspace',
-            'mount-folder',
-            'attachments-panel',
-            'sidebar-resize',
-          ].map(async (id) =>
+          ['specs-panel', 'local-workspace', 'mount-folder', 'attachments-panel'].map(async (id) =>
             page
               .getByTestId(id)
               .count()
               .then((count) => `${id}=${String(count)}`),
           ),
         )
-      ).join(', '),
+      ).join(', ')}; заголовок панели вложений: «${await page
+        .getByTestId('attachments-panel')
+        .locator('h3, h2')
+        .first()
+        .innerText()
+        .catch(
+          () => '—',
+        )}»; замеренная ширина ${String(restingWidth)}px, после шести шагов ручки влево ${String(
+        widenedWidth,
+      )}px`,
       screen: sidebarShot,
+    });
+
+    record({
+      id: '1.4-8',
+      claim: 'каждая методология экспортирует набор файлов своего конфига',
+      observed: `копия панели экспорта: «${
+        (await page.getByTestId('export-panel').innerText())
+          .split('\n')
+          .find((line) => line.startsWith('Mode:'))
+          ?.replace(/\s+/g, ' ') ?? '(строки нет)'
+      }»`,
+      screen: sidebarShot,
+    });
+
+    attributeReadings.push(await msgAttributes(page, 'completion'));
+
+    record({
+      id: '1.1-3',
+      claim:
+        'каждое сообщение несёт data-msg-id, data-msg-role, data-msg-stage, data-msg-substage, data-msg-snippet',
+      observed: `${attributeReadings.join(' — ')} — не встречены этой прогулкой: generation (первая попытка ничего не рисует), proposal (уточнений в этой прогулке нет)`,
+      screen: completeShot,
     });
 
     await page.goto(`/projects/${projectId}`);
     await expect(page.getByTestId('project-page')).toBeVisible();
     const projectShot = await screen(page, 'project-page');
+
+    record({
+      id: '1.5-4a',
+      claim: 'проектная страница: имя + **описание-тултип** + Share',
+      observed: `имя: «${await page.getByTestId('project-page-name').innerText()}»; описание: «${await page
+        .getByTestId('project-description')
+        .innerText()
+        .then((text) => text.replace(/\s+/g, ' ').slice(0, 90))
+        .catch(() => '(описания нет)')}», в атрибуте title целиком: ${
+        (await page.getByTestId('project-description').getAttribute('title')) === null
+          ? 'нет'
+          : 'да'
+      }`,
+      screen: projectShot,
+    });
 
     record({
       id: '1.5-4',
@@ -605,8 +889,78 @@ test.describe('parity checklist evidence (task 128)', () => {
       observed: `поле Describe открывается на «${await page
         .getByTestId('mcq-other-q-edit-describe')
         .inputValue()
-        .catch(() => '(поля нет)')}»`,
+        .catch(() => '(поля нет)')}»; первый пузырь Edit-чата целиком: «${await page
+        .getByTestId('session-prompt-line')
+        .first()
+        .innerText()
+        .then((text) => text.replace(/\s+/g, ' '))
+        .catch(() => '—')}»`,
       screen: describeShot,
+    });
+  });
+
+  /**
+   * One vocabulary, on a methodology that renames its positions (row `1.4-6`; D-119).
+   *
+   * `myspec-brownfield-v1` calls the `constitution` position «Proposal» and budgets its interview
+   * at two rounds, so it is the graph on which both of the content gaps the red-team found are
+   * observable at once: the proceed button, the chip and the card captions used to print the
+   * canonical seven beside a pill reading «Proposal», and the panel used to print the environment's
+   * three beside a gate that stops at two.
+   */
+  test('§1.4 — one vocabulary and one budget, on a non-default methodology', async ({
+    page,
+    context,
+  }) => {
+    const user = await createSignedInUser('parity-m11-vocabulary');
+    await signIn(context, user);
+
+    await startSession(page, IDEA, 'myspec-brownfield-v1');
+    const opened = await screen(page, 'brownfield-opened');
+
+    record({
+      id: '1.4-6',
+      claim: 'методология задаёт, как называется каждая позиция (D-119)',
+      observed: `пилюли: «${(await page.getByTestId('step-pills').innerText()).replace(/\s+/g, ' ')}»; кнопка перехода: «${await page
+        .getByTestId('proceed')
+        .innerText()}»`,
+      screen: opened,
+    });
+
+    record({
+      id: '1.4-7a',
+      claim: 'бюджет раундов — свойство методологии (brownfield объявляет два)',
+      observed: `панель печатает: «${
+        (await page.getByTestId('interview-panel').innerText())
+          .split('\n')
+          .find((line) => line.includes('question rounds'))
+          ?.replace(/\s+/g, ' ') ?? '(строки нет)'
+      }»`,
+      screen: opened,
+    });
+
+    await page.getByTestId('ask-round').click();
+    await expect(page.getByTestId('mcq-card')).toBeVisible({ timeout: 60_000 });
+    await page.getByTestId('mcq-option-q-audience-solo-devs').check();
+    await page.getByTestId('mcq-option-q-problem-context').check();
+    await page.getByTestId('mcq-submit').click();
+    await expect(page.getByTestId('round-answered').first()).toBeVisible({ timeout: 60_000 });
+
+    await page.getByTestId('proceed').click();
+    await expect(page.locator('[data-state="current"][data-stage="constitution"]')).toBeVisible();
+    const moved = await screen(page, 'brownfield-proposal');
+
+    record({
+      id: '1.4-6a',
+      claim: 'имя методологии доходит до стадийного чипа и подписей карточек',
+      observed: `чип: «${(await page.getByTestId('stage-chip').last().innerText()).replace(/\s+/g, ' ')}»; кнопка перехода теперь: «${await page
+        .getByTestId('proceed')
+        .innerText()}»; блок бандла: «${await page
+        .getByTestId('bundle-created')
+        .innerText()
+        .then((text) => text.replace(/\s+/g, ' '))
+        .catch(() => '—')}»`,
+      screen: moved,
     });
   });
 
@@ -631,8 +985,12 @@ test.describe('parity checklist evidence (task 128)', () => {
 
     record({
       id: '1.4-1',
-      claim: 'четыре методологии генерации = четыре конфигурации графа (+ Auto)',
-      observed: `пикер предлагает: ${offered.map((id) => `\`${id}\``).join(', ')}`,
+      claim: 'четыре методологии генерации, названные **полными именами**',
+      observed: `пикер предлагает: ${offered.map((id) => `\`${id}\``).join(', ')}; полные имена на поверхности: ${await page
+        .locator('[data-testid^="methodology-name-"]')
+        .allInnerTexts()
+        .then((names) => names.map((name) => `«${name}»`).join(', '))
+        .catch(() => '(нет)')}`,
       screen: pickerShot,
     });
 

@@ -228,6 +228,16 @@ async function writeBridge(
   stage: AskingStage,
   position: { stage: string; substage: string | null },
   unmetNeeds: readonly string[],
+  /**
+   * The round just answered, in the user's own words (`question — chosen labels`).
+   *
+   * The assembled context renders answers as `stage/questionId: <option id>`, which is right for a
+   * document generator — it is reading facts — and wrong for this one, which is asked to refer to
+   * the person's choices *in their own words*. Given ids it says «you chose solo-devs», which is
+   * our slug rather than anything they read. So the card path hands the labels it already computed
+   * for the summary, and they replace the id-shaped rendering for this call only.
+   */
+  highlights: readonly string[] = [],
 ): Promise<void> {
   const agent = createBridgeAgent(createDefaultAdapter(undefined, { modelId: session.modelId }));
 
@@ -241,7 +251,19 @@ async function writeBridge(
     });
 
     comment = await agent.write({
-      sources: collected.sources,
+      sources:
+        highlights.length === 0
+          ? collected.sources
+          : {
+              ...collected.sources,
+              answers: highlights.map((line, index) => ({
+                stage,
+                roundNumber: index + 1,
+                questionId: null,
+                selectedOptions: [],
+                freeText: line,
+              })),
+            },
       unmetNeeds,
       contentLanguage: session.contentLanguage,
       runId: randomUUID(),
@@ -578,6 +600,7 @@ export async function POST(
       stage,
       position,
       unmetNeedNames(afterCard.snapshot, stage),
+      highlightAnswers(set, matched.items),
     );
   }
 

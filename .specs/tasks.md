@@ -1642,7 +1642,7 @@ Goal: close every gap the red-team confirmed, so the stage-1 seal is earned, not
   - Acceptance Criteria: each row flips with evidence; no token-gate violations introduced.
   - _Dependencies: 133_ · _Requirements: CHECKLIST §Разрывы (косметические)_ · _Touches: `src/modules/web/**`_ · _Complexity: Medium_ · _Parallel-safe: yes_
 
-- [ ] 135\. M11п gate — checklist re-walk and the stage-1 seal (self-run, А-2.1)
+- [x] 135\. M11п gate — checklist re-walk and the stage-1 seal (self-run, А-2.1)
   - Re-run `parity-M10.spec.ts` with the updated expectations; re-issue the checklist with new verdicts (target: 0 unowned gaps — every row is парити or an Architect-confirmed difference); one short live walk (default methodology, both themes) proving the bridge, persistent chat, and surfaces live; gate profile as in 129.
   - Acceptance Criteria: checklist has zero undispositioned rows; live walk GREEN (zero truncations, zero structural rejections); CI green; artifacts `artifacts/gate-M11/`.
   - After the Architect's acceptance: tags `m11p-accepted` and `stage1-complete`.

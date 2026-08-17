@@ -1,4 +1,4 @@
-import { bundleFileNames, methodologyConfig } from '@/modules/methodologies';
+import { bundlePlan, methodologyConfig } from '@/modules/methodologies';
 import {
   isSpecStage,
   positionKey,
@@ -606,33 +606,47 @@ export function buildFeed(source: FeedSource): Feed {
   const blocks: FeedBlock[] = [];
   let current = START;
 
+  /*
+   * «Project bundle created» — the moment the session stops being an interview (task 133; row
+   * `1.2-5`; Эталон §1.2).
+   *
+   * Derived, like everything else here: leaving `interview` is *when* the bundle comes into
+   * existence, because that is when the first document acquires somewhere to be written. There is
+   * no bundle row to project — the name is computed from the project (labels.ts) — so the event is
+   * emitted wherever the evidence for the crossing is, which is **either** kind of chip: the one a
+   * later block evidences, or the tail chip into a stage nothing has happened in yet. A session
+   * that has this second only just proceeded, and that is exactly when the reference shows it.
+   */
+  const crossing = (from: StagePosition, to: StagePosition, at: string): BundleBlock | null =>
+    from.stage === 'interview' && to.stage !== 'interview'
+      ? {
+          kind: 'bundle',
+          id: 'bundle-created',
+          role: 'system',
+          stage: to.stage,
+          substage: to.substage,
+          at,
+          bundleName: bundleSlug(source.session.projectName),
+          /*
+           * The **default-mode** plan (task 135 walk finding). `bundleFileNames` answers "every file
+           * this bundle may ever contain", which includes the optional Quality stage — so the feed
+           * announced five files at the moment the export panel beside it promised four. What the
+           * session is about to write is what a person is being told here.
+           */
+          fileNames: bundlePlan(methodologyConfig(source.session.methodologyId), 'default').map(
+            (entry) => entry.fileName,
+          ),
+        }
+      : null;
+
   for (const block of ordered) {
     const evidenced = evidencedPosition(block);
 
     if (evidenced !== null && !samePosition(evidenced, current)) {
       blocks.push(transitionBlock(current, evidenced, block.id, block.at));
 
-      /*
-       * «Project bundle created» — the moment the session stops being an interview (task 133; row
-       * `1.2-5`; Эталон §1.2).
-       *
-       * Derived, like everything else here: leaving `interview` is *when* the bundle comes into
-       * existence, because that is when the first document acquires somewhere to be written. There
-       * is no bundle row to project — the name is computed from the project (labels.ts) — so the
-       * event is emitted where the evidence for it is, at the one transition out of the entry stage.
-       */
-      if (current.stage === 'interview' && evidenced.stage !== 'interview') {
-        blocks.push({
-          kind: 'bundle',
-          id: 'bundle-created',
-          role: 'system',
-          stage: evidenced.stage,
-          substage: evidenced.substage,
-          at: block.at,
-          bundleName: bundleSlug(source.session.projectName),
-          fileNames: bundleFileNames(methodologyConfig(source.session.methodologyId)),
-        } satisfies BundleBlock);
-      }
+      const created = crossing(current, evidenced, block.at);
+      if (created !== null) blocks.push(created);
 
       current = evidenced;
     }
@@ -652,7 +666,12 @@ export function buildFeed(source: FeedSource): Feed {
 
   if (!samePosition(position, current)) {
     const last = blocks[blocks.length - 1];
-    blocks.push(transitionBlock(current, position, 'tail', last?.at ?? source.session.createdAt));
+    const at = last?.at ?? source.session.createdAt;
+
+    blocks.push(transitionBlock(current, position, 'tail', at));
+
+    const created = crossing(current, position, at);
+    if (created !== null) blocks.push(created);
   }
 
   /*

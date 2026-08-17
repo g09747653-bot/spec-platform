@@ -273,7 +273,9 @@ describe('block kinds', () => {
     expect(bundle[0]).toMatchObject({
       kind: 'bundle',
       bundleName: 'local-voice-assistant',
-      fileNames: ['constitution.md', 'requirements.md', 'solution.md', 'tasks.md', 'quality.md'],
+      // The default-mode plan: the optional Quality stage is not something this session will write,
+      // and the export panel beside the feed counts four (task 135 walk finding).
+      fileNames: ['constitution.md', 'requirements.md', 'solution.md', 'tasks.md'],
     });
 
     expect(order.indexOf('bundle-created')).toBeGreaterThan(order.indexOf('round:r1'));
@@ -878,5 +880,38 @@ describe('every block says what it is (task 134)', () => {
     expect(seed?.snippet).toMatch(/^a very long/);
     expect(seed?.snippet).toHaveLength(120);
     expect(seed?.snippet?.endsWith('…')).toBe(true);
+  });
+});
+
+/**
+ * The bundle event at the **tail** crossing (task 135 walk finding).
+ *
+ * A session that has only just pressed «Proceed» has no block evidencing the new position yet, so
+ * the only chip is the tail one — and the first edition of the event was emitted inside the block
+ * loop, which meant the moment the reference actually shows it was the one moment ours did not.
+ * The parity walk found this on its first run.
+ */
+describe('the bundle event and the tail chip (task 133)', () => {
+  it('marks the crossing when nothing has happened in the new stage yet', () => {
+    const feed = buildFeed(
+      source({
+        session: {
+          ...source().session,
+          position: { stage: 'constitution', substage: 'collect' },
+        },
+        rounds: [round({ answeredAt: T.answered1 })],
+      }),
+    );
+
+    const order = ids(feed.blocks);
+
+    expect(feed.blocks.filter((block) => block.kind === 'bundle')).toHaveLength(1);
+    expect(order.indexOf('bundle-created')).toBeGreaterThan(order.indexOf('round:r1'));
+  });
+
+  it('still marks it exactly once when the stage has since produced blocks', () => {
+    expect(
+      buildFeed(walkedToReview()).blocks.filter((block) => block.kind === 'bundle'),
+    ).toHaveLength(1);
   });
 });

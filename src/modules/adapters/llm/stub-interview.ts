@@ -268,9 +268,12 @@ export function looksLikeInterviewBridgePrompt(prompt: string): boolean {
  * pass while the prompt was going out empty.
  */
 export function stubInterviewBridgeDocument(prompt: string): string {
+  /*
+   * The first answered line of the assembled context, whichever shape it takes: the card path hands
+   * the bridge «question — chosen labels» (task 135), the reply path hands the reply itself.
+   */
   const chosen =
-    /^- [a-z]+\/[^:]+: (.+)$/m.exec(prompt)?.[1]?.split(';')[0]?.trim() ??
-    'what you have chosen so far';
+    /^- .*?: (.+)$/m.exec(prompt)?.[1]?.split(';')[0]?.trim() ?? 'what you have chosen so far';
 
   return [
     `Noted: you chose ${chosen}.`,
