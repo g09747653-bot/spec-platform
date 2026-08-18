@@ -35,12 +35,12 @@ test.describe('deciding from chat', () => {
     await signIn(context, await createSignedInUser('typist'));
     await draftASpec(page);
 
-    await expect(page.getByTestId('spec-card')).toContainText('awaiting your decision');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'false');
 
     await say(page, 'approve it');
 
     // The same outcome the button produces: the revision is approved and the card says so.
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
     await expect(page.getByTestId('approve-spec')).toHaveCount(0);
     await expect(page.getByTestId('export-included')).toContainText('constitution.md');
   });
@@ -58,7 +58,7 @@ test.describe('deciding from chat', () => {
     await expect(page.getByTestId('chat-turn-assistant')).toBeVisible();
     // ...and the card is exactly where it was.
     await expect(page.getByTestId('approve-spec')).toBeVisible();
-    await expect(page.getByTestId('spec-card')).toContainText('awaiting your decision');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'false');
     await expect(page.getByTestId('spec-revision-number')).toHaveText('1');
   });
 
@@ -72,11 +72,11 @@ test.describe('deciding from chat', () => {
     }
 
     // Three near-misses later, the decision is still the user's to make.
-    await expect(page.getByTestId('spec-card')).toContainText('awaiting your decision');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'false');
 
     // And the real thing still works, so the guards are refusing rather than broken.
     await say(page, 'approve it');
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
   });
 
   test('a typed decision survives a reload, because it changed persisted state', async ({
@@ -87,10 +87,10 @@ test.describe('deciding from chat', () => {
     await draftASpec(page);
 
     await say(page, 'lgtm');
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
 
     await page.reload();
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
     await expect(page.getByTestId('approve-spec')).toHaveCount(0);
   });
   /**
@@ -111,7 +111,7 @@ test.describe('deciding from chat', () => {
     await draftASpec(page);
 
     await page.getByTestId('approve-spec').click();
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
     await page.getByTestId('proceed').click();
     await expect(page.getByTestId('review-board')).toBeVisible({ timeout: 20_000 });
 
@@ -151,20 +151,21 @@ test.describe('deciding from chat', () => {
     await draftASpec(page);
 
     await page.getByTestId('approve-spec').click();
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
     await page.getByTestId('proceed').click();
     await expect(page.getByTestId('review-board')).toBeVisible({ timeout: 20_000 });
 
     await say(page, 'accept the review');
 
     await expect(page.getByTestId('review-board')).toHaveCount(0, { timeout: 20_000 });
-    // The decided card says what was decided in words now (task 112); the fact asserted is the same.
-    await expect(page.getByTestId('review-decision')).toContainText('accepted');
+    // The decided card carries the decision the row holds (task 112), read as the table spells it
+    // rather than as the sentence the card puts it in (task 143); the fact asserted is the same.
+    await expect(page.getByTestId('review-decision')).toHaveAttribute('data-decision', 'accept');
 
     // The gate the decision opens is open — which is the whole point of it being the same write.
     await expect(page.getByTestId('proceed')).toBeEnabled();
     await page.reload();
-    await expect(page.getByTestId('review-decision')).toContainText('accepted');
+    await expect(page.getByTestId('review-decision')).toHaveAttribute('data-decision', 'accept');
   });
 
   /** The composer is never the thing that is disabled — that is the liveness invariant's floor. */

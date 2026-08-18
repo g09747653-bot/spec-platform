@@ -65,7 +65,11 @@ function ArchiveButton({ chat }: { chat: ChatListItem }) {
 
       if (!response.ok) {
         setError('That did not go through. Please try again.');
-        showToast('That chat could not be archived. Nothing changed.', 'danger');
+        showToast(
+          'That chat could not be archived. Nothing changed.',
+          'danger',
+          'chat-archive-failed',
+        );
         return;
       }
 
@@ -75,11 +79,16 @@ function ArchiveButton({ chat }: { chat: ChatListItem }) {
       showToast(
         chat.archived ? 'Chat restored.' : 'Chat archived. Restore it from Archived.',
         'success',
+        chat.archived ? 'chat-restored' : 'chat-archived',
       );
       router.refresh();
     } catch {
       setError('That did not go through. Please try again.');
-      showToast('That chat could not be archived. Nothing changed.', 'danger');
+      showToast(
+        'That chat could not be archived. Nothing changed.',
+        'danger',
+        'chat-archive-failed',
+      );
     } finally {
       setBusy(false);
     }
@@ -146,7 +155,16 @@ export function ChatList({ chats }: { chats: readonly ChatListItem[] }) {
               </div>
 
               <div className="flex items-center justify-between gap-4">
-                <span className="text-foreground-muted text-xs" data-testid="chat-age">
+                {/*
+                  Task 143: the number the label was formatted from travels beside it, because the
+                  words are about to become translatable and «Last message 3d ago» is the only thing
+                  a test could read today.
+                */}
+                <span
+                  className="text-foreground-muted text-xs"
+                  data-testid="chat-age"
+                  data-age-seconds={String(chat.ageSeconds)}
+                >
                   {lastMessageLabel(chat.ageSeconds)}
                 </span>
                 <ArchiveButton chat={chat} />

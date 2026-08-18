@@ -79,6 +79,7 @@ export function CompletionPanel({
         ? `Downloaded ${String(outcome.manifest.included.length)} ${outcome.manifest.included.length === 1 ? 'file' : 'files'} in ${outcome.manifest.mode} mode.`
         : outcome.message,
       outcome.ok ? 'success' : 'danger',
+      outcome.ok ? 'bundle-downloaded' : 'bundle-download-failed',
     );
 
     setBusy(null);
@@ -103,13 +104,17 @@ export function CompletionPanel({
       const parsed = CreatedChat.safeParse(await response.json().catch(() => null));
 
       if (!response.ok || !parsed.success) {
-        showToast('That edit could not be started. Please try again.', 'danger');
+        showToast(
+          'That edit could not be started. Please try again.',
+          'danger',
+          'edit-chat-failed',
+        );
         return;
       }
 
       router.push(`/sessions/${parsed.data.sessionId}`);
     } catch {
-      showToast('That edit could not be started. Please try again.', 'danger');
+      showToast('That edit could not be started. Please try again.', 'danger', 'edit-chat-failed');
     } finally {
       setBusy(null);
     }
@@ -159,6 +164,7 @@ export function CompletionPanel({
         ? `Prompt copied. Paste it into ${platform.label} — the tab is open.`
         : `Could not reach the clipboard. Copy the prompt below, then paste it into ${platform.label}.`,
       copied ? 'success' : 'danger',
+      copied ? 'handoff-prompt-copied' : 'handoff-prompt-copy-failed',
     );
   }
 
@@ -220,12 +226,20 @@ export function CompletionPanel({
           data-testid="build-with"
         >
           <p className="text-h3">Build with your favourite tool</p>
+          {/*
+            Task 143: the two clauses a walk checks — what the buttons do, and what we do not do
+            with the bundle — are the honesty of this panel, so each is addressable on its own
+            element. The suite asserts the promise is present rather than that this sentence is
+            still worded in English; the `<span>` adds nothing visible, only somewhere to point.
+          */}
           <p className="text-foreground-muted mt-1 text-sm">
             Generate a prompt that hands this bundle to a coding agent. The platform buttons{' '}
-            <strong className="font-medium">copy that prompt and open the platform</strong> — we do
-            not send your bundle anywhere, and there is no import to click through. Download the
-            ZIP, unpack it into <code className="font-mono text-xs">.specs/</code>, and paste the
-            prompt.
+            <strong className="font-medium" data-testid="build-with-copy-open">
+              copy that prompt and open the platform
+            </strong>{' '}
+            — <span data-testid="build-with-no-upload">we do not send your bundle anywhere</span>,
+            and there is no import to click through. Download the ZIP, unpack it into{' '}
+            <code className="font-mono text-xs">.specs/</code>, and paste the prompt.
           </p>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -272,6 +286,7 @@ export function CompletionPanel({
                     showToast(
                       copied ? 'Prompt copied to the clipboard.' : 'Could not reach the clipboard.',
                       copied ? 'success' : 'danger',
+                      copied ? 'handoff-prompt-copied' : 'handoff-prompt-copy-failed',
                     );
                   });
                 }}

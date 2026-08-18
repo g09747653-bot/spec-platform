@@ -64,7 +64,17 @@ function RoundHeading({ block }: { block: RoundBlockModel }) {
   const count = block.questions.length;
 
   return (
-    <p className="text-foreground-muted text-label uppercase" data-testid="round-heading">
+    <p
+      className="text-foreground-muted text-label uppercase"
+      data-testid="round-heading"
+      /*
+        The two numbers the heading reads out, as numbers (task 143). Reading them back out of
+        «Round 2 — 3 questions» means parsing a plural rule as well as a language, and the plural is
+        the half of that sentence most likely to be the first thing a translation changes.
+      */
+      data-round={String(block.roundNumber)}
+      data-questions={String(count)}
+    >
       Round {block.roundNumber} — {count} {count === 1 ? 'question' : 'questions'}
     </p>
   );
@@ -72,7 +82,16 @@ function RoundHeading({ block }: { block: RoundBlockModel }) {
 
 function SelectionHint({ question }: { question: FeedQuestion }) {
   return (
-    <span className="text-foreground-muted text-xs" data-testid={`mcq-hint-${question.id}`}>
+    <span
+      className="text-foreground-muted text-xs"
+      data-testid={`mcq-hint-${question.id}`}
+      /*
+        How many answers the question takes, in the schema's own word (task 143) — the same fact the
+        inputs below switch on, said once more where a walk can read it without inferring it from
+        «Select all that apply».
+      */
+      data-select={question.type}
+    >
       {question.type === 'single' ? 'Select one' : 'Select all that apply'}
     </span>
   );

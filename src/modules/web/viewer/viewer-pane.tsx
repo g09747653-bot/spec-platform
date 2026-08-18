@@ -154,8 +154,17 @@ export function ViewerPane({ target, onClose }: { target: ViewerTarget; onClose:
             <span
               className="text-foreground-muted flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs"
               data-testid="viewer-pane-metrics"
+              data-approved={String(target.kind === 'revision' && target.approved)}
             >
-              <span data-testid="viewer-metric-revision">
+              {/*
+                «Draft» and «Rev 3» are two states of the same reading, and a walk that told them
+                apart by the word would be reading chrome (task 143). The attribute says which one
+                this is; the span still says it in the reader's own language.
+              */}
+              <span
+                data-testid="viewer-metric-revision"
+                data-revision={revisionNumber === null ? 'draft' : String(revisionNumber)}
+              >
                 {revisionNumber === null ? 'Draft in progress' : `Rev ${String(revisionNumber)}`}
               </span>
               {/*
@@ -166,11 +175,11 @@ export function ViewerPane({ target, onClose }: { target: ViewerTarget; onClose:
               {counted && (
                 <>
                   <span aria-hidden>·</span>
-                  <span data-testid="viewer-metric-lines">
+                  <span data-testid="viewer-metric-lines" data-lines={String(metrics.lines)}>
                     {metrics.lines} {metrics.lines === 1 ? 'line' : 'lines'}
                   </span>
                   <span aria-hidden>·</span>
-                  <span data-testid="viewer-metric-words">
+                  <span data-testid="viewer-metric-words" data-words={String(metrics.words)}>
                     {metrics.words} {metrics.words === 1 ? 'word' : 'words'}
                   </span>
                 </>
@@ -337,8 +346,17 @@ function ViewerBody({
   }
 
   if (previous === null || previousRevision === null || currentRevision === null) {
+    /*
+     * Two different emptinesses, one element (task 143): a document still being written has no
+     * stored predecessor *yet*, a first revision never will. The sentences already say which; the
+     * attribute says it to anything that cannot read them.
+     */
     return (
-      <p className="text-sm" data-testid="viewer-pane-diff-empty">
+      <p
+        className="text-sm"
+        data-testid="viewer-pane-diff-empty"
+        data-empty-reason={currentRevision === null ? 'still-writing' : 'no-predecessor'}
+      >
         {currentRevision === null
           ? 'This document is still being written — there is nothing to compare yet.'
           : `This is the first revision of ${fileName} — there is no earlier one to compare it with.`}

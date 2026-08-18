@@ -32,6 +32,15 @@
  */
 import { rejectionNotice } from './gate-copy';
 
+/**
+ * Which ending a notice is reporting, as a token (task 143).
+ *
+ * `expired` is the deadline's own ending rather than `abandoned`: both stop a wait, but one is the
+ * user's decision and the other is the backstop firing, and a reader of this state that could not
+ * tell them apart would be back to matching sentences.
+ */
+export type SessionNoticeKind = 'abandoned' | 'unreachable' | 'refused' | 'expired';
+
 export interface SessionRequestState {
   /** The action whose request is in flight, or `null` when nothing is. */
   running: string | null;
@@ -39,12 +48,18 @@ export interface SessionRequestState {
   startedAt: number | null;
   /** How the last request ended, in words the user can act on; `null` when there is nothing to say. */
   notice: string | null;
+  /** The same ending as a token: the words are the reader's, this is for whatever has to *know*. */
+  noticeKind: SessionNoticeKind | null;
+  /** The gate's own reason code behind a refusal, when it attached one; `null` otherwise. */
+  noticeReason: string | null;
 }
 
 export const initialSessionRequestState: SessionRequestState = {
   running: null,
   startedAt: null,
   notice: null,
+  noticeKind: null,
+  noticeReason: null,
 };
 
 export interface SessionRequestResult {
@@ -142,6 +157,15 @@ export function reasonOf(payload: unknown): string | null {
   return typeof details.reason === 'string' ? details.reason : null;
 }
 
+/**
+ * Everything a settled request has to say, carried together so the words and the token cannot be
+ * set from different branches and disagree about which ending this was.
+ */
+type SettledNotice = Pick<SessionRequestState, 'notice' | 'noticeKind' | 'noticeReason'>;
+
+/** Nothing to report: a request that succeeded, and the state a new one starts from. */
+const NO_NOTICE: SettledNotice = { notice: null, noticeKind: null, noticeReason: null };
+
 export function createSessionRequest(options: SessionRequestOptions): SessionRequest {
   const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
   const now = options.now ?? Date.now;
@@ -156,9 +180,9 @@ export function createSessionRequest(options: SessionRequestOptions): SessionReq
     options.onState(state);
   }
 
-  function settle(notice: string | null): void {
+  function settle(ending: SettledNotice): void {
     controller = null;
-    publish({ running: null, startedAt: null, notice });
+    publish({ running: null, startedAt: null, ...ending });
   }
 
   async function send(action: string, url: string, body?: unknown): Promise<SessionRequestResult> {
@@ -168,7 +192,7 @@ export function createSessionRequest(options: SessionRequestOptions): SessionReq
 
     const local = new AbortController();
     controller = local;
-    publish({ running: action, startedAt: now(), notice: null });
+    publish({ running: action, startedAt: now(), ...NO_NOTICE });
 
     const request = fetchImpl(url, {
       method: 'POST',
@@ -189,7 +213,7 @@ export function createSessionRequest(options: SessionRequestOptions): SessionReq
       // Abort so the socket is released, then say so. The server may well have applied the change
       // already; the caller's refresh is what resolves that, not an assumption made here.
       local.abort();
-      settle(expiredNotice(deadlineMs));
+      settle({ notice: expiredNotice(deadlineMs), noticeKind: 'expired', noticeReason: null });
       return { ok: false, payload: null };
     }
 
@@ -198,7 +222,11 @@ export function createSessionRequest(options: SessionRequestOptions): SessionReq
       const abandoned = local.signal.aborted;
       if (!abandoned) options.onReachability?.(false);
 
-      settle(abandoned ? ABANDONED_NOTICE : UNREACHABLE_NOTICE);
+      settle(
+        abandoned
+          ? { notice: ABANDONED_NOTICE, noticeKind: 'abandoned', noticeReason: null }
+          : { notice: UNREACHABLE_NOTICE, noticeKind: 'unreachable', noticeReason: null },
+      );
       return { ok: false, payload: null };
     }
 
@@ -212,10 +240,16 @@ export function createSessionRequest(options: SessionRequestOptions): SessionReq
      * invented at the call site — "That step is not available yet" was one, and it is what the gate
      * walk got back for a question budget that had run out (Р-3 item 4).
      */
+    const reason = reasonOf(payload);
+
     settle(
       response.ok
-        ? null
-        : (rejectionNotice(messageOf(payload), reasonOf(payload)) ?? FALLBACK_FAILURE_NOTICE),
+        ? NO_NOTICE
+        : {
+            notice: rejectionNotice(messageOf(payload), reason) ?? FALLBACK_FAILURE_NOTICE,
+            noticeKind: 'refused',
+            noticeReason: reason,
+          },
     );
 
     return { ok: response.ok, payload };
@@ -227,7 +261,7 @@ export function createSessionRequest(options: SessionRequestOptions): SessionReq
       controller?.abort();
     },
     dismiss(): void {
-      if (state.notice !== null) publish({ ...state, notice: null });
+      if (state.notice !== null) publish({ ...state, ...NO_NOTICE });
     },
     get state() {
       return state;

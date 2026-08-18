@@ -118,7 +118,12 @@ export function ProjectActions({ projectId, name }: ProjectActionsProps) {
         </div>
       ) : mode === 'confirming-delete' ? (
         <div className="border-danger flex flex-col gap-2 rounded-md border p-3" role="alertdialog">
-          <p className="text-sm" data-testid="delete-confirm-text">
+          {/*
+            Task 143: FR-002 AC-4 is about what this paragraph *says*, and until now the only way to
+            check it was to search the English for «permanently». The flag is the claim in machine
+            form, so the assertion survives translation of the sentence that carries it.
+          */}
+          <p className="text-sm" data-testid="delete-confirm-text" data-permanent="true">
             Delete “{name}” permanently? Its session, questions, answers, every spec file and every
             revision, and every document you attached will be removed. This cannot be undone.
           </p>

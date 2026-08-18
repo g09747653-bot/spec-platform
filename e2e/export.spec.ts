@@ -59,7 +59,7 @@ async function approveConstitution(page: Page): Promise<void> {
   await page.getByTestId('generate-spec').click();
   await expect(page.getByTestId('spec-card')).toBeVisible({ timeout: 20_000 });
   await page.getByTestId('approve-spec').click();
-  await expect(page.getByTestId('spec-card')).toContainText('approved');
+  await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
 }
 
 test.describe('bundle export and single-file copy', () => {
@@ -87,9 +87,14 @@ test.describe('bundle export and single-file copy', () => {
      * past tense — not the estimate the page was rendered with.
      */
     const produced = page.getByTestId('export-downloaded');
-    await expect(produced).toContainText('default mode');
+    await expect(produced).toHaveAttribute('data-mode', 'default');
     await expect(produced).toContainText('constitution.md');
-    await expect(produced).toContainText('without requirements.md, solution.md, tasks.md');
+    /*
+     * The three files the archive went without, read from the manifest's own list rather than from
+     * the sentence built around it — the attribute is `manifest.omitted` joined by commas, so an
+     * archive that quietly included one of them fails here as loudly as before.
+     */
+    await expect(produced).toHaveAttribute('data-omitted', 'requirements.md,solution.md,tasks.md');
 
     const path = await download.path();
     expect(path).not.toBeNull();
@@ -111,7 +116,11 @@ test.describe('bundle export and single-file copy', () => {
     const shown = (await page.getByTestId('spec-content').textContent()) ?? '';
 
     await page.getByTestId('copy-constitution.md').click();
-    await expect(page.getByTestId('copy-constitution.md')).toHaveText('Copied ✓');
+    // AC-3: the confirmation is on the control that was pressed, and it is that control's state.
+    await expect(page.getByTestId('copy-constitution.md')).toHaveAttribute(
+      'data-copy-state',
+      'copied',
+    );
 
     const copied = await clipboardText(page);
 
@@ -143,7 +152,10 @@ test.describe('bundle export and single-file copy', () => {
     await approveConstitution(page);
 
     await page.getByTestId('copy-constitution.md').click();
-    await expect(page.getByTestId('copy-constitution.md')).toHaveText('Copied ✓');
+    await expect(page.getByTestId('copy-constitution.md')).toHaveAttribute(
+      'data-copy-state',
+      'copied',
+    );
     const copied = await clipboardText(page);
 
     const download = await Promise.all([

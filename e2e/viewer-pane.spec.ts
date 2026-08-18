@@ -31,7 +31,8 @@ test.describe('the document viewer pane', () => {
 
     await expect(page.getByTestId('viewer-pane')).toBeVisible();
     await expect(page.getByTestId('viewer-pane-name')).toHaveText('constitution.md');
-    await expect(page.getByTestId('viewer-metric-revision')).toHaveText('Rev 1');
+    // Which revision the pane is reading, from the header's own attribute rather than «Rev 1».
+    await expect(page.getByTestId('viewer-metric-revision')).toHaveAttribute('data-revision', '1');
 
     for (const view of ['outline', 'preview', 'raw', 'diff'] as const) {
       await page.getByTestId(`viewer-pane-tab-${view}`).click();
@@ -71,11 +72,12 @@ test.describe('the document viewer pane', () => {
 
     // 2 — approved: the same door, on a card that has been decided.
     await page.getByTestId('approve-spec').click();
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
 
     await page.getByTestId('spec-card').getByTestId('open-viewer').click();
     await expect(page.getByTestId('viewer-pane')).toBeVisible();
-    await expect(page.getByTestId('viewer-pane-metrics')).toContainText('approved');
+    // The decision travels with the document: the pane's own header knows it, not just the card.
+    await expect(page.getByTestId('viewer-pane-metrics')).toHaveAttribute('data-approved', 'true');
 
     /*
      * The counts are the exported bytes' own counts (task 138 AC). Fetched from the endpoint the
@@ -92,11 +94,13 @@ test.describe('the document viewer pane', () => {
     const expectedLines = exported.replace(/\n$/u, '').split('\n').length;
     const expectedWords = exported.trim().split(/\s+/u).length;
 
-    await expect(page.getByTestId('viewer-metric-lines')).toHaveText(
-      `${String(expectedLines)} lines`,
+    await expect(page.getByTestId('viewer-metric-lines')).toHaveAttribute(
+      'data-lines',
+      String(expectedLines),
     );
-    await expect(page.getByTestId('viewer-metric-words')).toHaveText(
-      `${String(expectedWords)} words`,
+    await expect(page.getByTestId('viewer-metric-words')).toHaveAttribute(
+      'data-words',
+      String(expectedWords),
     );
   });
 
@@ -142,7 +146,11 @@ test.describe('the document viewer pane', () => {
 
     await page.getByTestId('viewer-pane-tab-raw').click();
     await expect(page.getByTestId('viewer-raw')).toContainText('# Constitution');
-    await expect(page.getByTestId('viewer-metric-revision')).toHaveText('Draft in progress');
+    // No stored revision behind these words yet — the header reads the draft, not a numbered one.
+    await expect(page.getByTestId('viewer-metric-revision')).toHaveAttribute(
+      'data-revision',
+      'draft',
+    );
 
     /*
      * Д-1 with the viewer open: the control that ends the wait is on the surface being looked at.

@@ -47,18 +47,19 @@ export function RevertCard({ sessionId, revert }: { sessionId: string; revert: R
       });
 
       if (!response.ok) {
-        showToast('That step could not be reverted. Nothing changed.', 'danger');
+        showToast('That step could not be reverted. Nothing changed.', 'danger', 'revert-failed');
         return;
       }
 
       showToast(
         `${revert.fileName} restored from revision ${String(revert.previousRevision)} — as a new revision.`,
         'success',
+        'revert-applied',
       );
       setShowing(false);
       router.refresh();
     } catch {
-      showToast('That step could not be reverted. Nothing changed.', 'danger');
+      showToast('That step could not be reverted. Nothing changed.', 'danger', 'revert-failed');
     } finally {
       setBusy(false);
     }
@@ -68,6 +69,16 @@ export function RevertCard({ sessionId, revert }: { sessionId: string; revert: R
     <div
       className="border-border-subtle bg-surface flex w-full flex-col gap-3 rounded-xl border p-4"
       data-testid="revert-card"
+      /*
+        The three revisions the sentence beside the button names, as numbers (task 143).
+        «writes revision N+1 with the content of revision M» is the claim worth asserting, and the
+        only way to assert it was to match the prose that states it. `next` is spelled out rather
+        than left as an addition for the reader, because the append is precisely the part of this
+        card people expect to be an unwind.
+      */
+      data-current-revision={String(revert.currentRevision)}
+      data-previous-revision={String(revert.previousRevision)}
+      data-next-revision={String(revert.currentRevision + 1)}
     >
       <div className="flex flex-wrap items-center gap-3">
         <Button

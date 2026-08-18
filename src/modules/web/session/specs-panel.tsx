@@ -33,13 +33,28 @@ export interface SpecsPanelProps {
   files: readonly SpecFileModel[];
 }
 
-function statusOf(file: SpecFileModel | undefined): { label: string; tone: string } {
+/**
+ * The three states a row can be in, as words, as a colour and as a token (task 143).
+ *
+ * `kind` is the same distinction the label already draws, said in a way that survives translation:
+ * a walk that recognised «Approved» by reading it would stop recognising anything the moment the
+ * chrome is written in Russian, and «Rev 2» is not a state anyone can match on at all.
+ */
+function statusOf(file: SpecFileModel | undefined): {
+  label: string;
+  tone: string;
+  kind: 'not-started' | 'draft' | 'approved';
+} {
   if (file === undefined || file.revisionCount === 0) {
-    return { label: 'Not started', tone: 'text-foreground-muted' };
+    return { label: 'Not started', tone: 'text-foreground-muted', kind: 'not-started' };
   }
-  if (file.approved) return { label: 'Approved', tone: 'text-success-ink' };
+  if (file.approved) return { label: 'Approved', tone: 'text-success-ink', kind: 'approved' };
 
-  return { label: `Rev ${String(file.revisionCount)}`, tone: 'text-foreground-muted' };
+  return {
+    label: `Rev ${String(file.revisionCount)}`,
+    tone: 'text-foreground-muted',
+    kind: 'draft',
+  };
 }
 
 export function SpecsPanel({ plan, files }: SpecsPanelProps) {
@@ -95,6 +110,7 @@ export function SpecsPanel({ plan, files }: SpecsPanelProps) {
                 <span
                   className={`text-xs whitespace-nowrap ${status.tone}`}
                   data-testid="specs-panel-status"
+                  data-status={status.kind}
                 >
                   {status.label}
                 </span>

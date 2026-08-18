@@ -253,10 +253,16 @@ export function Composer({
               </select>
             </div>
 
+            {/*
+              Task 143: in-flight as a flag, not as «Sending…». A wait for the request to finish is
+              the commonest thing a walk does here, and reading the label to know is the one thing a
+              translated build would break.
+            */}
             <Button
               variant="brand"
               size="sm"
               data-testid="chat-send"
+              data-busy={String(busy)}
               disabled={busy || value.trim() === ''}
               onClick={send}
             >

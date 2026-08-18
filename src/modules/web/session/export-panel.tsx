@@ -94,21 +94,21 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
 
       if (!response.ok) {
         setCopy({ kind: 'failed', specFileId: file.specFileId });
-        showToast(`${file.fileName} could not be copied.`, 'danger');
+        showToast(`${file.fileName} could not be copied.`, 'danger', 'file-copy-failed');
         return;
       }
 
       markdown = await response.text();
     } catch {
       setCopy({ kind: 'failed', specFileId: file.specFileId });
-      showToast(`${file.fileName} could not be copied.`, 'danger');
+      showToast(`${file.fileName} could not be copied.`, 'danger', 'file-copy-failed');
       return;
     }
 
     try {
       await navigator.clipboard.writeText(markdown);
       setCopy({ kind: 'copied', specFileId: file.specFileId });
-      showToast(`${file.fileName} copied — the ${mode}-mode revision.`, 'success');
+      showToast(`${file.fileName} copied — the ${mode}-mode revision.`, 'success', 'file-copied');
     } catch {
       // AC-4: the text is offered for manual selection rather than lost with an apology.
       setCopy({
@@ -128,12 +128,13 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
 
     if (!outcome.ok) {
       setFailure(outcome.message);
-      showToast(outcome.message, 'danger');
+      showToast(outcome.message, 'danger', 'bundle-download-failed');
     } else {
       setManifest(outcome.manifest);
       showToast(
         `Downloaded ${String(outcome.manifest.included.length)} ${outcome.manifest.included.length === 1 ? 'file' : 'files'} in ${outcome.manifest.mode} mode.`,
         'success',
+        'bundle-downloaded',
       );
     }
 
@@ -152,7 +153,11 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
           `bundlePlan`; only the sentence above it was guessing.
         */}
         <p className="text-foreground-muted text-xs">
-          Mode: <span data-testid="export-mode">{shown.mode}</span> —{' '}
+          Mode:{' '}
+          <span data-testid="export-mode" data-mode={shown.mode}>
+            {shown.mode}
+          </span>{' '}
+          —{' '}
           {shown.mode === 'default'
             ? `this workflow's ${String(planned)} spec ${planned === 1 ? 'file' : 'files'}, each at its most recent pre-enrichment revision.`
             : 'the enriched files plus quality.md.'}
@@ -174,6 +179,9 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
                   variant="ghost"
                   size="sm"
                   data-testid={`copy-${file.fileName}`}
+                  data-copy-state={
+                    copy.kind !== 'idle' && copy.specFileId === file.specFileId ? copy.kind : 'idle'
+                  }
                   disabled={copy.kind === 'copying'}
                   onClick={() => void copyFile(file)}
                 >
@@ -226,7 +234,13 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
          * download the lists above are an estimate; after it they are a record.
          */}
         {manifest !== null && (
-          <p className="text-sm font-medium" data-testid="export-downloaded">
+          <p
+            className="text-sm font-medium"
+            data-testid="export-downloaded"
+            data-mode={manifest.mode}
+            data-included={manifest.included.join(',')}
+            data-omitted={manifest.omitted.join(',')}
+          >
             Downloaded in {manifest.mode} mode:{' '}
             {manifest.included.length === 0 ? 'an empty archive' : manifest.included.join(', ')}
             {manifest.omitted.length > 0 && ` — without ${manifest.omitted.join(', ')}`}.

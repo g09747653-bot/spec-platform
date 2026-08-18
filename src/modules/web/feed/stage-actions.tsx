@@ -28,6 +28,11 @@ export interface TransitionTargetModel {
   ready: boolean;
   /** What the gate said is missing, for honest UI copy. */
   unmet: readonly string[];
+  /**
+   * The machine's reason/condition identifiers behind the words in `unmet`, so a test can read the
+   * gate's verdict without reading its prose.
+   */
+  unmetCodes: readonly string[];
 }
 
 export interface StageActionsModel {
@@ -91,6 +96,19 @@ export function StageActions({
     <div
       className="border-border-subtle bg-surface flex w-full flex-col gap-3 rounded-xl border p-4"
       data-testid="interview-panel"
+      data-answered-rounds={String(actions.answeredRounds)}
+      data-round-budget={String(actions.roundBudget)}
+      /*
+        Absent, not `none`, outside the interview: a summary is a thing only that stage keeps, so a
+        walk that finds the attribute at all learns where it is standing as well as what it has.
+      */
+      data-summary={
+        actions.askingStage === 'interview'
+          ? actions.summaryPersisted
+            ? 'saved'
+            : 'none'
+          : undefined
+      }
     >
       {awaitingRound && (
         <p className="text-foreground-muted text-sm" data-testid="awaiting-round">
@@ -119,7 +137,13 @@ export function StageActions({
       )}
 
       {notice !== null && (
-        <p role="alert" data-testid="interview-notice" className="text-sm text-warning-ink">
+        <p
+          role="alert"
+          data-testid="interview-notice"
+          data-notice-kind={state.noticeKind ?? ''}
+          data-reason={state.noticeReason ?? ''}
+          className="text-sm text-warning-ink"
+        >
           {notice}
         </p>
       )}
@@ -234,6 +258,7 @@ export function StageActions({
             */
             variant={primary === 'proceed' ? 'primary' : 'secondary'}
             data-testid="proceed"
+            data-busy={String(busy === 'proceed')}
             disabled={busy === 'proceed'}
             onClick={() => {
               const target = actions.target;
@@ -253,7 +278,11 @@ export function StageActions({
           !awaitingRound &&
           !actions.target.ready &&
           actions.target.unmet.length > 0 && (
-            <span className="text-foreground-muted text-xs" data-testid="gate-unmet">
+            <span
+              className="text-foreground-muted text-xs"
+              data-testid="gate-unmet"
+              data-reasons={actions.target.unmetCodes.join(' ')}
+            >
               still needed: {actions.target.unmet.join(', ')}
             </span>
           )}

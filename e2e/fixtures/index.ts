@@ -11,6 +11,8 @@
  * - **`journey`** — driving a session through its gates. Every helper clicks what a person clicks, so
  *   a gate that stops holding is a test that stops passing.
  * - **`download`** — capturing an archive and reading what is actually inside it.
+ * - **`locale`** — choosing the interface language before the first request, which is the only way to
+ *   prove the server rendered it (task 143).
  *
  * Barrel rather than deep imports, so a test names what it needs and not where it lives.
  */
@@ -37,3 +39,5 @@ export {
 } from './journey';
 
 export { downloadBundle, type CapturedArchive } from './download';
+
+export { useLocale, type UiLocale } from './locale';

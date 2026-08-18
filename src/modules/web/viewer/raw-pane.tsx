@@ -45,16 +45,16 @@ export function RawPane({
       const response = await fetch(`/api/specs/${specFileId}/content`);
       if (!response.ok) {
         setState('failed');
-        showToast('That copy did not go through.', 'danger');
+        showToast('That copy did not go through.', 'danger', 'raw-copy-failed');
         return;
       }
 
       await navigator.clipboard.writeText(await response.text());
       setState('copied');
-      showToast('Copied the approved revision to the clipboard.', 'success');
+      showToast('Copied the approved revision to the clipboard.', 'success', 'raw-copied');
     } catch {
       setState('failed');
-      showToast('That copy did not go through.', 'danger');
+      showToast('That copy did not go through.', 'danger', 'raw-copy-failed');
     }
   }
 

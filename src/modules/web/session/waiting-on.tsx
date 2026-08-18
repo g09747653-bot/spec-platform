@@ -30,7 +30,16 @@ export function WaitingOn({ what, elapsedSeconds, onStop }: WaitingOnProps) {
       <Button variant="secondary" data-testid="stop-waiting" onClick={onStop}>
         Stop waiting
       </Button>
-      <span className="text-foreground-muted text-xs" data-testid="waiting-status">
+      {/*
+        The reading itself, next to the sentence that frames it (task 143). «A number that keeps
+        moving» is the property the walk has to check, and checking it by parsing «— 3 s.» out of a
+        sentence makes the check a hostage of how that sentence is worded in each locale.
+      */}
+      <span
+        className="text-foreground-muted text-xs"
+        data-testid="waiting-status"
+        data-elapsed={String(elapsedSeconds)}
+      >
         Waiting for {what} — {String(elapsedSeconds)} s. Stopping loses nothing: the page re-reads
         the session from the server either way.
       </span>

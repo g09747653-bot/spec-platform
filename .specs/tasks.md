@@ -1724,10 +1724,16 @@ Goal: the customer's second hands-on pass plus his video demo (`video demo/Deskt
   - Acceptance Criteria: a live autonomous run from a one-sentence seed reaches Session completed without any click, on the gate chain, within budgets; feed shows every auto-decision with rationale; Stop mid-run converts to manual cleanly (e2e); a hostile-seed corpus produces refusals/honest stops, never runaway loops; the bundle passes the structural checks and linters as usual.
   - _Dependencies: 144_ · _Requirements: А-7 (Программа А); North Star этап 2_ · _Touches: `src/modules/agents/autonomous/**` (new), `src/modules/web/**` (mode surface)_ · _Complexity: Large_ · _Parallel-safe: no_
 
+- [ ] 147\. Viewer presentation per the customer's video (Architect addendum, 2026-08-18)
+  - The document preview becomes a **centred overlay modal** as the video shows: file name + `Revision N` on the left; one line on the right — `Outline · [Preview|Raw|Diff] · Copy · Download · ✕`; identical width across all tabs; scrolling inside the window; `Outline` is a dropdown panel anchored to its button, not a permanent column. Esc and ✕ close; the docked-pane variant retires.
+  - **Raw wraps long lines** (амендмент к AC задачи 142 по видео): a line wider than the well continues on the next visual line WITHOUT a number (the gutter numbers logical lines only); horizontal scrolling exists nowhere in the viewer. Display-only: bytes, Copy and Download remain exact (побайтовость задачи 122 не тронута).
+  - Acceptance Criteria: overlay matches the video's composition point-for-point (side-by-side frames in the report); all four views share one width; Raw shows a >200-char line fully wrapped with correct logical-line numbering; page never scrolls sideways (re-run of the 142 probe stays green); liveness holds with the overlay open over a live stream (Stop reachable — re-run of the M12п check).
+  - _Dependencies: 142_ · _Requirements: видео-демо (разбор `.specs/research/video-demo-2026-08-18.md`); А-14.1_ · _Touches: `src/modules/web/viewer/**`_ · _Complexity: Large_ · _Parallel-safe: no_
+
 - [ ] 146\. M13п gate — ultracode red-team + live walks (self-run, А-2.1)
   - Video-demo conformance check first (the panel-preview flow and answer types per the video — list what the video shows vs what we ship, disposition each). Then the ultracode red-team pass over the two new agents (Concrete interviewer, autonomous driver) and the reworked surfaces; then live walks: one manual journey in Concrete mode + one full autonomous run, both themes, RU locale, gate profile (fresh key first, smallest passing local model).
   - Acceptance Criteria: red-team findings all dispositioned; both live walks GREEN (zero truncations/structural rejections, clean console); artifacts `artifacts/gate-M13/`; customer's eyes-acceptance follows the Architect's artifact verification.
-  - _Dependencies: 142–145_ · _Requirements: А-2.1; А-16_ · _Touches: `e2e/**`, `artifacts/gate-M13/**`_ · _Complexity: Large_ · _Parallel-safe: no_
+  - _Dependencies: 142–145, 147_ · _Requirements: А-2.1; А-16_ · _Touches: `e2e/**`, `artifacts/gate-M13/**`_ · _Complexity: Large_ · _Parallel-safe: no_
 
 
 ## Requirement Coverage

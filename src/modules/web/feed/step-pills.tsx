@@ -63,7 +63,14 @@ export function StepPills({
                 >
                   {index + 1}
                 </span>
-                <span data-testid={isCurrent ? 'stage-current' : undefined}>{step.label}</span>
+                {/*
+                  The pill above already carries `data-stage`, and this repeats it so that a walk
+                  reading the position off `stage-current` — the id every suite already selects —
+                  reads the canonical stage id rather than the label's English (task 143).
+                */}
+                <span data-stage={step.stage} data-testid={isCurrent ? 'stage-current' : undefined}>
+                  {step.label}
+                </span>
                 {/*
                   The word, not the token (task 133; row `1.4-5`). `substageLabel` was computed one
                   line above and used only as a condition, so the pill printed the machine's
@@ -71,7 +78,11 @@ export function StepPills({
                   two spellings, and the raw one in the header.
                 */}
                 {isCurrent && substage !== null && (
-                  <span className="opacity-80" data-testid="stage-substage">
+                  <span
+                    className="opacity-80"
+                    data-testid="stage-substage"
+                    data-substage={currentSubstage ?? ''}
+                  >
                     · {substage}
                   </span>
                 )}

@@ -60,6 +60,11 @@ function ConfidenceBadge({ item }: { item: FeedReviewItem }) {
       className="border-border-subtle text-foreground-muted rounded-full border px-2 py-0.5 text-[0.7rem] whitespace-nowrap"
       title={CONFIDENCE_TOOLTIP}
       data-testid={`review-item-confidence-${item.id}`}
+      /*
+        The score on its own, away from the sentence and the `/10` it is printed in (task 143):
+        what a suite wants to know is the number the reviewer gave, not how this badge phrases it.
+      */
+      data-confidence={String(item.confidence)}
     >
       Confidence score {item.confidence}/10
     </span>
@@ -195,6 +200,12 @@ function VerdictBadge({ outcome }: { outcome: 'pass' | 'needs_revision' }) {
           : 'rounded-full border border-warning-ink/40 px-2 py-0.5 text-xs text-warning-ink'
       }
       data-testid="review-outcome"
+      /*
+        The verdict as the review itself spells it (task 143). A walk that asserted «Needs Revision»
+        was asserting the English on the badge, and the English is the one thing about this badge
+        that is free to change.
+      */
+      data-outcome={outcome}
     >
       {outcome === 'pass' ? 'Pass' : 'Needs Revision'}
     </span>
@@ -362,7 +373,18 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
             <div className="mt-3 flex flex-col gap-3">
               {summary}
               {decisionLine !== null && (
-                <p className="text-foreground-muted text-sm" data-testid="review-decision">
+                <p
+                  className="text-foreground-muted text-sm"
+                  data-testid="review-decision"
+                  /*
+                    The decision in the table's own spelling, and absent when there is none
+                    (task 143). The third case above gives this line to a board nobody has decided
+                    yet, and a token minted to fill that gap would state a decision the
+                    `review_feedback` row does not have — the same lie the copy is careful not to
+                    tell there.
+                  */
+                  data-decision={decided ?? undefined}
+                >
                   {decisionLine}
                 </p>
               )}

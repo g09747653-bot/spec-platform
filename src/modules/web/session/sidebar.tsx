@@ -186,7 +186,12 @@ export function LocalWorkspace() {
       >
         Mount folder
       </button>
-      <p className="text-foreground-muted text-xs">
+      {/*
+        The honesty of the stub is a fact about the product, so it is asserted as one (task 143). A
+        walk that proved it by finding «is not built yet» in the sentence was proving it about the
+        English copy; this attribute is what stays true when the sentence is written in Russian.
+      */}
+      <p className="text-foreground-muted text-xs" data-stub="true">
         Mounting a folder from this machine is not built yet. Nothing here reads or writes your
         files.
       </p>

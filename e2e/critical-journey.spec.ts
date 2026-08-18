@@ -49,7 +49,12 @@ test.describe('critical journey', () => {
     const sessionUrl = await startSession(page, prompt);
 
     await expect(page.getByTestId('session-prompt')).toHaveText(prompt);
-    await expect(page.getByTestId('stage-current')).toHaveText(/Interview/i);
+    /*
+     * The position, not the pill's word for it (task 143). The current step carries the canonical
+     * stage id beside its label, and the id is what this journey is claiming at every checkpoint
+     * below: the label is the methodology's to choose and the interface's to translate.
+     */
+    await expect(page.getByTestId('stage-current')).toHaveAttribute('data-stage', 'interview');
     // Nothing is approved, so every file of the bundle is currently missing (FR-015 AC-7).
     await expect(page.getByTestId('export-omitted')).toContainText('constitution.md');
     await expect(page.getByTestId('export-omitted')).toContainText('tasks.md');
@@ -59,7 +64,7 @@ test.describe('critical journey', () => {
 
     // --- the four stages: collect, draft, approve, review, decide (FR-007; FR-009; FR-010) ---
     for (const stage of PARITY_STAGES) {
-      await expect(page.getByTestId('stage-current')).toHaveText(new RegExp(stage, 'i'));
+      await expect(page.getByTestId('stage-current')).toHaveAttribute('data-stage', stage);
 
       await completeStage(page, stage);
 
@@ -68,7 +73,7 @@ test.describe('critical journey', () => {
     }
 
     // --- the final accepted review sealed the session (FR-020 AC-1) ---
-    await expect(page.getByTestId('stage-current')).toHaveText(/Complete/i);
+    await expect(page.getByTestId('stage-current')).toHaveAttribute('data-stage', 'complete');
     await expect(page.getByTestId('session-complete')).toBeVisible();
     // FR-020 AC-3: a completed session presents the export actions.
     await expect(page.getByTestId('export-panel')).toBeVisible();
@@ -96,11 +101,12 @@ test.describe('critical journey', () => {
     expect(archive.names).not.toContain('manifest.md');
     expect(archive.names).not.toContain('quality.md');
 
-    await expect(page.getByTestId('export-downloaded')).toContainText('default mode');
+    // The mode the manifest recorded for the archive that was just saved, as the manifest spells it.
+    await expect(page.getByTestId('export-downloaded')).toHaveAttribute('data-mode', 'default');
 
     // --- the seal survives a reload: the journey ends where it ended (FR-017 AC-1; FR-020 AC-9) ---
     await page.goto(sessionUrl);
-    await expect(page.getByTestId('stage-current')).toHaveText(/Complete/i);
+    await expect(page.getByTestId('stage-current')).toHaveAttribute('data-stage', 'complete');
     await expect(page.getByTestId('session-complete')).toBeVisible();
     // Nothing offers a way onward — with no Quality module installed there is no door out (AC-9).
     await expect(page.getByTestId('proceed')).toHaveCount(0);

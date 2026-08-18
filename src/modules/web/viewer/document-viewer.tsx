@@ -168,7 +168,7 @@ export function DocumentViewer({
            * pane — «nothing to compare against» is the true answer, and a diff view that threw on
            * Rev 1 would make the tab a trap on every newly written document.
            */
-          <p className="text-sm" data-testid="viewer-diff-empty">
+          <p className="text-sm" data-testid="viewer-diff-empty" data-empty-reason="no-predecessor">
             This is the first revision of {fileName} — there is no earlier one to compare it with.
           </p>
         ) : (

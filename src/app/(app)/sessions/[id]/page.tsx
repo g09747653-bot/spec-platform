@@ -118,6 +118,12 @@ function targetModel(
     : (verdict.unmet?.map((condition) => CONDITION_COPY[condition]) ?? [
         STILL_NEEDED[verdict.reason],
       ]);
+  /*
+   * The same verdict, unworded (task 143). `unmet` is written to be read by a person and is
+   * therefore the one thing a suite must not assert on; these are the identifiers the words came
+   * from, taken from the same branch so the two can never describe different refusals.
+   */
+  const unmetCodes: readonly string[] = verdict.allowed ? [] : (verdict.unmet ?? [verdict.reason]);
 
   return {
     label,
@@ -125,6 +131,7 @@ function targetModel(
     toSubstage: to.substage,
     ready: verdict.allowed,
     unmet,
+    unmetCodes,
   };
 }
 

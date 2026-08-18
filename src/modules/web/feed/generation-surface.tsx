@@ -127,6 +127,22 @@ export function GenerationSurface({
     return null;
   }
 
+  /*
+   * What pressing the control would do, as a token: `retry` after a failed attempt, `apply-review`
+   * when the board sent the document back, `generate` when this is the step the session is waiting
+   * on, and `regenerate` over a document that is already written (task 143). Worked out from the
+   * same conditions in the same order as the label below, so the token and the words cannot come
+   * apart — the label is free to be re-worded or translated, and this is what a walk reads instead.
+   */
+  const action: 'retry' | 'apply-review' | 'generate' | 'regenerate' =
+    stream.error !== null
+      ? 'retry'
+      : owed !== null
+        ? 'apply-review'
+        : primary === 'generate-spec'
+          ? 'generate'
+          : 'regenerate';
+
   return (
     <div
       className="border-border-subtle bg-surface flex w-full flex-col gap-3 rounded-xl border p-4"
@@ -255,6 +271,7 @@ export function GenerationSurface({
             <Button
               variant={primary === 'generate-spec' ? 'primary' : 'secondary'}
               data-testid="generate-spec"
+              data-action={action}
               onClick={() => {
                 void generate();
               }}

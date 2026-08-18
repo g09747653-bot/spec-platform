@@ -26,7 +26,16 @@ export function McpCard() {
       <CardContent className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-4">
           <span className="text-sm font-medium">This project</span>
-          <span className="text-foreground-muted text-xs" data-testid="mcp-project-count">
+          {/*
+            Task 143: the count as a number, so a test asserts on it rather than on «0 servers».
+            A literal, because the card is a frame and there is no runtime behind it to count yet —
+            when one arrives, the attribute and the label take their value from the same place.
+          */}
+          <span
+            className="text-foreground-muted text-xs"
+            data-testid="mcp-project-count"
+            data-count="0"
+          >
             0 servers
           </span>
         </div>

@@ -13,6 +13,12 @@ import { ProjectActions } from './project-actions';
 export interface ProjectListItem {
   id: string;
   name: string;
+  /**
+   * The stage's canonical id, beside the label rather than instead of it (task 143): the label is
+   * the methodology's own word for the position and is about to be translatable, while this is the
+   * name the workflow model uses and never changes.
+   */
+  stage: string;
   stageLabel: string;
   updatedAt: Date;
   /** Where the name links: the chat itself when there is only one, otherwise the chat list (А-6). */
@@ -69,7 +75,9 @@ export function ProjectList({ projects }: { projects: readonly ProjectListItem[]
                   {project.sessionCount > 1 && (
                     <span data-testid="project-chat-count">{project.sessionCount} chats</span>
                   )}
-                  <span data-testid="project-stage">{project.stageLabel}</span>
+                  <span data-testid="project-stage" data-stage={project.stage}>
+                    {project.stageLabel}
+                  </span>
                   <time dateTime={project.updatedAt.toISOString()}>
                     {formatUpdatedAt(project.updatedAt)}
                   </time>

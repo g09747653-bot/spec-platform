@@ -55,8 +55,20 @@ describe('a session-moving request', () => {
 
     const result = await request.send('proceed', '/api/sessions/s/transition', { toStage: 'x' });
 
-    expect(states[0]).toEqual({ running: 'proceed', startedAt: 1_000, notice: null });
-    expect(states.at(-1)).toEqual({ running: null, startedAt: null, notice: null });
+    expect(states[0]).toEqual({
+      running: 'proceed',
+      startedAt: 1_000,
+      notice: null,
+      noticeKind: null,
+      noticeReason: null,
+    });
+    expect(states.at(-1)).toEqual({
+      running: null,
+      startedAt: null,
+      notice: null,
+      noticeKind: null,
+      noticeReason: null,
+    });
     expect(result).toEqual({ ok: true, payload: { stage: 'constitution' } });
   });
 
@@ -79,6 +91,10 @@ describe('a session-moving request', () => {
 
     expect(result.ok).toBe(false);
     expect(request.state.notice).toBe(REASON_EXPLANATION.NO_ANSWERED_ROUND);
+    // Task 143: the sentence is the user's, the code is the test's — asserted against the same
+    // refusal so a hand-written RU explanation cannot make this suite red.
+    expect(request.state.noticeKind).toBe('refused');
+    expect(request.state.noticeReason).toBe('NO_ANSWERED_ROUND');
     expect(request.state.running).toBeNull();
   });
 
@@ -101,6 +117,9 @@ describe('a session-moving request', () => {
 
     expect(request.state.notice).toBe(REASON_EXPLANATION.ROUND_LIMIT_REACHED);
     expect(request.state.notice).not.toContain('ROUND_LIMIT_REACHED');
+    // The code the words deliberately do not name is still there for anything that has to know it.
+    expect(request.state.noticeKind).toBe('refused');
+    expect(request.state.noticeReason).toBe('ROUND_LIMIT_REACHED');
   });
 
   it("falls back to the handler's message when the rejection carries no reason", async () => {
@@ -117,6 +136,9 @@ describe('a session-moving request', () => {
     await request.send('fallback', '/api/sessions/s/answers');
 
     expect(request.state.notice).toBe('The request was not valid.');
+    // Still a refusal; there was simply no code to carry with it.
+    expect(request.state.noticeKind).toBe('refused');
+    expect(request.state.noticeReason).toBeNull();
   });
 
   it('says something even when the failure carries nothing at all', async () => {
@@ -131,6 +153,8 @@ describe('a session-moving request', () => {
     await request.send('proceed', '/api/sessions/s/transition');
 
     expect(request.state.notice).toBe(FALLBACK_FAILURE_NOTICE);
+    expect(request.state.noticeKind).toBe('refused');
+    expect(request.state.noticeReason).toBeNull();
   });
 
   /*
@@ -157,6 +181,9 @@ describe('a session-moving request', () => {
     expect(request.state.notice).toBe(expiredNotice(615_000));
     // Named in seconds, because that is the unit the user waited in.
     expect(request.state.notice).toContain('615 s');
+    // The backstop firing is its own ending, not the user's choice to stop waiting.
+    expect(request.state.noticeKind).toBe('expired');
+    expect(request.state.noticeReason).toBeNull();
   });
 
   it('can be abandoned while it is still running, and says so', async () => {
@@ -180,6 +207,8 @@ describe('a session-moving request', () => {
     expect(result.ok).toBe(false);
     expect(request.state.running).toBeNull();
     expect(request.state.notice).toBe(ABANDONED_NOTICE);
+    expect(request.state.noticeKind).toBe('abandoned');
+    expect(request.state.noticeReason).toBeNull();
   });
 
   it('tells a dropped connection apart from a request the user abandoned', async () => {
@@ -194,6 +223,9 @@ describe('a session-moving request', () => {
     await request.send('proceed', '/api/sessions/s/transition');
 
     expect(request.state.notice).toBe(UNREACHABLE_NOTICE);
+    // The token keeps the two apart the same way the words do — and without reading the words.
+    expect(request.state.noticeKind).toBe('unreachable');
+    expect(request.state.noticeReason).toBeNull();
   });
 
   it('refuses a second request while one is in flight', async () => {
@@ -312,8 +344,12 @@ describe('a session-moving request', () => {
 
     await request.send('proceed', '/api/sessions/s/transition');
     expect(request.state.notice).not.toBeNull();
+    expect(request.state.noticeKind).toBe('refused');
 
     request.dismiss();
     expect(request.state.notice).toBeNull();
+    // Dismissing takes the whole ending with it: a token left behind would outlive its own sentence.
+    expect(request.state.noticeKind).toBeNull();
+    expect(request.state.noticeReason).toBeNull();
   });
 });

@@ -148,10 +148,13 @@ test.describe('the customer’s 2026-08-18 reports', () => {
      */
     await page.getByTestId('review-request-changes').click();
     await expect(page.getByTestId('review-board')).toHaveCount(0);
-    await expect(page.getByTestId('stage-substage')).toHaveText(/Generating/);
+    await expect(page.getByTestId('stage-substage')).toHaveAttribute('data-substage', 'generate');
 
     await page.getByTestId('generate-spec').click();
-    await expect(page.getByTestId('spec-card').last()).toContainText('Rev 2', { timeout: 40_000 });
+    // A second revision of the same file — read as the number the card holds, not as «Rev 2».
+    await expect(page.getByTestId('spec-card').last()).toHaveAttribute('data-revision', '2', {
+      timeout: 40_000,
+    });
 
     /*
      * The decided board is still in the conversation — it happened — but it now says what it is,
@@ -160,8 +163,9 @@ test.describe('the customer’s 2026-08-18 reports', () => {
      */
     const superseded = page.getByTestId('review-board-decided').first();
     await expect(superseded).toHaveAttribute('data-superseded', 'true');
+    // The badge is rendered for a superseded board and for no other, so it being on screen is the
+    // statement being made — whichever language it makes it in (task 143).
     await expect(superseded.getByTestId('review-superseded-badge')).toBeVisible();
-    await expect(superseded.getByTestId('review-superseded-badge')).toContainText('Superseded');
     await expect(superseded.getByTestId('review-accept')).toHaveCount(0);
 
     // Folded on arrival — the `open` attribute is the browser's own record of a `<details>` state.
@@ -227,7 +231,8 @@ test.describe('the customer’s 2026-08-18 reports', () => {
     await page.getByTestId('mcq-option-q-audience-solo-devs').check();
     await page.getByTestId('mcq-option-q-problem-context').check();
     await page.getByTestId('mcq-submit').click();
-    await expect(page.getByTestId('interview-panel')).toContainText('summary saved');
+    // The panel's own record that the round was persisted, rather than the line it says so on.
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-summary', 'saved');
     await countLoud('the interview, answered and ready to leave');
 
     await page.getByTestId('proceed').click();
@@ -240,7 +245,7 @@ test.describe('the customer’s 2026-08-18 reports', () => {
     await countLoud('a draft waiting for approval');
 
     await page.getByTestId('approve-spec').click();
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
 
     /*
      * THE SCREENSHOT. An approved document, a position that still drafts, refinement offered and a

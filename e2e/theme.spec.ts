@@ -95,7 +95,7 @@ test.describe('the theme', () => {
     await reachDrafting(page);
     await draftAndApprove(page);
 
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
     await expect(page.getByTestId('review-board')).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   });

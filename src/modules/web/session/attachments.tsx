@@ -263,7 +263,12 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
                   <span className="text-sm font-medium" data-testid="attachment-name">
                     {attachment.fileName}
                   </span>
-                  <span className="text-foreground-muted text-xs" data-testid="attachment-meta">
+                  <span
+                    className="text-foreground-muted text-xs"
+                    data-testid="attachment-meta"
+                    data-stage={attachment.attachedAtStage}
+                    data-mime={attachment.mimeType}
+                  >
                     {TYPE_LABELS[attachment.mimeType] ?? attachment.mimeType} ·{' '}
                     {sizeLabel(attachment.sizeBytes)} · attached at {attachment.attachedAtStage}
                   </span>

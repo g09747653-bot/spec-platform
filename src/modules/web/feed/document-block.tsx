@@ -127,6 +127,8 @@ export function DocumentBlock({
     <FeedItem block={block}>
       <div
         className="border-border-subtle bg-surface flex w-full flex-col gap-3 rounded-xl border p-4"
+        data-approved={String(block.approved)}
+        data-revision={String(block.revisionNumber)}
         {...(primary ? { 'data-testid': 'spec-card' } : { 'data-testid': 'document-card' })}
       >
         <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -179,6 +181,7 @@ export function DocumentBlock({
             <span
               className="border-border-subtle text-foreground-muted rounded-full border px-2 py-0.5 text-xs"
               data-testid="document-revision"
+              data-revision={String(block.revisionNumber)}
             >
               Rev{' '}
               {primary ? (

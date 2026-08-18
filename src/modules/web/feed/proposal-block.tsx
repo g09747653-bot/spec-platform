@@ -101,6 +101,12 @@ export function ProposalBlockCard({
         <div
           className="border-border-subtle bg-surface flex w-full flex-col gap-1 rounded-xl border p-4"
           data-testid="proposal-decided"
+          /*
+            Which way it went, in the column's own word (task 143). «Applied» and «Discarded» are
+            the sentence's business; this card is one of two outcomes and should say which without
+            anyone having to read it.
+          */
+          data-status={block.status}
         >
           <BlockCaption stage={block.stage} trailing={label} />
           <p className="text-sm">

@@ -68,6 +68,8 @@ function ToastRow({ toast }: { toast: Toast }) {
     <div
       data-testid="toast"
       data-tone={toast.tone}
+      // Task 143: which event this is, for a test that must not read the sentence to know.
+      data-toast-kind={toast.kind}
       className={cn(
         'pointer-events-auto flex max-w-[32rem] items-start gap-3 rounded-md border px-4 py-2 shadow-sm',
         TONE_CLASS[toast.tone],

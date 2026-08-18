@@ -83,7 +83,13 @@ export async function completeInterview(page: Page): Promise<void> {
   await page.getByTestId('mcq-option-q-problem-context').check();
   await page.getByTestId('mcq-submit').click();
 
-  await expect(page.getByTestId('interview-panel')).toContainText('summary saved');
+  /*
+   * The third condition of the exit gate, read off the panel rather than out of its prose
+   * (task 143). `data-summary` is written only while the interview is the asking stage, so its
+   * presence says where the session is standing and `saved` says the summary is persisted — the
+   * two halves the sentence «· summary saved» used to carry in one English clause.
+   */
+  await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-summary', 'saved');
   await page.getByTestId('proceed').click();
 
   /*
@@ -112,7 +118,8 @@ export async function collectFor(page: Page, stage: ParityStage): Promise<void> 
 
   await expect(page.getByTestId('interview-panel')).toBeVisible();
   await page.getByTestId('proceed').click();
-  await expect(page.getByTestId('stage-substage')).toHaveText(/Generating/);
+  // The substage the pill is standing in, in the machine's spelling — «Generating» is its label.
+  await expect(page.getByTestId('stage-substage')).toHaveAttribute('data-substage', 'generate');
 }
 
 /**
@@ -128,7 +135,8 @@ export async function draftAndApprove(page: Page): Promise<void> {
   await expect(page.getByTestId('approve-spec')).toBeVisible();
 
   await page.getByTestId('approve-spec').click();
-  await expect(page.getByTestId('spec-card')).toContainText('approved');
+  // The revision's state as the card holds it, not the word the badge prints for it (task 143).
+  await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
 
   await expect(page.getByTestId('proceed')).toBeEnabled();
   await page.getByTestId('proceed').click();

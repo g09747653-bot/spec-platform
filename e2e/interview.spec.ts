@@ -28,14 +28,22 @@ test.describe('workflow gates and the structured interview', () => {
     await page.getByTestId('create-project').click();
 
     await expect(page.getByTestId('session')).toBeVisible();
-    await expect(page.getByTestId('stage-current')).toHaveText(/Interview/);
+    await expect(page.getByTestId('stage-current')).toHaveAttribute('data-stage', 'interview');
 
     // --- The exit is shut and says why (FR-006 AC-2; task 29: 409 + machine-readable reason) ---
     await expect(page.getByTestId('interview-panel')).toBeVisible();
-    await expect(page.getByTestId('gate-unmet')).toContainText('one answered question round');
+    /*
+     * `data-reasons` is the gate's own unmet conditions, space-joined (task 143). The claim is that
+     * the missing answered round is among them, which is what the wording said; the bounded match
+     * keeps it from being satisfied by some future condition that merely ends in this one's name.
+     */
+    await expect(page.getByTestId('gate-unmet')).toHaveAttribute(
+      'data-reasons',
+      /(^| )answered-round( |$)/,
+    );
     await page.getByTestId('proceed').click();
     await expect(page.getByTestId('interview-notice')).toBeVisible();
-    await expect(page.getByTestId('stage-current')).toHaveText(/Interview/);
+    await expect(page.getByTestId('stage-current')).toHaveAttribute('data-stage', 'interview');
 
     // --- Asking presents a validated MCQ card (FR-005 AC-1/AC-2) ---
     await page.getByTestId('ask-round').click();
@@ -76,16 +84,22 @@ test.describe('workflow gates and the structured interview', () => {
 
     // The panel reflects persisted state: a round answered, the summary saved (task 38).
     await expect(page.getByTestId('interview-panel')).toBeVisible();
-    await expect(page.getByTestId('interview-panel')).toContainText('1 of 3 question rounds');
-    await expect(page.getByTestId('interview-panel')).toContainText('summary saved');
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-answered-rounds', '1');
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-round-budget', '3');
+    // `data-summary` is `saved` or `none`; only the interview keeps one, so it is absent elsewhere.
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-summary', 'saved');
 
     // --- The gate that refused now permits (FR-006 AC-3; task 38) ---
     await page.getByTestId('proceed').click();
-    await expect(page.getByTestId('stage-current')).toHaveText(/Constitution/);
-    await expect(page.getByTestId('stage-substage')).toHaveText(/Collecting/);
+    await expect(page.getByTestId('stage-current')).toHaveAttribute('data-stage', 'constitution');
+    await expect(page.getByTestId('stage-substage')).toHaveAttribute('data-substage', 'collect');
 
     // --- The next stage collects for itself (FR-007 AC-2: rounds are per stage) ---
-    await expect(page.getByTestId('gate-unmet')).toContainText('answered question round');
+    // This gate refuses with a reason code rather than the interview's condition list.
+    await expect(page.getByTestId('gate-unmet')).toHaveAttribute(
+      'data-reasons',
+      'NO_ANSWERED_ROUND',
+    );
     await page.getByTestId('ask-round').click();
     await expect(page.getByTestId('mcq-card')).toBeVisible();
     await page.getByTestId('mcq-option-q-constitution-scope-strict').check();
@@ -93,7 +107,7 @@ test.describe('workflow gates and the structured interview', () => {
 
     await expect(page.getByTestId('interview-panel')).toBeVisible();
     await page.getByTestId('proceed').click();
-    await expect(page.getByTestId('stage-substage')).toHaveText(/Generating/);
+    await expect(page.getByTestId('stage-substage')).toHaveAttribute('data-substage', 'generate');
 
     // --- At generate, the drafting path is open again (no pending card), and it streams ---
     await expect(page.getByTestId('generate-spec')).toBeVisible();
@@ -120,7 +134,8 @@ test.describe('workflow gates and the structured interview', () => {
     await page.getByTestId('mcq-option-q-audience-solo-devs').check();
     await page.getByTestId('mcq-option-q-problem-context').check();
     await page.getByTestId('mcq-submit').click();
-    await expect(page.getByTestId('interview-panel')).toContainText('1 of 3');
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-answered-rounds', '1');
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-round-budget', '3');
 
     // Round 2 answered by replying instead of submitting the card (task 36).
     await page.getByTestId('ask-round').click();
@@ -138,7 +153,8 @@ test.describe('workflow gates and the structured interview', () => {
     // Answer the follow-up; three rounds are now spent.
     await page.getByTestId('mcq-option-q-success-narrow-no-rewrite').check();
     await page.getByTestId('mcq-submit').click();
-    await expect(page.getByTestId('interview-panel')).toContainText('3 of 3');
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-answered-rounds', '3');
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-round-budget', '3');
 
     // --- Exhaustion: the fallback lists what stayed open, and records it directly (task 37) ---
     await expect(page.getByTestId('fallback-panel')).toBeVisible();
@@ -150,7 +166,7 @@ test.describe('workflow gates and the structured interview', () => {
 
     // The exit gate was never blocked by needs — and is open with round + summary in place.
     await page.getByTestId('proceed').click();
-    await expect(page.getByTestId('stage-current')).toHaveText(/Constitution/);
+    await expect(page.getByTestId('stage-current')).toHaveAttribute('data-stage', 'constitution');
   });
   /**
    * Task 106 — the round as the reference product presents it, and as the feed keeps it.
@@ -184,16 +200,18 @@ test.describe('workflow gates and the structured interview', () => {
     await page.getByTestId('ask-round').click();
     await expect(page.getByTestId('mcq-card')).toBeVisible();
 
-    // The header names the round and how much it asks (Эталон §1.1).
-    await expect(page.getByTestId('round-heading').first()).toContainText('Round 1 — 2 questions');
+    // The header names the round and how much it asks (Эталон §1.1) — the two numbers it reads out.
+    const heading = page.getByTestId('round-heading').first();
+    await expect(heading).toHaveAttribute('data-round', '1');
+    await expect(heading).toHaveAttribute('data-questions', '2');
 
-    // Required markers and the select-one/select-all captions.
+    // Required markers, and how many answers each question takes: `single` is the select-one caption.
     await expect(page.getByTestId('mcq-required-q-audience')).toBeVisible();
-    await expect(page.getByTestId('mcq-hint-q-audience')).toHaveText('Select one');
-    await expect(page.getByTestId('mcq-hint-q-problem')).toHaveText('Select all that apply');
+    await expect(page.getByTestId('mcq-hint-q-audience')).toHaveAttribute('data-select', 'single');
+    await expect(page.getByTestId('mcq-hint-q-problem')).toHaveAttribute('data-select', 'multiple');
 
-    // One recommendation, on the one option the model marked — and nowhere else.
-    await expect(page.getByTestId('mcq-recommended-teams')).toHaveText('(Recommended)');
+    // One recommendation, on the one option the model marked — the id says which — and nowhere else.
+    await expect(page.getByTestId('mcq-recommended-teams')).toBeVisible();
     await expect(
       page.getByTestId('mcq-card').locator('[data-testid^="mcq-recommended-"]'),
     ).toHaveCount(1);

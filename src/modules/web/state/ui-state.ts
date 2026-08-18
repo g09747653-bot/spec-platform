@@ -33,6 +33,15 @@ export const UI_STATE_KEYS = {
   sidebarWidth: 'spec-platform:sidebar-width',
   sidebarCollapsed: 'spec-platform:sidebar-collapsed',
   viewerView: 'spec-platform:viewer-view',
+  /*
+   * The chrome language (task 143) — declared here like every other preference, and stored somewhere
+   * else: it is a **cookie**, because the server has to know it before it renders a single word.
+   * That is the whole of D-214, argued in `i18n/locale.ts`. The spelling drops the colon on purpose:
+   * a cookie name is an RFC 6265 token and `:` is not a token character, so browsers tolerate it but
+   * nothing between us and the browser is obliged to. It follows the theme's hyphen instead, which is
+   * exactly the licence this table's own note gives — the point is that the spelling is written once.
+   */
+  locale: 'spec-platform-locale',
 } as const;
 
 export type UiStateKey = (typeof UI_STATE_KEYS)[keyof typeof UI_STATE_KEYS];

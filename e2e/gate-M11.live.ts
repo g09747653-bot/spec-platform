@@ -662,12 +662,17 @@ async function readSurfaces(page: Page): Promise<void> {
   if (attach === 0) problem('the composer has no attach control (row `1.5-2`)');
   if (!sendFill.includes('gradient')) problem('the Send button carries no gradient (row `1.5-2`)');
 
+  /*
+   * The panel's heading read as a heading, not as the word «Attachments» (task 143). What row
+   * `1.5-3` asks is that the panel is titled at all; the title itself is exactly the part of it a
+   * Russian interface rewrites.
+   */
   const attachmentsTitle = await page
     .getByTestId('attachments-panel')
     .locator('h3, h2')
     .first()
     .innerText()
-    .catch(() => '(no title)');
+    .catch(() => '');
 
   const width = await page
     .getByTestId('sidebar-panel')
@@ -681,21 +686,27 @@ async function readSurfaces(page: Page): Promise<void> {
     .boundingBox()
     .then((box) => Math.round(box?.width ?? 0));
 
-  say(`sidebar: «${attachmentsTitle}», ${String(width)}px → ${String(widened)}px after six steps`);
-  if (attachmentsTitle !== 'Attachments') {
-    problem(`the attachments panel is titled «${attachmentsTitle}» (row 1.5-3)`);
-  }
+  const titled = attachmentsTitle.trim();
+
+  say(
+    `sidebar: «${titled === '' ? 'no title' : titled}», ${String(width)}px → ${String(widened)}px after six steps`,
+  );
+  if (titled === '') problem('the attachments panel carries no title (row `1.5-3`)');
   if (widened <= width) problem('the resize handle does not widen the sidebar (row `1.5-3`)');
 
-  const exportLine = await page
-    .getByTestId('export-panel')
-    .innerText()
-    .then((text) => text.split('\n').find((line) => line.startsWith('Mode:')) ?? '(no mode line)')
-    .catch(() => '(no export panel)');
+  /*
+   * The export mode as the panel's own token (task 143). Row `1.4-8` was a copy defect — the panel
+   * called the baseline «parity files», a word from the bundle contract rather than from the export
+   * vocabulary — and the fact under it is that the mode on screen is one the vocabulary has.
+   */
+  const exportMode = await page
+    .getByTestId('export-mode')
+    .getAttribute('data-mode')
+    .catch(() => null);
 
-  say(`export panel: «${exportLine.replace(/\s+/g, ' ')}»`);
-  if (exportLine.includes('parity'))
-    problem('the export copy still says «parity files» (row `1.4-8`)');
+  say(`export panel: mode «${exportMode ?? 'none'}»`);
+  if (exportMode !== 'default' && exportMode !== 'quality')
+    problem('the export panel names no mode from the vocabulary (row `1.4-8`)');
 
   await snapshot(page, 'surfaces');
 }
@@ -788,13 +799,16 @@ async function run(browser: Browser): Promise<void> {
 
   await snapshot(page, 'bridge');
 
-  const budgetLine = await page
-    .getByTestId('interview-panel')
-    .innerText()
-    .then((text) => text.split('\n').find((line) => line.includes('question rounds')) ?? '(none)')
-    .catch(() => '(no panel)');
+  /*
+   * The budget as its two numbers rather than as the sentence «1 of 3 question rounds» (task 143).
+   * Reading it out of the prose meant matching a plural rule as well as a language, and the plural
+   * is the first half of that sentence a translation changes.
+   */
+  const panel = page.getByTestId('interview-panel');
+  const answeredRounds = await panel.getAttribute('data-answered-rounds').catch(() => null);
+  const roundBudget = await panel.getAttribute('data-round-budget').catch(() => null);
 
-  say(`the round budget on the card: «${budgetLine.replace(/\s+/g, ' ')}»`);
+  say(`the round budget on the card: ${answeredRounds ?? 'none'} of ${roundBudget ?? 'none'}`);
 
   /* ------------------------------------------- a chat reply that survives a reload */
 
@@ -866,10 +880,13 @@ async function run(browser: Browser): Promise<void> {
     .waitFor({ timeout: 120_000 })
     .catch(() => undefined);
 
-  const created = await page
-    .getByTestId('bundle-created')
-    .innerText()
-    .catch(() => '(no bundle event)');
+  const crossed = (await page.getByTestId('bundle-created').count()) > 0;
+  const created = crossed
+    ? await page
+        .getByTestId('bundle-created')
+        .innerText()
+        .catch(() => '(unreadable)')
+    : '(no bundle event)';
   const chip = await page
     .getByTestId('stage-chip')
     .last()
@@ -883,8 +900,13 @@ async function run(browser: Browser): Promise<void> {
   say(`the crossing: «${created.replace(/\s+/g, ' ')}»`);
   say(`the chip: «${chip.replace(/\s+/g, ' ')}»; the pill's substage: «${substage.trim()}»`);
 
-  if (!created.includes('Project bundle created')) {
-    problem('no «Project bundle created» block at the interview’s exit (row `1.2-5`)');
+  /*
+   * The block's presence, not its sentence (task 143). `bundle-created` is the block's own name and
+   * the only thing row `1.2-5` is about — that the crossing is marked in the feed at all — while
+   * «Project bundle created» is the wording, which is the part that changes language.
+   */
+  if (!crossed) {
+    problem('no bundle-created block at the interview’s exit (row `1.2-5`)');
   }
   if (/collect|generate|review/.test(substage)) {
     problem(`the step pill prints the raw substage token «${substage.trim()}» (row \`1.4-5\`)`);
