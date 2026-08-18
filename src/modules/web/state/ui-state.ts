@@ -219,12 +219,22 @@ function paintSidebarWidth(width: number): void {
  * must fall through to the stylesheet's default, not throw while `<head>` is being parsed. The
  * clamp is repeated here rather than imported because this string runs before any module does — and
  * the bounds are interpolated from the constants above, so there is still one place to change them.
+ *
+ * **The guard asks the string, not the number, and the first version asked the number** (found by
+ * the M12п live walk). `localStorage.getItem` answers `null` when nothing is stored; `Number(null)`
+ * is `0`, and `isFinite(0)` is true — so «nothing stored» walked straight past the guard, the clamp
+ * lifted zero to the minimum, and the script pinned `--sidebar-width: 220px` before the first paint
+ * of every first visit. The stylesheet's declared 300 was overridden by a script whose whole purpose
+ * is to do nothing when there is nothing to say, and no test caught it because every test seeded a
+ * width before reloading. A stored value still wins, exactly as before.
  */
 export function uiStateScriptSource(): string {
   return (
     '(function(){try{' +
-    `var w=Number(localStorage.getItem(${JSON.stringify(UI_STATE_KEYS.sidebarWidth)}));` +
-    `if(!isFinite(w))return;` +
+    `var s=localStorage.getItem(${JSON.stringify(UI_STATE_KEYS.sidebarWidth)});` +
+    `if(s===null||s==='')return;` +
+    `var w=Number(s);` +
+    `if(!isFinite(w)||w<=0)return;` +
     `w=Math.min(${String(SIDEBAR_MAX_WIDTH)},Math.max(${String(SIDEBAR_MIN_WIDTH)},Math.round(w)));` +
     `document.documentElement.style.setProperty(${JSON.stringify(SIDEBAR_WIDTH_PROPERTY)},w+'px');` +
     '}catch(e){}})()'

@@ -1,15 +1,19 @@
+import { runInNewContext } from 'node:vm';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
+  SIDEBAR_WIDTH_PROPERTY,
   UI_STATE_KEYS,
   clampSidebarWidth,
   persistedValue,
   resetUiStateCache,
   sidebarCollapsedValue,
   sidebarWidthValue,
+  uiStateScriptSource,
 } from './ui-state';
 
 /**
@@ -140,5 +144,58 @@ describe('persistedValue', () => {
     }).not.toThrow();
     // Applied for this visit even though it could not be written down.
     expect(sidebarWidthValue.snapshot()).toBe(320);
+  });
+});
+
+/**
+ * The pre-paint script, run rather than read (found by the M12п live walk).
+ *
+ * The script exists to stop a stored width arriving a frame late (D-198), and the walk measured the
+ * cost of the way it was written: on a session with nothing stored, the sidebar was 220 px — the
+ * clamp's minimum — where the stylesheet declares 300. `Number(null)` is `0` and `isFinite(0)` is
+ * true, so the guard let «nothing stored» through and the clamp lifted it to the floor.
+ *
+ * It survived round 1 because every test that touched this path wrote a width into storage before
+ * reloading, so the first-visit branch — the one every new user takes — was the only one nobody ran.
+ * These run the source itself, in a sandbox with just the two globals it reaches for.
+ */
+describe('the pre-paint sidebar script', () => {
+  const runWith = (stored: string | null): ReturnType<typeof vi.fn> => {
+    const setProperty = vi.fn();
+
+    runInNewContext(uiStateScriptSource(), {
+      localStorage: {
+        getItem: (key: string) => (key === UI_STATE_KEYS.sidebarWidth ? stored : null),
+      },
+      document: { documentElement: { style: { setProperty } } },
+    });
+
+    return setProperty;
+  };
+
+  it('says nothing on a first visit, so the stylesheet default stands', () => {
+    expect(runWith(null)).not.toHaveBeenCalled();
+    expect(runWith('')).not.toHaveBeenCalled();
+  });
+
+  it('paints a stored width before the first paint', () => {
+    expect(runWith('350')).toHaveBeenCalledWith(SIDEBAR_WIDTH_PROPERTY, '350px');
+  });
+
+  it('clamps a stored width that would produce an unusable layout', () => {
+    expect(runWith('5600')).toHaveBeenCalledWith(
+      SIDEBAR_WIDTH_PROPERTY,
+      `${String(SIDEBAR_MAX_WIDTH)}px`,
+    );
+    expect(runWith('40')).toHaveBeenCalledWith(
+      SIDEBAR_WIDTH_PROPERTY,
+      `${String(SIDEBAR_MIN_WIDTH)}px`,
+    );
+  });
+
+  it('ignores a stored value that is not a width', () => {
+    expect(runWith('as wide as possible')).not.toHaveBeenCalled();
+    expect(runWith('0')).not.toHaveBeenCalled();
+    expect(runWith('-200')).not.toHaveBeenCalled();
   });
 });
