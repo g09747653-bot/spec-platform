@@ -90,7 +90,13 @@ jobs:
     # at the ceiling that read as a red gate while saying nothing except «the box is too small»
     # (D-200/D-201). One engine on its own runner finishes in a third of that, so the box is now sized
     # for one engine plus its retries instead of for the sum of three (А-15).
-    timeout-minutes: 30
+    #
+    # 30 → 45 in task 142's PR, on a measurement rather than a hunch: a green chromium job spent
+    # 17 m 02 s in the tests and 4 m 06 s installing system dependencies, leaving nine minutes of
+    # slack — less than one retried test. The box was again sized to report «too small» before it
+    # reported anything about the product. The apt step below now has its own bound, so this ceiling
+    # is only ever reached by tests actually running.
+    timeout-minutes: 45
 
     strategy:
       # One engine's failure must not cancel the other two. The whole value of the split is that a
@@ -142,9 +148,26 @@ jobs:
       # dependencies each through `--with-deps` above and finished in about seventeen minutes.
       # A red gate that means "apt was slow installing browsers this job does not run" is exactly
       # the uninformative verdict D-201 and D-202 were about.
+      #
+      # Bounded and retried, because the failure this step actually has is a hang, not an error.
+      # `install-deps` is `apt-get update` plus `apt-get install`, and an apt mirror that stops
+      # answering makes it sit there until something kills it — twice on this PR it sat until the job
+      # timeout and was reported as a red end-to-end gate that had never run a test. A healthy run of
+      # this step takes about four minutes, so five is a generous bound on one attempt; three
+      # attempts cost at most sixteen minutes of the job's forty-five, and the usual cost is nothing.
       - name: Install Playwright system dependencies
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps ${{ matrix.engine }}
+        timeout-minutes: 16
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 300 pnpm exec playwright install-deps ${{ matrix.engine }}; then
+              exit 0
+            fi
+            echo "::warning::install-deps attempt ${attempt} failed or hung; retrying"
+            sleep 15
+          done
+          echo "::error::install-deps did not complete in three attempts"
+          exit 1
 
       # NFR-011 / SC-12: the smoke test runs on all three engines — one job each now, same three
       # Playwright projects. Edge is covered by the Chromium project (see playwright.config.ts).
