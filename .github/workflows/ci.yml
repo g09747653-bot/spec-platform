@@ -91,12 +91,13 @@ jobs:
     # (D-200/D-201). One engine on its own runner finishes in a third of that, so the box is now sized
     # for one engine plus its retries instead of for the sum of three (А-15).
     #
-    # 30 → 45 in task 142's PR, on a measurement rather than a hunch: a green chromium job spent
+    # 30 → 55 in task 142's PR, on a measurement rather than a hunch: a green chromium job spent
     # 17 m 02 s in the tests and 4 m 06 s installing system dependencies, leaving nine minutes of
     # slack — less than one retried test. The box was again sized to report «too small» before it
-    # reported anything about the product. The apt step below now has its own bound, so this ceiling
-    # is only ever reached by tests actually running.
-    timeout-minutes: 45
+    # reported anything about the product. The apt step below owns its own 25-minute bound, and
+    # WebKit's tests take about eighteen minutes, so 55 is that worst case with room left over; on a
+    # healthy runner the job still finishes in under twenty.
+    timeout-minutes: 55
 
     strategy:
       # One engine's failure must not cancel the other two. The whole value of the split is that a
@@ -160,13 +161,20 @@ jobs:
       # lock … held by process 2275 (apt-get)». A retry that is guaranteed to fail is worse than no
       # retry, because it reads like the problem was given three chances.
       #
-      # So: one attempt, with a bound the *step* owns. A hung mirror now costs twelve minutes and is
-      # reported as this step timing out, leaving the rest of the job's budget unspent and the fix
-      # obvious — re-run this one engine (D-202 made that cheap). A healthy run takes about four
-      # minutes.
+      # So: one attempt, with a bound the *step* owns. A stalled mirror is reported as this step
+      # timing out, leaving the rest of the job's budget unspent and the fix obvious — re-run this
+      # one engine (D-202 made that cheap).
+      #
+      # The bound is 25 minutes and not the 12 it was first set to, because the first number was
+      # measured on the wrong engine. Chromium's dependencies install in about four minutes; WebKit's
+      # set is several times larger (GTK, GStreamer, PipeWire, SDL, a soundfont), and on a slow
+      # `azure.archive.ubuntu.com` it was still **making progress** — package 126, one every ten to
+      # twenty seconds — when twelve minutes ran out. A bound that cuts off a step which is visibly
+      # working is the same defect as no bound at all, pointing the other way: it reports a red gate
+      # for a mirror having a bad afternoon. On a healthy runner none of this costs anything.
       - name: Install Playwright system dependencies
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        timeout-minutes: 12
+        timeout-minutes: 25
         run: pnpm exec playwright install-deps ${{ matrix.engine }}
 
       # NFR-011 / SC-12: the smoke test runs on all three engines — one job each now, same three
