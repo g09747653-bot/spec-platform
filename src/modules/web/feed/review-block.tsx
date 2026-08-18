@@ -274,7 +274,7 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
 
   const header = (
     <div className="flex flex-wrap items-center gap-2">
-      <BlockCaption stage={block.specType} trailing="review" />
+      <BlockCaption stage={block.specType} trailing="review" tone={pending ? 'primary' : 'muted'} />
       <VerdictBadge outcome={block.outcome} />
     </div>
   );
@@ -291,44 +291,104 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
     const frozen: ReadonlySet<string> = new Set(block.selectedItemIds ?? []);
     // Only a request-changes decision carried a selection, so only it has one to show.
     const showBoxes = decided === 'request_changes';
+    const superseded = block.supersededBy !== null;
+
+    /*
+     * The sentence, when there is one to say (task 142).
+     *
+     * A decided board says what was decided. A board that is genuinely old says nothing here at all
+     * — the badge in the summary says it, which is what the customer's report asked for. What is
+     * left is the third case, and it is the one that made the old copy wrong more often than right:
+     * an undecided, current, latest-revision board that simply is not what the session is waiting on
+     * this second, because a round or a proposal outranks it. That reader is not looking at history
+     * and must not be told they are.
+     */
+    const decisionLine =
+      decided !== null
+        ? DECISION_COPY[decided]
+        : superseded
+          ? null
+          : 'Something else is in front of you just now — this board is still open.';
 
     return (
       <FeedItem block={block}>
         <div
-          className="border-border-subtle bg-surface flex w-full flex-col gap-3 rounded-xl border p-4"
+          className={
+            superseded
+              ? 'border-border-subtle bg-surface-muted flex w-full flex-col rounded-xl border p-4 opacity-60 transition-opacity focus-within:opacity-100 hover:opacity-100'
+              : 'border-border-subtle bg-surface flex w-full flex-col rounded-xl border p-4'
+          }
           data-testid="review-board-decided"
+          /*
+            Two attributes rather than one because they answer different questions: `data-board`
+            names which of the three cards this is, and `data-superseded` is the plain boolean a
+            walk filters on. Both are additive — every id this card carried, it still carries.
+          */
+          data-board={superseded ? 'superseded' : 'settled'}
+          data-superseded={String(superseded)}
         >
-          {header}
-          {summary}
-          <p className="text-foreground-muted text-sm">
-            <span data-testid="review-decision">
-              {decided === null
-                ? 'This review is no longer the one in front of you.'
-                : DECISION_COPY[decided]}
-            </span>{' '}
-            {total} {total === 1 ? 'point' : 'points'} in all.
-          </p>
+          {/*
+            The badge stays outside the fold, because the badge is the thing the reader has to see
+            without doing anything. What folds is the findings.
+          */}
+          <div className="flex flex-wrap items-center gap-2">
+            {header}
+            {superseded && (
+              <span
+                data-testid="review-superseded-badge"
+                className="border-border-subtle text-foreground-subtle text-label rounded-full border px-2 py-0.5 uppercase"
+              >
+                Superseded — a newer review is below
+              </span>
+            )}
+          </div>
 
-          <ItemGroup
-            title="Must Fix"
-            items={mustFix}
-            tone="blocking"
-            testId="review-mustfix"
-            testIdPrefix="review-mustfix-item"
-            checkbox={showBoxes}
-            selected={frozen}
-            onToggle={null}
-          />
-          <ItemGroup
-            title="Recommendations"
-            items={recommendations}
-            tone="advisory"
-            testId="review-recommendations"
-            testIdPrefix="review-recommendation-item"
-            checkbox={showBoxes}
-            selected={frozen}
-            onToggle={null}
-          />
+          {/*
+            Folded when it is history, open when it is not — and folded *without JavaScript*, by the
+            same argument the item groups below already make: this card is readable in the first
+            paint and stays readable if hydration is slow. `open` is computed from the block alone,
+            never from anything only the browser knows, so the server render and the first client
+            render agree by construction.
+          */}
+          <details
+            data-testid="review-board-details"
+            open={!superseded}
+            className="mt-3 flex flex-col gap-3"
+          >
+            <summary className="text-foreground-muted cursor-pointer text-sm">
+              {total} {total === 1 ? 'point' : 'points'} in all
+            </summary>
+
+            <div className="mt-3 flex flex-col gap-3">
+              {summary}
+              {decisionLine !== null && (
+                <p className="text-foreground-muted text-sm" data-testid="review-decision">
+                  {decisionLine}
+                </p>
+              )}
+
+              <ItemGroup
+                title="Must Fix"
+                items={mustFix}
+                tone="blocking"
+                testId="review-mustfix"
+                testIdPrefix="review-mustfix-item"
+                checkbox={showBoxes}
+                selected={frozen}
+                onToggle={null}
+              />
+              <ItemGroup
+                title="Recommendations"
+                items={recommendations}
+                tone="advisory"
+                testId="review-recommendations"
+                testIdPrefix="review-recommendation-item"
+                checkbox={showBoxes}
+                selected={frozen}
+                onToggle={null}
+              />
+            </div>
+          </details>
         </div>
       </FeedItem>
     );
@@ -336,9 +396,18 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
 
   return (
     <FeedItem block={block}>
+      {/*
+        The board in hand, and it looks like it (task 142).
+
+        The accent is the one this codebase already reserves for the card a decision belongs to —
+        the same ring and border weight the composer wears when it is focused. It costs no new
+        colour, and it is what makes «the checkboxes disappeared» un-thinkable: the card with the
+        checkboxes is the only one on the page with a ring around it.
+      */}
       <div
-        className="border-border-subtle bg-surface flex w-full flex-col gap-4 rounded-xl border p-4"
+        className="border-primary/40 bg-surface ring-primary/20 flex w-full flex-col gap-4 rounded-xl border p-4 ring-1"
         data-testid="review-board"
+        data-board="active"
       >
         {header}
         {summary}

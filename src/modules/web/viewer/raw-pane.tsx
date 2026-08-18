@@ -88,7 +88,19 @@ export function RawPane({
         </div>
       )}
 
-      <div className="bg-background border-border-subtle flex overflow-auto rounded-md border">
+      {/*
+        The well owns the sideways scroll, and the test id is here so a walk can say so (task 142).
+
+        Nothing about this element changed with the clipping fix — it was always the thing that
+        scrolls. What the customer met was that the row two levels above it had grown to the width of
+        the longest line, so the well was scrolling correctly at an x-offset off the side of the
+        screen. The id makes «the pane stayed put and this scrolled» a measurement rather than an
+        inference.
+      */}
+      <div
+        data-testid="viewer-raw-well"
+        className="bg-background border-border-subtle flex overflow-auto rounded-md border"
+      >
         <ol
           aria-hidden
           data-testid="viewer-raw-gutter"

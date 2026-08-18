@@ -1,7 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { createSignedInUser, signIn } from './fixtures/auth';
-import { collectFor, completeInterview, completeStage, startSession } from './fixtures/journey';
+import {
+  collectFor,
+  completeInterview,
+  completeStage,
+  openRefine,
+  startSession,
+} from './fixtures/journey';
 
 /**
  * The destructive pass (task 140 — «сразу протестировать на баги»).
@@ -295,6 +301,7 @@ test.describe('M12п bug hunt', () => {
     await expect(page.getByTestId('spec-card')).toBeVisible({ timeout: 40_000 });
 
     // Two revisions of the same file, so the Diff view has something to compare.
+    await openRefine(page);
     await page.getByTestId('refine-instruction').fill('Add a note about non-goals.');
     await page.getByTestId('submit-refinement').click();
     await expect(page.getByTestId('diff-card')).toBeVisible({ timeout: 40_000 });

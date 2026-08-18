@@ -69,7 +69,7 @@ export function DocumentBlock({
   const [localError, setLocalError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const { state: request, elapsedSeconds, send, abandon } = useSessionRequest(deadlineMs);
+  const { state: request, elapsedSeconds, waiting, send, abandon } = useSessionRequest(deadlineMs);
   const viewerControl = useViewerControl();
 
   const busy = request.running;
@@ -248,7 +248,13 @@ export function DocumentBlock({
         {pending && !block.approved && (
           <div className="flex flex-col gap-3">
             <div className="flex gap-2">
+              {/*
+                The loud one — until the instruction box is open, at which point finishing the
+                instruction is what the user is in the middle of and Approve steps back (task 142).
+                One card, one headline, at every moment of its life.
+              */}
               <Button
+                variant={showInstruction ? 'secondary' : 'primary'}
                 data-testid="approve-spec"
                 disabled={busy === 'approve'}
                 onClick={() => {
@@ -299,9 +305,9 @@ export function DocumentBlock({
           </div>
         )}
 
-        {busy !== null && (
+        {waiting && (
           <WaitingOn
-            what={WAITING_FOR[busy] ?? 'the server'}
+            what={WAITING_FOR[busy ?? ''] ?? 'the server'}
             elapsedSeconds={elapsedSeconds}
             onStop={abandon}
           />

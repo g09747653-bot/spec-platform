@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { createSignedInUser, reachDrafting, signIn } from './fixtures';
+import { createSignedInUser, openRefine, reachDrafting, signIn } from './fixtures';
 
 /**
  * Conversational refinement, end to end (tasks 59 and 60; FR-011).
@@ -37,6 +37,7 @@ test.describe('conversational refinement', () => {
     await expect(page.getByTestId('spec-revision-number')).toHaveText('1');
 
     // --- The instruction produces a diff, and no revision (AC-1/AC-2) ---
+    await openRefine(page);
     await page.getByTestId('refine-instruction').fill('Add a note about non-goals.');
     await page.getByTestId('submit-refinement').click();
 
@@ -72,6 +73,7 @@ test.describe('conversational refinement', () => {
 
     const before = await page.getByTestId('spec-content').textContent();
 
+    await openRefine(page);
     await page.getByTestId('refine-instruction').fill('Add a paragraph about scope.');
     await page.getByTestId('submit-refinement').click();
     await expect(page.getByTestId('diff-card')).toBeVisible();
@@ -94,6 +96,7 @@ test.describe('conversational refinement', () => {
     await signIn(context, await createSignedInUser('vague'));
     await draftASpec(page);
 
+    await openRefine(page);
     await page.getByTestId('refine-instruction').fill('Make it better.');
     await page.getByTestId('submit-refinement').click();
 
@@ -119,6 +122,7 @@ test.describe('conversational refinement', () => {
 
     expect(heading).toBeDefined();
 
+    await openRefine(page);
     await page.getByTestId('refine-instruction').fill(`Remove the ${heading ?? ''} section.`);
     await page.getByTestId('submit-refinement').click();
 

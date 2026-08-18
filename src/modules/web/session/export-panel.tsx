@@ -239,8 +239,15 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
           </p>
         )}
 
+        {/*
+          Secondary (task 142). The archive is available from the moment there is anything to put in
+          it, all session long — it is a standing offer, not a step — and a control that is loud in
+          every state cannot be telling anyone what to do next. The one place downloading IS the next
+          step is the completion panel at the end of the journey, and that button is primary there.
+        */}
         <Button
           type="button"
+          variant="secondary"
           onClick={() => void download()}
           disabled={busy}
           data-testid="download-export"

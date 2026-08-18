@@ -213,6 +213,22 @@ export interface ReviewBlock extends FeedBlockBase {
    */
   cyclesUsed: number;
   cycleBudget: number;
+  /**
+   * The board that replaced this one, or `null` when nothing has (task 142).
+   *
+   * **Supersession is its own fact, and it is not the negation of «is the tail».** The card used to
+   * infer «you are looking at an old board» from not being the block the feed is waiting on, and
+   * those are different things: a pending round, a run in flight and an undecided proposal all
+   * outrank a pending review in the tail order, so a board that is perfectly current — latest
+   * revision, no decision, nothing newer anywhere — renders as not-the-tail whenever any of them is
+   * outstanding. Telling that reader «a newer review is below» would be a lie the product states
+   * confidently, which is worse than the confusion it was meant to fix.
+   *
+   * So it is computed here from the two things that actually make a board old: another board on the
+   * same file written after it, or a revision of that file newer than the one it reviewed
+   * (FR-010 AC-8). The value is the newer board's id, so the badge could one day link to it.
+   */
+  supersededBy: string | null;
 }
 
 /** A conversational refinement awaiting accept or reject (FR-011). */

@@ -915,3 +915,69 @@ describe('the bundle event and the tail chip (task 133)', () => {
     ).toHaveLength(1);
   });
 });
+
+/**
+ * Supersession is its own fact (task 142).
+ *
+ * The card used to say «this review is no longer the one in front of you» whenever it was not the
+ * feed's tail, and the customer read that as «the checkboxes are gone». The badge that replaces it
+ * makes a stronger claim — *a newer review is below* — so the projection has to be able to tell the
+ * difference between «old» and «merely outranked». These are the four cases that distinction has.
+ */
+describe('a board knows whether it has been superseded (task 142)', () => {
+  const boardsById = (source: FeedSource) =>
+    new Map(
+      buildFeed(source)
+        .blocks.filter((block) => block.kind === 'review')
+        .map((block) => [block.id, block]),
+    );
+
+  it('is not superseded when it is the only board on the latest revision', () => {
+    expect(boardsById(walkedToReview()).get('review:review-1')?.supersededBy).toBeNull();
+  });
+
+  it('names the newer board when the file was reviewed again', () => {
+    const state = walkedToReview();
+
+    const boards = boardsById({
+      ...state,
+      revisions: [
+        revision({ approved: true }),
+        revision({ revisionId: 'rev-2', revisionNumber: 2, createdAt: T.revision2, approved: true }),
+      ],
+      reviews: [
+        review({ decision: 'request_changes', selectedItemIds: ['item-1'], decidedAt: T.decided }),
+        review({ reviewId: 'review-2', revisionNumber: 2, createdAt: T.chat }),
+      ],
+    });
+
+    expect(boards.get('review:review-1')?.supersededBy).toBe('review:review-2');
+    expect(boards.get('review:review-2')?.supersededBy).toBeNull();
+  });
+
+  it('is superseded by a newer revision even with no second board', () => {
+    const state = walkedToReview();
+
+    const boards = boardsById({
+      ...state,
+      revisions: [
+        revision({ approved: true }),
+        revision({ revisionId: 'rev-2', revisionNumber: 2, createdAt: T.revision2 }),
+      ],
+    });
+
+    expect(boards.get('review:review-1')?.supersededBy).toBe('revision:file-constitution:2');
+  });
+
+  /*
+   * The case that makes this a separate field rather than `!pending`. A pending proposal outranks a
+   * pending review in the tail order, so this board is not the tail — and it is not old either. The
+   * old copy called it history; the badge must not.
+   */
+  it('is not superseded merely because something else holds the tail', () => {
+    const state = { ...walkedToReview(), proposals: [proposal()] };
+
+    expect(buildFeed(state).tail.kind).toBe('pending-proposal');
+    expect(boardsById(state).get('review:review-1')?.supersededBy).toBeNull();
+  });
+});

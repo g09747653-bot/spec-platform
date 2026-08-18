@@ -178,3 +178,23 @@ export async function reachDrafting(page: Page): Promise<void> {
   await completeInterview(page);
   await collectFor(page, 'constitution');
 }
+
+/**
+ * Opens the refinement box (task 142).
+ *
+ * It is folded behind its own heading now — it is always available, and a surface that is always
+ * available should not be as loud as the one thing the session is waiting for. A test that types
+ * into it has to open it first, exactly as a person does. `refine-card` is the `<details>` itself,
+ * so it stays visible while closed and the assertions that only check for its presence are
+ * unaffected.
+ */
+export async function openRefine(page: Page): Promise<void> {
+  const card = page.getByTestId('refine-card');
+  await expect(card).toBeVisible();
+
+  if (!(await card.evaluate((node) => node.hasAttribute('open')))) {
+    await page.getByTestId('refine-toggle').click();
+  }
+
+  await expect(page.getByTestId('refine-instruction')).toBeVisible();
+}

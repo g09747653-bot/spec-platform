@@ -40,14 +40,24 @@ const SESSION_CONTROLS = [
   'chat-message',
 ] as const;
 
-/** The session-moving controls that are present and enabled right now. */
+/**
+ * The session-moving controls that are present, enabled **and reachable** right now.
+ *
+ * `checkVisibility` was added in task 142, when the refinement box moved behind a `<details>`. Until
+ * then the check asked only whether the element existed in the DOM, and Д-1 — «there is always
+ * something the user can press» — would have gone on reporting green over a control folded out of
+ * sight. The invariant is about what a person can reach, so the test has to ask what a person can
+ * see; anything hidden later would have reopened the same hole.
+ */
 async function liveControls(page: Page): Promise<string[]> {
   return page.evaluate((ids: readonly string[]) => {
     const live: string[] = [];
 
     for (const id of ids) {
       const element = document.querySelector(`[data-testid="${id}"]`);
-      if (element !== null && !element.hasAttribute('disabled')) live.push(id);
+      if (element === null || element.hasAttribute('disabled')) continue;
+      if (!element.checkVisibility()) continue;
+      live.push(id);
     }
 
     return live;
