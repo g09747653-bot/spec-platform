@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
+import { useT } from '../i18n/locale-context';
 import { GenerationStreamProvider } from '../session/generation-context';
 import {
   isTypingTarget,
@@ -150,6 +151,7 @@ function SessionSurface({
   sidebar,
 }: SessionFeedProps) {
   const router = useRouter();
+  const t = useT();
   const { state: chat, send } = useChatDecision(sessionId);
   const [draft, setDraft] = useState('');
   const [viewer, setViewer] = useState<ViewerTarget | null>(null);
@@ -295,6 +297,9 @@ function SessionSurface({
     function onKeyDown(event: KeyboardEvent) {
       const id: ShortcutId | null = shortcutFor({
         key: event.key,
+        // The physical key as well as the character it produced: on a Russian layout they differ,
+        // and matching the character alone left four shortcuts dead (task 143; §7.2).
+        code: event.code,
         ctrlKey: event.ctrlKey,
         metaKey: event.metaKey,
         altKey: event.altKey,
@@ -468,8 +473,8 @@ function SessionSurface({
           <FeedItem key={block.id} block={block}>
             <p className="text-foreground-muted w-full text-xs" data-testid="generation-marker">
               {block.status === 'failed'
-                ? 'That generation did not complete. Nothing was lost.'
-                : `Drafted on attempt ${String(block.attempt)} — an earlier provider did not answer.`}
+                ? t('feed.surface.generation-failed')
+                : t('feed.surface.generation-failover', { attempt: block.attempt })}
             </p>
           </FeedItem>
         );
@@ -606,7 +611,7 @@ function SessionSurface({
                 <button
                   type="button"
                   data-testid="jump-to-end"
-                  aria-label="Jump to the end of the conversation"
+                  aria-label={t('feed.surface.jump-to-end')}
                   onClick={jumpToEnd}
                   className="border-border-subtle bg-surface text-foreground-muted hover:text-foreground sticky bottom-4 left-full z-10 mr-4 -mt-2 inline-flex h-9 w-9 items-center justify-center rounded-full border shadow-lg"
                 >

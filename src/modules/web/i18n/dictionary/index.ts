@@ -2,6 +2,7 @@ import { commonPhrases } from './common';
 import { errorsPhrases } from './errors';
 import { feedConversationPhrases } from './feed-conversation';
 import { feedDocumentsPhrases } from './feed-documents';
+import { methodologyPhrases } from './methodology';
 import { pagesPhrases } from './pages';
 import { projectsPhrases } from './projects';
 import { sessionPhrases } from './session';
@@ -10,8 +11,8 @@ import { viewerPhrases } from './viewer';
 /**
  * Every word this interface says, in both languages (task 143).
  *
- * **Split by surface, joined here.** One file of five hundred entries is a file nobody reads; eight
- * files named after the surfaces they dress are eight files a person can hold in their head while
+ * **Split by surface, joined here.** One file of five hundred entries is a file nobody reads; nine
+ * files named after the surfaces they dress are nine files a person can hold in their head while
  * translating one of them. The join is a spread rather than a nested namespace so a key is a flat
  * string — `t('feed.review.pass')` — which is what makes the union of keys usable as a type and a
  * missing entry a compile error rather than an `undefined` in a sentence.
@@ -26,6 +27,7 @@ export const PHRASES = {
   ...errorsPhrases,
   ...feedConversationPhrases,
   ...feedDocumentsPhrases,
+  ...methodologyPhrases,
   ...pagesPhrases,
   ...projectsPhrases,
   ...sessionPhrases,

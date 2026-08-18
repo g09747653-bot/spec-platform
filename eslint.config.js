@@ -9,6 +9,7 @@ import { noRestrictedPathsRule } from './eslint.boundaries.js';
 import { designTokensConfigs } from './eslint.design-tokens.js';
 import { restrictedImportConfigs } from './eslint.restricted-imports.js';
 import { sectionSchemaConfigs } from './eslint.section-schema.js';
+import { uiStringsConfigs } from './eslint.ui-strings.js';
 
 /**
  * Build-blocking lint configuration.
@@ -143,6 +144,9 @@ export default tseslint.config(
 
   // Task 124: one home for colour. Tokens are declared in src/app/brand.css and nowhere else.
   ...designTokensConfigs,
+
+  // Task 143: one home for copy. Every word a reader sees comes from src/modules/web/i18n/dictionary.
+  ...uiStringsConfigs,
 
   // Plain JS tooling scripts are outside the TypeScript program.
   {

@@ -2,6 +2,7 @@
 
 import { useEffect, useSyncExternalStore } from 'react';
 
+import { useT } from '../i18n/locale-context';
 import { cn } from '../lib/cn';
 
 import {
@@ -52,6 +53,7 @@ const TONE_CLASS: Record<Toast['tone'], string> = {
 };
 
 function ToastRow({ toast }: { toast: Toast }) {
+  const t = useT();
   const { id } = toast;
 
   useEffect(() => {
@@ -79,7 +81,7 @@ function ToastRow({ toast }: { toast: Toast }) {
       <button
         type="button"
         data-testid="toast-dismiss"
-        aria-label="Dismiss notification"
+        aria-label={t('shell.toast.dismiss')}
         className="text-caption shrink-0 opacity-70 hover:opacity-100"
         onClick={() => {
           dismissToast(id);

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+import { useT } from '../i18n/locale-context';
 import { Button } from '../ui/button';
 import { showToast } from '../ui/toast';
 
@@ -37,6 +38,7 @@ export function RawPane({
   content: string;
   copyable?: boolean;
 }) {
+  const t = useT();
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const lines = lineCount(content);
 
@@ -45,16 +47,16 @@ export function RawPane({
       const response = await fetch(`/api/specs/${specFileId}/content`);
       if (!response.ok) {
         setState('failed');
-        showToast('That copy did not go through.', 'danger', 'raw-copy-failed');
+        showToast(t('viewer.raw.copy-failed'), 'danger', 'raw-copy-failed');
         return;
       }
 
       await navigator.clipboard.writeText(await response.text());
       setState('copied');
-      showToast('Copied the approved revision to the clipboard.', 'success', 'raw-copied');
+      showToast(t('viewer.raw.copied'), 'success', 'raw-copied');
     } catch {
       setState('failed');
-      showToast('That copy did not go through.', 'danger', 'raw-copy-failed');
+      showToast(t('viewer.raw.copy-failed'), 'danger', 'raw-copy-failed');
     }
   }
 
@@ -70,7 +72,7 @@ export function RawPane({
               void copy();
             }}
           >
-            Copy markdown
+            {t('viewer.raw.copy')}
           </Button>
           {state !== 'idle' && (
             <span
@@ -80,9 +82,7 @@ export function RawPane({
                 state === 'copied' ? 'text-foreground-muted text-xs' : 'text-xs text-danger-ink'
               }
             >
-              {state === 'copied'
-                ? 'Copied the approved revision to the clipboard.'
-                : 'That copy did not go through.'}
+              {t(state === 'copied' ? 'viewer.raw.copied' : 'viewer.raw.copy-failed')}
             </span>
           )}
         </div>

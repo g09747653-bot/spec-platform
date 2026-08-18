@@ -10,6 +10,7 @@ import {
   PageBody,
   ProjectList,
 } from '@/modules/web';
+import { serverT } from '@/modules/web/i18n/server-locale';
 import { stageLabel } from '@/modules/web/session/stage-display';
 
 /**
@@ -19,6 +20,7 @@ import { stageLabel } from '@/modules/web/session/stage-display';
  * and filtered afterwards. `requireOwnerScope` is what makes the query possible at all.
  */
 export default async function ProjectsPage() {
+  const t = await serverT();
   const scope = await requireOwnerScope();
   const projects = await createProjectRepository(getDatabase()).list(scope);
 
@@ -26,15 +28,13 @@ export default async function ProjectsPage() {
     <PageBody>
       <section className="flex flex-col gap-6">
         <div className="flex flex-col gap-1">
-          <h1 className="text-h1">Projects</h1>
-          <p className="text-foreground-muted text-sm">
-            Each project holds one specification bundle and the chats that write it.
-          </p>
+          <h1 className="text-h1">{t('page.projects.title')}</h1>
+          <p className="text-foreground-muted text-sm">{t('page.projects.subtitle')}</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Start a new project</CardTitle>
+            <CardTitle>{t('page.projects.new-project')}</CardTitle>
           </CardHeader>
           <CardContent>
             <NewProjectForm />
@@ -47,7 +47,7 @@ export default async function ProjectsPage() {
             name: project.name,
             stage: project.stage,
             // The primary chat's own methodology names the position (task 132; row `1.4-6`).
-            stageLabel: stageLabel(project.stage, project.methodologyId),
+            stageLabel: stageLabel(t, project.stage, project.methodologyId),
             updatedAt: project.updatedAt,
             /*
              * Where the row's name goes (А-6). A project with one chat opens **in that chat**, so

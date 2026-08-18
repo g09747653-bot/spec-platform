@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { decodeChatEvents, type ChatResultEvent } from '../api/chat-protocol';
+import { type PhraseKey } from '../i18n/dictionary';
+import { useT } from '../i18n/locale-context';
 
 /**
  * Sending a chat message that might be a decision (task 62; FR-009 AC-6/AC-7; streamed in task 109).
@@ -37,10 +39,19 @@ export interface ChatDecisionState {
   error: string | null;
 }
 
-const FAILURE = 'That message did not go through. Please try again.';
+/**
+ * The one thing this hook says in its own voice (task 143).
+ *
+ * A key rather than a sentence, and one key for both endings the user can meet — a response that was
+ * never `ok` and a stream that stopped before the server had an answer. They differ in where the
+ * connection broke and in nothing the reader can act on: the card is untouched either way, and the
+ * message has to say so without pretending to know more than it does.
+ */
+const FAILURE: PhraseKey = 'errors.chat.send-failed';
 
 export function useChatDecision(sessionId: string) {
   const router = useRouter();
+  const t = useT();
   const [turns, setTurns] = useState<readonly ChatTurn[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,7 +130,7 @@ export function useChatDecision(sessionId: string) {
       });
 
       if (!response.ok || response.body === null) {
-        setError(FAILURE);
+        setError(t(FAILURE));
         return;
       }
 
@@ -146,7 +157,7 @@ export function useChatDecision(sessionId: string) {
       // connection, not a decision. The card is untouched either way; say so and stop.
       if (outcome === null) {
         settle(undefined, undefined);
-        setError(FAILURE);
+        setError(t(FAILURE));
         return;
       }
 
@@ -161,7 +172,7 @@ export function useChatDecision(sessionId: string) {
       router.refresh();
     } catch {
       settle(undefined, undefined);
-      setError(FAILURE);
+      setError(t(FAILURE));
     } finally {
       setBusy(false);
     }

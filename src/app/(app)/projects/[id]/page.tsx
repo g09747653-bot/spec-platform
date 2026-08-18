@@ -8,6 +8,8 @@ import { createProjectRepository } from '@/modules/projects/repositories/project
 import { createSessionRepository } from '@/modules/projects/repositories/sessions';
 import { createSpecFileRepository } from '@/modules/specs/repositories/spec-files';
 import { PageBody } from '@/modules/web';
+import type { PhraseKey } from '@/modules/web/i18n/dictionary';
+import { serverT } from '@/modules/web/i18n/server-locale';
 import { ChatList, type ChatListItem } from '@/modules/web/projects/chat-list';
 import { McpCard } from '@/modules/web/projects/mcp-card';
 import { NewEditChat } from '@/modules/web/projects/new-edit-chat';
@@ -27,16 +29,21 @@ import { stageLabel } from '@/modules/web/session/stage-display';
  * from the same database that stamped the rows (task 120 AC-2).
  */
 
+/*
+ * The tab and the filter each keep their table and trade the word for a key (task 143). The `key`
+ * half is the URL and stays as it is — it is what a bookmark carries — and the `label` half is
+ * resolved at the call site, so the two vocabularies cannot drift into one column.
+ */
 const TABS = [
-  { key: 'generate', label: 'Generate' },
-  { key: 'edit', label: 'Edit' },
-] as const;
+  { key: 'generate', label: 'page.project.tab-generate' },
+  { key: 'edit', label: 'page.project.tab-edit' },
+] as const satisfies readonly { key: string; label: PhraseKey }[];
 
 const FILTERS = [
-  { key: 'active', label: 'Active' },
-  { key: 'archived', label: 'Archived' },
-  { key: 'all', label: 'All' },
-] as const;
+  { key: 'active', label: 'page.project.filter-active' },
+  { key: 'archived', label: 'page.project.filter-archived' },
+  { key: 'all', label: 'page.project.filter-all' },
+] as const satisfies readonly { key: string; label: PhraseKey }[];
 
 type TabKey = (typeof TABS)[number]['key'];
 type FilterKey = (typeof FILTERS)[number]['key'];
@@ -65,6 +72,7 @@ export default async function ProjectPage({
 }) {
   const { id } = await params;
   const query = await searchParams;
+  const t = await serverT();
   const scope = await requireOwnerScope();
   const db = getDatabase();
 
@@ -111,9 +119,13 @@ export default async function ProjectPage({
       badge: `${config.badge.vendor} · ${config.badge.flavour} · ${config.badge.version}`,
       // The chat's own methodology names its position (task 132), so the list agrees with the
       // header of the conversation it links to rather than printing the canonical seven at it.
-      stageLabel: stageLabel(chat.stage, chat.methodologyId),
+      stageLabel: stageLabel(t, chat.stage, chat.methodologyId),
       completed: chat.completionCount > 0,
-      bundleLabel: `${String(approved.length)}/${String(bundleConfig.stages.filter((stage) => stage.document !== null && !stage.optional).length)} approved`,
+      bundleLabel: t('page.project.bundle-approved', {
+        approved: approved.length,
+        planned: bundleConfig.stages.filter((stage) => stage.document !== null && !stage.optional)
+          .length,
+      }),
       ageSeconds: chat.ageSeconds,
     };
   });
@@ -141,13 +153,13 @@ export default async function ProjectPage({
           >
             {project.initialPrompt}
           </p>
-          <p className="text-foreground-muted text-xs">
-            Every conversation about this bundle. Archiving hides a chat from Active and changes
-            nothing else.
-          </p>
+          <p className="text-foreground-muted text-xs">{t('page.project.about')}</p>
         </div>
 
-        <nav className="flex flex-wrap items-center gap-4" aria-label="Chat class">
+        <nav
+          className="flex flex-wrap items-center gap-4"
+          aria-label={t('page.project.chat-class')}
+        >
           <span className="flex gap-2">
             {TABS.map((entry) => (
               <Link
@@ -161,7 +173,7 @@ export default async function ProjectPage({
                     : 'text-foreground-muted rounded-md px-3 py-1.5 text-sm hover:underline'
                 }
               >
-                {entry.label}
+                {t(entry.label)}
               </Link>
             ))}
           </span>
@@ -179,7 +191,7 @@ export default async function ProjectPage({
                     : 'text-foreground-muted rounded-md px-3 py-1.5 text-xs hover:underline'
                 }
               >
-                {entry.label}
+                {t(entry.label)}
               </Link>
             ))}
           </span>
@@ -193,13 +205,13 @@ export default async function ProjectPage({
             <input type="hidden" name="tab" value={tab} />
             <input type="hidden" name="show" value={filter} />
             <label className="sr-only" htmlFor="chat-search">
-              Search chats
+              {t('page.project.search-label')}
             </label>
             <input
               id="chat-search"
               name="q"
               defaultValue={search}
-              placeholder="Search by name"
+              placeholder={t('page.project.search-placeholder')}
               data-testid="chat-search"
               className="border-border-subtle bg-surface rounded-md border px-3 py-1.5 text-sm"
             />
@@ -208,7 +220,7 @@ export default async function ProjectPage({
               data-testid="chat-search-submit"
               className="border-border-subtle rounded-md border px-3 py-1.5 text-sm"
             >
-              Search
+              {t('page.project.search-submit')}
             </button>
           </form>
         </nav>

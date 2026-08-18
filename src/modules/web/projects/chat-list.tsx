@@ -4,6 +4,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { type PhraseKey } from '../i18n/dictionary';
+import { useT } from '../i18n/locale-context';
+import { type Translate } from '../i18n/translate';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { showToast } from '../ui/toast';
@@ -34,23 +37,30 @@ export interface ChatListItem {
  * Rendered rather than stored, and the input is a difference the database computed, so this is
  * formatting and nothing else. Deliberately coarse: the reference product says "3d ago", and a
  * minute-accurate label would go stale on the page while nothing had happened.
+ *
+ * The translator is a parameter rather than a hook call (task 143), which keeps the function what it
+ * was — a pure choice between four phrases — and testable against a locale of the caller's choosing.
+ * The choice itself is the part worth testing; Russian needs three forms of each unit where English
+ * needs none, and a bracket picked one step wrong is a plural picked wrong in three languages at
+ * once.
  */
-export function lastMessageLabel(ageSeconds: number): string {
+export function lastMessageLabel(t: Translate, ageSeconds: number): string {
   const minutes = Math.floor(ageSeconds / 60);
-  if (minutes < 1) return 'Last message just now';
-  if (minutes < 60) return `Last message ${String(minutes)}m ago`;
+  if (minutes < 1) return t('projects.chat-list.last-message-now');
+  if (minutes < 60) return t('projects.chat-list.last-message-minutes', { count: minutes });
 
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Last message ${String(hours)}h ago`;
+  if (hours < 24) return t('projects.chat-list.last-message-hours', { count: hours });
 
   const days = Math.floor(hours / 24);
-  return `Last message ${String(days)}d ago`;
+  return t('projects.chat-list.last-message-days', { count: days });
 }
 
 function ArchiveButton({ chat }: { chat: ChatListItem }) {
   const router = useRouter();
+  const t = useT();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<PhraseKey | null>(null);
 
   async function toggle() {
     setBusy(true);
@@ -64,12 +74,8 @@ function ArchiveButton({ chat }: { chat: ChatListItem }) {
       });
 
       if (!response.ok) {
-        setError('That did not go through. Please try again.');
-        showToast(
-          'That chat could not be archived. Nothing changed.',
-          'danger',
-          'chat-archive-failed',
-        );
+        setError('projects.chat-list.failed');
+        showToast(t('projects.chat-list.archive-failed'), 'danger', 'chat-archive-failed');
         return;
       }
 
@@ -77,18 +83,14 @@ function ArchiveButton({ chat }: { chat: ChatListItem }) {
       // confirmation has to live somewhere the row does not — otherwise the only feedback for a
       // successful archive is a chat disappearing.
       showToast(
-        chat.archived ? 'Chat restored.' : 'Chat archived. Restore it from Archived.',
+        t(chat.archived ? 'projects.chat-list.restored' : 'projects.chat-list.archived'),
         'success',
         chat.archived ? 'chat-restored' : 'chat-archived',
       );
       router.refresh();
     } catch {
-      setError('That did not go through. Please try again.');
-      showToast(
-        'That chat could not be archived. Nothing changed.',
-        'danger',
-        'chat-archive-failed',
-      );
+      setError('projects.chat-list.failed');
+      showToast(t('projects.chat-list.archive-failed'), 'danger', 'chat-archive-failed');
     } finally {
       setBusy(false);
     }
@@ -98,7 +100,7 @@ function ArchiveButton({ chat }: { chat: ChatListItem }) {
     <span className="flex items-center gap-2">
       {error !== null && (
         <span role="alert" className="text-xs text-danger-ink" data-testid="chat-error">
-          {error}
+          {t(error)}
         </span>
       )}
       <Button
@@ -110,22 +112,25 @@ function ArchiveButton({ chat }: { chat: ChatListItem }) {
           void toggle();
         }}
       >
-        {busy ? 'Working…' : chat.archived ? 'Restore' : 'Archive'}
+        {busy
+          ? t('projects.chat-list.busy')
+          : chat.archived
+            ? t('projects.chat-list.restore')
+            : t('projects.chat-list.archive')}
       </Button>
     </span>
   );
 }
 
 export function ChatList({ chats }: { chats: readonly ChatListItem[] }) {
+  const t = useT();
+
   if (chats.length === 0) {
     return (
       <Card data-testid="chats-empty">
         <CardHeader>
-          <CardTitle>No chats here</CardTitle>
-          <CardDescription>
-            Nothing matches this tab, filter and search together. Archived chats are still here —
-            switch the filter to see them.
-          </CardDescription>
+          <CardTitle>{t('projects.chat-list.empty-title')}</CardTitle>
+          <CardDescription>{t('projects.chat-list.empty-body')}</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -149,7 +154,7 @@ export function ChatList({ chats }: { chats: readonly ChatListItem[] }) {
                   <span data-testid="chat-methodology">{chat.badge}</span>
                   <span data-testid="chat-bundle">{chat.bundleLabel}</span>
                   <span data-testid="chat-status">
-                    {chat.completed ? 'Completed' : chat.stageLabel}
+                    {chat.completed ? t('projects.chat-list.status-completed') : chat.stageLabel}
                   </span>
                 </span>
               </div>
@@ -165,7 +170,7 @@ export function ChatList({ chats }: { chats: readonly ChatListItem[] }) {
                   data-testid="chat-age"
                   data-age-seconds={String(chat.ageSeconds)}
                 >
-                  {lastMessageLabel(chat.ageSeconds)}
+                  {lastMessageLabel(t, chat.ageSeconds)}
                 </span>
                 <ArchiveButton chat={chat} />
               </div>

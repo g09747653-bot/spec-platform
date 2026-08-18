@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 
+import type { PhraseKey } from '../i18n/dictionary';
+import { useT } from '../i18n/locale-context';
 import { Button } from '../ui/button';
 
 import {
@@ -23,13 +25,15 @@ import {
  * behind what the handler binds.
  */
 export function ShortcutsButton() {
+  const t = useT();
+
   return (
     <>
       <Button
         variant="ghost"
         size="sm"
-        aria-label="Keyboard shortcuts"
-        title="Keyboard shortcuts"
+        aria-label={t('session.shortcuts.title')}
+        title={t('session.shortcuts.title')}
         data-testid="shortcuts-open"
         onClick={() => {
           setShortcutsOpen(true);
@@ -42,6 +46,19 @@ export function ShortcutsButton() {
     </>
   );
 }
+
+/**
+ * The words for the three grouping tokens `shortcuts.ts` sorts by (task 143).
+ *
+ * The headings used to be the token itself — `Document viewer` printed as a heading because it
+ * happened to read as English. A record rather than a rename keeps the token stable for anything
+ * grouping by it, and keeps the type exhaustive: a fourth scope without a heading does not compile.
+ */
+const SCOPE_PHRASE: Readonly<Record<Shortcut['scope'], PhraseKey>> = {
+  Anywhere: 'session.shortcuts.scope-anywhere',
+  Session: 'session.shortcuts.scope-session',
+  'Document viewer': 'session.shortcuts.scope-viewer',
+};
 
 function groupsOf(shortcuts: readonly Shortcut[]): [Shortcut['scope'], Shortcut[]][] {
   const groups = new Map<Shortcut['scope'], Shortcut[]>();
@@ -56,6 +73,7 @@ function groupsOf(shortcuts: readonly Shortcut[]): [Shortcut['scope'], Shortcut[
 }
 
 function ShortcutsDialog() {
+  const t = useT();
   const open = useSyncExternalStore(subscribeShortcuts, shortcutsOpen, shortcutsServerSnapshot);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -81,7 +99,7 @@ function ShortcutsDialog() {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Keyboard shortcuts"
+        aria-label={t('session.shortcuts.title')}
         data-testid="shortcuts-dialog"
         className="border-border-subtle bg-surface flex w-full max-w-md flex-col gap-4 rounded-xl border p-5 shadow-xl"
         onClick={(event) => {
@@ -89,7 +107,7 @@ function ShortcutsDialog() {
         }}
       >
         <div className="flex items-start justify-between gap-4">
-          <h2 className="text-h3">Keyboard shortcuts</h2>
+          <h2 className="text-h3">{t('session.shortcuts.title')}</h2>
           <Button
             ref={closeRef}
             variant="ghost"
@@ -99,13 +117,15 @@ function ShortcutsDialog() {
               setShortcutsOpen(false);
             }}
           >
-            Close
+            {t('common.close')}
           </Button>
         </div>
 
         {groupsOf(SHORTCUTS).map(([scope, shortcuts]) => (
           <section key={scope} className="flex flex-col gap-1.5">
-            <h3 className="text-label text-foreground-muted tracking-widest uppercase">{scope}</h3>
+            <h3 className="text-label text-foreground-muted tracking-widest uppercase">
+              {t(SCOPE_PHRASE[scope])}
+            </h3>
             <ul className="flex flex-col gap-1">
               {shortcuts.map((shortcut) => (
                 <li
@@ -114,7 +134,7 @@ function ShortcutsDialog() {
                   data-testid="shortcut-row"
                   data-shortcut={shortcut.id}
                 >
-                  <span>{shortcut.label}</span>
+                  <span>{t(shortcut.phrase)}</span>
                   <kbd className="border-border-subtle bg-background text-foreground-muted shrink-0 rounded border px-1.5 py-0.5 font-mono text-xs">
                     {shortcut.keys}
                   </kbd>
@@ -124,9 +144,7 @@ function ShortcutsDialog() {
           </section>
         ))}
 
-        <p className="text-foreground-muted text-xs">
-          Single letters apply when the caret is not in a text box.
-        </p>
+        <p className="text-foreground-muted text-xs">{t('session.shortcuts.note')}</p>
       </div>
     </div>
   );

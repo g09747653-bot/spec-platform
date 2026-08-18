@@ -1,6 +1,7 @@
+import { serverT } from '../i18n/server-locale';
 import { cn } from '../lib/cn';
 
-import { substageLabel } from './labels';
+import { substageKey } from './labels';
 import { steps } from './stage-sequence';
 
 /**
@@ -14,6 +15,10 @@ import { steps } from './stage-sequence';
  * replaces on purpose. They name facts — which stages exist, which one the session is in, which
  * substage — and those facts did not change when the surface did; renaming them would have made
  * every suite that reads a position look like it was testing something new.
+ *
+ * Asynchronous since task 143: the rail announces itself to a screen reader, and that announcement
+ * is copy. The one call site is the session page, so there is no client rendering to break — a rail
+ * behind `'use client'` would need the word passed in instead.
  */
 export interface StepPillsProps {
   currentStage: string;
@@ -23,18 +28,19 @@ export interface StepPillsProps {
   methodologyId?: string | null;
 }
 
-export function StepPills({
+export async function StepPills({
   currentStage,
   currentSubstage,
   qualityEnabled,
   methodologyId,
 }: StepPillsProps) {
-  const stages = steps(methodologyId, currentStage, currentSubstage, qualityEnabled);
+  const t = await serverT();
+  const stages = steps(t, methodologyId, currentStage, currentSubstage, qualityEnabled);
   const currentIndex = stages.findIndex((step) => step.current);
-  const substage = substageLabel(currentSubstage);
+  const substage = substageKey(currentSubstage);
 
   return (
-    <nav aria-label="Workflow stages" data-testid="stage-rail">
+    <nav aria-label={t('page.session.stage-rail')} data-testid="stage-rail">
       <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" data-testid="step-pills">
         {stages.map((step, index) => {
           const isCurrent = step.current;
@@ -83,7 +89,7 @@ export function StepPills({
                     data-testid="stage-substage"
                     data-substage={currentSubstage ?? ''}
                   >
-                    · {substage}
+                    · {t(substage)}
                   </span>
                 )}
               </span>

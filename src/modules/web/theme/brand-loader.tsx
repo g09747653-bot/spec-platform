@@ -14,14 +14,14 @@ import { cn } from '../lib/cn';
  *
  * The whole thing is one `role="status"` live region, so the wait is announced rather than merely
  * animated, and every stroke stops under `prefers-reduced-motion` (the keyframes in `globals.css`).
+ *
+ * `label` is required since task 143, and the component does not translate it. This renders in the
+ * `fallback` of a Suspense boundary, which is the one position a component may not suspend in — so
+ * it cannot read the cookie the chrome language lives in. The caller owning the boundary already has
+ * a translator, and handing the word in is the same rule shared components follow elsewhere: the
+ * words are the caller's, the geometry is ours.
  */
-export function BrandLoader({
-  label = 'Loading',
-  className,
-}: {
-  label?: string;
-  className?: string;
-}) {
+export function BrandLoader({ label, className }: { label: string; className?: string }) {
   return (
     <div
       role="status"

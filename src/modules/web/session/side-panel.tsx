@@ -13,6 +13,12 @@ import type { ReactNode } from 'react';
  * underneath. The reference sets its sidebar headings the same way and for the same reason — the
  * panel titles are signposts, not headlines, and should not compete with the document names below
  * them.
+ *
+ * **The title arrives as a word, not as a dictionary key** (task 143). Three of the four panels are
+ * client components and the fourth is rendered on the server, so the two ways of reaching the
+ * translator meet here — and a component that took a key would have to choose one of them and shut
+ * the other half of the application out. Each panel translates its own heading and passes the
+ * result, which is the same rule the shell already applies to anything rendered from both sides.
  */
 export function SidePanel({
   title,

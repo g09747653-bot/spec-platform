@@ -35,6 +35,7 @@ export {
   configEntryPosition,
   methodologyIssues,
   stageNameFor,
+  stageStepIndexFor,
   stepCoversPosition,
   visitsSpecStage,
   MethodologyConfigError,

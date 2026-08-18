@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { type PhraseKey } from '../i18n/dictionary';
+import { useT } from '../i18n/locale-context';
 import { Button } from '../ui/button';
 import { Input, Label, Textarea } from '../ui/field';
 import { WaitingOn } from '../session/waiting-on';
@@ -33,10 +35,16 @@ interface RoundBlockProps {
   freeTextPrefill?: string | null;
 }
 
-/** What each action is waiting for, in the words the status line reads out. */
-const WAITING_FOR: Record<string, string> = {
-  submit: 'your answers to be recorded',
-  reply: 'your reply to be read',
+/**
+ * What each action is waiting for, in the words the status line reads out.
+ *
+ * Keys rather than words (task 143): the table keeps deciding which wait this is, and the sentence
+ * it lands in is resolved where the translator is — the status line frames these differently in the
+ * two languages, and a table of English fragments could not follow it.
+ */
+const WAITING_FOR: Record<string, PhraseKey> = {
+  submit: 'feed.round.waiting-submit',
+  reply: 'feed.round.waiting-reply',
 };
 
 interface QuestionState {
@@ -62,6 +70,7 @@ const emptyState = (
 
 function RoundHeading({ block }: { block: RoundBlockModel }) {
   const count = block.questions.length;
+  const t = useT();
 
   return (
     <p
@@ -75,12 +84,14 @@ function RoundHeading({ block }: { block: RoundBlockModel }) {
       data-round={String(block.roundNumber)}
       data-questions={String(count)}
     >
-      Round {block.roundNumber} — {count} {count === 1 ? 'question' : 'questions'}
+      {t('feed.round.heading', { round: block.roundNumber, count })}
     </p>
   );
 }
 
 function SelectionHint({ question }: { question: FeedQuestion }) {
+  const t = useT();
+
   return (
     <span
       className="text-foreground-muted text-xs"
@@ -92,12 +103,14 @@ function SelectionHint({ question }: { question: FeedQuestion }) {
       */
       data-select={question.type}
     >
-      {question.type === 'single' ? 'Select one' : 'Select all that apply'}
+      {question.type === 'single' ? t('feed.round.select-one') : t('feed.round.select-many')}
     </span>
   );
 }
 
 function OptionBody({ option }: { option: FeedQuestion['options'][number] }) {
+  const t = useT();
+
   return (
     <span>
       <span className="font-medium">{option.label}</span>
@@ -106,7 +119,7 @@ function OptionBody({ option }: { option: FeedQuestion['options'][number] }) {
           className="text-primary-strong ml-1.5 text-xs"
           data-testid={`mcq-recommended-${option.id}`}
         >
-          (Recommended)
+          {t('feed.round.recommended')}
         </span>
       )}
       {option.description !== undefined && (
@@ -216,6 +229,7 @@ export function RoundBlock({
   const [replyMode, setReplyMode] = useState(false);
   const [reply, setReply] = useState('');
   const { state: request, elapsedSeconds, waiting, send, abandon } = useSessionRequest(deadlineMs);
+  const t = useT();
 
   const busy = request.running;
   const error = request.notice;
@@ -264,7 +278,7 @@ export function RoundBlock({
                   {question.text}
                   {question.required && (
                     <span
-                      aria-label="required"
+                      aria-label={t('feed.round.required')}
                       className="ml-1 text-danger-ink"
                       data-testid={`mcq-required-${question.id}`}
                     >
@@ -300,7 +314,7 @@ export function RoundBlock({
               {question.allowOther && (
                 <div className="flex flex-col gap-1">
                   <Label htmlFor={`other-${block.roundId}-${question.id}`} className="text-xs">
-                    Other — your own answer
+                    {t('feed.round.other-label')}
                   </Label>
                   <Input
                     id={`other-${block.roundId}-${question.id}`}
@@ -313,7 +327,7 @@ export function RoundBlock({
                         [question.id]: { ...questionState(question.id), other },
                       }));
                     }}
-                    placeholder="Type an answer not listed above"
+                    placeholder={t('feed.round.other-placeholder')}
                   />
                 </div>
               )}
@@ -351,7 +365,7 @@ export function RoundBlock({
             }}
             className="self-start"
           >
-            {busy === 'submit' ? 'Submitting…' : 'Submit Answers'}
+            {busy === 'submit' ? t('feed.round.submit-busy') : t('feed.round.submit')}
           </Button>
 
           {!replyMode ? (
@@ -363,7 +377,7 @@ export function RoundBlock({
                 setReplyMode(true);
               }}
             >
-              Answer in your own words instead
+              {t('feed.round.reply-open')}
             </button>
           ) : (
             <div className="flex flex-col gap-2">
@@ -378,7 +392,7 @@ export function RoundBlock({
                 you a paragraph.
               */}
               <div className="flex items-baseline justify-between gap-2">
-                <Label htmlFor={`reply-${block.roundId}`}>Your answer, in free text</Label>
+                <Label htmlFor={`reply-${block.roundId}`}>{t('feed.round.reply-label')}</Label>
                 <button
                   type="button"
                   data-testid="mcq-reply-cancel"
@@ -387,7 +401,7 @@ export function RoundBlock({
                     setReplyMode(false);
                   }}
                 >
-                  Use the options instead
+                  {t('feed.round.reply-cancel')}
                 </button>
               </div>
               <Textarea
@@ -397,7 +411,7 @@ export function RoundBlock({
                 onChange={(event) => {
                   setReply(event.target.value);
                 }}
-                placeholder="Describe it the way you would to a colleague."
+                placeholder={t('feed.round.reply-placeholder')}
               />
               <Button
                 variant="secondary"
@@ -408,7 +422,7 @@ export function RoundBlock({
                 }}
                 className="self-start"
               >
-                {busy === 'reply' ? 'Sending…' : 'Send reply'}
+                {busy === 'reply' ? t('common.sending') : t('feed.round.reply-send')}
               </Button>
             </div>
           )}
@@ -419,7 +433,7 @@ export function RoundBlock({
           */}
           {waiting && (
             <WaitingOn
-              what={WAITING_FOR[busy ?? ''] ?? 'the server'}
+              what={t(WAITING_FOR[busy ?? ''] ?? 'feed.waiting.server')}
               elapsedSeconds={elapsedSeconds}
               onStop={abandon}
             />

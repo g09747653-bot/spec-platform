@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 import { auth, signOut, SIGN_IN_PATH } from '@/modules/projects/auth';
 import { AppShell, Button } from '@/modules/web';
+import { serverT } from '@/modules/web/i18n/server-locale';
 
 /**
  * Layout for the authenticated area.
@@ -17,10 +18,12 @@ export default async function AuthenticatedAreaLayout({ children }: { children: 
 
   if (!session?.user) redirect(SIGN_IN_PATH);
 
+  const t = await serverT();
+
   const account = (
     <>
       <span data-testid="account-email">
-        {session.user.email ?? session.user.name ?? 'Signed in'}
+        {session.user.email ?? session.user.name ?? t('shell.account.signed-in')}
       </span>
       <form
         action={async () => {
@@ -29,7 +32,7 @@ export default async function AuthenticatedAreaLayout({ children }: { children: 
         }}
       >
         <Button type="submit" variant="secondary" size="sm" data-testid="sign-out">
-          Sign out
+          {t('shell.account.sign-out')}
         </Button>
       </form>
     </>

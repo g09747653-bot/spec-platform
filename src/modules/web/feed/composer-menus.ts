@@ -1,3 +1,5 @@
+import { type PhraseKey } from '../i18n/dictionary';
+
 /**
  * The composer's two menus, as data (task 121; Эталон §1.5).
  *
@@ -6,6 +8,12 @@
  * encode are small but easy to get subtly wrong by hand — where a token starts, when a menu should
  * close, what "the current position refuses this" means — and each of them is a place a menu could
  * lie about what pressing an entry would do.
+ *
+ * **A command's `label` is typed and its `description` is read** (task 143). `/proceed` is what a
+ * person types into the box and what `slashQuery` matches on, so it is an identifier and is the same
+ * in every language; the line underneath is the only copy here, and it is a key the composer
+ * resolves. Translating the label would have broken the menu in Russian and left the slash commands
+ * in the shortcuts list pointing at nothing.
  */
 
 /** One thing a slash command can do. Each maps 1:1 onto a control the page already renders. */
@@ -13,43 +21,53 @@ export const SLASH_COMMANDS = [
   {
     id: 'ask',
     label: '/ask',
-    description: 'Ask another round of questions',
+    description: 'feed.command.ask',
     /** The test id of the control this dispatches to — the *same* control, not a parallel path. */
     control: 'ask-round',
   },
-  { id: 'proceed', label: '/proceed', description: 'Move to the next step', control: 'proceed' },
+  { id: 'proceed', label: '/proceed', description: 'feed.command.proceed', control: 'proceed' },
   {
     id: 'generate',
     label: '/generate',
-    description: 'Draft the document for this step',
+    description: 'feed.command.generate',
     control: 'generate-spec',
   },
-  { id: 'approve', label: '/approve', description: 'Approve the draft', control: 'approve-spec' },
+  {
+    id: 'approve',
+    label: '/approve',
+    description: 'feed.command.approve',
+    control: 'approve-spec',
+  },
   {
     id: 'request-changes',
     label: '/request-changes',
-    description: 'Send the document back with the points you ticked',
+    description: 'feed.command.request-changes',
     control: 'review-request-changes',
   },
   {
     id: 'accept',
     label: '/accept',
-    description: 'Accept the review and move on',
+    description: 'feed.command.accept',
     control: 'review-accept',
   },
   {
     id: 'go-back',
     label: '/go-back',
-    description: 'Go back to the previous revision of this document',
+    description: 'feed.command.go-back',
     control: 'go-back',
   },
   {
     id: 'export',
     label: '/export',
-    description: 'Download the bundle',
+    description: 'feed.command.export',
     control: 'export-download',
   },
-] as const;
+] as const satisfies readonly {
+  id: string;
+  label: string;
+  description: PhraseKey;
+  control: string;
+}[];
 
 export type SlashCommand = (typeof SLASH_COMMANDS)[number];
 

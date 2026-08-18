@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useSyncExternalStore } from 'react';
 
+import { useT } from '../i18n/locale-context';
 import { Button } from '../ui/button';
 
 import {
@@ -30,6 +31,7 @@ import {
  * second opinion about reachability is a second thing that can be wrong.
  */
 export function ConnectionBanner({ stamp }: { stamp: string }) {
+  const t = useT();
   const router = useRouter();
   const state = useSyncExternalStore(
     subscribeConnection,
@@ -65,9 +67,7 @@ export function ConnectionBanner({ stamp }: { stamp: string }) {
       className="border-warning-ink/40 bg-warning-soft text-warning-ink z-30 flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-2"
     >
       <span className="text-caption">
-        {state === 'checking'
-          ? 'Still trying to reach the server. Nothing you have done is lost — it is all on the server or on its way there.'
-          : 'The server stopped answering. Nothing is lost: a generation already running carries on, and everything approved is saved.'}
+        {t(state === 'checking' ? 'session.connection.checking' : 'session.connection.offline')}
       </span>
       <Button
         size="sm"
@@ -78,7 +78,7 @@ export function ConnectionBanner({ stamp }: { stamp: string }) {
           router.refresh();
         }}
       >
-        Reconnect
+        {t('session.connection.reconnect')}
       </Button>
     </div>
   );

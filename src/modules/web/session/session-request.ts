@@ -18,6 +18,14 @@
  * — is logic, and logic that only runs inside a component is logic that only gets tested by
  * clicking. `useSessionRequest.ts` is a thin binding over this.
  *
+ * **The words arrive as a translator, not as a locale** (task 143). `notice` stays a plain string,
+ * because it is read by a renderer that puts it in a paragraph and by a suite that asserts on what a
+ * refusal said; handing back a key would move that resolution into every one of those callers. But a
+ * module with no React in it cannot reach the locale — the client half is a context and the server
+ * half is a cookie — so the caller passes the `t` it already has. `useSessionRequest` calls `useT()`
+ * once and hands it down here, which keeps this file free of both React and the dictionary while the
+ * message it settles on is still in the reader's language.
+ *
  * Three properties are deliberate:
  *
  * 1. **Abandoning is always possible.** `abandon()` aborts the request and settles the state, so a
@@ -30,6 +38,9 @@
  *    server's, never the client's guess. The caller refreshes on success, failure, timeout and
  *    abandonment alike.
  */
+import type { PhraseKey } from '../i18n/dictionary';
+import type { Translate } from '../i18n/translate';
+
 import { rejectionNotice } from './gate-copy';
 
 /**
@@ -71,6 +82,8 @@ export interface SessionRequestResult {
 
 export interface SessionRequestOptions {
   onState: (state: SessionRequestState) => void;
+  /** The caller's translator — see the note on words above. Required, so a notice cannot ship in one language. */
+  t: Translate;
   fetchImpl?: typeof fetch;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -108,23 +121,30 @@ const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(r
 /** Marker for the deadline winning the race against the request. */
 const EXPIRED = Symbol('session-request-deadline');
 
-export const ABANDONED_NOTICE =
-  'You stopped waiting. Nothing you have entered is lost — the page has been re-read from the ' +
-  'server, so it now shows where the session actually is. You can try again.';
+/**
+ * The four endings, as keys rather than sentences (task 143).
+ *
+ * Still exported, and for the same reason as before: a test asserting «this is what an abandoned
+ * request says» must name the copy rather than repeat it, or the assertion becomes a second place the
+ * wording lives. A key does that job better than a constant did — it also names the entry a
+ * translator edits.
+ */
+export const ABANDONED_NOTICE: PhraseKey = 'errors.request.abandoned';
 
-export const UNREACHABLE_NOTICE =
-  'That request did not reach the server. Check the connection and try again — nothing was lost.';
+export const UNREACHABLE_NOTICE: PhraseKey = 'errors.request.unreachable';
 
-export const FALLBACK_FAILURE_NOTICE = 'That did not go through. Please try again.';
+export const FALLBACK_FAILURE_NOTICE: PhraseKey = 'errors.request.failed';
 
-export function expiredNotice(deadlineMs: number): string {
-  const seconds = Math.round(deadlineMs / 1000);
+export const EXPIRED_NOTICE: PhraseKey = 'errors.request.expired';
 
-  return (
-    `The server did not answer within ${String(seconds)} s, which is longer than this step can ` +
-    'legitimately take, so waiting was stopped. The page has been re-read from the server and shows ' +
-    'where the session actually is — if it did not move, try again.'
-  );
+/**
+ * The deadline's own sentence, which is the one ending that has a number in it.
+ *
+ * Kept a function so the milliseconds→seconds rounding happens once, beside the deadline that
+ * produced it, rather than at each place the phrase is rendered.
+ */
+export function expiredNotice(t: Translate, deadlineMs: number): string {
+  return t(EXPIRED_NOTICE, { seconds: Math.round(deadlineMs / 1000) });
 }
 
 /**
@@ -142,6 +162,23 @@ export function messageOf(payload: unknown): string | null {
   if (typeof error !== 'object' || error === null || !('message' in error)) return null;
 
   return typeof error.message === 'string' && error.message !== '' ? error.message : null;
+}
+
+/**
+ * The error code a failed response carries.
+ *
+ * Read for the same purpose as `messageOf` and instead of it wherever possible: the code is the half
+ * of `{ error: { code, message } }` the browser can word for itself (see `API_EXPLANATION` in
+ * `gate-copy.ts`), while the message is the server's English. A response with neither leaves the
+ * fallback notice, which is the only sentence written at a call site in this file.
+ */
+export function codeOf(payload: unknown): string | null {
+  if (typeof payload !== 'object' || payload === null || !('error' in payload)) return null;
+
+  const { error } = payload;
+  if (typeof error !== 'object' || error === null || !('code' in error)) return null;
+
+  return typeof error.code === 'string' && error.code !== '' ? error.code : null;
 }
 
 /** The machine-readable reason a rejection carries, when the handler attached one. */
@@ -167,6 +204,7 @@ type SettledNotice = Pick<SessionRequestState, 'notice' | 'noticeKind' | 'notice
 const NO_NOTICE: SettledNotice = { notice: null, noticeKind: null, noticeReason: null };
 
 export function createSessionRequest(options: SessionRequestOptions): SessionRequest {
+  const t = options.t;
   const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? defaultSleep;
@@ -213,7 +251,7 @@ export function createSessionRequest(options: SessionRequestOptions): SessionReq
       // Abort so the socket is released, then say so. The server may well have applied the change
       // already; the caller's refresh is what resolves that, not an assumption made here.
       local.abort();
-      settle({ notice: expiredNotice(deadlineMs), noticeKind: 'expired', noticeReason: null });
+      settle({ notice: expiredNotice(t, deadlineMs), noticeKind: 'expired', noticeReason: null });
       return { ok: false, payload: null };
     }
 
@@ -224,8 +262,8 @@ export function createSessionRequest(options: SessionRequestOptions): SessionReq
 
       settle(
         abandoned
-          ? { notice: ABANDONED_NOTICE, noticeKind: 'abandoned', noticeReason: null }
-          : { notice: UNREACHABLE_NOTICE, noticeKind: 'unreachable', noticeReason: null },
+          ? { notice: t(ABANDONED_NOTICE), noticeKind: 'abandoned', noticeReason: null }
+          : { notice: t(UNREACHABLE_NOTICE), noticeKind: 'unreachable', noticeReason: null },
       );
       return { ok: false, payload: null };
     }
@@ -236,9 +274,10 @@ export function createSessionRequest(options: SessionRequestOptions): SessionReq
 
     /*
      * A refusal is shown in the words of whichever layer knows most about it: the reason code when
-     * the gate attached one, the handler's message otherwise. What is never shown is a sentence
-     * invented at the call site — "That step is not available yet" was one, and it is what the gate
-     * walk got back for a question budget that had run out (Р-3 item 4).
+     * the gate attached one, the error code when the handler answered with a known one, the server's
+     * own message otherwise. What is never shown is a sentence invented at the call site — "That step
+     * is not available yet" was one, and it is what the gate walk got back for a question budget that
+     * had run out (Р-3 item 4).
      */
     const reason = reasonOf(payload);
 
@@ -246,7 +285,9 @@ export function createSessionRequest(options: SessionRequestOptions): SessionReq
       response.ok
         ? NO_NOTICE
         : {
-            notice: rejectionNotice(messageOf(payload), reason) ?? FALLBACK_FAILURE_NOTICE,
+            notice:
+              rejectionNotice(t, messageOf(payload), reason, codeOf(payload)) ??
+              t(FALLBACK_FAILURE_NOTICE),
             noticeKind: 'refused',
             noticeReason: reason,
           },

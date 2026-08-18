@@ -203,6 +203,40 @@ export function stepCoversPosition(
 }
 
 /**
+ * Which step names a position — the index, not the word (task 143).
+ *
+ * A step label has two audiences, and that is why the chrome may not simply translate it.
+ * `/api/sessions/[id]/generate` puts it into the prompt that writes the document, where it must stay
+ * in the content language of the session (У-1); the badge those labels sit beside is pasted into a
+ * coding agent by `specs/handoff`. So the configuration keeps its English, and the Russian lives in
+ * `web/i18n/dictionary/methodology.ts` keyed by the pair (`config.id`, index).
+ *
+ * **Keyed by the index and never by the label**, because a label is not unique: «Proposal» names a
+ * step in two of the five configurations, «Tasks» in four, and a table keyed by the English word
+ * would hand an OpenSpec session the brownfield wording. The index is the one address that is both
+ * unique and stable under a rename of the English.
+ *
+ * The lookup order is `stageNameFor`'s — it *is* `stageNameFor`'s, which is now the English half of
+ * this function rather than a second walk of the same steps.
+ */
+export function stageStepIndexFor(
+  config: MethodologyConfig,
+  stage: string,
+  substage: string | null = null,
+): number | null {
+  if (substage !== null) {
+    const narrowed = config.steps.findIndex(
+      (step) => step.substages !== null && stepCoversPosition(step, stage, substage),
+    );
+    if (narrowed !== -1) return narrowed;
+  }
+
+  const whole = config.steps.findIndex((step) => step.stage === stage && step.substages === null);
+
+  return whole === -1 ? null : whole;
+}
+
+/**
  * What **this methodology** calls a position, or `null` when its steps do not name it (task 132).
  *
  * D-119 said a configuration declares "how each position is called to the user", and until now only
@@ -218,22 +252,19 @@ export function stepCoversPosition(
  * `null` rather than the first of them: a document card in an Edit chat is about the bundle's
  * `constitution.md`, and captioning it «Describe» would name a step that did not write it. The
  * caller then falls back to the canonical label, which is at least true.
+ *
+ * Since task 143 this is the **English** half: the chrome asks `stageStepIndexFor` and looks the
+ * word up in the dictionary, and reaches this only for a configuration the dictionary does not name.
+ * The prompt-facing callers, which need the English, still ask here.
  */
 export function stageNameFor(
   config: MethodologyConfig,
   stage: string,
   substage: string | null = null,
 ): string | null {
-  if (substage !== null) {
-    const narrowed = config.steps.find(
-      (step) => step.substages !== null && stepCoversPosition(step, stage, substage),
-    );
-    if (narrowed !== undefined) return narrowed.label;
-  }
+  const index = stageStepIndexFor(config, stage, substage);
 
-  return (
-    config.steps.find((step) => step.stage === stage && step.substages === null)?.label ?? null
-  );
+  return index === null ? null : (config.steps[index]?.label ?? null);
 }
 
 /** The position a session on this config starts at. */

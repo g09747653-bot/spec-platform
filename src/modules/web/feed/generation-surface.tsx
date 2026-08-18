@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 
+import { useT } from '../i18n/locale-context';
 import { useGenerationStream } from '../session/generation-context';
 import { Button } from '../ui/button';
 import { EyeIcon } from '../ui/icons';
@@ -74,6 +75,7 @@ export function GenerationSurface({
    */
   const { state: stream, start, resume, detached, detach } = useGenerationStream();
   const viewerControl = useViewerControl();
+  const t = useT();
 
   const generating = stream.status === 'streaming' || stream.status === 'reconnecting';
   const runId = activeRun?.runId ?? null;
@@ -117,6 +119,15 @@ export function GenerationSurface({
   const owed = revisionOwed !== null && revisionOwed.specType === stage ? revisionOwed : null;
 
   /*
+   * The two waits, named here rather than compared inside the JSX. A status token weighed against a
+   * literal is not copy, but it reads as one from inside a `{…}`, and naming the state is how the
+   * "no words in a component" rule stays a rule about words (task 143).
+   */
+  const beforeFirstToken =
+    stream.status === 'streaming' && stream.text === '' && !stream.researching;
+  const reconnecting = stream.status === 'reconnecting';
+
+  /*
    * Nothing to say: the position does not draft, no card is holding drafting up, nothing is
    * running, and no attempt has failed. `blocked` is in the condition because "a question card is
    * waiting for your answers" is the one thing worth saying at a position that cannot draft —
@@ -149,7 +160,7 @@ export function GenerationSurface({
       data-testid="generation-surface"
     >
       <div className="flex items-center justify-between gap-2">
-        <BlockCaption stage={stage} trailing="drafting" />
+        <BlockCaption stage={stage} trailing="feed.caption.drafting" />
 
         {/*
           The eye, on a document that is still being written (task 138 AC — «generating» is one of
@@ -160,15 +171,20 @@ export function GenerationSurface({
           <button
             type="button"
             data-testid="open-viewer-live"
-            aria-label="Open this document in the viewer"
-            title="Open in the viewer"
+            aria-label={t('feed.generation.open-viewer-aria')}
+            title={t('feed.generation.open-viewer-title')}
             className="text-foreground-muted hover:text-foreground inline-flex items-center gap-1.5 text-xs"
             onClick={() => {
-              viewerControl.open({ kind: 'live', stage, fileName: 'Draft in progress' });
+              /*
+               * The pane prints whatever it is handed as a file name, so the live target's stands in
+               * for one and has to be a phrase — the same phrase the pane's own metrics line uses
+               * for a revision that does not exist yet (task 143).
+               */
+              viewerControl.open({ kind: 'live', stage, fileName: t('viewer.metrics.draft') });
             }}
           >
             <EyeIcon />
-            Open
+            {t('common.open')}
           </button>
         )}
       </div>
@@ -195,7 +211,7 @@ export function GenerationSurface({
       */}
       {stream.researching && (
         <p className="text-foreground-muted text-sm" data-testid="stream-researching">
-          Reading current sources on the web…
+          {t('feed.generation.researching')}
         </p>
       )}
 
@@ -208,16 +224,15 @@ export function GenerationSurface({
         is what proves it — so the honest thing to render is what is being waited for, not a
         spinner that looks the same as one over a broken socket.
       */}
-      {stream.status === 'streaming' && stream.text === '' && !stream.researching && (
+      {beforeFirstToken && (
         <p className="text-foreground-muted text-sm" data-testid="stream-waiting">
-          Waiting for the first words. A local model can think for a minute or two before it starts
-          writing — nothing is stuck, and nothing is lost if you stop.
+          {t('feed.generation.waiting-first-words')}
         </p>
       )}
 
-      {stream.status === 'reconnecting' && (
+      {reconnecting && (
         <p className="text-foreground-muted text-sm" data-testid="stream-reconnecting">
-          The connection dropped. Reconnecting — nothing written so far is lost.
+          {t('feed.generation.reconnecting')}
         </p>
       )}
 
@@ -233,12 +248,10 @@ export function GenerationSurface({
             data-testid="stop-generation"
             onClick={detach}
           >
-            Stop
+            {t('common.stop')}
           </Button>
           <span className="text-foreground-muted text-xs">
-            {generating
-              ? 'Generating… you can stop and start again; nothing written so far is lost.'
-              : 'A generation for this step is already running — this page is picking it up. Stop to take the page back; the run itself carries on either way.'}
+            {generating ? t('feed.generation.in-flight') : t('feed.generation.reattaching')}
           </span>
         </div>
       )}
@@ -246,20 +259,17 @@ export function GenerationSurface({
       {idle &&
         (blocked ? (
           <p className="text-foreground-muted text-sm" data-testid="generation-blocked">
-            A question card is waiting for your answers above — nothing generates until it is
-            submitted.
+            {t('feed.generation.blocked')}
           </p>
         ) : !canGenerate ? (
           <p className="text-foreground-muted text-sm" data-testid="generation-unavailable">
-            This step does not draft a document. Use the controls below to move the session on.
+            {t('feed.generation.unavailable')}
           </p>
         ) : (
           <>
             {owed !== null && (
               <p className="text-foreground-muted text-sm" data-testid="revision-owed">
-                The review sent this document back with {owed.points}{' '}
-                {owed.points === 1 ? 'point' : 'points'} ticked. Rewriting applies exactly those and
-                leaves the rest as it stands.
+                {t('feed.generation.revision-owed', { count: owed.points })}
               </p>
             )}
             {/*
@@ -278,12 +288,12 @@ export function GenerationSurface({
               className="self-start"
             >
               {stream.error !== null
-                ? 'Try again'
+                ? t('common.retry')
                 : owed !== null
-                  ? 'Apply the review points'
+                  ? t('feed.generation.apply-review')
                   : primary === 'generate-spec'
-                    ? 'Generate'
-                    : 'Write it again'}
+                    ? t('feed.generation.generate')
+                    : t('feed.generation.regenerate')}
             </Button>
           </>
         ))}

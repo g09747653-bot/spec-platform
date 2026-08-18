@@ -5,6 +5,9 @@ import {
 } from '@/modules/methodologies';
 import type { Stage } from '@/modules/workflow/model/stages';
 
+import { stagePhraseKey } from '../i18n/dictionary/methodology';
+import { type Translate } from '../i18n/translate';
+
 /**
  * The numbered steps of a session, read off its methodology (tasks 105, 117).
  *
@@ -26,6 +29,7 @@ export interface StepModel {
 }
 
 export function steps(
+  t: Translate,
   methodologyId: string | null | undefined,
   currentStage: string,
   currentSubstage: string | null,
@@ -33,13 +37,24 @@ export function steps(
 ): StepModel[] {
   const config: MethodologyConfig = methodologyConfig(methodologyId);
 
-  return config.steps
-    .filter((step) => step.stage !== 'quality' || qualityEnabled)
-    .map((step) => ({
-      label: step.label,
-      stage: step.stage,
-      current: stepCoversPosition(step, currentStage, currentSubstage),
-    }));
+  /*
+   * `flatMap` over the whole list rather than a filter and a map, because the index is the address
+   * the dictionary is keyed by (task 143) and filtering first would renumber it: hide the Quality
+   * step of the parity workflow and «Complete» would ask for the sixth name instead of the seventh.
+   */
+  return config.steps.flatMap((step, index) => {
+    if (step.stage === 'quality' && !qualityEnabled) return [];
+
+    const key = stagePhraseKey(config.id, index);
+
+    return [
+      {
+        label: key === null ? step.label : t(key),
+        stage: step.stage,
+        current: stepCoversPosition(step, currentStage, currentSubstage),
+      },
+    ];
+  });
 }
 
 /**

@@ -29,6 +29,8 @@ import { isAskingStage, type StagePosition } from '@/modules/workflow/model/stag
 import { forwardDoors, nextPosition } from '@/modules/workflow/next-position';
 import { assembleWorkflowSnapshot } from '@/modules/workflow/snapshot-assembler';
 import { unmetNeedNames, type WorkflowSnapshot } from '@/modules/workflow/snapshot';
+import { serverT } from '@/modules/web/i18n/server-locale';
+import type { Translate } from '@/modules/web/i18n/translate';
 import { buildFeed } from '@/modules/web/feed/build-feed';
 import { bundleSlug, methodologyLabel } from '@/modules/web/feed/labels';
 import { SessionFeed } from '@/modules/web/feed/session-feed';
@@ -71,24 +73,30 @@ import { assembleFeedSource } from './feed-source';
  * engine's table describes; only the wording is decided here, because wording is presentation.
  */
 function labelFor(
+  t: Translate,
   from: StagePosition,
   to: StagePosition,
   methodologyId: string | null | undefined,
 ): string {
-  if (to.stage === 'complete') return 'Finish and seal the session';
-  if (to.substage === 'generate') return 'Proceed to drafting';
+  if (to.stage === 'complete') return t('page.session.door-complete');
+  if (to.substage === 'generate') return t('page.session.door-generate');
   // Approval permits this move (FR-009 AC-3) and entering it is what produces the review
   // (FR-010 AC-1), so the door is offered rather than opened as a side effect of approving.
-  if (to.substage === 'review') return 'Proceed to review';
-  if (from.stage === 'complete') return 'Re-open for the Quality stage';
+  if (to.substage === 'review') return t('page.session.door-review');
+  if (from.stage === 'complete') return t('page.session.door-quality');
 
   /*
    * The methodology's own name for the door (task 132; checklist row `1.4-6`). Until now this was
    * the canonical seven, so a brownfield session offered «Proceed to Constitution» under a step pill
    * reading «Proposal» — two names for one position, and the louder of them ours rather than the
    * workflow's.
+   *
+   * The stage name is substituted after the phrase's colon and never inside it (task 143): a label
+   * dropped into the middle of a Russian sentence would need a case the configuration cannot know.
    */
-  return `Proceed to ${stageLabel(to.stage, methodologyId, to.substage)}`;
+  return t('page.session.door-stage', {
+    stage: stageLabel(t, to.stage, methodologyId, to.substage),
+  });
 }
 
 /**
@@ -99,24 +107,31 @@ function labelFor(
  * the **raw code** for the other five, so an exhausted question budget told its owner
  * `still needed: ROUND_LIMIT_REACHED`.
  */
-function nextTarget(snapshot: WorkflowSnapshot): TransitionTargetModel | null {
+function nextTarget(t: Translate, snapshot: WorkflowSnapshot): TransitionTargetModel | null {
   const to = nextPosition(snapshot);
   if (to === null) return null;
 
-  return targetModel(snapshot, to, labelFor(snapshot.position, to, snapshot.methodologyId));
+  return targetModel(t, snapshot, to, labelFor(t, snapshot.position, to, snapshot.methodologyId));
 }
 
 /** One door, with the gate's current verdict on it. Presentation only — the server re-decides. */
 function targetModel(
+  t: Translate,
   snapshot: WorkflowSnapshot,
   to: StagePosition,
   label: string,
 ): TransitionTargetModel {
   const verdict = evaluateTransition(snapshot, to);
+  /*
+   * `gate-copy` answers with phrase keys since task 143, and this is where they become words. Both
+   * branches are resolved here rather than in the panel because the panel receives one flat list and
+   * cannot tell which branch produced a member — and an unresolved key renders as itself, which is
+   * the `still needed: ROUND_LIMIT_REACHED` defect wearing a different identifier.
+   */
   const unmet: string[] = verdict.allowed
     ? []
-    : (verdict.unmet?.map((condition) => CONDITION_COPY[condition]) ?? [
-        STILL_NEEDED[verdict.reason],
+    : (verdict.unmet?.map((condition) => t(CONDITION_COPY[condition])) ?? [
+        t(STILL_NEEDED[verdict.reason]),
       ]);
   /*
    * The same verdict, unworded (task 143). `unmet` is written to be read by a person and is
@@ -228,6 +243,7 @@ async function pendingProposalModel(
 
 export default async function SessionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const t = await serverT();
   const scope = await requireOwnerScope();
   const db = getDatabase();
 
@@ -249,9 +265,13 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
    * inside it — a soft 404, and a weaker answer than AR-2/NFR-005 AC-2 asks for. That is exactly why
    * this is a boundary in the page rather than a `loading.tsx`: the route file convention puts the
    * fallback above the whole segment, ownership check included.
+   *
+   * The loader's word is resolved here rather than inside it (task 143). A fallback is the one
+   * position a component may not suspend in, so whatever reads the language cookie has to be the
+   * component that holds the boundary, not the component the boundary shows.
    */
   return (
-    <Suspense fallback={<BrandLoader label="Opening the session…" />}>
+    <Suspense fallback={<BrandLoader label={t('page.session.loading')} />}>
       <SessionBody session={session} scope={scope} />
     </Suspense>
   );
@@ -263,6 +283,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
  */
 async function SessionBody({ session, scope }: { session: SessionDetail; scope: OwnerScope }) {
   const db = getDatabase();
+  const t = await serverT();
 
   /*
    * The export estimate, resolved through the same mode machinery the endpoint uses (task 73). The
@@ -407,10 +428,15 @@ async function SessionBody({ session, scope }: { session: SessionDetail; scope: 
       ? null
       : {
           specFileId: revertFileId,
+          /*
+           * A word rather than a file name at the end of the chain (task 143). The first two
+           * candidates are real names and never translate (§3 of the interface standard); this last
+           * one is what the card says when there is no name to print, and it is copy.
+           */
           fileName:
             lastTouched?.fileName ??
             plan.find((entry) => entry.specType === currentFile?.specType)?.fileName ??
-            'the document',
+            t('page.session.revert-unnamed-file'),
           currentRevision: revertCurrent.revisionNumber,
           previousRevision: revertPrevious.revisionNumber,
           unifiedDiff: formatUnifiedDiff(
@@ -447,7 +473,7 @@ async function SessionBody({ session, scope }: { session: SessionDetail; scope: 
       ? position.stage
       : null;
 
-  const actionsTarget = snapshot === null ? null : nextTarget(snapshot);
+  const actionsTarget = snapshot === null ? null : nextTarget(t, snapshot);
 
   const actions: StageActionsModel = {
     askingStage,
@@ -489,7 +515,19 @@ async function SessionBody({ session, scope }: { session: SessionDetail; scope: 
                 door.to.substage !== actionsTarget.toSubstage,
             )
             .flatMap((door) => {
-              return [targetModel(snapshot, door.to, door.label)];
+              /*
+               * The door's own name, from the same function the pill and the chip use (task 143).
+               * `forwardDoors` used to carry a label, which made `workflow` a second place naming a
+               * position — in English only, because that module may not reach the dictionary.
+               */
+              return [
+                targetModel(
+                  t,
+                  snapshot,
+                  door.to,
+                  stageLabel(t, door.to.stage, snapshot.methodologyId, door.to.substage),
+                ),
+              ];
             }),
   };
 
@@ -522,7 +560,7 @@ async function SessionBody({ session, scope }: { session: SessionDetail; scope: 
             className="text-foreground-muted shrink-0 text-xs hover:underline"
             data-testid="back-to-project"
           >
-            All chats
+            {t('page.session.all-chats')}
           </Link>
         </div>
 

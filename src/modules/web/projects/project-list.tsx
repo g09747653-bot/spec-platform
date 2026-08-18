@@ -1,5 +1,7 @@
 import Link from 'next/link';
 
+import { type Locale } from '../i18n/phrase';
+import { currentLocale, serverT } from '../i18n/server-locale';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 
 import { ProjectActions } from './project-actions';
@@ -27,26 +29,34 @@ export interface ProjectListItem {
 }
 
 /**
- * Rendered on the server, so the format is stable rather than dependent on the visitor's locale
- * settings differing between server and client (which would be a hydration mismatch).
+ * The one date this application formats, and the two halves of that are not the same decision
+ * (task 143).
+ *
+ * The **language** follows the chrome: a page whose every other word is Russian has no business
+ * printing «17 Aug 2026», and `<html lang>` now claims the language out loud. The **time zone** does
+ * not follow anything — it is pinned to UTC, and that pin is what makes the string stable. Rendered
+ * on the server, the format has to be one the client would produce from the same instant, and the
+ * visitor's zone is the part of `Intl` the server cannot know; the locale it does know, because it
+ * just read the cookie. Dropping the pin would trade a translated date for a hydration mismatch.
  */
-function formatUpdatedAt(updatedAt: Date): string {
-  return new Intl.DateTimeFormat('en-GB', {
+function formatUpdatedAt(updatedAt: Date, locale: Locale): string {
+  return new Intl.DateTimeFormat(locale === 'ru' ? 'ru-RU' : 'en-GB', {
     dateStyle: 'medium',
     timeStyle: 'short',
     timeZone: 'UTC',
   }).format(updatedAt);
 }
 
-export function ProjectList({ projects }: { projects: readonly ProjectListItem[] }) {
+export async function ProjectList({ projects }: { projects: readonly ProjectListItem[] }) {
+  const t = await serverT();
+  const locale = await currentLocale();
+
   if (projects.length === 0) {
     return (
       <Card data-testid="projects-empty">
         <CardHeader>
-          <CardTitle>No projects yet</CardTitle>
-          <CardDescription>
-            Describe an idea above and the interview starts from that prompt.
-          </CardDescription>
+          <CardTitle>{t('projects.list.empty-title')}</CardTitle>
+          <CardDescription>{t('projects.list.empty-body')}</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -73,13 +83,15 @@ export function ProjectList({ projects }: { projects: readonly ProjectListItem[]
                 </Link>
                 <span className="text-foreground-muted flex shrink-0 items-center gap-3 text-xs">
                   {project.sessionCount > 1 && (
-                    <span data-testid="project-chat-count">{project.sessionCount} chats</span>
+                    <span data-testid="project-chat-count">
+                      {t('projects.list.chat-count', { count: project.sessionCount })}
+                    </span>
                   )}
                   <span data-testid="project-stage" data-stage={project.stage}>
                     {project.stageLabel}
                   </span>
                   <time dateTime={project.updatedAt.toISOString()}>
-                    {formatUpdatedAt(project.updatedAt)}
+                    {formatUpdatedAt(project.updatedAt, locale)}
                   </time>
                 </span>
               </div>

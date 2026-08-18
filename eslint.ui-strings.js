@@ -101,9 +101,18 @@ const noLiteralCopy = {
     /**
      * Walks an expression printed into JSX, reporting the literals a reader would see.
      *
-     * Only the node types that can *print* a string are descended into. A call expression is not
-     * one of them — `{t('key')}` and `{cn(...)}` both stop the walk, which is what keeps the rule
-     * free of an allowlist of helpers.
+     * Only the node types that can *print* a string are descended into, and within them only the
+     * operands that can *become* the rendered value. A call expression is not one of them —
+     * `{t('key')}` and `{cn(...)}` both stop the walk, which is what keeps the rule free of an
+     * allowlist of helpers.
+     *
+     * **A test is not a word, wherever it is written.** The walk has always skipped the `test` of
+     * `{cond ? a : b}` for that reason, and the same argument reaches two positions it used to
+     * descend into anyway. `{view === 'outline' && …}` compares against a union member — the
+     * literal is an operand of an equality, and what the reader sees is the right-hand side or
+     * nothing at all. `{state !== 'idle' && …}` is the same shape over a state machine's token.
+     * Reporting those asked eight surfaces to translate the identifiers they switch on, which is
+     * the opposite of what §3 of the voice standard says to do with a machine token.
      */
     function walkPrinted(node) {
       if (node === null || node === undefined || typeof node.type !== 'string') return;
@@ -121,7 +130,15 @@ const noLiteralCopy = {
           walkPrinted(node.alternate);
           return;
         case 'LogicalExpression':
+          // `a && b` renders `b`; the left half only decides whether it renders at all. `a || b`
+          // and `a ?? b` are the other way round — either half can be the value, so both are walked.
+          if (node.operator !== '&&') walkPrinted(node.left);
+          walkPrinted(node.right);
+          return;
         case 'BinaryExpression':
+          // `+` joins two strings into copy; `===`, `!==`, `<`, `in` and the rest answer a question
+          // with a boolean, and a boolean renders as nothing.
+          if (node.operator !== '+') return;
           walkPrinted(node.left);
           walkPrinted(node.right);
           return;

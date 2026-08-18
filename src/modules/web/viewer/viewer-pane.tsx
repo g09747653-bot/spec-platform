@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 
 import { diffLines, formatUnifiedDiff } from '@/modules/specs/diff';
 
+import { type PhraseKey } from '../i18n/dictionary';
+import { useT } from '../i18n/locale-context';
 import { cn } from '../lib/cn';
 import { useGenerationStream } from '../session/generation-context';
 import { viewerViewValue } from '../state/ui-state';
@@ -13,11 +15,11 @@ import { Button } from '../ui/button';
 import { DiffBody } from '../ui/diff-body';
 import { CloseIcon } from '../ui/icons';
 
-import { VIEWS, isViewerView, type ViewerView } from './document-viewer';
 import { Markdown } from './markdown';
 import { documentMetrics } from './metrics';
 import { outlineOf } from './outline';
 import { RawPane } from './raw-pane';
+import { VIEWS, VIEW_LABELS, isViewerView, type ViewerView } from './views';
 
 /**
  * The document viewer, docked beside the conversation (task 138).
@@ -54,12 +56,18 @@ interface Loaded {
 }
 
 export function ViewerPane({ target, onClose }: { target: ViewerTarget; onClose: () => void }) {
+  const t = useT();
   const [storedView, setStoredView] = useUiState(viewerViewValue);
   const view: ViewerView = isViewerView(storedView) ? storedView : 'preview';
   const stream = useGenerationStream();
 
   const [fetched, setFetched] = useState<Loaded | null>(null);
-  const [failed, setFailed] = useState<{ key: string; message: string } | null>(null);
+  /*
+   * The failure is remembered as a phrase key rather than as a sentence (task 143): the fetch runs
+   * in an effect that must not close over the translator, and a language chosen between the failure
+   * and the paint should still print the message the reader can read.
+   */
+  const [failed, setFailed] = useState<{ key: string; reason: PhraseKey } | null>(null);
 
   const revisionNumber = target.kind === 'revision' ? target.revisionNumber : null;
   const key =
@@ -72,7 +80,7 @@ export function ViewerPane({ target, onClose }: { target: ViewerTarget; onClose:
    * and no `setState` runs synchronously inside an effect body (`react-hooks/set-state-in-effect`).
    */
   const loaded = fetched?.key === key ? fetched : null;
-  const failure = failed?.key === key ? failed.message : null;
+  const failure = failed?.key === key ? failed.reason : null;
 
   useEffect(() => {
     if (target.kind !== 'revision') return;
@@ -105,7 +113,7 @@ export function ViewerPane({ target, onClose }: { target: ViewerTarget; onClose:
         const content = await read(number);
 
         if (content === null) {
-          setFailed({ key, message: 'That revision could not be read just now.' });
+          setFailed({ key, reason: 'viewer.pane.read-failed' });
           return;
         }
 
@@ -119,7 +127,7 @@ export function ViewerPane({ target, onClose }: { target: ViewerTarget; onClose:
         });
       } catch {
         if (!attempt.signal.aborted) {
-          setFailed({ key, message: 'That revision could not be read just now.' });
+          setFailed({ key, reason: 'viewer.pane.read-failed' });
         }
       }
     })();
@@ -143,7 +151,7 @@ export function ViewerPane({ target, onClose }: { target: ViewerTarget; onClose:
       data-testid="viewer-pane"
       data-viewer-kind={target.kind}
       data-view={view}
-      aria-label={`${target.fileName} — document viewer`}
+      aria-label={t('viewer.pane.label', { fileName: target.fileName })}
     >
       <header className="border-border-subtle flex shrink-0 flex-col gap-2 border-b px-4 py-3">
         <div className="flex items-start justify-between gap-3">
@@ -165,7 +173,9 @@ export function ViewerPane({ target, onClose }: { target: ViewerTarget; onClose:
                 data-testid="viewer-metric-revision"
                 data-revision={revisionNumber === null ? 'draft' : String(revisionNumber)}
               >
-                {revisionNumber === null ? 'Draft in progress' : `Rev ${String(revisionNumber)}`}
+                {revisionNumber === null
+                  ? t('viewer.metrics.draft')
+                  : t('common.revision-badge', { revision: revisionNumber })}
               </span>
               {/*
                 Withheld until there is something to count. «0 lines · 0 words» over a document
@@ -176,18 +186,18 @@ export function ViewerPane({ target, onClose }: { target: ViewerTarget; onClose:
                 <>
                   <span aria-hidden>·</span>
                   <span data-testid="viewer-metric-lines" data-lines={String(metrics.lines)}>
-                    {metrics.lines} {metrics.lines === 1 ? 'line' : 'lines'}
+                    {t('viewer.metrics.lines', { count: metrics.lines })}
                   </span>
                   <span aria-hidden>·</span>
                   <span data-testid="viewer-metric-words" data-words={String(metrics.words)}>
-                    {metrics.words} {metrics.words === 1 ? 'word' : 'words'}
+                    {t('viewer.metrics.words', { count: metrics.words })}
                   </span>
                 </>
               )}
               {target.kind === 'revision' && target.approved && (
                 <>
                   <span aria-hidden>·</span>
-                  <span className="text-success-ink">approved</span>
+                  <span className="text-success-ink">{t('viewer.metrics.approved')}</span>
                 </>
               )}
             </span>
@@ -206,7 +216,7 @@ export function ViewerPane({ target, onClose }: { target: ViewerTarget; onClose:
                 data-testid="viewer-stop-generation"
                 onClick={stream.detach}
               >
-                Stop
+                {t('common.stop')}
               </Button>
             )}
 
@@ -216,14 +226,14 @@ export function ViewerPane({ target, onClose }: { target: ViewerTarget; onClose:
                 className="text-foreground-muted hover:text-foreground text-xs underline underline-offset-2"
                 data-testid="viewer-pane-full"
               >
-                Full page
+                {t('viewer.pane.full-page')}
               </Link>
             )}
 
             <button
               type="button"
-              aria-label="Close the document viewer"
-              title="Close the document viewer (Esc)"
+              aria-label={t('viewer.pane.close')}
+              title={t('viewer.pane.close-hint')}
               data-testid="viewer-pane-close"
               className="border-border-subtle text-foreground-muted hover:bg-background hover:text-foreground inline-flex h-8 w-8 items-center justify-center rounded-md border"
               onClick={onClose}
@@ -233,7 +243,11 @@ export function ViewerPane({ target, onClose }: { target: ViewerTarget; onClose:
           </div>
         </div>
 
-        <nav className="flex gap-1" aria-label="View" data-testid="viewer-pane-tabs">
+        <nav
+          className="flex gap-1"
+          aria-label={t('viewer.tabs.label')}
+          data-testid="viewer-pane-tabs"
+        >
           {VIEWS.map((candidate) => (
             <button
               key={candidate}
@@ -241,7 +255,7 @@ export function ViewerPane({ target, onClose }: { target: ViewerTarget; onClose:
               data-testid={`viewer-pane-tab-${candidate}`}
               data-state={view === candidate ? 'current' : 'available'}
               className={cn(
-                'rounded-md px-2.5 py-1 text-xs capitalize transition-colors',
+                'rounded-md px-2.5 py-1 text-xs transition-colors',
                 view === candidate
                   ? 'bg-primary text-primary-foreground font-medium'
                   : 'text-foreground-muted hover:bg-background',
@@ -250,7 +264,7 @@ export function ViewerPane({ target, onClose }: { target: ViewerTarget; onClose:
                 setStoredView(candidate);
               }}
             >
-              {candidate}
+              {t(VIEW_LABELS[candidate])}
             </button>
           ))}
         </nav>
@@ -259,19 +273,19 @@ export function ViewerPane({ target, onClose }: { target: ViewerTarget; onClose:
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4" data-testid="viewer-pane-body">
         {failure !== null && (
           <p role="alert" className="text-sm text-danger-ink">
-            {failure}
+            {t(failure)}
           </p>
         )}
 
         {failure === null && target.kind === 'revision' && loaded === null && (
           <p className="text-foreground-muted text-sm" data-testid="viewer-pane-loading">
-            Reading the document…
+            {t('viewer.pane.reading')}
           </p>
         )}
 
         {failure === null && content === '' && streaming && (
           <p className="text-foreground-muted text-sm" data-testid="viewer-pane-waiting">
-            Nothing written yet. The words appear here as the model writes them.
+            {t('viewer.pane.waiting')}
           </p>
         )}
 
@@ -308,13 +322,15 @@ function ViewerBody({
   previousRevision: number | null;
   currentRevision: number | null;
 }) {
+  const t = useT();
+
   if (view === 'outline') {
     const outline = outlineOf(content);
 
     return (
       <nav data-testid="viewer-pane-outline" className="flex flex-col gap-0.5">
         {outline.length === 0 ? (
-          <p className="text-foreground-muted text-sm">No headings yet.</p>
+          <p className="text-foreground-muted text-sm">{t('viewer.pane.outline-empty')}</p>
         ) : (
           outline.map((heading) => (
             <span
@@ -358,8 +374,8 @@ function ViewerBody({
         data-empty-reason={currentRevision === null ? 'still-writing' : 'no-predecessor'}
       >
         {currentRevision === null
-          ? 'This document is still being written — there is nothing to compare yet.'
-          : `This is the first revision of ${fileName} — there is no earlier one to compare it with.`}
+          ? t('viewer.diff.still-writing')
+          : t('viewer.diff.first-revision', { fileName })}
       </p>
     );
   }
@@ -367,7 +383,7 @@ function ViewerBody({
   return (
     <div className="flex flex-col gap-2">
       <p className="text-foreground-muted text-xs" data-testid="viewer-pane-diff-caption">
-        Rev {previousRevision} → Rev {currentRevision}
+        {t('viewer.diff.caption', { from: previousRevision, to: currentRevision })}
       </p>
       <DiffBody
         unifiedDiff={formatUnifiedDiff(diffLines(previous, content), fileName)}

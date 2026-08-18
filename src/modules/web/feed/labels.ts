@@ -1,6 +1,8 @@
 import { methodologyConfig } from '@/modules/methodologies';
 import { isSubstage, type StagePosition, type Substage } from '@/modules/workflow/model/stages';
 
+import { type PhraseKey } from '../i18n/dictionary';
+import { type Translate } from '../i18n/translate';
 import { stageLabel } from '../session/stage-display';
 
 /**
@@ -10,17 +12,30 @@ import { stageLabel } from '../session/stage-display';
  * Wording only. The vocabulary is `workflow`'s and the position is read from persisted state; what
  * is decided here is that `collect` is called *Collecting* to a person. A substage added to the model
  * without a word for it is a type error, which is the same guard `stageLabel` carries for stages.
+ *
+ * **A key rather than a word** (task 143). This module has no JSX to be linted and no request to read
+ * a locale from, so an English string here would be copy living underneath everything that enforces
+ * the dictionary. What it answers is *which* phrase names a substage; whoever renders it resolves it,
+ * which is what lets the client chip and the server-rendered header pill share one table.
  */
-const SUBSTAGE_LABELS: Record<Substage, string> = {
-  collect: 'Collecting',
-  generate: 'Generating',
-  review: 'Reviewing',
+const SUBSTAGE_KEYS: Record<Substage, PhraseKey> = {
+  collect: 'feed.substage.collect',
+  generate: 'feed.substage.generate',
+  review: 'feed.substage.review',
 };
 
-export function substageLabel(substage: string | null): string | null {
-  if (substage === null) return null;
+/**
+ * The phrase naming a substage, or `null` when there is none to name.
+ *
+ * A value outside the vocabulary answers `null` rather than itself. Echoing the raw token was
+ * tolerable while the chrome was English — `collect` at least reads as a word — but in Russian it is
+ * a machine value dressed as copy, which the voice standard treats as a defect of presentation
+ * rather than as something to translate. The token is still on the element, in `data-substage`.
+ */
+export function substageKey(substage: string | null): PhraseKey | null {
+  if (substage === null || !isSubstage(substage)) return null;
 
-  return isSubstage(substage) ? SUBSTAGE_LABELS[substage] : substage;
+  return SUBSTAGE_KEYS[substage];
 }
 
 /**
@@ -31,11 +46,15 @@ export function substageLabel(substage: string | null): string | null {
  * «Specify · Generating» under SpecKit. The substage half stays canonical: `collect` is *Collecting*
  * in every methodology, because it is a property of the machine rather than of the workflow.
  */
-export function positionLabel(position: StagePosition, methodologyId?: string | null): string {
-  const substage = substageLabel(position.substage);
-  const stage = stageLabel(position.stage, methodologyId, position.substage);
+export function positionLabel(
+  t: Translate,
+  position: StagePosition,
+  methodologyId?: string | null,
+): string {
+  const substage = substageKey(position.substage);
+  const stage = stageLabel(t, position.stage, methodologyId, position.substage);
 
-  return substage === null ? stage : `${stage} · ${substage}`;
+  return substage === null ? stage : `${stage}${t('common.separator')}${t(substage)}`;
 }
 
 /**

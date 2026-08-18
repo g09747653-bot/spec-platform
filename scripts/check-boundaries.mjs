@@ -17,6 +17,8 @@ const SCHEMA_IMPORT_RULE = 'no-restricted-imports';
 const HEADINGS_RULE = 'spec-platform/no-duplicated-section-headings';
 /** Task 124: one home for colour. */
 const COLOUR_RULE = 'design-tokens/no-raw-colours';
+/** Task 143: one home for copy. */
+const COPY_RULE = 'ui-strings/no-literal-copy';
 
 /** @type {{ file: string, shouldFail: boolean, why: string, rule?: string }[]} */
 const EXPECTATIONS = [
@@ -97,6 +99,18 @@ const EXPECTATIONS = [
     shouldFail: false,
     rule: COLOUR_RULE,
     why: 'token utilities are the spelling components are supposed to use',
+  },
+  {
+    file: 'src/modules/web/__fixtures__/web-hardcodes-copy.tsx',
+    shouldFail: true,
+    rule: COPY_RULE,
+    why: 'every word a reader sees comes from src/modules/web/i18n/dictionary (task 143)',
+  },
+  {
+    file: 'src/modules/web/__fixtures__/web-prints-copy-from-dictionary.tsx',
+    shouldFail: false,
+    rule: COPY_RULE,
+    why: 'a phrase from the dictionary, a machine attribute and a union member in a guard are not copy',
   },
 ];
 

@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { type PhraseKey } from '../i18n/dictionary';
+import { useT } from '../i18n/locale-context';
 import { Button } from '../ui/button';
 import { Input } from '../ui/field';
 
@@ -28,11 +30,12 @@ type Mode = 'idle' | 'renaming' | 'confirming-delete' | 'busy';
 
 export function ProjectActions({ projectId, name }: ProjectActionsProps) {
   const router = useRouter();
+  const t = useT();
   const [mode, setMode] = useState<Mode>('idle');
   const [draftName, setDraftName] = useState(name);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<PhraseKey | null>(null);
 
-  async function send(request: () => Promise<Response>, failure: string): Promise<void> {
+  async function send(request: () => Promise<Response>, failure: PhraseKey): Promise<void> {
     setMode('busy');
     setError(null);
 
@@ -61,20 +64,20 @@ export function ProjectActions({ projectId, name }: ProjectActionsProps) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: draftName }),
         }),
-      'That name could not be saved.',
+      'projects.actions.rename-failed',
     );
 
   const duplicate = () =>
     send(
       () => fetch(`/api/projects/${projectId}/duplicate`, { method: 'POST' }),
-      'That project could not be duplicated.',
+      'projects.actions.duplicate-failed',
     );
 
   // The query parameter is the endpoint's half of AC-4; the dialog above it is the user's half.
   const remove = () =>
     send(
       () => fetch(`/api/projects/${projectId}?confirm=permanent`, { method: 'DELETE' }),
-      'That project could not be deleted.',
+      'projects.actions.delete-failed',
     );
 
   return (
@@ -88,7 +91,7 @@ export function ProjectActions({ projectId, name }: ProjectActionsProps) {
             this the row overflows instead, which on a narrow window pushes Save off the edge.
           */}
           <Input
-            aria-label="Project name"
+            aria-label={t('projects.actions.name-label')}
             className="min-w-0"
             data-testid="rename-input"
             value={draftName}
@@ -102,7 +105,7 @@ export function ProjectActions({ projectId, name }: ProjectActionsProps) {
             disabled={draftName.trim() === ''}
             onClick={() => void rename()}
           >
-            Save
+            {t('projects.actions.save')}
           </Button>
           <Button
             size="sm"
@@ -113,7 +116,7 @@ export function ProjectActions({ projectId, name }: ProjectActionsProps) {
               setMode('idle');
             }}
           >
-            Cancel
+            {t('common.cancel')}
           </Button>
         </div>
       ) : mode === 'confirming-delete' ? (
@@ -124,8 +127,7 @@ export function ProjectActions({ projectId, name }: ProjectActionsProps) {
             form, so the assertion survives translation of the sentence that carries it.
           */}
           <p className="text-sm" data-testid="delete-confirm-text" data-permanent="true">
-            Delete “{name}” permanently? Its session, questions, answers, every spec file and every
-            revision, and every document you attached will be removed. This cannot be undone.
+            {t('projects.actions.delete-confirm', { name })}
           </p>
           <div className="flex gap-2">
             <Button
@@ -134,7 +136,7 @@ export function ProjectActions({ projectId, name }: ProjectActionsProps) {
               data-testid="delete-confirm"
               onClick={() => void remove()}
             >
-              Delete permanently
+              {t('projects.actions.delete-confirmed')}
             </Button>
             <Button
               size="sm"
@@ -144,7 +146,7 @@ export function ProjectActions({ projectId, name }: ProjectActionsProps) {
                 setMode('idle');
               }}
             >
-              Keep it
+              {t('projects.actions.delete-cancel')}
             </Button>
           </div>
         </div>
@@ -160,7 +162,7 @@ export function ProjectActions({ projectId, name }: ProjectActionsProps) {
               setMode('renaming');
             }}
           >
-            Rename
+            {t('projects.actions.rename')}
           </Button>
           <Button
             size="sm"
@@ -169,7 +171,7 @@ export function ProjectActions({ projectId, name }: ProjectActionsProps) {
             disabled={mode === 'busy'}
             onClick={() => void duplicate()}
           >
-            {mode === 'busy' ? 'Working…' : 'Duplicate'}
+            {mode === 'busy' ? t('projects.actions.busy') : t('projects.actions.duplicate')}
           </Button>
           <Button
             size="sm"
@@ -180,14 +182,14 @@ export function ProjectActions({ projectId, name }: ProjectActionsProps) {
               setMode('confirming-delete');
             }}
           >
-            Delete
+            {t('projects.actions.delete')}
           </Button>
         </div>
       )}
 
       {error !== null && (
         <p role="alert" className="text-danger text-xs" data-testid="project-action-error">
-          {error}
+          {t(error)}
         </p>
       )}
     </div>

@@ -1,3 +1,5 @@
+import type { PhraseKey } from '../i18n/dictionary';
+
 /**
  * Keyboard shortcuts — the vocabulary, and the rule for when a key press is meant for us (task 141).
  *
@@ -16,38 +18,101 @@
 
 export interface Shortcut {
   id: string;
-  /** What a person presses, as it should be printed. */
+  /**
+   * What a person presses, as it should be printed.
+   *
+   * Not copy: `B` is the engraving on a key, and the voice standard §3 forbids translating or
+   * transliterating it. What the row *describes* is copy, and lives in `phrase`.
+   */
   keys: string;
-  label: string;
-  /** Where it applies, so the list does not promise a viewer key on a page with no viewer. */
+  /** The dictionary entry that says what this does, in whichever language the chrome speaks. */
+  phrase: PhraseKey;
+  /**
+   * Where it applies, so the list does not promise a viewer key on a page with no viewer.
+   *
+   * A grouping token, not a heading: the words the heading prints are
+   * `session.shortcuts.scope-*`, and changing a value here renames a key rather than the text a
+   * reader sees.
+   */
   scope: 'Anywhere' | 'Session' | 'Document viewer';
 }
 
 export const SHORTCUTS: readonly Shortcut[] = [
-  { id: 'shortcuts', keys: '?', label: 'Show this list', scope: 'Anywhere' },
-  { id: 'toggle-sidebar', keys: 'B', label: 'Collapse or expand the sidebar', scope: 'Session' },
-  { id: 'focus-composer', keys: 'C', label: 'Jump to the message box', scope: 'Session' },
-  { id: 'slash', keys: '/', label: 'Open the command menu', scope: 'Session' },
-  { id: 'open-viewer', keys: 'V', label: 'Open the newest document', scope: 'Session' },
-  { id: 'view-outline', keys: '1', label: 'Outline', scope: 'Document viewer' },
-  { id: 'view-preview', keys: '2', label: 'Preview', scope: 'Document viewer' },
-  { id: 'view-raw', keys: '3', label: 'Raw', scope: 'Document viewer' },
-  { id: 'view-diff', keys: '4', label: 'Diff', scope: 'Document viewer' },
-  { id: 'close', keys: 'Esc', label: 'Close the viewer or this list', scope: 'Anywhere' },
-  { id: 'send', keys: 'Ctrl/⌘ + Enter', label: 'Send the message', scope: 'Session' },
+  { id: 'shortcuts', keys: '?', phrase: 'session.shortcuts.show-list', scope: 'Anywhere' },
+  {
+    id: 'toggle-sidebar',
+    keys: 'B',
+    phrase: 'session.shortcuts.toggle-sidebar',
+    scope: 'Session',
+  },
+  {
+    id: 'focus-composer',
+    keys: 'C',
+    phrase: 'session.shortcuts.focus-composer',
+    scope: 'Session',
+  },
+  { id: 'slash', keys: '/', phrase: 'session.shortcuts.slash', scope: 'Session' },
+  { id: 'open-viewer', keys: 'V', phrase: 'session.shortcuts.open-viewer', scope: 'Session' },
+  {
+    id: 'view-outline',
+    keys: '1',
+    phrase: 'common.view-outline',
+    scope: 'Document viewer',
+  },
+  {
+    id: 'view-preview',
+    keys: '2',
+    phrase: 'common.view-preview',
+    scope: 'Document viewer',
+  },
+  { id: 'view-raw', keys: '3', phrase: 'common.view-raw', scope: 'Document viewer' },
+  { id: 'view-diff', keys: '4', phrase: 'common.view-diff', scope: 'Document viewer' },
+  { id: 'close', keys: 'Esc', phrase: 'session.shortcuts.close', scope: 'Anywhere' },
+  { id: 'send', keys: 'Ctrl/⌘ + Enter', phrase: 'session.shortcuts.send', scope: 'Session' },
 ];
 
 export type ShortcutId = (typeof SHORTCUTS)[number]['id'];
 
 /** What a key press looks like once the parts we care about are separated from the event. */
 export interface KeyPress {
+  /** The character the layout produced — «b» on QWERTY, «и» on ЙЦУКЕН for the same key. */
   key: string;
+  /** Which physical key it was — `KeyB` for both of those. */
+  code: string;
   ctrlKey: boolean;
   metaKey: boolean;
   altKey: boolean;
   /** Whether the caret is in something that accepts text. */
   typing: boolean;
 }
+
+/**
+ * The physical keys the letter and digit shortcuts live on (task 143; voice standard §7.2).
+ *
+ * **Matching on the produced character shipped four dead shortcuts.** `case 'v'` is true only while
+ * the layout is Latin: on ЙЦУКЕН the key engraved `V` reports «м», `B` reports «и», `C` reports «с»,
+ * and `/` cannot be typed at all — so `toggle-sidebar`, `focus-composer`, `open-viewer` and `slash`
+ * did nothing for the users this deployment is being translated for, while the in-app list went on
+ * promising them. Keys are not translated (§3); what had to change is the reading of them.
+ *
+ * `code` names the key by its position, which is what a printed `B` means and what a user pressing
+ * it expects. Numpad digits are listed beside the row digits because matching on the character used
+ * to accept them and a translation is not the place to withdraw a binding.
+ */
+const BY_CODE: Readonly<Record<string, ShortcutId>> = {
+  KeyB: 'toggle-sidebar',
+  KeyC: 'focus-composer',
+  KeyV: 'open-viewer',
+  Slash: 'slash',
+  Digit1: 'view-outline',
+  Digit2: 'view-preview',
+  Digit3: 'view-raw',
+  Digit4: 'view-diff',
+  Numpad1: 'view-outline',
+  Numpad2: 'view-preview',
+  Numpad3: 'view-raw',
+  Numpad4: 'view-diff',
+};
 
 /**
  * Which shortcut a key press means, or `null`.
@@ -66,31 +131,15 @@ export function shortcutFor(press: KeyPress): ShortcutId | null {
   if (press.key === 'Escape') return 'close';
   if (press.typing) return null;
 
-  switch (press.key) {
-    case '?':
-      return 'shortcuts';
-    case 'b':
-    case 'B':
-      return 'toggle-sidebar';
-    case 'c':
-    case 'C':
-      return 'focus-composer';
-    case '/':
-      return 'slash';
-    case 'v':
-    case 'V':
-      return 'open-viewer';
-    case '1':
-      return 'view-outline';
-    case '2':
-      return 'view-preview';
-    case '3':
-      return 'view-raw';
-    case '4':
-      return 'view-diff';
-    default:
-      return null;
-  }
+  /*
+   * `?` is the character and not the key, and it has to be read before the table: it is Shift and
+   * the `Slash` key on QWERTY but Shift and `Digit7` on ЙЦУКЕН, so the position tells us nothing
+   * while the character tells us everything. Reading it first is also what keeps Shift+`/` opening
+   * this list rather than the command menu.
+   */
+  if (press.key === '?') return 'shortcuts';
+
+  return BY_CODE[press.code] ?? null;
 }
 
 /**

@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { type PhraseKey } from '../i18n/dictionary';
+import { useT } from '../i18n/locale-context';
 import { Button } from '../ui/button';
 import { EyeIcon } from '../ui/icons';
 import { Label, Textarea } from '../ui/field';
@@ -41,9 +43,16 @@ interface DocumentBlockProps {
   deadlineMs: number;
 }
 
-const WAITING_FOR: Record<string, string> = {
-  approve: 'the approval to be recorded',
-  changes: 'the revision to be written',
+/**
+ * What the wait block is told the card is waiting for, as keys (task 143).
+ *
+ * `WaitingOn` is shared with the stage bar and takes its words as a prop, so the phrase is chosen
+ * here rather than there. The Russian frame around it is «Ожидание: …», which wants a nominative
+ * noun where English uses an infinitive — a fact that lives in the dictionary, not in this table.
+ */
+const WAITING_FOR: Record<string, PhraseKey> = {
+  approve: 'feed.document.waiting-approve',
+  changes: 'feed.document.waiting-changes',
 };
 
 function isSpecCardState(value: unknown): boolean {
@@ -71,6 +80,7 @@ export function DocumentBlock({
   const [previewOpen, setPreviewOpen] = useState(false);
   const { state: request, elapsedSeconds, waiting, send, abandon } = useSessionRequest(deadlineMs);
   const viewerControl = useViewerControl();
+  const t = useT();
 
   const busy = request.running;
   const error = localError ?? request.notice;
@@ -101,7 +111,7 @@ export function DocumentBlock({
     if (preview !== null || previewOpen) return;
 
     const response = await fetch(`/api/specs/${block.specFileId}/content`);
-    setPreview(response.ok ? await response.text() : 'That file could not be read just now.');
+    setPreview(response.ok ? await response.text() : t('feed.document.preview-failed'));
   }
 
   async function decide(action: 'approve' | 'changes', body: Record<string, unknown>) {
@@ -111,7 +121,7 @@ export function DocumentBlock({
     // A 200 that is not a spec-card state is a contract breach, not a refusal: the request layer
     // reports transport and refusals, and this is neither.
     if (outcome.ok && !isSpecCardState(outcome.payload)) {
-      setLocalError('That did not work. Please try again.');
+      setLocalError(t('feed.document.decision-failed'));
       return;
     }
 
@@ -151,8 +161,8 @@ export function DocumentBlock({
                 type="button"
                 data-testid="open-viewer"
                 data-state={isOpen ? 'open' : 'closed'}
-                aria-label={`Open ${block.fileName} in the viewer`}
-                title="Open in the viewer (V)"
+                aria-label={t('feed.document.open-viewer-aria', { fileName: block.fileName })}
+                title={t('feed.document.open-viewer-title')}
                 className={
                   isOpen
                     ? 'border-primary text-primary-ink inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs'
@@ -161,7 +171,7 @@ export function DocumentBlock({
                 onClick={openInViewer}
               >
                 <EyeIcon />
-                Open
+                {t('common.open')}
               </button>
             )}
 
@@ -170,7 +180,7 @@ export function DocumentBlock({
                 className="rounded-full border border-success-ink/40 px-2 py-0.5 text-xs text-success-ink"
                 data-testid="document-approved"
               >
-                Approved
+                {t('feed.document.approved-badge')}
               </span>
             )}
             {/*
@@ -183,7 +193,7 @@ export function DocumentBlock({
               data-testid="document-revision"
               data-revision={String(block.revisionNumber)}
             >
-              Rev{' '}
+              {t('feed.document.revision-prefix')}{' '}
               {primary ? (
                 <span data-testid="spec-revision-number">{block.revisionNumber}</span>
               ) : (
@@ -195,9 +205,7 @@ export function DocumentBlock({
 
         <p className="text-foreground-muted text-xs">
           {primary ? <span data-testid="spec-file-name">{block.fileName}</span> : block.fileName}
-          {block.approved
-            ? ' · approved — included in the export.'
-            : ' · awaiting your decision — nothing advances until you approve or ask for changes.'}
+          {block.approved ? t('feed.document.status-approved') : t('feed.document.status-pending')}
         </p>
 
         {canPreview && (
@@ -211,7 +219,7 @@ export function DocumentBlock({
           >
             {/* The eye the reference draws on this control (task 134; row `1.1-11`). */}
             <EyeIcon open={previewOpen} />
-            {previewOpen ? 'Hide preview' : 'Preview'}
+            {previewOpen ? t('feed.document.preview-hide') : t('feed.document.preview-show')}
           </button>
         )}
 
@@ -267,7 +275,7 @@ export function DocumentBlock({
                   });
                 }}
               >
-                {busy === 'approve' ? 'Approving…' : 'Approve'}
+                {busy === 'approve' ? t('feed.document.approving') : t('feed.document.approve')}
               </Button>
               <Button
                 variant="secondary"
@@ -277,13 +285,15 @@ export function DocumentBlock({
                   setShowInstruction(true);
                 }}
               >
-                Request changes
+                {t('common.request-changes')}
               </Button>
             </div>
 
             {showInstruction && (
               <div className="flex flex-col gap-2">
-                <Label htmlFor={`instruction-${block.revisionId}`}>What should change?</Label>
+                <Label htmlFor={`instruction-${block.revisionId}`}>
+                  {t('feed.document.instruction-label')}
+                </Label>
                 <Textarea
                   id={`instruction-${block.revisionId}`}
                   data-testid="change-instruction"
@@ -291,7 +301,7 @@ export function DocumentBlock({
                   onChange={(event) => {
                     setInstruction(event.target.value);
                   }}
-                  placeholder="Tighten the scope section and add a non-goal."
+                  placeholder={t('feed.document.instruction-placeholder')}
                 />
                 <Button
                   data-testid="submit-changes"
@@ -301,7 +311,9 @@ export function DocumentBlock({
                   }}
                   className="self-start"
                 >
-                  {busy === 'changes' ? 'Revising…' : 'Send instruction'}
+                  {busy === 'changes'
+                    ? t('feed.document.revising')
+                    : t('feed.document.send-instruction')}
                 </Button>
               </div>
             )}
@@ -310,7 +322,7 @@ export function DocumentBlock({
 
         {waiting && (
           <WaitingOn
-            what={WAITING_FOR[busy ?? ''] ?? 'the server'}
+            what={t(WAITING_FOR[busy ?? ''] ?? 'feed.waiting.server')}
             elapsedSeconds={elapsedSeconds}
             onStop={abandon}
           />
