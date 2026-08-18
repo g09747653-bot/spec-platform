@@ -943,7 +943,12 @@ describe('a board knows whether it has been superseded (task 142)', () => {
       ...state,
       revisions: [
         revision({ approved: true }),
-        revision({ revisionId: 'rev-2', revisionNumber: 2, createdAt: T.revision2, approved: true }),
+        revision({
+          revisionId: 'rev-2',
+          revisionNumber: 2,
+          createdAt: T.revision2,
+          approved: true,
+        }),
       ],
       reviews: [
         review({ decision: 'request_changes', selectedItemIds: ['item-1'], decidedAt: T.decided }),

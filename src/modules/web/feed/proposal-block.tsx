@@ -272,10 +272,7 @@ export function RefineBox({ specFileId }: { specFileId: string }) {
       data-testid="refine-card"
       open={speaking}
     >
-      <summary
-        className="text-foreground-muted cursor-pointer text-sm"
-        data-testid="refine-toggle"
-      >
+      <summary className="text-foreground-muted cursor-pointer text-sm" data-testid="refine-toggle">
         Refine a file — say what should change
       </summary>
 

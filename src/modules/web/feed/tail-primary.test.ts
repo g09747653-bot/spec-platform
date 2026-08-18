@@ -27,15 +27,17 @@ describe('which control is the loud one', () => {
     );
     expect(
       tailPrimary(
-        at({ tail: { kind: 'pending-approval', blockId: 'b', specFileId: 'f', revisionNumber: 1 } }),
+        at({
+          tail: { kind: 'pending-approval', blockId: 'b', specFileId: 'f', revisionNumber: 1 },
+        }),
       ),
     ).toBe('approve-spec');
     expect(
       tailPrimary(at({ tail: { kind: 'pending-proposal', blockId: 'b', proposedChangeId: 'p' } })),
     ).toBe('accept-diff');
-    expect(
-      tailPrimary(at({ tail: { kind: 'pending-review', blockId: 'b', reviewId: 'v' } })),
-    ).toBe('review-accept');
+    expect(tailPrimary(at({ tail: { kind: 'pending-review', blockId: 'b', reviewId: 'v' } }))).toBe(
+      'review-accept',
+    );
     expect(tailPrimary(at({ tail: { kind: 'sealed', blockId: 'b' } }))).toBe('completion-download');
   });
 
