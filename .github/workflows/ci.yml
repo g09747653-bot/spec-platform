@@ -149,25 +149,25 @@ jobs:
       # A red gate that means "apt was slow installing browsers this job does not run" is exactly
       # the uninformative verdict D-201 and D-202 were about.
       #
-      # Bounded and retried, because the failure this step actually has is a hang, not an error.
-      # `install-deps` is `apt-get update` plus `apt-get install`, and an apt mirror that stops
-      # answering makes it sit there until something kills it — twice on this PR it sat until the job
-      # timeout and was reported as a red end-to-end gate that had never run a test. A healthy run of
-      # this step takes about four minutes, so five is a generous bound on one attempt; three
-      # attempts cost at most sixteen minutes of the job's forty-five, and the usual cost is nothing.
+      # Bounded, and deliberately NOT retried — the retry was tried on this very PR and made things
+      # worse, which is worth writing down rather than quietly deleting.
+      #
+      # The failure this step has is a hang: `install-deps` is `apt-get update` plus `apt-get
+      # install`, and a mirror that stops answering leaves it sitting. Wrapping one attempt in
+      # `timeout 300` and looping three times looked obvious and was not: `timeout` kills the command
+      # it launched, but `apt-get` is a *grandchild*, so it survived the kill still holding
+      # `/var/lib/apt/lists/lock`, and attempts two and three failed in seconds with «Could not get
+      # lock … held by process 2275 (apt-get)». A retry that is guaranteed to fail is worse than no
+      # retry, because it reads like the problem was given three chances.
+      #
+      # So: one attempt, with a bound the *step* owns. A hung mirror now costs twelve minutes and is
+      # reported as this step timing out, leaving the rest of the job's budget unspent and the fix
+      # obvious — re-run this one engine (D-202 made that cheap). A healthy run takes about four
+      # minutes.
       - name: Install Playwright system dependencies
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        timeout-minutes: 16
-        run: |
-          for attempt in 1 2 3; do
-            if timeout 300 pnpm exec playwright install-deps ${{ matrix.engine }}; then
-              exit 0
-            fi
-            echo "::warning::install-deps attempt ${attempt} failed or hung; retrying"
-            sleep 15
-          done
-          echo "::error::install-deps did not complete in three attempts"
-          exit 1
+        timeout-minutes: 12
+        run: pnpm exec playwright install-deps ${{ matrix.engine }}
 
       # NFR-011 / SC-12: the smoke test runs on all three engines — one job each now, same three
       # Playwright projects. Edge is covered by the Chromium project (see playwright.config.ts).
