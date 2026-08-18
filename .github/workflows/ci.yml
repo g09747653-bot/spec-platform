@@ -132,9 +132,19 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps ${{ matrix.engine }}
 
+      # The engine belongs here too, and its absence cost half an hour (task 142's PR).
+      #
+      # A cached browser still needs its system libraries, but `install-deps` with no argument
+      # installs them for **all three** engines — including WebKit's GTK and GStreamer stack, which
+      # is the bulk of it. The job that got a cache hit therefore did the most apt work of the three,
+      # and on one run that took 29 m 32 s and was killed by the 30-minute job timeout without
+      # reaching a single test, while the two jobs that missed the cache installed one engine's
+      # dependencies each through `--with-deps` above and finished in about seventeen minutes.
+      # A red gate that means "apt was slow installing browsers this job does not run" is exactly
+      # the uninformative verdict D-201 and D-202 were about.
       - name: Install Playwright system dependencies
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps
+        run: pnpm exec playwright install-deps ${{ matrix.engine }}
 
       # NFR-011 / SC-12: the smoke test runs on all three engines — one job each now, same three
       # Playwright projects. Edge is covered by the Chromium project (see playwright.config.ts).
