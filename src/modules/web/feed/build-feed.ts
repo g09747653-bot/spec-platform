@@ -295,6 +295,56 @@ function cyclesUsedFor(source: FeedSource, specFileId: string): number {
   ).length;
 }
 
+/**
+ * The board that replaced this one, or `null` (task 142).
+ *
+ * Two ways a board becomes history, and the card needs them both:
+ *
+ * 1. **another board on the same file, written later** — the ordinary «request changes, get a
+ *    rewrite, get reviewed again» loop, which is precisely the shape the customer was looking at;
+ * 2. **a revision of that file newer than the one it reviewed** — the rule `source.ts` already
+ *    states on `revisionNumber` («a review of anything but the latest is history», FR-010 AC-8).
+ *    A board can be the newest board and still be stale, if the document moved on without a review.
+ *
+ * Ties on `createdAt` fall to the later id so two boards stamped in the same millisecond still
+ * order deterministically; without that, a fixture with equal timestamps could make each the other's
+ * successor and both cards would claim to be old.
+ *
+ * `createdAt` arrives as an ISO string (`source.ts`), and ISO strings at one offset sort correctly
+ * as text — which is what the rest of this file already relies on. Comparing them as text rather
+ * than parsing to `Date` keeps that one convention.
+ */
+function supersededBy(review: FeedSourceReview, source: FeedSource): string | null {
+  const isNewer = (candidate: FeedSourceReview): boolean =>
+    candidate.createdAt > review.createdAt ||
+    (candidate.createdAt === review.createdAt && candidate.reviewId > review.reviewId);
+
+  const newer = source.reviews
+    .filter(
+      (candidate) =>
+        candidate.specFileId === review.specFileId &&
+        candidate.reviewId !== review.reviewId &&
+        isNewer(candidate),
+    )
+    .sort((a, b) =>
+      a.createdAt === b.createdAt
+        ? b.reviewId.localeCompare(a.reviewId)
+        : b.createdAt.localeCompare(a.createdAt),
+    )
+    .at(0);
+
+  if (newer !== undefined) return `review:${newer.reviewId}`;
+
+  /*
+   * No newer board, but the document has moved past the revision this one read. There is nothing to
+   * point at, so the id is the file's own newest revision — the badge says «this is history», and
+   * `null` would have said the opposite.
+   */
+  return review.revisionNumber < latestRevisionNumber(source.revisions, review.specFileId)
+    ? `revision:${review.specFileId}:${String(latestRevisionNumber(source.revisions, review.specFileId))}`
+    : null;
+}
+
 function reviewBlocks(source: FeedSource): ReviewBlock[] {
   return source.reviews.map((review) => ({
     kind: 'review',
@@ -312,6 +362,7 @@ function reviewBlocks(source: FeedSource): ReviewBlock[] {
     selectedItemIds: review.selectedItemIds,
     cyclesUsed: cyclesUsedFor(source, review.specFileId),
     cycleBudget: source.session.revisionCycleBudget,
+    supersededBy: supersededBy(review, source),
   }));
 }
 

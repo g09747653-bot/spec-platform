@@ -90,7 +90,12 @@ export function RevertCard({ sessionId, revert }: { sessionId: string; revert: R
         <>
           <DiffBody unifiedDiff={revert.unifiedDiff} testId="revert-diff" />
           <div className="flex items-center gap-2">
+            {/*
+              Secondary: this card is an offer, not the next step. The tail names the loud control
+              (task 142; `tail-primary.ts`), and going back is never it.
+            */}
             <Button
+              variant="secondary"
               data-testid="revert-apply"
               disabled={busy}
               onClick={() => {

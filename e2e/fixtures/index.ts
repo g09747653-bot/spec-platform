@@ -28,6 +28,7 @@ export {
   completeStage,
   decideReviewAndAdvance,
   draftAndApprove,
+  openRefine,
   PARITY_STAGES,
   projectIdOf,
   reachDrafting,

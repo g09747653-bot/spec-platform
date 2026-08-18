@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { createSignedInUser, reachDrafting, signIn, startSession } from './fixtures';
+import { createSignedInUser, openRefine, reachDrafting, signIn, startSession } from './fixtures';
 
 /**
  * Rename, duplicate and delete, from the list (tasks 76, 77; FR-002 AC-3..AC-7).
@@ -112,6 +112,7 @@ test.describe('project lifecycle', () => {
     expect(copyUrl).not.toBe(sourceUrl);
 
     // AC-7: refining the copy leaves the source at revision 1.
+    await openRefine(page);
     await page.getByTestId('refine-instruction').fill('Add a non-goals section.');
     await page.getByTestId('submit-refinement').click();
     await expect(page.getByTestId('diff-card')).toBeVisible({ timeout: 20_000 });

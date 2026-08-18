@@ -9,6 +9,7 @@ import { EyeIcon } from '../ui/icons';
 import { useViewerControl } from '../viewer/viewer-control';
 
 import { BlockCaption } from './bubbles';
+import type { TailPrimary } from './tail-primary';
 
 /**
  * Where a document is written into the conversation (tasks 105, 107; FR-008, FR-018).
@@ -46,6 +47,14 @@ interface GenerationSurfaceProps {
    * specific: apply these N points and change nothing else.
    */
   revisionOwed?: { specType: string; points: number } | null;
+  /**
+   * Which control the tail says is the loud one (task 142).
+   *
+   * Handed in rather than decided here: this card cannot see the door out of the stage or the
+   * refinement box, and deciding on its own is exactly how three primaries ended up stacked in the
+   * customer's screenshot. `tail-primary.ts` is where the answer is worked out.
+   */
+  primary?: TailPrimary;
 }
 
 export function GenerationSurface({
@@ -55,6 +64,7 @@ export function GenerationSurface({
   canGenerate,
   blocked,
   revisionOwed = null,
+  primary = null,
 }: GenerationSurfaceProps) {
   const router = useRouter();
   /*
@@ -197,7 +207,16 @@ export function GenerationSurface({
 
       {(generating || runInFlight) && (
         <div className="flex items-center gap-2">
-          <Button variant="secondary" data-testid="stop-generation" onClick={detach}>
+          {/*
+            Promoted while a run is in flight, because then it is the only control on the page that
+            does anything: Generate is gone, the door is refused by the gate, and «stop and start
+            again» is the whole of what a reader can do about a generation they are watching.
+          */}
+          <Button
+            variant={primary === 'stop-generation' ? 'primary' : 'secondary'}
+            data-testid="stop-generation"
+            onClick={detach}
+          >
             Stop
           </Button>
           <span className="text-foreground-muted text-xs">
@@ -227,7 +246,14 @@ export function GenerationSurface({
                 leaves the rest as it stands.
               </p>
             )}
+            {/*
+              Loud while there is something to write, quiet once the document is written and
+              approved — and it says which of the two it is. «Generate» over a document that already
+              exists and has already been approved was the button the customer's eye went to first,
+              and pressing it was never the next step.
+            */}
             <Button
+              variant={primary === 'generate-spec' ? 'primary' : 'secondary'}
               data-testid="generate-spec"
               onClick={() => {
                 void generate();
@@ -238,7 +264,9 @@ export function GenerationSurface({
                 ? 'Try again'
                 : owed !== null
                   ? 'Apply the review points'
-                  : 'Generate'}
+                  : primary === 'generate-spec'
+                    ? 'Generate'
+                    : 'Write it again'}
             </Button>
           </>
         ))}

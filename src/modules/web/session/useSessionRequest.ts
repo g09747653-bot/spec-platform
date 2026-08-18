@@ -30,6 +30,21 @@ export interface UseSessionRequest {
   state: SessionRequestState;
   /** Whole seconds the in-flight request has been running; `0` when nothing is. */
   elapsedSeconds: number;
+  /**
+   * Whether this has become a **wait** — a request still running a second after it was sent.
+   *
+   * Separate from `state.running` because the two answer different questions, and the panel needs
+   * the second one (task 142). Every request was announced with a wait block reading «0 s», because
+   * the counter cannot tick until a second has passed; on the sub-second requests that are most of
+   * them, «0 s» was the only reading it ever showed before vanishing. A block that appears, says
+   * nothing, and leaves is worse than no block: the customer read it as the session sitting still.
+   *
+   * Д-1 is not weakened by the pause. For that first second the control that was pressed is
+   * disabled and says what it is doing — «Checking the gate…», «Approving…», «Preparing questions…»
+   * — which is feedback; and one second is not a wait anybody needs an escape hatch from. From the
+   * second the wait is real, so is the way out of it.
+   */
+  waiting: boolean;
   send: (action: string, url: string, body?: unknown) => Promise<SessionRequestResult>;
   /** Stops waiting. The request is aborted; whatever it started on the server is not. */
   abandon: () => void;
@@ -41,6 +56,16 @@ export function useSessionRequest(deadlineMs?: number): UseSessionRequest {
   const [state, setState] = useState<SessionRequestState>(initialSessionRequestState);
   /** Last tick of the clock, written only by the interval — never from an effect body. */
   const [tickedAt, setTickedAt] = useState(0);
+  /**
+   * Which request has been running long enough to be called a wait — its `startedAt`, not a flag.
+   *
+   * A boolean would have to be cleared when a request settles, and clearing it is a `setState` in
+   * an effect body, which this codebase does not do (`react-hooks/set-state-in-effect`, and D-164's
+   * reasoning behind it). Storing *which* request crossed the second lets `waiting` be derived at
+   * render time by comparison — the same shape `elapsedSeconds` below already uses, and it is
+   * self-clearing: a new request has a new `startedAt`, and no request at all has none.
+   */
+  const [waitingSince, setWaitingSince] = useState<number | null>(null);
   const requestRef = useRef<SessionRequest | null>(null);
 
   const getRequest = useCallback((): SessionRequest => {
@@ -68,14 +93,28 @@ export function useSessionRequest(deadlineMs?: number): UseSessionRequest {
   useEffect(() => {
     if (startedAt === null) return;
 
+    /*
+     * The two timers are armed together and cleared together, so «the block is on screen» and «the
+     * number it prints is ≥ 1» can never disagree. Deriving the first from the second instead would
+     * be reading a boolean out of a counter whose zero is an artefact of its initial value — which
+     * is precisely how the «0 s» flash got here.
+     */
+    const shown = setTimeout(() => {
+      setWaitingSince(startedAt);
+    }, 1000);
+
     const handle = setInterval(() => {
       setTickedAt(Date.now());
     }, 1000);
 
     return () => {
+      clearTimeout(shown);
       clearInterval(handle);
     };
   }, [startedAt]);
+
+  /** See `waitingSince`: true only for the request that is still running a second on. */
+  const waiting = startedAt !== null && waitingSince === startedAt;
 
   /*
    * Zero until the first tick lands, and zero again the moment nothing is running: a stale
@@ -105,5 +144,5 @@ export function useSessionRequest(deadlineMs?: number): UseSessionRequest {
     requestRef.current?.dismiss();
   }, []);
 
-  return { state, elapsedSeconds, send, abandon, dismiss };
+  return { state, elapsedSeconds, waiting, send, abandon, dismiss };
 }

@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import {
   createSignedInUser,
   draftAndApprove,
+  openRefine,
   reachDrafting,
   signIn,
   startSession,
@@ -25,6 +26,7 @@ async function twoRevisions(page: Page): Promise<void> {
   await reachDrafting(page);
   await draftAndApprove(page);
 
+  await openRefine(page);
   await page.getByTestId('refine-instruction').fill('Add a non-goals section under the overview.');
   await page.getByTestId('submit-refinement').click();
   await expect(page.getByTestId('diff-body')).toBeVisible({ timeout: 40_000 });
@@ -82,6 +84,7 @@ test.describe('going back a step', () => {
 
     await reachDrafting(page);
     await draftAndApprove(page);
+    await openRefine(page);
     await page
       .getByTestId('refine-instruction')
       .fill('Add a non-goals section under the overview.');
@@ -124,6 +127,7 @@ test.describe('going back a step', () => {
     await draftAndApprove(page);
     await expect(page.getByTestId('specs-panel-diff')).toHaveCount(0);
 
+    await openRefine(page);
     await page
       .getByTestId('refine-instruction')
       .fill('Add a non-goals section under the overview.');

@@ -250,44 +250,74 @@ export function RefineBox({ specFileId }: { specFileId: string }) {
     }
   }
 
+  /*
+   * Folded behind its own heading (task 142).
+   *
+   * The box was a permanently open textarea in a card of its own, stacked under two other cards
+   * that each had a loud button. It is not a step of the journey — it is a thing you can do at any
+   * point once a document exists — and a surface that is always available should not be as loud as
+   * the one thing the session is actually waiting for.
+   *
+   * `<details>` for the reason this codebase has already written down for the review groups: it
+   * opens before hydration, and on this page hydration is genuinely not instant (the viewer arrives
+   * as its own chunk). The one thing a fold must never do is swallow something the user needs to
+   * read, so it is forced open whenever it has an answer, an error, or typed text in it — a
+   * disclosure that hides a refusal would be D-97 all over again.
+   */
+  const speaking = question !== null || error !== null || instruction.trim() !== '';
+
   return (
-    <div
-      className="border-border-subtle flex w-full flex-col gap-2 rounded-xl border border-dashed p-4"
+    <details
+      className="border-border-subtle w-full rounded-xl border border-dashed p-4"
       data-testid="refine-card"
+      open={speaking}
     >
-      <Label htmlFor="refine-instruction">Refine a file — say what should change</Label>
-      <Textarea
-        id="refine-instruction"
-        data-testid="refine-instruction"
-        value={instruction}
-        onChange={(event) => {
-          setInstruction(event.target.value);
-        }}
-        placeholder="Add a non-goals section under the overview."
-      />
+      <summary className="text-foreground-muted cursor-pointer text-sm" data-testid="refine-toggle">
+        Refine a file — say what should change
+      </summary>
 
-      {question !== null && (
-        <p data-testid="refine-question" className="text-sm">
-          {question}
-        </p>
-      )}
+      <div className="mt-3 flex w-full flex-col gap-2">
+        <Label htmlFor="refine-instruction" className="sr-only">
+          Refine a file — say what should change
+        </Label>
+        <Textarea
+          id="refine-instruction"
+          data-testid="refine-instruction"
+          value={instruction}
+          onChange={(event) => {
+            setInstruction(event.target.value);
+          }}
+          placeholder="Add a non-goals section under the overview."
+        />
 
-      {error !== null && (
-        <p role="alert" data-testid="refine-error" className="text-sm text-danger-ink">
-          {error}
-        </p>
-      )}
+        {question !== null && (
+          <p data-testid="refine-question" className="text-sm">
+            {question}
+          </p>
+        )}
 
-      <Button
-        data-testid="submit-refinement"
-        disabled={busy || instruction.trim() === ''}
-        onClick={() => {
-          void submit();
-        }}
-        className="self-start"
-      >
-        {busy ? 'Working…' : 'Propose change'}
-      </Button>
-    </div>
+        {error !== null && (
+          <p role="alert" data-testid="refine-error" className="text-sm text-danger-ink">
+            {error}
+          </p>
+        )}
+
+        {/*
+          Never the loud one. Refinement is always available and therefore never the next step; the
+          tail decides what is (see `tail-primary.ts`).
+        */}
+        <Button
+          variant="secondary"
+          data-testid="submit-refinement"
+          disabled={busy || instruction.trim() === ''}
+          onClick={() => {
+            void submit();
+          }}
+          className="self-start"
+        >
+          {busy ? 'Working…' : 'Propose change'}
+        </Button>
+      </div>
+    </details>
   );
 }

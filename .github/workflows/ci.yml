@@ -90,7 +90,14 @@ jobs:
     # at the ceiling that read as a red gate while saying nothing except «the box is too small»
     # (D-200/D-201). One engine on its own runner finishes in a third of that, so the box is now sized
     # for one engine plus its retries instead of for the sum of three (А-15).
-    timeout-minutes: 30
+    #
+    # 30 → 55 in task 142's PR, on a measurement rather than a hunch: a green chromium job spent
+    # 17 m 02 s in the tests and 4 m 06 s installing system dependencies, leaving nine minutes of
+    # slack — less than one retried test. The box was again sized to report «too small» before it
+    # reported anything about the product. The apt step below owns its own 25-minute bound, and
+    # WebKit's tests take about eighteen minutes, so 55 is that worst case with room left over; on a
+    # healthy runner the job still finishes in under twenty.
+    timeout-minutes: 55
 
     strategy:
       # One engine's failure must not cancel the other two. The whole value of the split is that a
@@ -132,9 +139,43 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps ${{ matrix.engine }}
 
+      # The engine belongs here too, and its absence cost half an hour (task 142's PR).
+      #
+      # A cached browser still needs its system libraries, but `install-deps` with no argument
+      # installs them for **all three** engines — including WebKit's GTK and GStreamer stack, which
+      # is the bulk of it. The job that got a cache hit therefore did the most apt work of the three,
+      # and on one run that took 29 m 32 s and was killed by the 30-minute job timeout without
+      # reaching a single test, while the two jobs that missed the cache installed one engine's
+      # dependencies each through `--with-deps` above and finished in about seventeen minutes.
+      # A red gate that means "apt was slow installing browsers this job does not run" is exactly
+      # the uninformative verdict D-201 and D-202 were about.
+      #
+      # Bounded, and deliberately NOT retried — the retry was tried on this very PR and made things
+      # worse, which is worth writing down rather than quietly deleting.
+      #
+      # The failure this step has is a hang: `install-deps` is `apt-get update` plus `apt-get
+      # install`, and a mirror that stops answering leaves it sitting. Wrapping one attempt in
+      # `timeout 300` and looping three times looked obvious and was not: `timeout` kills the command
+      # it launched, but `apt-get` is a *grandchild*, so it survived the kill still holding
+      # `/var/lib/apt/lists/lock`, and attempts two and three failed in seconds with «Could not get
+      # lock … held by process 2275 (apt-get)». A retry that is guaranteed to fail is worse than no
+      # retry, because it reads like the problem was given three chances.
+      #
+      # So: one attempt, with a bound the *step* owns. A stalled mirror is reported as this step
+      # timing out, leaving the rest of the job's budget unspent and the fix obvious — re-run this
+      # one engine (D-202 made that cheap).
+      #
+      # The bound is 25 minutes and not the 12 it was first set to, because the first number was
+      # measured on the wrong engine. Chromium's dependencies install in about four minutes; WebKit's
+      # set is several times larger (GTK, GStreamer, PipeWire, SDL, a soundfont), and on a slow
+      # `azure.archive.ubuntu.com` it was still **making progress** — package 126, one every ten to
+      # twenty seconds — when twelve minutes ran out. A bound that cuts off a step which is visibly
+      # working is the same defect as no bound at all, pointing the other way: it reports a red gate
+      # for a mirror having a bad afternoon. On a healthy runner none of this costs anything.
       - name: Install Playwright system dependencies
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps
+        timeout-minutes: 25
+        run: pnpm exec playwright install-deps ${{ matrix.engine }}
 
       # NFR-011 / SC-12: the smoke test runs on all three engines — one job each now, same three
       # Playwright projects. Edge is covered by the Chromium project (see playwright.config.ts).

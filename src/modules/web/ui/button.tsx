@@ -50,6 +50,16 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <button
       ref={ref}
       type={type}
+      /*
+       * The variant, on the element (task 142).
+       *
+       * «One primary action per state» is the kind of rule that decays the moment nobody can see it
+       * breaking, and it had: three surfaces each reached for `<Button>` without a variant, the cva
+       * default is `primary`, and the customer's screenshot had three of them stacked. This
+       * attribute is what makes the rule countable from outside — `[data-variant="primary"]` in a
+       * walk — so the next surface that forgets is caught by a test rather than by a screenshot.
+       */
+      data-variant={variant ?? 'primary'}
       className={cn(buttonVariants({ variant, size }), className)}
       {...props}
     />

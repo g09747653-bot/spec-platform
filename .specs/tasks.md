@@ -1693,6 +1693,43 @@ Goal: the customer personally walked the product end-to-end — mechanics confir
   - _Dependencies: 136–139, 141_ · _Requirements: А-2.1; А-14_ · _Touches: `e2e/**`, `artifacts/gate-M12/**`_ · _Complexity: Large_ · _Parallel-safe: no_
 
 
+### Milestone 13п — Interview modes, the autonomous subject, defects & RU locale (Architect, 2026-08-18; режим сессии — ULTRACODE по приказу заказчика)
+
+Goal: the customer's second hands-on pass plus his video demo (`video demo/Desktop 2026.08.18 - 18.29.26.06.mp4`, on this machine — extract frames/audio locally and study it FIRST, before any task below). Four workstreams: reported defects, native RU chrome, a third «concrete» interview mode, and the **autonomous generation mode — the subject Программа А will drive**, which is why the customer ordered ultracode: prompts and autonomy must be built at ensemble quality, not first-draft quality. Note discovered from the customer's saved page: his browser AUTO-TRANSLATES our English chrome (the «врата» comedy is Google Translate) — locale work below removes that entire failure class.
+
+- [x] 142\. Reported defects and state clarity
+  - **Raw view clipping** (скриншот 3): in Raw the pane slides right — part of the window is eaten off-screen and long lines never fit. Root-cause the pane width/overflow chain; long lines get horizontal scroll INSIDE the code well, the pane itself never exceeds the viewport. e2e measures the pane's right edge ≤ viewport at three widths.
+  - **Superseded vs active review boards** (скриншот 1, разобрано по HTML — поведение задумано, подача провалена): a superseded board gets an explicit badge («Superseded — a newer review is below» / «Устаревший обзор — новый ниже»), dimmed and collapsed by default; the active board is visually distinct with its checkboxes and three buttons always visible together. The «This review is no longer the one in front of you» copy is replaced by the badge.
+  - **Stage-panel hierarchy** (скриншот 2): after approval the panel stacks «Generate» + gate-wait block + refinement into a confusing pile. Restructure: ONE primary action per state, secondary actions visually secondary, the gate-wait block appears only while an actual wait is in flight (never idles at «0 seconds»), refinement collapsed behind its header. Study the video for how the reference sequences this surface.
+  - Acceptance Criteria: three e2e repros (Raw clipping, superseded-board distinction, single-primary-action per panel state); a screenshot set of the reworked panel states.
+  - _Dependencies: 140_ · _Requirements: рекламации 2026-08-18; D-112_ · _Touches: `src/modules/web/**`_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [ ] 143\. Native Russian chrome (рукописная локализация)
+  - Full RU locale for every UI string (chrome, empty states, tooltips, shortcut list, error notices) — hand-written by the model at ensemble quality, not machine-translated; locale switch persisted in the UI-state module (default: ru for this deployment); У-1 content language stays independent of chrome locale.
+  - String extraction becomes a lint-enforced registry (no literal UI strings in components), so a new surface cannot ship untranslated silently.
+  - Acceptance Criteria: walking the full journey with locale=ru shows zero English chrome (e2e asserts a curated list of surfaces); gate-copy/ReasonCode explanations localized; auto-translate no longer has anything to mangle; both locales pass the existing e2e suite.
+  - _Dependencies: 142_ · _Requirements: рекламации (автоперевод); У-1_ · _Touches: `src/modules/web/**`, string registry (new)_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [ ] 144\. Third interview mode — «Concrete» (по видео и формулировке заказчика)
+  - A third question style alongside the existing two profiles: **always tight and practical** — asks specifically WHAT to build, HOW the user wants it implemented and HOW they will use it; consistent direct second-person voice (никаких «что должен чувствовать муравей»); options remain but lean to implementation choices; answers may carry **справки** (short reference notes attached to an answer — the video shows answers that include context, not bare picks).
+  - Built at ensemble quality (ultracode): generate N candidate prompt variants, judge panel scores them on concreteness/voice-consistency/actionability against transcripts of both reference sessions, best variant ships; the losers' best questions are folded in.
+  - Style is chosen at chat creation next to the audience profile; existing modes untouched.
+  - Acceptance Criteria: a live round in Concrete mode produces only implementation-and-usage questions (judged by a scripted rubric over 3 live rounds); voice is uniformly second-person (lint over the round text in tests); справки render attached to options and survive submit/reload.
+  - _Dependencies: 142_ · _Requirements: директива заказчика 2026-08-18; видео-демо_ · _Touches: `src/modules/agents/interview/**`, round schema (optional fields)_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [ ] 145\. Autonomous generation mode — the Программа А subject
+  - A per-chat mode in which the AI drives the whole journey from the seed prompt alone: it answers its own interview rounds (each auto-answer recorded in the feed with a one-line rationale — the transparency IS the product), auto-decides reviews (Must Fix → request changes until Pass, bounded by the existing cycle budgets; recommendations judged against the seed), and carries the session seed → complete bundle **with zero human clicks**.
+  - Human sovereignty preserved: the run is watchable live; Stop at any point drops the session into normal manual mode at exactly that position; every existing gate/budget/contract holds — autonomy is a driver over the same machine, never a bypass (P1/P2: the gates stay the law, the driver is just another user).
+  - The driver itself is an agent module (prompt + policy) — built and red-teamed at ensemble quality (ultracode): adversarial panel attacks it with vague seeds, contradictory seeds, hostile seeds; failure modes get named handling, not hopes.
+  - Acceptance Criteria: a live autonomous run from a one-sentence seed reaches Session completed without any click, on the gate chain, within budgets; feed shows every auto-decision with rationale; Stop mid-run converts to manual cleanly (e2e); a hostile-seed corpus produces refusals/honest stops, never runaway loops; the bundle passes the structural checks and linters as usual.
+  - _Dependencies: 144_ · _Requirements: А-7 (Программа А); North Star этап 2_ · _Touches: `src/modules/agents/autonomous/**` (new), `src/modules/web/**` (mode surface)_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [ ] 146\. M13п gate — ultracode red-team + live walks (self-run, А-2.1)
+  - Video-demo conformance check first (the panel-preview flow and answer types per the video — list what the video shows vs what we ship, disposition each). Then the ultracode red-team pass over the two new agents (Concrete interviewer, autonomous driver) and the reworked surfaces; then live walks: one manual journey in Concrete mode + one full autonomous run, both themes, RU locale, gate profile (fresh key first, smallest passing local model).
+  - Acceptance Criteria: red-team findings all dispositioned; both live walks GREEN (zero truncations/structural rejections, clean console); artifacts `artifacts/gate-M13/`; customer's eyes-acceptance follows the Architect's artifact verification.
+  - _Dependencies: 142–145_ · _Requirements: А-2.1; А-16_ · _Touches: `e2e/**`, `artifacts/gate-M13/**`_ · _Complexity: Large_ · _Parallel-safe: no_
+
+
 ## Requirement Coverage
 
 Every functional requirement maps to at least one task.

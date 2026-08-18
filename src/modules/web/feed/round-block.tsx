@@ -196,7 +196,7 @@ export function RoundBlock({
   );
   const [replyMode, setReplyMode] = useState(false);
   const [reply, setReply] = useState('');
-  const { state: request, elapsedSeconds, send, abandon } = useSessionRequest(deadlineMs);
+  const { state: request, elapsedSeconds, waiting, send, abandon } = useSessionRequest(deadlineMs);
 
   const busy = request.running;
   const error = request.notice;
@@ -398,9 +398,9 @@ export function RoundBlock({
             Round 5, Р-3. The card is the whole of what is on screen while it waits, so a submission
             that hangs takes every other control with it unless the way out is here.
           */}
-          {busy !== null && (
+          {waiting && (
             <WaitingOn
-              what={WAITING_FOR[busy] ?? 'the server'}
+              what={WAITING_FOR[busy ?? ''] ?? 'the server'}
               elapsedSeconds={elapsedSeconds}
               onStop={abandon}
             />

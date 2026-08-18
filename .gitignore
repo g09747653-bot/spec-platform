@@ -59,3 +59,8 @@ artifacts/**/trace.zip
 # megabytes of saved HTML that any reader can reproduce with one `unzip` is not history worth
 # keeping twice.
 .specs/research/etalon-design/
+
+# The customer's screen recordings — reference material, handed over on this machine.
+# ~200 MB each: in git history that is permanent, and the discussion of them lives in
+# `.specs/research/` instead (see `video-demo-2026-08-18.md`).
+video demo/

@@ -7,6 +7,8 @@ import { Input, Label } from '../ui/field';
 import { WaitingOn } from '../session/waiting-on';
 import { useSessionRequest } from '../session/useSessionRequest';
 
+import type { TailPrimary } from './tail-primary';
+
 /**
  * What moves the session on, at the tail of the conversation (task 105).
  *
@@ -58,9 +60,12 @@ export function StageActions({
   actions,
   awaitingRound,
   deadlineMs,
+  primary = null,
 }: {
   sessionId: string;
   actions: StageActionsModel;
+  /** Which control the tail says is the loud one (task 142); see `tail-primary.ts`. */
+  primary?: TailPrimary;
   /**
    * Whether a question card is waiting for the user (the feed's `pending-round` tail).
    *
@@ -73,7 +78,7 @@ export function StageActions({
   awaitingRound: boolean;
   deadlineMs: number;
 }) {
-  const { state, elapsedSeconds, send, abandon } = useSessionRequest(deadlineMs);
+  const { state, elapsedSeconds, waiting, send, abandon } = useSessionRequest(deadlineMs);
   const [fallbackText, setFallbackText] = useState<Record<string, string>>({});
 
   const busy = state.running;
@@ -156,7 +161,7 @@ export function StageActions({
             </div>
           ))}
           <Button
-            variant="secondary"
+            variant={primary === 'fallback-submit' ? 'primary' : 'secondary'}
             data-testid="fallback-submit"
             disabled={
               busy === 'fallback' ||
@@ -179,6 +184,7 @@ export function StageActions({
       <div className="flex flex-wrap items-center gap-2">
         {asking && !awaitingRound && actions.canAskMore && (
           <Button
+            variant={primary === 'ask-round' ? 'primary' : 'secondary'}
             data-testid="ask-round"
             disabled={busy === 'ask'}
             onClick={() => {
@@ -219,7 +225,14 @@ export function StageActions({
 
         {actions.target !== null && !awaitingRound && (
           <Button
-            variant={actions.target.ready ? 'primary' : 'secondary'}
+            /*
+              The door is loud when it is the next step and quiet when something else is — not when
+              the gate happens to hold. Those were the same thing often enough for the old rule to
+              look right, and different exactly where it mattered: immediately after an approval the
+              gate holds AND Generate was still primary, so the state the customer screenshotted had
+              two loud buttons for the same reason the rule was written.
+            */
+            variant={primary === 'proceed' ? 'primary' : 'secondary'}
             data-testid="proceed"
             disabled={busy === 'proceed'}
             onClick={() => {
@@ -247,13 +260,17 @@ export function StageActions({
       </div>
 
       {/*
-        The way out, offered for as long as anything this bar started is running (Р-3 item 2). It is
+        The way out, offered for as long as this is a wait (Р-3 item 2, narrowed by task 142). It is
         rendered outside the row above so it cannot be mistaken for another action: it is not another
         thing to do, it is permission to stop doing this one.
+
+        `waiting` rather than `busy !== null`: the block used to appear on the same frame as the
+        click, when the only reading it could print was «0 s», and on a request that answered in
+        300 ms that reading was also its last. See `useSessionRequest`.
       */}
-      {busy !== null && (
+      {waiting && (
         <WaitingOn
-          what={WAITING_FOR[busy] ?? 'the server'}
+          what={WAITING_FOR[busy ?? ''] ?? 'the server'}
           elapsedSeconds={elapsedSeconds}
           onStop={abandon}
         />

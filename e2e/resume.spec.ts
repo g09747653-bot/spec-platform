@@ -3,6 +3,7 @@ import { Client } from 'pg';
 
 import {
   createSignedInUser,
+  openRefine,
   reachDrafting,
   reauthenticate,
   signIn,
@@ -179,6 +180,7 @@ test.describe('session resume', () => {
     await page.getByTestId('approve-spec').click();
     await expect(page.getByTestId('spec-card')).toContainText('approved');
 
+    await openRefine(page);
     await page.getByTestId('refine-instruction').fill('Add a section about non-goals.');
     await page.getByTestId('submit-refinement').click();
     await expect(page.getByTestId('diff-card')).toBeVisible({ timeout: 20_000 });

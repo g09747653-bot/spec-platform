@@ -46,6 +46,7 @@ import { RevertCard, type RevertModel } from './revert-card';
 import { ReviewBlockCard } from './review-block';
 import { RoundBlock } from './round-block';
 import { StageActions, type StageActionsModel } from './stage-actions';
+import { tailPrimary } from './tail-primary';
 
 /**
  * The session surface: one conversation, a docked composer, and a right-hand pane (tasks 105, 137).
@@ -252,6 +253,35 @@ function SessionSurface({
   const newestDocument = [...body]
     .reverse()
     .find((block): block is Extract<FeedBlock, { kind: 'document' }> => block.kind === 'document');
+
+  /*
+   * The one loud control, worked out once (task 142).
+   *
+   * Every surface below is handed the answer rather than reaching for `<Button>` and getting the
+   * cva default. `tail-primary.ts` holds the table and its unit tests; what belongs here is only the
+   * gathering of the facts it reads, all of which the page has already computed.
+   */
+  const primary = tailPrimary({
+    tail,
+    canGenerate,
+    revisionOwed: feed.revisionOwed !== null && feed.revisionOwed.specType === feed.position.stage,
+    // This stage's own newest document — an approved constitution says nothing about a draft tasks.
+    documentApproved:
+      [...body]
+        .reverse()
+        .find(
+          (block): block is Extract<FeedBlock, { kind: 'document' }> =>
+            block.kind === 'document' && block.specType === feed.position.stage,
+        )?.approved ?? false,
+    asking: actions.askingStage !== null,
+    canAskMore: actions.canAskMore,
+    fallbackOffered:
+      actions.askingStage !== null &&
+      !blocked &&
+      !actions.canAskMore &&
+      actions.unmetNeeds.length > 0,
+    hasTarget: actions.target !== null,
+  });
 
   /*
    * Keyboard shortcuts (task 141).
@@ -472,7 +502,25 @@ function SessionSurface({
   return (
     <MethodologyNaming methodologyId={methodologyId}>
       <ViewerControlProvider value={{ open: openViewer, openTarget: viewer }}>
-        <div className="flex min-h-0 flex-1" data-testid="session-panes">
+        {/*
+          `min-w-0` is the whole of the Raw-clipping fix, and it belongs here rather than on any of
+          the surfaces that showed the symptom (task 142).
+
+          The row is a flex item of the page's own `session` row, with `flex: 1 1 0%`. Without this
+          class its automatic minimum size is content-based — and the content it is measured against
+          is the viewer pane, whose width is `clamp(26rem, 44%, 52rem)`. A percentage is indefinite
+          while intrinsic sizes are being computed, so the middle term falls back to the pane's
+          contents, and the widest of those is the Raw view's `<pre>`, which does not wrap. A single
+          1 200-character `_Touches:_` line therefore sized this row to twenty-eight thousand pixels:
+          the conversation column, being `flex-1`, swallowed the surplus and carried the pane off the
+          right-hand edge, where the frame's `overflow-hidden` ate it. Measured before the fix: the
+          pane's right edge at 28 516 px in a 1 280 px window, its own width unchanged at 832.
+
+          So the defect was never in the pane or in the `<pre>`; both behaved. What was missing was
+          the instruction, at the one place a row learns it, that this row is as wide as the window
+          and its children are the ones that scroll. `e2e/bug-hunt-M13.spec.ts` measures it.
+        */}
+        <div className="flex min-h-0 min-w-0 flex-1" data-testid="session-panes">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             {/* Pinned: the title, the pills and the collapse control never scroll away. */}
             <div className="border-border-subtle bg-surface shrink-0 border-b px-4 py-2.5">
@@ -505,6 +553,7 @@ function SessionSurface({
                       canGenerate={canGenerate}
                       blocked={blocked}
                       revisionOwed={feed.revisionOwed}
+                      primary={primary}
                     />
                   </li>
                 )}
@@ -515,6 +564,7 @@ function SessionSurface({
                     actions={actions}
                     awaitingRound={blocked}
                     deadlineMs={deadlineMs}
+                    primary={primary}
                   />
                 </li>
 
