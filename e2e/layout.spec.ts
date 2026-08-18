@@ -71,6 +71,47 @@ test.describe('the session shell', () => {
     await expect(page.getByTestId('sidebar-panel')).toBeVisible();
   });
 
+  /**
+   * The width a first visit gets — the branch every new user takes and no test took (M12п walk).
+   *
+   * The pre-paint script (D-198) exists to put a *stored* width on screen before React can, and it
+   * guarded on the number rather than on the string: `Number(null)` is `0`, `isFinite(0)` is true,
+   * so «nothing stored» went through the clamp and came out as the minimum. Every first visit was
+   * painted at 220 px where the stylesheet declares 300 — measured on a live walk, because every
+   * test on this path wrote a width into storage before reloading and none of them ever asked what
+   * happens when there is nothing there.
+   */
+  test('a first visit is painted at the stylesheet default, not the clamp floor (task 141)', async ({
+    page,
+    context,
+  }) => {
+    await signIn(context, await createSignedInUser('shell'));
+    await page.setViewportSize({ width: 1280, height: 800 });
+
+    await startSession(page, 'A tool opened for the very first time');
+
+    const first = await page.evaluate(() => {
+      const root = document.documentElement;
+      const column = document.querySelector('[data-testid="session-sidebar"]');
+
+      return {
+        stored: window.localStorage.getItem('spec-platform:sidebar-width'),
+        // What the script wrote, if anything: it sets the property inline on <html>.
+        written: root.style.getPropertyValue('--sidebar-width'),
+        declared: getComputedStyle(root).getPropertyValue('--sidebar-width').trim(),
+        column: Math.round(column?.getBoundingClientRect().width ?? 0),
+      };
+    });
+
+    expect(first.stored, 'this context has never dragged the handle').toBeNull();
+    expect(first.written, 'with nothing stored the script must write nothing').toBe('');
+    expect(first.column, 'the column is painted at the width the stylesheet declares').toBe(
+      Number.parseInt(first.declared, 10),
+    );
+    // The defect painted exactly the clamp's floor, which is what made it look deliberate.
+    expect(first.column, 'and that width is not the minimum').toBeGreaterThan(220);
+  });
+
   test('the collapse control stays reachable on a long conversation (task 136)', async ({
     page,
     context,

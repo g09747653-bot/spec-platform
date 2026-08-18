@@ -1685,7 +1685,7 @@ Goal: the customer personally walked the product end-to-end — mechanics confir
   - Acceptance Criteria: no page-level scrollbar on the session surface at 1280×800 — panes scroll internally; fully operable at 1000×700 without horizontal scroll; every shortcut works and is listed in-app; UI state survives reload through a single persistence module; the report names what a desktop wrapper would still need.
   - _Dependencies: 137_ · _Requirements: А-14.1 (будущая адаптация в desktop)_ · _Touches: `src/modules/web/**` (shell, persistence)_ · _Complexity: Large_ · _Parallel-safe: no_
 
-- [ ] 140\. M12п gate — scripted bug hunt + live walk (self-run, А-2.1)
+- [x] 140\. M12п gate — scripted bug hunt + live walk (self-run, А-2.1)
   - The customer's directive: «сразу протестировать на баги». Beyond the standard walk, run a destructive pass: collapse/expand and resize everything repeatedly, reload at every state, switch themes mid-generation, open/close the viewer during streaming, drive Edit and revert, spam the composer — every found defect is fixed with a regression test, every non-trivial one journaled.
   - Then the standard short live walk (gate profile: fresh key first, smallest passing local model) on the final visuals.
   - Acceptance Criteria: bug-hunt log with disposition per finding; live walk GREEN (zero truncations/structural rejections/console errors); artifacts `artifacts/gate-M12/` incl. both-themes screens; CI green.

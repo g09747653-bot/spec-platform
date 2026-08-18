@@ -83,14 +83,23 @@ jobs:
           if-no-files-found: ignore
 
   e2e:
-    name: End-to-end (Chromium, Firefox, WebKit)
+    name: E2E (${{ matrix.engine }})
     runs-on: ubuntu-latest
-    # Raised from 45 in M12п. The last green run took 36 minutes, so 45 was nine minutes of
-    # headroom on a suite that grows every milestone — and M12п's fifteen new tests across three
-    # engines spent it, which reads as a red gate rather than as a suite that outgrew its box.
-    # Sixty is headroom again; if it is ever spent, the answer is to split the matrix by engine
-    # rather than to keep adding minutes.
-    timeout-minutes: 60
+    # 90 → 30, and the drop is the point. The monolith ran three engines serially on one runner:
+    # ~46 minutes green, an hour when one flaky Firefox test spent its two retries, and a cancellation
+    # at the ceiling that read as a red gate while saying nothing except «the box is too small»
+    # (D-200/D-201). One engine on its own runner finishes in a third of that, so the box is now sized
+    # for one engine plus its retries instead of for the sum of three (А-15).
+    timeout-minutes: 30
+
+    strategy:
+      # One engine's failure must not cancel the other two. The whole value of the split is that a
+      # WebKit-only defect is reported as a WebKit-only defect with the other two verdicts still on
+      # the record — D-198/D-199 were exactly that shape, and under fail-fast they would have arrived
+      # as two cancellations and a mystery.
+      fail-fast: false
+      matrix:
+        engine: [chromium, firefox, webkit]
 
     steps:
       - uses: actions/checkout@v5
@@ -109,31 +118,61 @@ jobs:
         id: playwright
         run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
 
+      # The engine belongs in the cache key. Each job now downloads one browser, so three jobs sharing
+      # one key would let whichever finished first save a cache holding only its own engine — and the
+      # other two would take that as a hit, skip the install and fail on a browser that is not there.
       - name: Cache Playwright browsers
         id: playwright-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ matrix.engine }}
 
-      - name: Install Playwright browsers
+      - name: Install Playwright browser
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium firefox webkit
+        run: pnpm exec playwright install --with-deps ${{ matrix.engine }}
 
       - name: Install Playwright system dependencies
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps
 
-      # NFR-011 / SC-12: the smoke test runs on all three engines. Edge is covered by the
-      # Chromium project (see playwright.config.ts).
+      # NFR-011 / SC-12: the smoke test runs on all three engines — one job each now, same three
+      # Playwright projects. Edge is covered by the Chromium project (see playwright.config.ts).
       - name: End-to-end tests
-        run: pnpm test:e2e
+        run: pnpm test:e2e --project=${{ matrix.engine }}
 
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.engine }}
           path: playwright-report/
           retention-days: 7
           if-no-files-found: ignore
+
+  # The branch-protection gate for the suite above.
+  #
+  # `main` requires a status check named «End-to-end (Chromium, Firefox, WebKit)» by that exact name,
+  # and the executor account has push but not admin — the required-checks list cannot be rewritten
+  # from here (D-202; the exact UI steps for the owner are a section of the M12п report). So this job
+  # carries the required name and reports the matrix's combined verdict. Strictness is unchanged:
+  # three engines still have to pass, and this gate is red unless every one of them did.
+  #
+  # `if: always()` is load-bearing. Without it, a failed engine leaves this job *skipped*, and branch
+  # protection counts a skipped required check as satisfied — the split would have quietly become a
+  # way to merge a red suite. It runs regardless and asserts the verdict explicitly.
+  e2e-gate:
+    name: End-to-end (Chromium, Firefox, WebKit)
+    runs-on: ubuntu-latest
+    needs: e2e
+    if: always()
+    timeout-minutes: 5
+
+    steps:
+      # `needs.e2e.result` is the matrix's aggregate: `success` only when every engine succeeded,
+      # and `failure`/`cancelled`/`skipped` the moment one did not.
+      - name: Every engine passed
+        run: |
+          result='${{ needs.e2e.result }}'
+          echo "Engine matrix verdict: $result"
+          test "$result" = success
