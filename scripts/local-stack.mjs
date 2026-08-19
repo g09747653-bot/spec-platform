@@ -25,6 +25,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { get } from 'node:http';
+import { setTimeout as delay } from 'node:timers/promises';
 import { createConnection } from 'node:net';
 
 const COMMAND = process.argv[2] ?? '';
@@ -37,8 +38,6 @@ const STATE_DIR = '.local';
 const PID_FILE = `${STATE_DIR}/stack.json`;
 
 const say = (line) => console.log(line);
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Whether anything answers on a local TCP port. */
 function portInUse(port) {
@@ -56,7 +55,7 @@ async function waitForPort(port, label, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await portInUse(port)) return;
-    await sleep(300);
+    await delay(300);
   }
   throw new Error(`${label} не открыл порт ${String(port)} за ${String(timeoutMs / 1000)} секунд`);
 }
@@ -86,7 +85,7 @@ function waitForHttp(port, timeoutMs, stillRunning) {
         if (Date.now() > deadline) {
           reject(new Error(`приложение не ответило на порту ${String(port)}`));
         } else {
-          setTimeout(attempt, 500);
+          void delay(500).then(attempt);
         }
       });
     };
