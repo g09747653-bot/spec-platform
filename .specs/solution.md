@@ -1107,6 +1107,7 @@ All configuration is environment-based and Zod-validated at startup; the process
 | Variable | Purpose |
 |---|---|
 | `DATABASE_URL` | Neon connection string |
+| `LOCAL_SINGLE_USER` | Local single-user deployment (task 148; А-7 §4; А-20). Boot-time flag: every session-less request resolves to one fixed local owner at the `currentOwnerScope()` seam, the OAuth surface refuses, and the five `AUTH_*` variables below stop being required. Off (default) — hosted behaviour, byte-identical to before the flag existed |
 | `AUTH_SECRET`, `AUTH_URL` | Auth.js |
 | `AUTH_GOOGLE_ID` / `_SECRET` | Google OAuth |
 | `AUTH_GITHUB_ID` / `_SECRET` | GitHub OAuth |

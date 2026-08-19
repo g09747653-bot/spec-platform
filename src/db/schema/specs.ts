@@ -14,7 +14,7 @@ import {
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
-import { EXPORT_MODES } from '@/modules/specs/model/export';
+import { RECORDED_EXPORT_MODES } from '@/modules/specs/model/export';
 import { PROPOSAL_STATUSES, REVIEW_DECISIONS, REVIEW_OUTCOMES } from '@/modules/specs/model/review';
 import { REVISION_ORIGINS, SPEC_FILE_NAMES, SPEC_TYPES } from '@/modules/specs/model/spec-files';
 
@@ -364,7 +364,7 @@ export const exportRecords = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   },
   (table) => [
-    check('export_records_mode_valid', sql`${table.mode} IN (${list(EXPORT_MODES)})`),
+    check('export_records_mode_valid', sql`${table.mode} IN (${list(RECORDED_EXPORT_MODES)})`),
     check('export_records_included_is_array', sql`jsonb_typeof(${table.includedFiles}) = 'array'`),
     check('export_records_omitted_is_array', sql`jsonb_typeof(${table.omittedFiles}) = 'array'`),
     index('export_records_project_id_idx').on(table.projectId),

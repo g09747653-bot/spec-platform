@@ -132,16 +132,49 @@ const required = (description: string) =>
  */
 export const NO_CREDENTIAL = 'none';
 
+/**
+ * The OAuth surface's own variables, named beside what each one is (task 148).
+ *
+ * A map rather than five `required(...)` fields, because their obligation is now conditional: a
+ * deployment serves OAuth or it is a local single-user one, and only the first kind has any use for
+ * a client secret. `requireAuthVariables` below enforces presence exactly where `required()` used
+ * to — same paths, same messages — so a deployment with the flag unset fails byte-identically.
+ */
+const AUTH_VARIABLES = Object.freeze({
+  AUTH_SECRET: 'a random secret for Auth.js (openssl rand -base64 32)',
+  AUTH_GOOGLE_ID: 'the Google OAuth client id',
+  AUTH_GOOGLE_SECRET: 'the Google OAuth client secret',
+  AUTH_GITHUB_ID: 'the GitHub OAuth client id',
+  AUTH_GITHUB_SECRET: 'the GitHub OAuth client secret',
+} as const);
+
 const baseEnvSchema = z.object({
   // --- Required from Milestone 0 ---
   DATABASE_URL: required('the Neon connection string for this environment'),
 
-  // --- Auth.js — required from Milestone 1 (task 12), per D-8 ---
-  AUTH_SECRET: required('a random secret for Auth.js (openssl rand -base64 32)'),
-  AUTH_GOOGLE_ID: required('the Google OAuth client id'),
-  AUTH_GOOGLE_SECRET: required('the Google OAuth client secret'),
-  AUTH_GITHUB_ID: required('the GitHub OAuth client id'),
-  AUTH_GITHUB_SECRET: required('the GitHub OAuth client secret'),
+  /**
+   * Local single-user mode (task 148; А-7 §4; А-20).
+   *
+   * A **deployment property, read at boot** — never a session property. With it set, every request
+   * without an authenticated session resolves to one fixed local owner (see
+   * `projects/auth/local-owner.ts`), the OAuth surface refuses, and the five variables above stop
+   * being required — a machine that serves one person has no use for OAuth client secrets. With it
+   * unset — every hosted deployment — nothing anywhere changes.
+   */
+  LOCAL_SINGLE_USER: boolish(false),
+
+  /*
+   * --- Auth.js — required from Milestone 1 (task 12), per D-8; conditional since task 148 ---
+   *
+   * Declared optional here and made mandatory by the deployment kind: `requireAuthVariables` demands
+   * all five unless `LOCAL_SINGLE_USER` is set — the same declared-optional-enforced-by-rule move
+   * `requireChainKeys` makes for provider keys.
+   */
+  AUTH_SECRET: z.string().min(1).optional(),
+  AUTH_GOOGLE_ID: z.string().min(1).optional(),
+  AUTH_GOOGLE_SECRET: z.string().min(1).optional(),
+  AUTH_GITHUB_ID: z.string().min(1).optional(),
+  AUTH_GITHUB_SECRET: z.string().min(1).optional(),
   /**
    * Optional on purpose. Auth.js resolves the callback base from the request when this is absent,
    * which is what lets one build serve production and every preview URL (`trustHost`, see
@@ -281,7 +314,31 @@ function requireChainKeys(
   }
 }
 
-export const envSchema = baseEnvSchema.superRefine(requireChainKeys);
+/**
+ * An OAuth deployment must hold its OAuth credentials; a local single-user one need not (task 148).
+ *
+ * The condition reads the flag, not the variables: a local deployment that happens to have a
+ * client id in its `.env` is not thereby an OAuth one, and an OAuth one missing a secret must fail
+ * by name at boot exactly as it always has.
+ */
+function requireAuthVariables(
+  env: z.infer<typeof baseEnvSchema>,
+  ctx: z.RefinementCtx<z.infer<typeof baseEnvSchema>>,
+): void {
+  if (env.LOCAL_SINGLE_USER) return;
+
+  const source: Record<string, unknown> = { ...env };
+
+  for (const [variable, description] of Object.entries(AUTH_VARIABLES)) {
+    if (source[variable] === undefined) {
+      ctx.addIssue({ code: 'custom', path: [variable], message: `required: ${description}` });
+    }
+  }
+}
+
+export const envSchema = baseEnvSchema
+  .superRefine(requireChainKeys)
+  .superRefine(requireAuthVariables);
 
 export type Env = z.infer<typeof envSchema>;
 

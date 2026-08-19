@@ -70,6 +70,14 @@ export const pagesPhrases = definePhrases({
   'shell.account.sign-out': { en: 'Sign out', ru: 'Выйти' },
 
   /**
+   * The account slot of a local single-user deployment (task 148).
+   *
+   * A noun phrase where the address would be, because that is what the slot answers — who this
+   * platform belongs to. There is no sign-out beside it: the mode has no session to end.
+   */
+  'shell.account.local-owner': { en: 'Local owner', ru: 'Локальный владелец' },
+
+  /**
    * Two phrases where the component built one sentence around a machine token.
    *
    * `Switch to ${next} theme` printed `dark` and `light` — the values the attribute and the storage

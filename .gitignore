@@ -42,6 +42,9 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 
+# the local single-user profile: its database, pidfile and logs (task 149)
+.local/
+
 # gate walk artifacts (round 2, Д-6): screenshots from a live exploratory run
 .gate-artifacts/
 

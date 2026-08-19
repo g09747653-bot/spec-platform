@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { createSignedInUser, downloadBundle, projectIdOf, reachDrafting, signIn } from './fixtures';
+import { LOCAL_SINGLE_USER_RUN, OAUTH_SURFACE_ONLY } from './fixtures/local-mode';
 
 /**
  * The walking skeleton, end to end (task 23; SC-16; constitution — Testing Approaches item 2).
@@ -142,12 +143,20 @@ test.describe('walking skeleton', () => {
     // worthless, because the row behind it is gone. Clearing the cookie alone would prove nothing.
     await signIn(context, owner);
     const withRevokedToken = await page.goto(projectUrl);
-    expect(withRevokedToken?.url()).toContain('/signin');
+    if (LOCAL_SINGLE_USER_RUN) {
+      // Same claim, local phrasing: the revoked credential authenticates nobody, so the visitor is
+      // the local owner — who does not own this project, and is answered 404 like any foreign id.
+      expect(withRevokedToken?.status()).toBe(404);
+    } else {
+      expect(withRevokedToken?.url()).toContain('/signin');
+    }
   });
 
   test('an anonymous visitor is sent to sign-in and learns nothing about what exists (FR-001 AC-5)', async ({
     page,
   }) => {
+    test.skip(LOCAL_SINGLE_USER_RUN, OAUTH_SURFACE_ONLY);
+
     const real = await createSignedInUser('quiet');
     const context = page.context();
     await signIn(context, real);

@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { getEnv } from '@/config/env';
+
 /**
  * Route protection (task 14; FR-001 AC-5; AR-2).
  *
@@ -31,17 +33,39 @@ const PUBLIC_PATHS = new Set(['/', '/signin']);
 
 const AUTH_ROUTE_PREFIX = '/api/auth';
 
-export function isPublicPath(pathname: string): boolean {
-  // The trailing slash matters: a prefix test alone would also open a future `/api/authorisation`
-  // route to anonymous traffic, which is how an exemption quietly becomes a hole.
-  const isAuthRoute =
-    pathname === AUTH_ROUTE_PREFIX || pathname.startsWith(`${AUTH_ROUTE_PREFIX}/`);
+// The trailing slash matters: a prefix test alone would also open a future `/api/authorisation`
+// route to anonymous traffic, which is how an exemption quietly becomes a hole.
+export function isAuthRoute(pathname: string): boolean {
+  return pathname === AUTH_ROUTE_PREFIX || pathname.startsWith(`${AUTH_ROUTE_PREFIX}/`);
+}
 
-  return PUBLIC_PATHS.has(pathname) || isAuthRoute;
+export function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PATHS.has(pathname) || isAuthRoute(pathname);
 }
 
 export function proxy(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
+
+  /*
+   * Local single-user mode (task 148). The cookie gate below answers the question «could this
+   * request possibly be authenticated?» — and on a local deployment every request is, as the owner,
+   * decided at the `currentOwnerScope()` seam. So nothing here has anything to refuse except the
+   * OAuth endpoints themselves, which do not exist on a machine that serves one person: they are
+   * answered as routes that are not there, before a handler runs. The body mirrors
+   * `errorResponse('NOT_FOUND')`, which the route family also answers — the proxy stays clear of
+   * application modules (`getEnv` is the configuration reader, the one thing every layer shares),
+   * so the shape is mirrored rather than imported.
+   */
+  if (getEnv().LOCAL_SINGLE_USER) {
+    if (isAuthRoute(pathname)) {
+      return NextResponse.json(
+        { error: { code: 'NOT_FOUND', message: 'Not found.' } },
+        { status: 404 },
+      );
+    }
+
+    return NextResponse.next();
+  }
 
   if (isPublicPath(pathname)) return NextResponse.next();
 

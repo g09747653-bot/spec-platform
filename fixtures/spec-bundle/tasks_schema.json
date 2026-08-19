@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SpecBundleTasks",
+  "type": "object",
+  "properties": {
+    "bundleId": { "type": "string" },
+    "projectId": { "type": "string" },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "taskId": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "techStack": {
+            "type": "string",
+            "enum": ["nodejs", "python", "go", "rust", "generic"]
+          },
+          "dependsOn": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "expectedArtifacts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": { "type": "string" },
+                    "validationCmd": { "type": "string" },
+                    "validationArgs": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "successRegex": { "type": "string" }
+                  },
+                  "required": ["path", "validationCmd", "validationArgs", "successRegex"]
+                }
+              }
+            },
+            "required": ["expectedArtifacts"]
+          }
+        },
+        "required": ["taskId", "title", "description", "dependsOn", "metadata"]
+      }
+    }
+  },
+  "required": ["bundleId", "projectId", "tasks"]
+}

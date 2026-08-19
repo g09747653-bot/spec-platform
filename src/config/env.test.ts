@@ -389,3 +389,56 @@ describe('parseEnv treats a blank value as an absent one', () => {
     expect(env.ALLOWED_UPLOAD_TYPES).toEqual(['text/plain', 'text/markdown']);
   });
 });
+
+describe('local single-user mode makes the OAuth variables conditional (task 148)', () => {
+  const AUTH_VARIABLES = [
+    'AUTH_SECRET',
+    'AUTH_GOOGLE_ID',
+    'AUTH_GOOGLE_SECRET',
+    'AUTH_GITHUB_ID',
+    'AUTH_GITHUB_SECRET',
+  ] as const;
+
+  /** `MINIMAL` with no OAuth credential at all — the shape of a local deployment's `.env`. */
+  const LOCAL = Object.fromEntries(
+    Object.entries(MINIMAL).filter(
+      ([name]) => !(AUTH_VARIABLES as readonly string[]).includes(name),
+    ),
+  );
+
+  it('defaults to off, so a hosted deployment cannot become local by omission', () => {
+    expect(parseEnv({ ...MINIMAL }).LOCAL_SINGLE_USER).toBe(false);
+  });
+
+  it('boots a local deployment with no OAuth credential at all', () => {
+    const env = parseEnv({ ...LOCAL, LOCAL_SINGLE_USER: '1' });
+
+    expect(env.LOCAL_SINGLE_USER).toBe(true);
+    expect(env.AUTH_SECRET).toBeUndefined();
+  });
+
+  it('still demands every OAuth credential, by name, when the flag is off', () => {
+    try {
+      parseEnv({ ...LOCAL });
+      expect.unreachable('an OAuth deployment without its credentials must not boot');
+    } catch (error) {
+      const { issues } = error as EnvironmentConfigurationError;
+      for (const name of AUTH_VARIABLES) {
+        expect(issues.some((issue) => issue.startsWith(`${name}:`))).toBe(true);
+      }
+    }
+  });
+
+  it('accepts credentials that are present anyway — local mode ignores, never rejects, them', () => {
+    const env = parseEnv({ ...MINIMAL, LOCAL_SINGLE_USER: 'true' });
+
+    expect(env.LOCAL_SINGLE_USER).toBe(true);
+    expect(env.AUTH_GOOGLE_ID).toBe(MINIMAL.AUTH_GOOGLE_ID);
+  });
+
+  it('rejects a value that is neither true nor false rather than guessing', () => {
+    expect(() => parseEnv({ ...MINIMAL, LOCAL_SINGLE_USER: 'yes' })).toThrow(
+      EnvironmentConfigurationError,
+    );
+  });
+});

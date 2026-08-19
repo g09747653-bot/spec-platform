@@ -1,0 +1,2 @@
+ALTER TABLE "export_records" DROP CONSTRAINT "export_records_mode_valid";--> statement-breakpoint
+ALTER TABLE "export_records" ADD CONSTRAINT "export_records_mode_valid" CHECK ("export_records"."mode" IN ('default', 'quality', 'machine'));

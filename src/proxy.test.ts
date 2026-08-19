@@ -1,7 +1,27 @@
 import { NextRequest } from 'next/server';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type * as EnvModule from '@/config/env';
+import { testEnv } from '@/config/testing/test-env';
+
+/*
+ * The proxy reads exactly one configuration value — the deployment kind (task 148). The reader is
+ * mocked over a swappable source so a test can flip the flag; the parse itself is the real one, so
+ * what the proxy sees is a genuine `Env` rather than a hand-shaped literal.
+ */
+let envSource: Record<string, string> = testEnv();
+
+vi.mock('@/config/env', async (importOriginal) => {
+  const actual = await importOriginal<typeof EnvModule>();
+
+  return { ...actual, getEnv: () => actual.parseEnv(envSource) };
+});
 
 import { isPublicPath, proxy } from './proxy';
+
+const configured = (localSingleUser: boolean) => {
+  envSource = testEnv(localSingleUser ? { LOCAL_SINGLE_USER: '1' } : {});
+};
 
 /**
  * Task 14 — what the proxy turns away and what it lets through.
@@ -14,6 +34,10 @@ const request = (path: string, cookie?: string) => {
   if (cookie !== undefined) built.cookies.set(cookie, 'a-session-token');
   return built;
 };
+
+beforeEach(() => {
+  configured(false);
+});
 
 describe('proxy (task 14)', () => {
   describe('an unauthenticated request', () => {
@@ -80,6 +104,43 @@ describe('proxy (task 14)', () => {
       for (const path of ['/projects', '/api/projects', '/signin-please', '/api/authorise']) {
         expect(isPublicPath(path)).toBe(false);
       }
+    });
+  });
+
+  describe('local single-user mode (task 148)', () => {
+    beforeEach(() => {
+      configured(true);
+    });
+
+    it('passes an anonymous request through — the owner scope is decided at the seam, not here', () => {
+      for (const path of ['/projects', '/api/projects', '/', '/signin']) {
+        const response = proxy(request(path));
+
+        expect(response.status).toBe(200);
+        expect(response.headers.get('location')).toBeNull();
+      }
+    });
+
+    it('answers the OAuth endpoints as routes that do not exist', async () => {
+      for (const path of ['/api/auth/signin', '/api/auth/session', '/api/auth/callback/google']) {
+        const response = proxy(request(path));
+
+        expect(response.status).toBe(404);
+        expect(await response.json()).toEqual({
+          error: { code: 'NOT_FOUND', message: 'Not found.' },
+        });
+      }
+    });
+
+    it('does not catch a lookalike route in the OAuth refusal', () => {
+      expect(proxy(request('/api/authorise')).status).toBe(200);
+    });
+
+    it('changes nothing when the flag is off — the deployment property, not a request one', () => {
+      configured(false);
+
+      expect(proxy(request('/projects')).status).toBe(307);
+      expect(proxy(request('/api/auth/csrf')).status).toBe(200);
     });
   });
 });

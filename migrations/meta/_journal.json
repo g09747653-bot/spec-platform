@@ -134,6 +134,13 @@
       "when": 1787122858898,
       "tag": "0018_autonomous_runs",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1787152778036,
+      "tag": "0019_machine_export_mode",
+      "breakpoints": true
     }
   ]
 }

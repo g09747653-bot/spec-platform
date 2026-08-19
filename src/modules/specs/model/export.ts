@@ -18,6 +18,20 @@ export function isExportMode(value: string): value is ExportMode {
 }
 
 /**
+ * What the machine bundle's export record says in its `mode` column (task 150; А-20).
+ *
+ * A **shape**, never a mode: it is deliberately absent from `EXPORT_MODES`, so `?mode=machine` on
+ * the ZIP endpoint stays an unknown value that resolves to `default`, and no quality/staleness
+ * question is ever asked of it — the machine bundle always derives from the default-mode revisions.
+ * The token exists so `export_records` can say which shape left the building, which is the record's
+ * whole job.
+ */
+export const MACHINE_EXPORT_RECORD_MODE = 'machine';
+
+/** Every value `export_records.mode` may hold: the two resolvable modes plus the machine shape. */
+export const RECORDED_EXPORT_MODES = [...EXPORT_MODES, MACHINE_EXPORT_RECORD_MODE] as const;
+
+/**
  * Which file names a mode may contain, in bundle order.
  *
  * The parity baseline is four files and nothing else (constitution P3), and quality mode adds exactly
