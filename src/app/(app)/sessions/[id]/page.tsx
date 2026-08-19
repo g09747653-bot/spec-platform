@@ -629,6 +629,7 @@ async function SessionBody({ session, scope }: { session: SessionDetail; scope: 
         driver={{
           running: latestRun?.status === 'running' ? { steps: latestRun.steps } : null,
           lastStopReason: latestRun?.stopReason ?? null,
+          steps: latestRun?.steps ?? 0,
         }}
         feed={feed}
         methodologyId={session.methodologyId}

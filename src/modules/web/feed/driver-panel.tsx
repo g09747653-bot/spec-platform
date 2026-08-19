@@ -58,6 +58,15 @@ export interface DriverModel {
   running: { steps: number } | null;
   /** Why the last run ended, when one has — a token, worded by the feed's own note. */
   lastStopReason: string | null;
+  /**
+   * How many moves the latest run took, live or finished.
+   *
+   * Separate from `running.steps` because the number outlives the run and the gate walk reads it:
+   * the M13п walk recorded «шагов 0» beside a database that said 95, because the panel had only the
+   * live run's count and a finished run has no live count. A number that is only true while nothing
+   * has ended is not a measurement.
+   */
+  steps: number;
 }
 
 export function DriverPanel({
@@ -211,12 +220,10 @@ export function DriverPanel({
       data-testid="driver-panel"
       data-driver={running ? 'running' : 'stopped'}
       data-stop-reason={driver.lastStopReason ?? ''}
-      data-steps={String(driver.running?.steps ?? 0)}
+      data-steps={String(driver.steps)}
     >
       <p className="text-foreground-muted text-sm" data-testid="driver-status">
-        {running
-          ? t('feed.driver.running', { steps: driver.running?.steps ?? 0 })
-          : t('feed.driver.stopped')}
+        {running ? t('feed.driver.running', { steps: driver.steps }) : t('feed.driver.stopped')}
       </p>
 
       {running ? (
