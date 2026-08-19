@@ -258,6 +258,17 @@ async function concreteRounds(page: Page): Promise<void> {
       break;
     }
 
+    /*
+     * How many answered rounds are already on screen.
+     *
+     * The feed **appends**, so waiting for `round-answered` to appear stops being a wait the moment
+     * one exists: the first round's card satisfies the wait for the second round's answer instantly,
+     * the loop runs on before the submission has landed, and the next iteration finds a pending card
+     * where it expected an Ask control. That is exactly what the first run of this walk did. Count
+     * the blocks and wait for one more — the lesson `e2e/feed.spec.ts` already carries.
+     */
+    const answeredBefore = await page.getByTestId('round-answered').count();
+
     await click(page, 'ask-round');
     await page.getByTestId('mcq-card').waitFor({ state: 'visible', timeout: 900_000 });
     await stillAlive(page, `concrete round ${String(round)}`);
@@ -292,10 +303,12 @@ async function concreteRounds(page: Page): Promise<void> {
     }
 
     await click(page, 'mcq-submit');
-    await page
-      .getByTestId('round-answered')
-      .first()
-      .waitFor({ state: 'visible', timeout: 900_000 });
+    await page.waitForFunction(
+      (expected: number) =>
+        document.querySelectorAll('[data-testid="round-answered"]').length >= expected,
+      answeredBefore + 1,
+      { timeout: 900_000 },
+    );
     await stillAlive(page, `after round ${String(round)}`);
   }
 }
@@ -365,6 +378,15 @@ async function watchTheRun(page: Page): Promise<RunProgress> {
 
 /* ------------------------------------------------------------------ the walk */
 
+/**
+ * Which walk to make, so a defect in one does not cost a re-run of the other.
+ *
+ * `both` by default — the gate is both — but the autonomous walk takes half an hour of live model
+ * time, and re-running it to re-take three screenshots would let the walk's own cost decide what
+ * gets measured.
+ */
+const WALK = process.env.GATE_WALK ?? 'both';
+
 async function run(browser: Browser): Promise<void> {
   const user = await createSignedInUser();
 
@@ -381,24 +403,28 @@ async function run(browser: Browser): Promise<void> {
     consoleErrors.push(`[A] pageerror: ${error.message}`);
   });
 
-  say('walk A — «Конкретный», вручную, русский интерфейс');
-  await createSession(manualPage, { style: 'concrete' });
-  await snapshot(manualPage, 'concrete-session-open');
-  await stillAlive(manualPage, 'a new concrete session');
+  if (WALK !== 'B') {
+    say('walk A — «Конкретный», вручную, русский интерфейс');
+    await createSession(manualPage, { style: 'concrete' });
+    await snapshot(manualPage, 'concrete-session-open');
+    await stillAlive(manualPage, 'a new concrete session');
 
-  await concreteRounds(manualPage);
-  await snapshot(manualPage, 'concrete-after-three-rounds');
+    await concreteRounds(manualPage);
+    await snapshot(manualPage, 'concrete-after-three-rounds');
 
-  /* The dark theme, on the same surface — both themes, as the gate profile asks. */
-  await manualPage.evaluate(() => {
-    document.documentElement.setAttribute('data-theme', 'dark');
-  });
-  await snapshot(manualPage, 'concrete-dark');
-  await manualPage.evaluate(() => {
-    document.documentElement.setAttribute('data-theme', 'light');
-  });
+    /* The dark theme, on the same surface — both themes, as the gate profile asks. */
+    await manualPage.evaluate(() => {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    });
+    await snapshot(manualPage, 'concrete-dark');
+    await manualPage.evaluate(() => {
+      document.documentElement.setAttribute('data-theme', 'light');
+    });
+  }
 
   await manual.close();
+
+  if (WALK === 'A') return;
 
   /* ---------------------------------------------------------- walk B: the autonomous run, ru */
 
