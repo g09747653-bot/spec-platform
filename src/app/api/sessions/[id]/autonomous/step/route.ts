@@ -111,9 +111,7 @@ export async function POST(
    * whose driver has stopped, and the page ticks one more time after pressing Stop. Answering with a
    * finished report rather than a 409 is what lets the ticker end quietly.
    */
-  if (run === null) {
-    return jsonResponse({ kind: 'stop', moved: false, done: true, stopReason: null, steps: 0 });
-  }
+  if (run === null) return jsonResponse(report('stop', false, true, null, 0));
 
   const context = await assembleDriverContext(db, scope, session, run);
   if (context === null) return errorResponse('NOT_FOUND');
@@ -126,10 +124,7 @@ export async function POST(
     return jsonResponse(report(move.kind, false, true, move.reason, run.steps));
   }
 
-  /*
-   * The claim. Everything above this line is a read; nothing below it happens for a run that has
-   * been stopped or for a tick that lost the race.
-   */
+  /* The first guard: everything above this line is a read, and this is where the step is counted. */
   const claimed = await runs.recordStep({
     runId: run.id,
     expectedVersion: run.version,
