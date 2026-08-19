@@ -4,11 +4,13 @@ import { getEnv } from '@/config/env';
 import type { SchemaDatabase } from '@/db';
 import type { OwnerScope } from '@/db/owner-scope';
 import { createGenerationStore } from '@/modules/adapters/llm';
+import { methodologyConfig, stageOf } from '@/modules/methodologies';
 import { countSeedWords, type AutonomousSituation } from '@/modules/agents/autonomous/policy';
 import type { AutonomousRun } from '@/modules/projects/repositories/autonomous-runs';
 import { createInterviewRepository } from '@/modules/projects/repositories/interview';
 import type { OwnedSession } from '@/modules/projects/repositories/sessions';
-import { findPendingDecision } from '@/modules/specs/pending-decision';
+import { findPendingDecision, type PendingDecision } from '@/modules/specs/pending-decision';
+import { createRevisionRepository } from '@/modules/specs/repositories/revisions';
 import {
   createReviewRepository,
   type StoredReviewItem,
@@ -96,12 +98,38 @@ export async function assembleDriverContext(
   const state = await createWorkflowStateRepository(db).find(session.id);
   if (state === null) return null;
 
-  const pending = await findPendingDecision(
+  const specFiles = createSpecFileRepository(db);
+  const reviews = createReviewRepository(db);
+
+  /*
+   * **The card in front of *this* chat**, which is not always the card `findPendingDecision` names.
+   *
+   * That function answers project-wide, deliberately and correctly for what it was built for: the
+   * chat endpoint has to resolve a typed «approve» against whatever card the page is showing, and
+   * since М9п a project can hold a Generate chat and an Edit chat at once. A driver is a different
+   * question. It walks **one** session's graph, and the red-team pass showed what the project-wide
+   * answer costs it: with an Edit chat open beside it, a driver at `constitution/generate` reads the
+   * *other* chat's unapproved `tasks` draft as its own pending card, approves it, and decides a board
+   * that belongs to a conversation it is not having.
+   *
+   * So the precedence is kept — a pending round, then a proposed change, then a board, then an
+   * unapproved draft — and only the *scope* of the last two is narrowed to the file this position is
+   * standing on. A proposal still stops the driver whoever it belongs to, which is the conservative
+   * direction: refusing to decide someone's diff costs a stop, deciding it costs their change.
+   */
+  const stageFile =
+    position.substage === null
+      ? null
+      : await specFiles.findByProjectAndType(scope, session.projectId, position.stage);
+
+  const pending = await pendingForThisChat({
     db,
     scope,
-    session.projectId,
-    pendingRoundId(state.pendingAction),
-  );
+    session,
+    pendingRoundId: pendingRoundId(state.pendingAction),
+    stageFile: stageFile === null ? null : { id: stageFile.id, fileName: stageFile.fileName },
+    reviews,
+  });
 
   const generationInFlight = await createGenerationStore(db).activeRunForSession(session.id);
 
@@ -114,18 +142,34 @@ export async function assembleDriverContext(
   const to = nextPosition(snapshot);
   const verdict = to === null ? null : evaluateTransition(snapshot, to);
 
-  const specFiles = createSpecFileRepository(db);
-  const reviews = createReviewRepository(db);
+  /*
+   * Whether this position drafts a **document** at all.
+   *
+   * An Edit chat's working stage declares `document: null` — it produces proposed changes, not
+   * revisions — and every «is the document approved?» question is therefore meaningless there. It is
+   * worse than meaningless: `specApproved` is keyed by spec type and scoped to the *project*, so an
+   * Edit chat over an existing bundle read the Generate chat's approved `constitution.md` as its own
+   * finished work, skipped drafting entirely and sealed a session with nothing in it. Asking the
+   * configuration first is what turns that into the right behaviour — the stage drafts, the driver
+   * generates, the proposals it produces become a pending diff, and the diff is a person's to decide.
+   */
+  const producesDocument =
+    position.substage !== null &&
+    stageOf(methodologyConfig(session.methodologyId), position.stage)?.document != null;
 
   /*
-   * The rewrite a board asked for, resolved exactly as the feed resolves it: a request-changes
-   * decision standing on this file's latest revision (`requestedChangesForFile`). It is the only
-   * thing that distinguishes «this stage is finished drafting» from «this stage owes a rewrite»,
-   * because a request-changes decision leaves the approved revision approved.
+   * The rewrite a board asked for, resolved as the **feed** resolves it and not as the project does:
+   * a request-changes decision standing on the latest revision of *this stage's* file. The
+   * project-wide reading (`currentFile`, the most recently revised file anywhere in the project) is
+   * what the export and the viewer want; for a driver it means missing a rewrite its own stage owes
+   * because another file was touched later, or redrafting an approved document because a different
+   * one owes something. Both surfaces that render this apply the same `specType === position.stage`
+   * clause; the driver had dropped it.
    */
-  const currentFile = await specFiles.currentFile(scope, session.projectId);
   const owedBoard =
-    currentFile === null ? null : await reviews.requestedChangesForFile(scope, currentFile.id);
+    stageFile === null || !producesDocument
+      ? null
+      : await reviews.requestedChangesForFile(scope, stageFile.id);
 
   let round: DriverContext['round'] = null;
   if (pending !== null && pending.kind === 'question-round') {
@@ -177,11 +221,11 @@ export async function assembleDriverContext(
     canAskMore: askingStage !== null && canAskAnotherRound(snapshot, askingStage).allowed,
     canGenerate: position.substage === 'generate',
     /*
-     * `specApproved` is keyed by spec stage; away from one there is nothing to be approved, and the
-     * lookup is guarded by the substage rather than by a cast — a position with a substage is a spec
-     * stage, which is the shape `StagePosition` encodes.
+     * `specApproved` is keyed by spec stage; away from one — and on a stage that drafts no document
+     * at all — there is nothing to be approved.
      */
-    documentApproved: position.substage !== null && snapshot.specApproved[position.stage],
+    documentApproved:
+      position.substage !== null && producesDocument && snapshot.specApproved[position.stage],
     revisionOwed: owedBoard !== null,
     target:
       to === null || verdict === null
@@ -214,6 +258,60 @@ export async function assembleDriverContext(
     run.fingerprint === null ? 0 : fingerprint === run.fingerprint ? run.idleSteps + 1 : 0;
 
   return { situation, position, fingerprint, round, board };
+}
+
+/**
+ * The pending card of one chat, in `findPendingDecision`'s own precedence.
+ *
+ * The first two arms are that function's verbatim: a presented round outranks everything, and a
+ * proposed change outranks the rest. The last two differ only in scope — they ask about the file
+ * this position is standing on rather than about the project's most recently written one — which is
+ * the whole of the correction, and the reason this is not simply a call into `specs`.
+ */
+async function pendingForThisChat(input: {
+  db: SchemaDatabase;
+  scope: OwnerScope;
+  session: OwnedSession;
+  pendingRoundId: string | null;
+  stageFile: { id: string; fileName: string } | null;
+  reviews: ReturnType<typeof createReviewRepository>;
+}): Promise<PendingDecision> {
+  if (input.pendingRoundId !== null) {
+    return { kind: 'question-round', roundId: input.pendingRoundId };
+  }
+
+  /*
+   * Proposals stay project-wide, and that is deliberate rather than an oversight: a pending change
+   * blocks the whole bundle whichever chat proposed it, and the driver's answer to one is to stop.
+   * Narrowing it would let a driver walk past a decision somebody is waiting to make.
+   */
+  const projectWide = await findPendingDecision(input.db, input.scope, input.session.projectId);
+  if (projectWide !== null && projectWide.kind === 'diff') return projectWide;
+
+  const stageFile = input.stageFile;
+  if (stageFile === null) return null;
+
+  const review = await input.reviews.pendingForFile(input.scope, stageFile.id);
+  if (review !== null) {
+    return {
+      kind: 'review',
+      reviewId: review.id,
+      specFileId: stageFile.id,
+      specType: review.specType,
+    };
+  }
+
+  const latest = await createRevisionRepository(input.db).latest(stageFile.id);
+  if (latest !== null && !latest.approved) {
+    return {
+      kind: 'spec',
+      specFileId: stageFile.id,
+      revisionNumber: latest.revisionNumber,
+      fileName: stageFile.fileName,
+    };
+  }
+
+  return null;
 }
 
 function pendingKeyOf(pending: NonNullable<AutonomousSituation['pending']>): string {

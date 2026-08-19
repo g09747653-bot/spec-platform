@@ -478,23 +478,54 @@ export const feedConversationPhrases = definePhrases({
   },
 
   /**
-   * The clause that admits the seed did not decide everything.
+   * The clause that admits the seed did not decide everything — in two versions, because there are
+   * two different things to admit.
    *
    * Separate from the note above rather than folded into it, because it is only true sometimes and a
-   * sentence that says «for 0 questions» would be worse than silence. Counted in both halves: three
-   * Russian forms for a number that is usually one or two.
+   * sentence that says «for 0 questions» would be worse than silence. Separate from **each other**
+   * because the first version of this said «I took the recommended option» over questions that
+   * recommended nothing, and a sentence that is grammatical, plausible and false is exactly the
+   * failure the red-team pass exists to catch. Counted in both halves: three Russian forms for a
+   * number that is usually one or two.
    */
   'feed.driver.answered-fallback': {
     en: {
-      one: ' Your description did not settle {count} question, so I took the recommended option.',
+      one: ' Your description did not settle {count} question, so I took the option the round recommends.',
       other:
-        ' Your description did not settle {count} questions, so I took the recommended options.',
+        ' Your description did not settle {count} questions, so I took the options the round recommends.',
     },
     ru: {
-      one: ' Описание не решает {count} вопрос, поэтому я взял рекомендованный вариант.',
-      few: ' Описание не решает {count} вопроса, поэтому я взял рекомендованные варианты.',
-      many: ' Описание не решает {count} вопросов, поэтому я взял рекомендованные варианты.',
+      one: ' Описание не решает {count} вопрос, поэтому я взял вариант, рекомендованный самим раундом.',
+      few: ' Описание не решает {count} вопроса, поэтому я взял варианты, рекомендованные самим раундом.',
+      many: ' Описание не решает {count} вопросов, поэтому я взял варианты, рекомендованные самим раундом.',
     },
+  },
+
+  /** The same admission where the round recommended nothing, so the choice was positional. */
+  'feed.driver.answered-fallback-first': {
+    en: {
+      one: ' Your description did not settle {count} question, and the round recommended nothing there, so I took the first option.',
+      other:
+        ' Your description did not settle {count} questions, and the round recommended nothing there, so I took the first option each time.',
+    },
+    ru: {
+      one: ' Описание не решает {count} вопрос, и раунд там ничего не рекомендует\u00A0— я взял первый вариант.',
+      few: ' Описание не решает {count} вопроса, и раунд там ничего не рекомендует\u00A0— я взял первый вариант.',
+      many: ' Описание не решает {count} вопросов, и раунд там ничего не рекомендует\u00A0— я взял первый вариант.',
+    },
+  },
+
+  /**
+   * The reason a rewrite carries only its blocking points.
+   *
+   * Its own phrase because the alternative was worse than clumsy: the note's `{reason}` slot was
+   * being filled with the *stop* sentence «the model could not produce what this step needed… do
+   * the step by hand», over a run that was carrying on. A reader would have been told the session
+   * had stopped while watching it move.
+   */
+  'feed.driver.no-selection': {
+    en: 'I could not weigh the optional findings, so only the blocking ones are going in.',
+    ru: 'Не смог взвесить необязательные замечания\u00A0— в переписывание идут только блокирующие.',
   },
 
   'feed.driver.approved': {
@@ -561,9 +592,16 @@ export const feedConversationPhrases = definePhrases({
     en: 'Stopped: two steps in a row changed nothing, which means I was going in a circle.',
     ru: 'Остановился: два шага подряд ничего не изменили\u00A0— значит, я ходил по кругу.',
   },
+  /**
+   * Deliberately vaguer than «the gate refused».
+   *
+   * This ending covers a gate saying no *and* a request the driver itself got wrong, and naming the
+   * gate would put words in its mouth for the second case. «Was not accepted» is true of both, and
+   * the run's own record carries the code for whoever needs the difference.
+   */
   'feed.driver.stop.gate-refused': {
-    en: 'Stopped: the next step was refused and I have no move that would change that.',
-    ru: 'Остановился: следующий шаг отклонён, и у меня нет хода, который это изменит.',
+    en: 'Stopped: the next step was not accepted, and I have no move that would change that.',
+    ru: 'Остановился: следующий шаг не был принят, и у меня нет хода, который это изменит.',
   },
   'feed.driver.stop.provider-failed': {
     en: 'Stopped: the model could not produce what this step needed. Nothing is lost — try the step by hand.',

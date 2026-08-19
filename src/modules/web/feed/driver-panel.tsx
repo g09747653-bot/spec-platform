@@ -34,6 +34,16 @@ import type { TailPrimary } from './tail-primary';
 const REFRESH_MS = 2_000;
 
 /**
+ * How many failed steps in a row end the ticking.
+ *
+ * Five, and the number is a shape rather than a preference: one or two failures are a lost race,
+ * and a page that gave up on those would stall a healthy run; a run answering nothing usable five
+ * times is a run the page cannot help, and asking a sixth time is noise. The run row is untouched
+ * either way — only this page stops asking, and a reload starts it again.
+ */
+const MAX_CONSECUTIVE_FAILURES = 5;
+
+/**
  * Whether a step reported the run over. Read defensively: this is a network boundary like any other,
  * and a body this cannot read is treated as an ending rather than as a reason to keep ticking.
  */
@@ -76,6 +86,8 @@ export function DriverPanel({
   const mounted = useRef(true);
   /** Set once a step reports the run over, so no tick outlives the ending it already read. */
   const finished = useRef(false);
+  /** Consecutive steps that answered with a failure; reset by any answer at all. */
+  const failures = useRef(0);
 
   useEffect(() => {
     mounted.current = true;
@@ -105,12 +117,25 @@ export function DriverPanel({
       if (!mounted.current) return;
 
       /*
-       * A refused step is not retried here. Every refusal the driver can survive is already retried
-       * server-side by the next tick's re-read (`CONFLICT` is the only retryable code), and one it
-       * cannot survive has stopped the run and written why — so the honest thing for the page to do
-       * is show that, not ask again.
+       * **A failed step is not an ended run**, and conflating the two stalls the driver for good.
+       *
+       * The first version of this stopped ticking on any non-OK response, and the red-team pass
+       * found what that costs: two ticks racing produce one `409 CONFLICT` — a lost turn, nothing
+       * more — and the page would then sit still for ever over a run row that still says `running`,
+       * with a Stop button that stops something already stopped. So the ending comes from the
+       * server's own word (`done`) and never from a status code, and a failure only counts towards
+       * giving up: five in a row means the session is answering nothing this page can act on, and
+       * ticking into it is noise rather than persistence.
        */
-      if (!response.ok || runIsOver(payload)) {
+      if (runIsOver(payload)) {
+        finished.current = true;
+        router.refresh();
+        return;
+      }
+
+      failures.current = response.ok ? 0 : failures.current + 1;
+
+      if (failures.current >= MAX_CONSECUTIVE_FAILURES) {
         finished.current = true;
         router.refresh();
       }
@@ -128,6 +153,7 @@ export function DriverPanel({
     if (!running) return;
 
     finished.current = false;
+    failures.current = 0;
     void step();
     const timer = setInterval(() => void step(), 400);
     return () => {

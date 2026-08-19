@@ -82,10 +82,24 @@ describe('turning a draft into a submission', () => {
     expect(resolved.fallbacks).toBe(2);
   });
 
-  /* No recommendation to fall back to: the first option is a rule, and the rule is stated. */
-  it('falls back to the first option when the round recommends nothing', () => {
-    const resolved = resolveAnswers([multiple], draft({ answers: [] }));
-    expect(resolved.answers[0]?.selectedOptionIds).toEqual(['context']);
+  /*
+   * No recommendation to fall back to: the first option is a rule, and the rule is stated.
+   *
+   * Counted apart from a recommended fallback, and the red-team pass is why: the note said «I took
+   * the recommended option» over questions that recommended nothing — grammatical, plausible, false.
+   * A round with no recommendation is not unusual, it is what the interviewer's own repair produces
+   * when the model marked none.
+   */
+  it('falls back to the first option when the round recommends nothing, and says which it was', () => {
+    const positional = resolveAnswers([multiple], draft({ answers: [] }));
+    expect(positional.answers[0]?.selectedOptionIds).toEqual(['context']);
+    expect(positional.fallbacks).toBe(1);
+    expect(positional.recommendedFallbacks).toBe(0);
+
+    const recommended = resolveAnswers([single], draft({ answers: [] }));
+    expect(recommended.answers[0]?.selectedOptionIds).toEqual(['openai']);
+    expect(recommended.fallbacks).toBe(1);
+    expect(recommended.recommendedFallbacks).toBe(1);
   });
 
   it('keeps one pick on a single-choice question, whatever the draft returned', () => {

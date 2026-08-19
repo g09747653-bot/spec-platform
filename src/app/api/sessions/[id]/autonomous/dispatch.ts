@@ -32,24 +32,55 @@ export interface DispatchOutcome {
   ok: boolean;
   /** The endpoint's own error code, when it refused. */
   code: string | null;
+  /**
+   * The gate's machine-readable reason, when the refusal carried one (`details.reason`).
+   *
+   * Read apart from the code because `GATE_REJECTED` is the answer to several different questions —
+   * a spent rewrite budget and a lost transition both wear it — and a driver that reported them as
+   * one ending would name a budget that had not run out.
+   */
+  reason: string | null;
   /** Whether the refusal is worth another tick rather than an ending (a lost race, never a gate). */
   retryable: boolean;
 }
 
-const LANDED: DispatchOutcome = { ok: true, code: null, retryable: false };
+const LANDED: DispatchOutcome = { ok: true, code: null, reason: null, retryable: false };
 
-/** A refusal is read from `{ error: { code } }` — the one shape every handler answers with. */
+/**
+ * The move was prepared and then not made, because the run was stopped in the meantime.
+ *
+ * Not a refusal and not a race: nothing was sent, so there is nothing to retry and nothing to report
+ * as a failure. The step handler reads this code and returns quietly — the run already has its
+ * ending, written by whoever stopped it.
+ */
+export const RUN_STOPPED: DispatchOutcome = {
+  ok: false,
+  code: 'RUN_STOPPED',
+  reason: null,
+  retryable: false,
+};
+
+/** The `error` object every handler answers a refusal with, or `null` when there is none to read. */
+function errorOf(payload: unknown): Record<string, unknown> | null {
+  if (typeof payload !== 'object' || payload === null || !('error' in payload)) return null;
+
+  const { error } = payload;
+  return typeof error === 'object' && error !== null ? (error as Record<string, unknown>) : null;
+}
+
+/** A refusal is read from `{ error: { code, details } }` — the one shape every handler answers with. */
 async function refusalOf(response: Response): Promise<DispatchOutcome> {
   const payload: unknown = await response.json().catch(() => null);
-  const code =
-    typeof payload === 'object' &&
-    payload !== null &&
-    'error' in payload &&
-    typeof payload.error === 'object' &&
-    payload.error !== null &&
-    'code' in payload.error &&
-    typeof payload.error.code === 'string'
-      ? payload.error.code
+  const error = errorOf(payload);
+  const code = typeof error?.code === 'string' ? error.code : null;
+
+  const details = error?.details;
+  const reason =
+    typeof details === 'object' &&
+    details !== null &&
+    'reason' in details &&
+    typeof details.reason === 'string'
+      ? details.reason
       : null;
 
   /*
@@ -58,7 +89,7 @@ async function refusalOf(response: Response): Promise<DispatchOutcome> {
    * other 409 in the table — GATE_REJECTED, ROUND_LIMIT_REACHED, PENDING_DECISION — is the machine
    * saying no, and retrying it would be the driver arguing with a gate.
    */
-  return { ok: false, code, retryable: code === 'CONFLICT' };
+  return { ok: false, code, reason, retryable: code === 'CONFLICT' };
 }
 
 export function jsonRequest(url: string, body?: unknown): Request {
@@ -158,7 +189,9 @@ export async function dispatchReviewDecision(
  */
 async function drain(response: Response): Promise<DispatchOutcome> {
   if (!response.ok) return refusalOf(response);
-  if (response.body === null) return { ok: false, code: 'NO_STREAM', retryable: false };
+  if (response.body === null) {
+    return { ok: false, code: 'NO_STREAM', reason: null, retryable: false };
+  }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -177,13 +210,22 @@ async function drain(response: Response): Promise<DispatchOutcome> {
     }
   }
 
-  if (last === null) return { ok: false, code: 'STREAM_ENDED_SILENTLY', retryable: true };
+  if (last === null) {
+    return { ok: false, code: 'STREAM_ENDED_SILENTLY', reason: null, retryable: true };
+  }
   if (last.type === 'complete') return LANDED;
 
+  /*
+   * The stream says for itself whether the failure is worth another attempt (`retryable` on the
+   * error event, FR-018 AC-2), and that answer is better than a list of codes kept in step here.
+   * `GENERATION_IN_FLIGHT` is added rather than assumed: it is the one-run-per-session guard, which
+   * the next tick resolves by draining the run that got there first.
+   */
   return {
     ok: false,
     code: last.code,
-    retryable: last.code === 'GENERATION_IN_FLIGHT',
+    reason: null,
+    retryable: last.retryable || last.code === 'GENERATION_IN_FLIGHT',
   };
 }
 

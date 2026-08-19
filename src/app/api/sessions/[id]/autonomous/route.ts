@@ -101,12 +101,13 @@ export async function DELETE(
   if (stopped === null) return errorResponse('NOT_FOUND');
 
   /*
-   * The note is written only by the press that actually ended the run — `stop` is idempotent and
-   * hands back the row as it stands, so a Stop that arrives after the run finished on its own reads
-   * a reason that is not `stopped-by-user` and says nothing, leaving the run's own ending in the
-   * feed rather than two endings.
+   * The note is written only by the press that actually ended the run.
+   *
+   * `ended` rather than a reason comparison, and the difference is the whole point: two presses of
+   * the same button read back the same `stopped-by-user` and would both believe they wrote it, so
+   * the feed would carry the ending twice. Only the UPDATE that matched a live row reports `ended`.
    */
-  if (stopped.stopReason === 'stopped-by-user') {
+  if (stopped.ended) {
     const t = await serverT();
     const state = await createWorkflowStateRepository(db).find(session.id);
 
@@ -123,8 +124,9 @@ export async function DELETE(
   }
 
   return jsonResponse({
-    runId: stopped.id,
-    status: stopped.status,
-    stopped: stopped.stopReason === 'stopped-by-user',
+    runId: stopped.run.id,
+    status: stopped.run.status,
+    /** Whether *this* request is the one that ended it — a second press answers `false`. */
+    stopped: stopped.ended,
   });
 }

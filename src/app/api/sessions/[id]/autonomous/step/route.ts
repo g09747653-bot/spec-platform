@@ -29,6 +29,7 @@ import {
   dispatchGenerate,
   dispatchReviewDecision,
   dispatchTransition,
+  RUN_STOPPED,
   type DispatchOutcome,
 } from '../dispatch';
 import { assembleDriverContext, type DriverContext } from '../situation';
@@ -45,12 +46,32 @@ import { assembleDriverContext, type DriverContext } from '../situation';
  * of ordinary bookkeeping rather than of cancellation working. It also makes the run *watchable* —
  * between two steps the page has re-read the feed, so a person sees the session move.
  *
- * *What makes a step atomic?* `recordStep` claims the run's `version` **before** anything is
- * dispatched. That single guarded UPDATE does three jobs: it serialises two ticks that race (the
- * loser matches no row and does nothing), it makes `Stop` authoritative against a step already in
- * flight (a stopped run fails the `status = 'running'` predicate, so the claim fails and the move is
- * never made), and it is what counts the step for the budget. Nothing is dispatched from an
- * unclaimed step, so «no half-played move after Stop» is structural.
+ * *What makes a step atomic?* **Two guards, and both are needed.**
+ *
+ * The first is `recordStep`, which claims the run's `version` before any work begins. It counts the
+ * step against the budget and refuses a tick holding a stale read.
+ *
+ * It is deliberately **not** a lease, and the distinction is worth stating because a comment
+ * claiming otherwise would be believed: two browser tabs on one session can both tick, both call a
+ * model, and both dispatch. What stops that from writing anything twice is not this row — it is the
+ * endpoints, every one of which already arbitrates two humans doing the same thing at once
+ * (`pending_action` on a round, `version` on a transition, `decision IS NULL` on a board, the
+ * one-run-per-session guard on a generation). The driver is another user, so it is refused the same
+ * way, and the losing step reports a move that did not land. A lease here would add a timeout to
+ * guess at, and would be a second answer to a question the machine already answers.
+ *
+ * The second is `stillRunning`, checked immediately before the move is dispatched and after the
+ * model call that prepared it. The first guard alone is not enough, and the red-team pass proved it
+ * rather than argued it: a step claims its turn, spends a minute inside a model call, and a `Stop`
+ * pressed during that minute arrives *after* the claim — so the claim cannot see it, and the move
+ * lands on a session the person has already taken back. The second guard closes exactly that window,
+ * and it is why every branch of `perform` routes its dispatch through `guarded` rather than calling
+ * a `dispatchX` directly: a branch that forgot would be visible as the one that did not.
+ *
+ * What remains, and is named rather than hidden: a **generation already streaming** when Stop is
+ * pressed finishes writing. Its chunks are durable and its revision is the session's own work
+ * (P5), and the manual surface owns it from that moment with its own `Stop` — the same control it
+ * would have had if a person had started it.
  *
  * *Where is the model?* Inside two moves and nowhere else. `nextMove` is a pure function of
  * persisted facts and it alone decides what happens; the driver agent is asked only which options to
@@ -123,8 +144,18 @@ export async function POST(
   let outcome: DispatchOutcome;
   let note: string | null;
 
+  /*
+   * The second guard, as a closure so `perform` cannot be called without one. It re-reads the run
+   * rather than trusting the claim: between the claim and this line lies the model call, which is
+   * where a person presses Stop.
+   */
+  const stillRunning = async (): Promise<boolean> => {
+    const live = await runs.findLive(session.id);
+    return live !== null && live.id === run.id;
+  };
+
   try {
-    const performed = await perform(db, session, context, move, origin, t);
+    const performed = await perform(db, session, context, move, origin, t, stillRunning);
     outcome = performed.outcome;
     note = performed.note;
   } catch (error) {
@@ -137,6 +168,17 @@ export async function POST(
 
     await stopRun(db, session, run.id, 'provider-failed', t);
     return jsonResponse(report(move.kind, false, true, 'provider-failed', claimed.steps));
+  }
+
+  /*
+   * The move was prepared and abandoned: the run was stopped while it was being prepared. Nothing
+   * was sent, so there is nothing to say about it — and in particular no note, because a note about
+   * an act that did not happen is worse than silence. The ending is already in the feed, written by
+   * whoever stopped the run.
+   */
+  if (outcome.code === RUN_STOPPED.code) {
+    const stopped = await runs.findById(run.id);
+    return jsonResponse(report(move.kind, false, true, stopped?.stopReason ?? null, claimed.steps));
   }
 
   if (note !== null) await appendDriverNote(db, session.id, note);
@@ -153,7 +195,7 @@ export async function POST(
     return jsonResponse(report(move.kind, false, false, null, claimed.steps));
   }
 
-  const reason = endingFor(move, outcome);
+  const reason = endingFor(outcome);
   await stopRun(db, session, run.id, reason, t);
 
   return jsonResponse(report(move.kind, false, true, reason, claimed.steps));
@@ -177,12 +219,27 @@ function report(
  * rather than nine. Guessing finer distinctions from an error code would put words in the gate's
  * mouth.
  */
-function endingFor(move: AutonomousMove, outcome: DispatchOutcome): AutonomousStopReason {
+function endingFor(outcome: DispatchOutcome): AutonomousStopReason {
   if (outcome.code === 'GENERATION_FAILED' || outcome.code === 'DRAFT_INVALID') {
     return 'provider-failed';
   }
 
-  if (move.kind === 'decide-review' && outcome.code === 'GATE_REJECTED') return 'revision-budget';
+  /*
+   * The gate's own reason, not the endpoint's code. `GATE_REJECTED` covers both the spent rewrite
+   * budget and every other refusal the review decision can raise (a transition rejected after the
+   * decision is already persisted, for one), and reporting the second as the first would tell the
+   * reader a budget ran out that did not.
+   */
+  if (outcome.reason === 'REVISION_LIMIT_REACHED') return 'revision-budget';
+
+  /*
+   * The interviewer has nothing left to ask and the door is still shut. That is the fallback panel's
+   * state — the one where a person supplies what the model could not extract — reached from the
+   * other side, so it gets the same ending the policy gives it rather than «the step was refused».
+   */
+  if (outcome.code === 'NO_ROUND_TO_ASK' || outcome.code === 'ROUND_LIMIT_REACHED') {
+    return 'needs-unanswered';
+  }
 
   return 'gate-refused';
 }
@@ -197,11 +254,11 @@ async function stopRun(
 ): Promise<void> {
   const stopped = await createAutonomousRunRepository(db).stop(runId, reason);
   /*
-   * Only the step that actually ended the run writes the note. `stop` is idempotent and answers with
-   * the row as it stands, so a Stop press and a step that finished at the same moment do not put two
-   * endings in the feed — the first one wins and the second sees a reason that is not its own.
+   * Only the call that actually ended the run writes the note. A Stop press and a step finishing at
+   * the same moment race here, and exactly one of them matched a live row — the other finds `ended`
+   * false and says nothing, so the feed carries one ending rather than two.
    */
-  if (stopped?.stopReason !== reason) return;
+  if (stopped?.ended !== true) return;
 
   await appendDriverNote(
     db,
@@ -259,25 +316,39 @@ async function perform(
   move: Exclude<AutonomousMove, { kind: 'stop' }>,
   origin: string,
   t: Awaited<ReturnType<typeof serverT>>,
+  stillRunning: StillRunning,
 ): Promise<{ outcome: DispatchOutcome; note: string | null }> {
   switch (move.kind) {
     case 'ask-round':
-      return { outcome: await dispatchAskRound(origin, session.id), note: null };
+      return {
+        outcome: await guarded(stillRunning, () => dispatchAskRound(origin, session.id)),
+        note: null,
+      };
 
     case 'await-generation':
-      return { outcome: await dispatchAwaitGeneration(origin, move.runId), note: null };
+      return {
+        outcome: await guarded(stillRunning, () => dispatchAwaitGeneration(origin, move.runId)),
+        note: null,
+      };
 
     case 'generate':
-      return { outcome: await dispatchGenerate(origin, session.id), note: null };
+      return {
+        outcome: await guarded(stillRunning, () => dispatchGenerate(origin, session.id)),
+        note: null,
+      };
 
     case 'proceed':
       return {
-        outcome: await dispatchTransition(origin, session.id, move.toStage, move.toSubstage),
+        outcome: await guarded(stillRunning, () =>
+          dispatchTransition(origin, session.id, move.toStage, move.toSubstage),
+        ),
         note: null,
       };
 
     case 'approve-spec': {
-      const outcome = await dispatchApprove(origin, move.specFileId, move.revisionNumber);
+      const outcome = await guarded(stillRunning, () =>
+        dispatchApprove(origin, move.specFileId, move.revisionNumber),
+      );
       if (!outcome.ok) return { outcome, note: null };
 
       return {
@@ -290,11 +361,29 @@ async function perform(
     }
 
     case 'answer-round':
-      return answerRound(db, session, context, move.roundId, origin, t);
+      return answerRound(db, session, context, move.roundId, origin, t, stillRunning);
 
     case 'decide-review':
-      return decideReview(db, session, context, move, origin, t);
+      return decideReview(db, session, context, move, origin, t, stillRunning);
   }
+}
+
+/** Whether the run this step belongs to is still the session's live one. */
+type StillRunning = () => Promise<boolean>;
+
+/**
+ * The one place a move is sent.
+ *
+ * Every branch of `perform` goes through here, so «nothing is dispatched after Stop» is a property
+ * of one function rather than of eight remembered checks.
+ */
+async function guarded(
+  stillRunning: StillRunning,
+  send: () => Promise<DispatchOutcome>,
+): Promise<DispatchOutcome> {
+  if (!(await stillRunning())) return RUN_STOPPED;
+
+  return send();
 }
 
 async function answerRound(
@@ -304,6 +393,7 @@ async function answerRound(
   roundId: string,
   origin: string,
   t: Awaited<ReturnType<typeof serverT>>,
+  stillRunning: StillRunning,
 ): Promise<{ outcome: DispatchOutcome; note: string | null }> {
   const round = context.round;
   /*
@@ -311,7 +401,7 @@ async function answerRound(
    * the next tick re-reads, and `findPendingDecision` will have moved on.
    */
   if (round === null || round.questions.length === 0) {
-    return { outcome: { ok: false, code: 'CONFLICT', retryable: true }, note: null };
+    return { outcome: { ok: false, code: 'CONFLICT', reason: null, retryable: true }, note: null };
   }
 
   const agent = createDriverAgent(createDefaultAdapter(undefined, { modelId: session.modelId }));
@@ -325,23 +415,36 @@ async function answerRound(
   });
 
   if (drafted.kind === 'draft-invalid') {
-    return { outcome: { ok: false, code: 'DRAFT_INVALID', retryable: false }, note: null };
+    return {
+      outcome: { ok: false, code: 'DRAFT_INVALID', reason: null, retryable: false },
+      note: null,
+    };
   }
 
   const resolved = resolveAnswers(round.questions, drafted.draft);
-  const outcome = await dispatchAnswers(origin, session.id, {
-    roundId,
-    answers: resolved.answers,
-  });
+  const outcome = await guarded(stillRunning, () =>
+    dispatchAnswers(origin, session.id, { roundId, answers: resolved.answers }),
+  );
 
   if (!outcome.ok) return { outcome, note: null };
 
   const roundNumber = await roundNumberOf(db, roundId);
+  /*
+   * Two admissions, because there are two different things to admit: the driver took the option the
+   * round recommends, or it took the first one because the round recommended none. A run in which
+   * every fallback was positional says so.
+   */
+  const positional = resolved.fallbacks - resolved.recommendedFallbacks;
+  const fallbackClause =
+    resolved.fallbacks === 0
+      ? ''
+      : positional === 0
+        ? t('feed.driver.answered-fallback', { count: resolved.fallbacks })
+        : t('feed.driver.answered-fallback-first', { count: resolved.fallbacks });
+
   const note =
     t('feed.driver.answered', { round: roundNumber, reason: drafted.draft.rationale }) +
-    (resolved.fallbacks === 0
-      ? ''
-      : t('feed.driver.answered-fallback', { count: resolved.fallbacks }));
+    fallbackClause;
 
   return { outcome, note };
 }
@@ -353,16 +456,24 @@ async function decideReview(
   move: Extract<AutonomousMove, { kind: 'decide-review' }>,
   origin: string,
   t: Awaited<ReturnType<typeof serverT>>,
+  stillRunning: StillRunning,
 ): Promise<{ outcome: DispatchOutcome; note: string | null }> {
   const board = context.board;
   if (board === null) {
-    return { outcome: { ok: false, code: 'CONFLICT', retryable: true }, note: null };
+    return { outcome: { ok: false, code: 'CONFLICT', reason: null, retryable: true }, note: null };
   }
 
-  const document = board.specType;
+  /*
+   * What the reader calls this document, not what the column stores it as. `specType` is a slot slug
+   * — `constitution`, `solution` — and no card, path or ZIP entry in the product prints it: a
+   * SpecKit session calls the same slot «Specify», and a Russian interface calls it «Требования».
+   */
+  const document = stageLabel(t, board.specType, session.methodologyId, null);
 
   if (move.decision === 'accept') {
-    const outcome = await dispatchReviewDecision(origin, move.reviewId, 'accept', []);
+    const outcome = await guarded(stillRunning, () =>
+      dispatchReviewDecision(origin, move.reviewId, 'accept', []),
+    );
     if (!outcome.ok) return { outcome, note: null };
 
     /*
@@ -398,7 +509,7 @@ async function decideReview(
    */
   const keepIds = drafted.kind === 'draft' ? drafted.draft.keepIds : [];
   const rationale =
-    drafted.kind === 'draft' ? drafted.draft.rationale : t('feed.driver.stop.provider-failed');
+    drafted.kind === 'draft' ? drafted.draft.rationale : t('feed.driver.no-selection');
 
   const selected = resolveSelectedItems(
     board.blocking.map((item) => item.id),
@@ -406,7 +517,9 @@ async function decideReview(
     keepIds,
   );
 
-  const outcome = await dispatchReviewDecision(origin, move.reviewId, 'request_changes', selected);
+  const outcome = await guarded(stillRunning, () =>
+    dispatchReviewDecision(origin, move.reviewId, 'request_changes', selected),
+  );
 
   if (!outcome.ok) return { outcome, note: null };
 

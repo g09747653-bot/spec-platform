@@ -170,10 +170,15 @@ export function createAutonomousRunRepository(db: SchemaDatabase) {
      * that its own move outranks the person watching it. A step that had already read `running` finds
      * this row `stopped` at its guard and dispatches nothing (see `recordStep`'s `status` predicate).
      *
-     * Idempotent: stopping a run that is already stopped answers with the row as it stands, so a
-     * double-click and a stop-then-complete race both end with one recorded reason — the first one.
+     * Idempotent, and it reports **which** call did it. `ended` is false for a caller that found the
+     * run already stopped, which is the only way two simultaneous stops can put one ending in the
+     * feed rather than two: reading the reason back is not enough, because two presses of the same
+     * button read back the same reason and both believe they wrote it.
      */
-    async stop(runId: string, reason: AutonomousStopReason): Promise<AutonomousRun | null> {
+    async stop(
+      runId: string,
+      reason: AutonomousStopReason,
+    ): Promise<{ run: AutonomousRun; ended: boolean } | null> {
       const rows = await queryRows(
         db,
         sql`
@@ -189,7 +194,7 @@ export function createAutonomousRunRepository(db: SchemaDatabase) {
       );
 
       const updated = rows[0];
-      if (updated !== undefined) return toRun(updated);
+      if (updated !== undefined) return { run: toRun(updated), ended: true };
 
       const existing = await queryRows(
         db,
@@ -198,6 +203,23 @@ export function createAutonomousRunRepository(db: SchemaDatabase) {
       );
 
       const row = existing[0];
+      return row === undefined ? null : { run: toRun(row), ended: false };
+    },
+    /**
+     * One run by id.
+     *
+     * Read by the step handler after it abandons a prepared move: the run already has an ending, and
+     * the honest thing to report is the one that is recorded rather than one inferred from the fact
+     * that the move did not go.
+     */
+    async findById(runId: string): Promise<AutonomousRun | null> {
+      const rows = await queryRows(
+        db,
+        sql`SELECT ${COLUMNS} FROM ${autonomousRuns} WHERE id = ${runId}::uuid`,
+        RunRow,
+      );
+
+      const row = rows[0];
       return row === undefined ? null : toRun(row);
     },
   };

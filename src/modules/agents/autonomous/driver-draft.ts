@@ -61,6 +61,15 @@ export interface ResolvedAnswer {
 export interface AnswerResolution {
   answers: ResolvedAnswer[];
   fallbacks: number;
+  /**
+   * How many of those fallbacks took the option the round itself recommended.
+   *
+   * Counted apart because the two are different things to tell a reader, and the first version of
+   * the note said «I took the recommended option» over questions that recommended nothing — a
+   * sentence that is grammatical, plausible and false. `fallbacks - recommendedFallbacks` is the
+   * number of questions where the driver took the first option because there was no better rule.
+   */
+  recommendedFallbacks: number;
   /** Ids the model returned that were not on the round. Dropped, and counted. */
   rejectedIds: number;
 }
@@ -72,11 +81,12 @@ export interface AnswerResolution {
  * and preferring it keeps the driver's default the same default a hurried person would take — then
  * the first option, which is a rule rather than a preference and is stated as such.
  */
-function fallbackOption(question: RoundQuestion): string | null {
+function fallbackOption(question: RoundQuestion): { id: string; recommended: boolean } | null {
   const recommended = question.options.find((option) => option.recommended === true);
-  if (recommended !== undefined) return recommended.id;
+  if (recommended !== undefined) return { id: recommended.id, recommended: true };
 
-  return question.options[0]?.id ?? null;
+  const first = question.options[0];
+  return first === undefined ? null : { id: first.id, recommended: false };
 }
 
 /**
@@ -101,6 +111,7 @@ export function resolveAnswers(
   const drafted = new Map(draft.answers.map((answer) => [answer.questionId, answer]));
   const answers: ResolvedAnswer[] = [];
   let fallbacks = 0;
+  let recommendedFallbacks = 0;
   let rejectedIds = 0;
 
   for (const question of questions) {
@@ -116,8 +127,9 @@ export function resolveAnswers(
     if (selected.length === 0) {
       const fallback = fallbackOption(question);
       if (fallback !== null) {
-        selected = [fallback];
+        selected = [fallback.id];
         fallbacks += 1;
+        if (fallback.recommended) recommendedFallbacks += 1;
       }
     }
 
@@ -130,7 +142,7 @@ export function resolveAnswers(
     });
   }
 
-  return { answers, fallbacks, rejectedIds };
+  return { answers, fallbacks, recommendedFallbacks, rejectedIds };
 }
 
 /**
