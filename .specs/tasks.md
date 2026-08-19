@@ -1748,7 +1748,7 @@ Goal: the customer's second hands-on pass plus his video demo (`video demo/Deskt
   - Acceptance Criteria: with the flag on, opening `/` lands in the owner's projects with no login step (e2e with JS off proves the server made the session); the existing e2e suite passes with the flag ON against the local profile; a regression run with the flag OFF shows the present OAuth flow unchanged.
   - _Dependencies: —_ · _Requirements: А-7 §4; бандл A0 (FR «Локальный однопользовательский режим»)_ · _Touches: `src/modules/projects/auth/**`, auth surface in `src/app/**`_ · _Complexity: Medium_ · _Parallel-safe: no_
 
-- [ ] 149\. Persistent local database profile
+- [x] 149\. Persistent local database profile
   - A durable local DB profile reusing the machinery the throwaway harness already trusts (PGlite): data lives in a project-local gitignored directory, survives restarts, selected by the same env seam that picks the throwaway one today. One command brings the whole local stack up (DB + dev server with the local flag), one takes it down; a short RU README section for the заказчик (три команды).
   - Explicitly NOT a migration to SQLite: Spec Platform stays on its Postgres dialect (18 миграций, партиальные уникальные индексы, триггеры); SQLite в Программе А — база оркестратора (`loop/`), не платформы (А-20).
   - Acceptance Criteria: full journey (seed → sealed bundle) on the local profile with the dev server restarted mid-journey — session, revisions, boards and messages survive restart byte-for-byte; the throwaway gate harness is untouched and green.
@@ -1760,7 +1760,7 @@ Goal: the customer's second hands-on pass plus his video demo (`video demo/Deskt
   - Acceptance Criteria: AJV validation of both JSON files against the shared schema fixtures is a unit test; a golden-fixture test pins the markdown→JSON mapping so schema drift is a red diff; ZIP export byte-identical to today.
   - _Dependencies: 149_ · _Requirements: бандл A0 (Integration: Spec Platform Bundle); А-20_ · _Touches: `src/modules/specs/export/**` (new mode)_ · _Complexity: Medium_ · _Parallel-safe: no_
 
-- [ ] 151\. M14а gate — live walk on the local profile (self-run, А-2.1)
+- [x] 151\. M14а gate — live walk on the local profile (self-run, А-2.1)
   - Live walk: local stack up by the one-command script, auto-owner session, full autonomous run from a short RU seed to a sealed bundle (профиль гейта: свежий ключ спереди), machine export produced and AJV-validated, dev-server restart mid-walk proving persistence. Both themes, RU chrome; liveness invariant on every snapshot; the usual red conditions (truncation, structural rejection, console) plus one new: any OAuth surface visible in local mode = red.
   - Acceptance Criteria: walk GREEN with artifacts `artifacts/gate-M14a/` (RESULT, screens, transcript, sha256 of the machine bundle); Architect artifact verification, then customer eyes-acceptance.
   - _Dependencies: 148–150_ · _Requirements: А-2.1_ · _Touches: `e2e/**`, `artifacts/gate-M14a/**`_ · _Complexity: Medium_ · _Parallel-safe: no_
