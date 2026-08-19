@@ -25,9 +25,9 @@ import { VIEWS, VIEW_LABELS, type ViewerView } from './views';
 
 /**
  * The view vocabulary moved to `views.ts` when this file started reading the request's locale
- * (task 143): `next/headers` may not appear in a client component's module graph, and the docked
- * pane imports the union. Re-exported because the page reaches it through this module — the pane
- * takes it from `views.ts` directly, and must keep doing so.
+ * (task 143): `next/headers` may not appear in a client component's module graph, and the overlay
+ * imports the union. Re-exported because the page reaches it through this module — the overlay takes
+ * it from `views.ts` directly, and must keep doing so.
  */
 export { VIEWS, isViewerView, type ViewerView } from './views';
 
@@ -183,7 +183,19 @@ export async function DocumentViewer({
 
       {view === 'preview' && <Markdown content={current.content} />}
 
-      {view === 'raw' && <RawPane specFileId={specFileId} content={current.content} />}
+      {/*
+        The revision is passed, and before task 147 it was not: this page can be opened at `?rev=1`
+        while Rev 3 is the approved one, and a Copy that omitted the number asked the endpoint the
+        *export* question and answered with Rev 3 — silently, under a confirmation that said it had
+        worked. What is on screen and what lands on the clipboard are now one revision by name.
+      */}
+      {view === 'raw' && (
+        <RawPane
+          specFileId={specFileId}
+          content={current.content}
+          revision={current.revisionNumber}
+        />
+      )}
 
       {view === 'diff' &&
         (previous === null || unifiedDiff === null ? (

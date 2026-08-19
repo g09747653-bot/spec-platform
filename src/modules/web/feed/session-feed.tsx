@@ -64,8 +64,9 @@ import { tailPrimary } from './tail-primary';
  * **What M12п changed is the frame around all that** (tasks 136, 137, 141). The conversation scrolls
  * inside itself, between a header and a composer that do not move, rather than being one long page
  * that carries its header and its controls out of reach as it grows. The right dock holds the
- * sidebar or — when a document is opened — the viewer, which is wider, because a document is the
- * thing this product makes and a 300-pixel well was never a way to read one.
+ * sidebar, and a document opens over the whole surface as an overlay (task 147) rather than taking
+ * that dock away from it — because a document is the thing this product makes, and neither a
+ * 300-pixel well nor a third of a row was ever a way to read one.
  */
 export interface SessionFeedProps {
   sessionId: string;
@@ -105,7 +106,7 @@ export interface SessionFeedProps {
   selectedModel: string;
   /** The session header — rendered by the page, pinned by this component (task 137). */
   header: ReactNode;
-  /** The sidebar's panels. Rendered in the dock, and displaced by the viewer when one is open. */
+  /** The sidebar's panels. Rendered in the dock, where they now stay while a document is open. */
   sidebar: ReactNode;
 }
 
@@ -524,6 +525,11 @@ function SessionSurface({
           So the defect was never in the pane or in the `<pre>`; both behaved. What was missing was
           the instruction, at the one place a row learns it, that this row is as wide as the window
           and its children are the ones that scroll. `e2e/bug-hunt-M13.spec.ts` measures it.
+
+          Task 147 took the pane out of this row — it is an overlay, and its width is a number rather
+          than a share — and Raw now wraps, so neither of the two conditions that produced D-205 is
+          still here. The class is: this row must never be sized by its contents, whatever they turn
+          out to be. That is why the guard stays after the specific defect it was written for left.
         */}
         <div className="flex min-h-0 min-w-0 flex-1" data-testid="session-panes">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -646,25 +652,17 @@ function SessionSurface({
           </div>
 
           {/*
-            One dock, two possible occupants. A document displaces the panels rather than squeezing
-            in beside them: at any width this product has to work at, three columns leave none of
-            them wide enough to be the reason it exists.
+            The viewer is an overlay now, so the dock has one occupant again (task 147).
 
-            The sidebar stays mounted while the viewer is open — hidden, not unmounted — because its
-            file input is the one upload path, and the composer's attach button presses it.
+            It is rendered from here because this is where «which document is open» lives, but it is
+            `position: fixed` and therefore no longer part of this row at any width — which is what
+            let the sidebar stop being displaced. Hiding the panels was the price of a docked pane:
+            three columns leave none of them wide enough, so a document had to push one out. Nothing
+            pushes now, and the tests that checked «the panels came back after closing» pass because
+            the panels never left.
           */}
           {viewer !== null && <ViewerPane target={viewer} onClose={closeViewer} />}
-          {/*
-            `display: contents`, so the pane itself is the row's flex child and its `max-w-[40%]`
-            resolves against the row. A wrapper box in between would have been the flex child, and
-            the cap would have measured forty per cent of a box the pane itself sizes.
-
-            `hidden` rather than not rendering it: the pane holds the session's one file input, and
-            the composer's attach button presses exactly that control.
-          */}
-          <div className="contents" hidden={viewer !== null}>
-            {sidebar}
-          </div>
+          {sidebar}
         </div>
       </ViewerControlProvider>
     </MethodologyNaming>

@@ -332,6 +332,16 @@ test.describe('M12п bug hunt', () => {
         revision,
       );
       await expect(page.getByTestId('viewer-metric-lines')).toBeVisible();
+
+      /*
+       * Closed before the next card, because the viewer is a modal overlay now (task 147): the
+       * conversation is visible under the scrim but not clickable through it, so «open the next
+       * document» is a two-step move for a person and has to be one here too. The docked pane let
+       * this loop press the next eye directly; the property being tested — the pane follows the
+       * card it was opened from, rather than showing whichever revision loaded last — is unchanged.
+       */
+      await page.keyboard.press('Escape');
+      await expect(page.getByTestId('viewer-pane')).toHaveCount(0);
     }
 
     // A reload closes the pane rather than restoring a stale one — and leaves the session usable.

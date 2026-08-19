@@ -63,8 +63,14 @@ export function ConnectionBanner({ stamp }: { stamp: string }) {
         A band across the frame rather than a floating card (task 137): it now sits between the
         application header and the panes, where nothing scrolls, so `sticky` has nothing left to do
         and a rounded box would read as content rather than as chrome.
+
+        `relative` is what makes the `z-30` real (task 147). A `z-index` on a static box is inert, so
+        the declared order was decoration until something claimed a layer above it: the document
+        overlay is `fixed` at 25, and a fixed box paints over every static one whatever its number.
+        «You are offline» is the one sentence that must not end up behind a document — the reader's
+        next action depends on it — so the banner takes the layer the number always promised.
       */
-      className="border-warning-ink/40 bg-warning-soft text-warning-ink z-30 flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-2"
+      className="border-warning-ink/40 bg-warning-soft text-warning-ink relative z-30 flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-2"
     >
       <span className="text-caption">
         {t(state === 'checking' ? 'session.connection.checking' : 'session.connection.offline')}

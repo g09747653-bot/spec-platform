@@ -3,7 +3,7 @@ import { definePhrases } from '../phrase';
 /**
  * The words the document viewer says (task 143).
  *
- * **Two surfaces, one vocabulary.** The pane docked beside the conversation and the full page at
+ * **Two surfaces, one vocabulary.** The overlay over the conversation and the full page at
  * `/specs/:id` show the same four views over the same revisions, so the tab names, the revision
  * badge and the diff caption are one entry each, printed from both. Where the two surfaces mean
  * different things they keep their own key: the pane's outline is empty because nothing has been
@@ -42,7 +42,7 @@ export const viewerPhrases = definePhrases({
   'viewer.revision.verdict-request-changes': { en: 'changes requested', ru: 'на доработку' },
 
   /*
-   * The header of the docked pane. Counted phrases, because a viewer over a one-line document is
+   * The header of the overlay. Counted phrases, because a viewer over a one-line document is
    * ordinary and «1 строки» is the defect this dictionary shape exists to prevent (Эталон §4).
    */
   'viewer.metrics.draft': { en: 'Draft in progress', ru: 'Черновик пишется' },
@@ -58,7 +58,7 @@ export const viewerPhrases = definePhrases({
 
   /*
    * «Окно документа» is the same name the card and the shortcut list use for this surface, and it
-   * outlives the docked pane the overlay of task 147 replaces (Эталон §2.5, §5.12).
+   * outlived the docked pane the overlay of task 147 replaced (Эталон §2.5, §5.12).
    */
   'viewer.pane.label': {
     en: '{fileName} — document viewer',
@@ -70,6 +70,16 @@ export const viewerPhrases = definePhrases({
     ru: 'Закрыть окно документа (Esc)',
   },
   'viewer.pane.full-page': { en: 'Full page', ru: 'Отдельная страница' },
+  /*
+   * Download's tooltip names the file, because the control itself cannot: the header's right-hand
+   * line is one line (task 147), so the label is the bare verb and the sentence that says what will
+   * land in the downloads folder lives in the `title`. The file name is a placeholder rather than
+   * part of the phrase — it is a machine identifier and neither language declines it (§3).
+   */
+  'viewer.pane.download-hint': {
+    en: 'Download {fileName} as it is on screen',
+    ru: 'Скачать {fileName}\u00A0— ту ревизию, что на экране',
+  },
   'viewer.pane.read-failed': {
     en: 'That revision could not be read just now.',
     ru: 'Эту ревизию сейчас не удалось прочитать.',
@@ -102,13 +112,30 @@ export const viewerPhrases = definePhrases({
     ru: 'Документ ещё пишется\u00A0— сравнивать пока не с чем.',
   },
 
-  /* Markdown keeps its Latin spelling and takes no Russian case ending (Эталон §3). */
-  'viewer.raw.copy': { en: 'Copy markdown', ru: 'Копировать Markdown' },
-  'viewer.raw.copied': {
-    en: 'Copied the approved revision to the clipboard.',
-    ru: 'Одобренная ревизия скопирована в буфер обмена.',
+  /*
+   * Markdown keeps its Latin spelling and takes no Russian case ending (Эталон §3).
+   *
+   * Perfective, in step with `common.copy` — the two copy controls a reader meets in one header
+   * cannot be one verb in two aspects (§1.2 rule 1).
+   */
+  'viewer.raw.copy': { en: 'Copy markdown', ru: 'Скопировать Markdown' },
+
+  /*
+   * What a copy says, from either surface — the overlay's header control and the standalone page's
+   * Raw pane are one behaviour (`viewer/content.ts`), so they are one sentence. Hence `viewer.copy`
+   * rather than `viewer.raw`: the control stopped belonging to the Raw view when the overlay's
+   * header took it over (task 147).
+   *
+   * **It no longer says «the approved revision»,** because that had stopped being true and had been
+   * untrue in a worse way before: the copy now asks for the revision on screen by number, so a
+   * reader looking at Rev 1 gets Rev 1. The sentence names what was copied without claiming a
+   * verdict it cannot see from here.
+   */
+  'viewer.copy.done': {
+    en: 'Copied that revision to the clipboard.',
+    ru: 'Ревизия скопирована в буфер обмена.',
   },
-  'viewer.raw.copy-failed': {
+  'viewer.copy.failed': {
     en: 'That copy did not go through.',
     ru: 'Скопировать не удалось.',
   },

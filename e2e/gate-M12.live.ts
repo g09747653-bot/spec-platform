@@ -729,17 +729,27 @@ async function readViewer(page: Page): Promise<void> {
     if (view === 'raw' || view === 'outline') await snapshot(page, `viewer-${view}`);
   }
 
-  /* Raw carries a number for every line of the document, in a gutter that is not the document. */
+  /*
+   * Raw carries a number for every line of the document, painted beside text that is only the
+   * document (task 147).
+   *
+   * Two things changed here with the overlay. The gutter is no longer an `<ol>` beside the text but
+   * a CSS counter over one span per logical line, so `data-lines` is asked of the `<pre>` itself.
+   * And the text is read with `textContent` rather than `innerText`: the spans are block boxes, so
+   * `innerText` would add a line break at every boundary *on top of* the newline each span already
+   * carries and report twice as many lines as the file has. `textContent` is also the stricter
+   * question — it is the one that has to equal the stored bytes.
+   */
   await click(page, 'viewer-pane-tab-raw', 'viewer: raw again', 15_000);
   const raw = await page
     .getByTestId('viewer-raw')
-    .innerText()
+    .textContent()
     .catch(() => '');
   const gutter = await page
-    .getByTestId('viewer-raw-gutter')
+    .getByTestId('viewer-raw')
     .getAttribute('data-lines')
     .catch(() => null);
-  const rawLines = raw.replace(/\n$/u, '').split('\n').length;
+  const rawLines = (raw ?? '').replace(/\n$/u, '').split('\n').length;
 
   say(`viewer raw: ${String(rawLines)} line(s) of text, the gutter numbers ${gutter ?? 'none'}`);
   if (gutter !== String(rawLines)) {
@@ -763,7 +773,20 @@ async function readViewer(page: Page): Promise<void> {
     .getAttribute('href')
     .catch(() => null);
   const specFileId = (href ?? '').split('/').at(-1)?.split('?')[0] ?? '';
-  const revisionNumber = /Rev\s+(\d+)/.exec(revision)?.[1] ?? '';
+  /*
+   * The number comes from the header's own attribute, not from the words in it (task 147).
+   *
+   * `/Rev\s+(\d+)/` read the badge as English copy, and the badge says «Рев. 1» in the locale this
+   * deployment defaults to — so the pattern found nothing, the walk asked the endpoint without
+   * `?rev=`, and the export answer («none», for a draft nobody has approved) came back to be counted
+   * against the header. `data-revision` is the same value with no language in it, and `draft` is how
+   * it says «no stored revision», which is exactly when there is no number to ask for.
+   */
+  const stated = await page
+    .getByTestId('viewer-metric-revision')
+    .getAttribute('data-revision')
+    .catch(() => null);
+  const revisionNumber = stated === null || stated === 'draft' ? '' : stated;
 
   if (specFileId !== '') {
     const exported = await page.evaluate(
