@@ -83,7 +83,12 @@ export interface SeedBlock extends FeedBlockBase {
 export interface MessageBlock extends FeedBlockBase {
   kind: 'message';
   /** `bridge` is the interviewer's commentary between two rounds (task 132; Эталон §1.2). */
-  origin: 'summary' | 'chat' | 'revision-note' | 'bridge';
+  /**
+   * `driver` is the autonomous driver's account of an answer it gave or a decision it took on the
+   * reader's behalf (task 145). It carries its own test id and its own badge, because «the machine
+   * did this for you» is the one thing about such a line that must not be inferred from its wording.
+   */
+  origin: 'summary' | 'chat' | 'revision-note' | 'bridge' | 'driver';
   text: string;
   /** True while an assistant reply is still being written into the feed (task 109). */
   streaming: boolean;

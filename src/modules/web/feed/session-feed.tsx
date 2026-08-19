@@ -46,6 +46,7 @@ import { ProposalBlockCard, RefineBox, type PendingProposalModel } from './propo
 import { RevertCard, type RevertModel } from './revert-card';
 import { ReviewBlockCard } from './review-block';
 import { RoundBlock } from './round-block';
+import { DriverPanel, type DriverModel } from './driver-panel';
 import { StageActions, type StageActionsModel } from './stage-actions';
 import { tailPrimary } from './tail-primary';
 
@@ -108,6 +109,8 @@ export interface SessionFeedProps {
   header: ReactNode;
   /** The sidebar's panels. Rendered in the dock, where they now stay while a document is open. */
   sidebar: ReactNode;
+  /** The autonomous run driving this chat, and how the last one ended (task 145). */
+  driver: DriverModel;
 }
 
 export function SessionFeed(props: SessionFeedProps) {
@@ -150,6 +153,7 @@ function SessionSurface({
   selectedModel,
   header,
   sidebar,
+  driver,
 }: SessionFeedProps) {
   const router = useRouter();
   const t = useT();
@@ -266,6 +270,7 @@ function SessionSurface({
    */
   const primary = tailPrimary({
     tail,
+    autonomousRunning: driver.running !== null,
     canGenerate,
     revisionOwed: feed.revisionOwed !== null && feed.revisionOwed.specType === feed.position.stage,
     // This stage's own newest document — an approved constitution says nothing about a draft tasks.
@@ -566,6 +571,22 @@ function SessionSurface({
                       revisionOwed={feed.revisionOwed}
                       primary={primary}
                     />
+                  </li>
+                )}
+
+                {/*
+                  The driver's own bar, above the stage bar rather than inside it (task 145).
+
+                  Two bars rather than one because they answer to different owners: the stage bar is
+                  what a person presses, and this is what a person presses to *stop* something being
+                  pressed for them. Folding the run's Stop into the panel of controls it suspends
+                  would put the way out among the things it is a way out of.
+                */}
+                {(tail.kind !== 'sealed' ||
+                  driver.running !== null ||
+                  driver.lastStopReason !== null) && (
+                  <li className="flex w-full">
+                    <DriverPanel sessionId={sessionId} driver={driver} primary={primary} />
                   </li>
                 )}
 

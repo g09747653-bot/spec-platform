@@ -450,4 +450,143 @@ export const feedConversationPhrases = definePhrases({
     en: 'That step could not be reverted. Nothing changed.',
     ru: 'Вернуться к предыдущему шагу не удалось. Ничего не изменилось.',
   },
+
+  /* ------------------------------------------------------------ the autonomous driver (task 145) */
+
+  /**
+   * The driver's own voice in the feed.
+   *
+   * These are **chrome**, not content, and the distinction is the one У-1 draws: the spec is written
+   * in the session's language, but a line saying what the product just did on your behalf is the
+   * product talking, and it belongs in the language the rest of the interface is in. Where a model
+   * supplied a reason, that reason arrives as `{reason}` and stays in the content language — so one
+   * sentence can carry both halves without either pretending to be the other.
+   *
+   * They are persisted, so each is frozen in the locale it was written in. That is true of every
+   * message this product stores and is the honest behaviour: the note says what was said at the
+   * moment it happened, and re-translating history would be inventing a record nobody wrote.
+   */
+  'feed.driver.started': {
+    en: 'Autonomous mode is on. I will take this session from your description on my own, and record every answer and decision as I go — press Stop at any point to take it back.',
+    ru: 'Автономный режим включён. Я проведу сессию от вашего описания сам и запишу каждый ответ и каждое решение\u00A0— нажмите «Стоп» в любой момент, чтобы взять управление.',
+  },
+
+  /** The answer note. `{reason}` is the model's own sentence and is never touched. */
+  'feed.driver.answered': {
+    en: 'Answered round {round} for you — {reason}',
+    ru: 'Ответил за вас на раунд {round}\u00A0— {reason}',
+  },
+
+  /**
+   * The clause that admits the seed did not decide everything.
+   *
+   * Separate from the note above rather than folded into it, because it is only true sometimes and a
+   * sentence that says «for 0 questions» would be worse than silence. Counted in both halves: three
+   * Russian forms for a number that is usually one or two.
+   */
+  'feed.driver.answered-fallback': {
+    en: {
+      one: ' Your description did not settle {count} question, so I took the recommended option.',
+      other:
+        ' Your description did not settle {count} questions, so I took the recommended options.',
+    },
+    ru: {
+      one: ' Описание не решает {count} вопрос, поэтому я взял рекомендованный вариант.',
+      few: ' Описание не решает {count} вопроса, поэтому я взял рекомендованные варианты.',
+      many: ' Описание не решает {count} вопросов, поэтому я взял рекомендованные варианты.',
+    },
+  },
+
+  'feed.driver.approved': {
+    en: 'Approved {document}, revision {revision} — the review below is what judges it.',
+    ru: 'Утвердил документ «{document}», ревизия {revision}\u00A0— судит его ревью ниже.',
+  },
+
+  /** Sent back. The count is the points going into the rewrite, blocking and kept advisory alike. */
+  'feed.driver.review-changes': {
+    en: {
+      one: 'Sent {document} back with {count} point — {reason}',
+      other: 'Sent {document} back with {count} points — {reason}',
+    },
+    ru: {
+      one: 'Вернул документ «{document}» на доработку с {count} замечанием\u00A0— {reason}',
+      few: 'Вернул документ «{document}» на доработку с {count} замечаниями\u00A0— {reason}',
+      many: 'Вернул документ «{document}» на доработку с {count} замечаниями\u00A0— {reason}',
+    },
+  },
+
+  'feed.driver.review-accepted': {
+    en: 'Accepted the review of {document}: it found nothing blocking.',
+    ru: 'Принял ревью документа «{document}»: блокирующих замечаний нет.',
+  },
+
+  /**
+   * The other way a board is accepted, and it is not the same event.
+   *
+   * A board accepted because the rewrite budget is spent still says the document is wanting, and a
+   * note that read «nothing blocking» over it would be the driver misreporting its own reason.
+   */
+  'feed.driver.review-accepted-budget': {
+    en: 'Accepted the review of {document} because this file has used its {count} rewrites — the points it still raises stay on the board.',
+    ru: 'Принял ревью документа «{document}»: файл израсходовал свои переписывания ({count})\u00A0— оставшиеся замечания сохранены на доске.',
+  },
+
+  /* ------------------------------------------------------- how a run ends, one sentence per reason */
+
+  'feed.driver.stop.completed': {
+    en: 'The bundle is finished. Autonomous mode is done here; the session is yours.',
+    ru: 'Бандл готов. Автономный режим завершён, сессия снова ваша.',
+  },
+  'feed.driver.stop.stopped-by-user': {
+    en: 'Stopped at your request. The session stays exactly where it is and continues by hand.',
+    ru: 'Остановлен по вашей команде. Сессия осталась ровно на этом месте и продолжается вручную.',
+  },
+  'feed.driver.stop.seed-too-thin': {
+    en: 'Stopped: the description is too short to answer an interview from. Add a few sentences about what you want built and start again, or answer the questions yourself.',
+    ru: 'Остановился: описание слишком короткое, чтобы отвечать по нему на интервью. Допишите несколько предложений о том, что нужно построить, и запустите снова\u00A0— или ответьте на вопросы сами.',
+  },
+  'feed.driver.stop.needs-unanswered': {
+    en: 'Stopped: the question rounds for this part are used up and something is still missing. That answer is yours to give.',
+    ru: 'Остановился: раунды вопросов для этой части исчерпаны, а чего-то всё ещё не хватает. Этот ответ можете дать только вы.',
+  },
+  'feed.driver.stop.revision-budget': {
+    en: 'Stopped: this document has used every rewrite it is allowed and the review still asks for changes.',
+    ru: 'Остановился: документ израсходовал все допустимые переписывания, а ревью всё ещё просит правок.',
+  },
+  'feed.driver.stop.step-budget': {
+    en: 'Stopped: the run reached its ceiling of {count} steps without finishing. Nothing is lost — the session continues by hand.',
+    ru: 'Остановился: прогон упёрся в потолок в {count} шагов и не завершился. Ничего не потеряно\u00A0— сессия продолжается вручную.',
+  },
+  'feed.driver.stop.stalled': {
+    en: 'Stopped: two steps in a row changed nothing, which means I was going in a circle.',
+    ru: 'Остановился: два шага подряд ничего не изменили\u00A0— значит, я ходил по кругу.',
+  },
+  'feed.driver.stop.gate-refused': {
+    en: 'Stopped: the next step was refused and I have no move that would change that.',
+    ru: 'Остановился: следующий шаг отклонён, и у меня нет хода, который это изменит.',
+  },
+  'feed.driver.stop.provider-failed': {
+    en: 'Stopped: the model could not produce what this step needed. Nothing is lost — try the step by hand.',
+    ru: 'Остановился: модель не смогла выдать то, что нужно этому шагу. Ничего не потеряно\u00A0— сделайте шаг вручную.',
+  },
+  'feed.driver.stop.human-decision-pending': {
+    en: 'Stopped: a change you proposed is waiting for your decision, and that decision is not mine to take.',
+    ru: 'Остановился: предложенная вами правка ждёт вашего решения, а это решение не моё.',
+  },
+
+  /* --------------------------------------------------------------------- the driver panel controls */
+
+  'feed.driver.badge': { en: 'Autonomous', ru: 'Автономно' },
+  'feed.driver.running': {
+    en: 'Driving the session — step {steps}.',
+    ru: 'Веду сессию\u00A0— шаг {steps}.',
+  },
+  'feed.driver.stop-action': { en: 'Stop', ru: 'Стоп' },
+  'feed.driver.stopping': { en: 'Stopping…', ru: 'Останавливаю…' },
+  'feed.driver.start-action': { en: 'Run autonomously', ru: 'Вести автономно' },
+  'feed.driver.starting': { en: 'Starting…', ru: 'Запускаю…' },
+  'feed.driver.stopped': {
+    en: 'Autonomous mode is off. The session continues by hand from here.',
+    ru: 'Автономный режим выключен. Сессия продолжается вручную с этого места.',
+  },
 });

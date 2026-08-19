@@ -42,6 +42,16 @@ export function FeedItem({
        */
       data-msg-snippet={block.snippet ?? ''}
       data-msg-kind={block.kind}
+      /*
+       * Who wrote it, where a block records that (task 145).
+       *
+       * Ours rather than the reference's, and it exists for one claim the autonomous mode has to be
+       * able to make mechanically: **every act the machine took on the reader's behalf is marked as
+       * one**. A walk can count `[data-msg-origin="driver"]` against the answers and decisions in a
+       * run; a badge in prose could only be counted by reading. Absent on every block that has no
+       * origin to record, so the attribute's presence is itself information.
+       */
+      data-msg-origin={block.kind === 'message' ? block.origin : undefined}
       data-testid={`feed-block-${block.kind}`}
       className={cn(
         'flex w-full',

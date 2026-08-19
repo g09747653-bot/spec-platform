@@ -8,8 +8,39 @@
  *
  * Two blocking items and one advisory item, deliberately: FR-010 AC-7's filter is only meaningful
  * when there is more than one item to choose between, and the ReviewBoard renders two lists.
+ *
+ * **A re-review passes** (`revised`), and that is a correction rather than a convenience (task 145).
+ * A stub that raises the same two blocking findings about a document rewritten to apply them is not
+ * standing in for a well-behaved model — it is standing in for one that cannot read. It also made
+ * `verdict: 'pass'` unreachable from every automated path in the repository, so the terminating half
+ * of the revision cycle had never once been walked: every suite that entered the loop left it by
+ * accepting a board that still said the document was broken. The advisory finding survives the
+ * rewrite because taste is not something a rewrite settles, and a board with nothing on it would
+ * stop exercising the two lists this double exists to produce.
  */
-export function stubReviewDocument(specType = 'specification'): string {
+export function stubReviewDocument(specType = 'specification', revised = false): string {
+  if (revised) {
+    return JSON.stringify(
+      {
+        verdict: 'pass',
+        summary: `The rewritten ${specType} applies the points it was sent back for; what is left is a matter of taste.`,
+        mustFix: [],
+        recommendations: [
+          {
+            id: 'rec-example',
+            sectionPath: 'Notes',
+            title: 'The list would read better with an example',
+            body: 'The section would read more clearly with a worked example.',
+            suggestion: 'Add one short example beneath the list.',
+            confidence: 6,
+          },
+        ],
+      },
+      null,
+      2,
+    );
+  }
+
   return JSON.stringify(
     {
       verdict: 'needs_revision',
@@ -63,4 +94,16 @@ export function looksLikeReviewPrompt(prompt: string): boolean {
 /** The spec type named in a review prompt, for a document that mentions the file it reviewed. */
 export function specTypeFromReviewPrompt(prompt: string): string {
   return /Review the (\S+) document/.exec(prompt)?.[1] ?? 'specification';
+}
+
+/**
+ * Whether the review being asked for is a **re**-review.
+ *
+ * Recognised by the opening sentence `verificationBlock` renders verbatim when — and only when — the
+ * caller passed points to verify (`prompts/assets/review.ts`). A first review renders that block as
+ * the empty string, so the two cases are told apart by the same fact the prompt itself is built
+ * from, not by counting anything.
+ */
+export function looksLikeRereviewPrompt(prompt: string): boolean {
+  return prompt.includes('This document has been revised.');
 }

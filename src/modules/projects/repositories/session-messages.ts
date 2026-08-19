@@ -17,7 +17,7 @@ import { queryOneRow, queryRows } from '@/db/sql';
  * the text is what somebody said.
  */
 export type MessageRole = 'user' | 'assistant';
-export type MessageOrigin = 'chat' | 'bridge';
+export type MessageOrigin = 'chat' | 'bridge' | 'driver';
 
 export interface StoredMessage {
   id: string;
@@ -33,7 +33,7 @@ export interface StoredMessage {
 const MessageRow = z.object({
   id: z.uuid(),
   role: z.enum(['user', 'assistant']),
-  origin: z.enum(['chat', 'bridge']),
+  origin: z.enum(['chat', 'bridge', 'driver']),
   stage: z.string(),
   substage: z.string().nullable(),
   body: z.string(),

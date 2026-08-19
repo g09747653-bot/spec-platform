@@ -370,4 +370,21 @@ export const projectsPhrases = definePhrases({
    */
   'projects.mcp.count-none': { en: '0 servers', ru: 'Серверов нет' },
   'projects.mcp.add': { en: 'Add server', ru: 'Добавить сервер' },
+
+  /**
+   * Who answers the interview (task 145).
+   *
+   * The label promises what the mode does and the description names its two guarantees — that the
+   * work is visible while it happens, and that it can be taken back — because those are the two
+   * things a person needs to know before handing over a session, and a checkbox that only says
+   * «autonomous» makes them find out by trying it.
+   */
+  'projects.new-project.autonomous-label': {
+    en: 'Let the AI run this chat',
+    ru: 'Пусть ИИ проведёт этот чат сам',
+  },
+  'projects.new-project.autonomous-description': {
+    en: 'It answers its own interview from your description, decides its own reviews and carries the session to a finished bundle. Everything it does appears in the chat as it happens, and Stop hands the session back at any moment.',
+    ru: 'Он сам ответит на своё интервью по вашему описанию, сам примет решения по рецензиям и доведёт сессию до готового бандла. Всё, что он делает, появляется в чате по ходу дела, а «Стоп» в любой момент возвращает сессию вам.',
+  },
 });

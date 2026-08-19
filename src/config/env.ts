@@ -196,6 +196,17 @@ const baseEnvSchema = z.object({
    * bound can be widened without a code change, exactly like the round budget.
    */
   MAX_REVISION_CYCLES_PER_STAGE: positiveInt(5),
+  /**
+   * The ceiling on moves in one autonomous run (task 145).
+   *
+   * A **backstop, not a working limit**, and the distinction is what the number is chosen for: the
+   * bounds that are supposed to end a run are the round and revision budgets above, and a run that
+   * reaches this one has found a way to keep moving without finishing — a defect worth reading in
+   * the journal rather than a session that needed more room. Two hundred is roughly twice the
+   * longest legitimate walk (five stages, three rounds each, five rewrites each), so hitting it
+   * means something other than «this bundle was large».
+   */
+  MAX_AUTONOMOUS_STEPS: positiveInt(200),
   DECISION_INTENT_MIN_CONFIDENCE: z
     .string()
     .optional()

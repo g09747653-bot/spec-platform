@@ -16,10 +16,13 @@ import type { FeedTail } from './model';
  * that is the state machine's, and P1 says so. This decides only which of the allowed things is
  * printed loudest, which is a presentation question and belongs on this side of the boundary.
  *
- * When a milestone adds a surface to the tail — the autonomous driver of task 145 will — it adds a
- * case here. That is the point: the pile comes back the moment the answer is spread out again.
+ * The autonomous driver of task 145 added its case at the top, and the placement is the argument: a
+ * run is a wait that lasts a whole session, and Д-1 says the control that ends a wait must be the one
+ * the reader is looking at. Nothing else on the tail competes with it, because nothing else on the
+ * tail is a person's to press while a machine is acting for them.
  */
 export type TailPrimary =
+  | 'autonomous-stop'
   | 'mcq-submit'
   | 'stop-generation'
   | 'approve-spec'
@@ -34,6 +37,8 @@ export type TailPrimary =
 
 export interface TailPrimaryInput {
   tail: FeedTail;
+  /** Whether an autonomous run is driving this session right now (task 145). */
+  autonomousRunning: boolean;
   /** Whether this position drafts a document at all (`substage === 'generate'`). */
   canGenerate: boolean;
   /** Whether the stage still owes the rewrite a review board asked for. */
@@ -50,6 +55,15 @@ export interface TailPrimaryInput {
 }
 
 export function tailPrimary(input: TailPrimaryInput): TailPrimary {
+  /*
+   * A running driver outranks every card, including one holding a decision — because while it runs,
+   * that decision is not the reader's to make: the driver will answer it within the second. The one
+   * thing they can do is take the session back, so that is the loud control. Stopping the generation
+   * instead would be the quieter half of the same intention and would not work: the driver would
+   * simply start another.
+   */
+  if (input.autonomousRunning) return 'autonomous-stop';
+
   /*
    * A card holding a decision wins outright. That is P2 rendered: when the machine is waiting on a
    * human, the loudest control on the page is the one that answers it, and nothing else competes.
