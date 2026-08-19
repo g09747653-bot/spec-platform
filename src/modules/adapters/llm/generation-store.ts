@@ -295,6 +295,55 @@ export function createGenerationStore(db: SchemaDatabase) {
       return rows[0] ?? null;
     },
 
+    /**
+     * Closes runs orphaned by a dead producer (task 168; Backlog B-1).
+     *
+     * A terminal status is written by the producer and by nobody else, so a process that dies
+     * mid-generation — a crash, a redeploy, a power cut, `local:down` — leaves its run in flight
+     * forever. Nothing revisits that row afterwards, and the one-run-at-a-time guard above then
+     * refuses **every** later generation of that session: the session is permanently ungeneratable
+     * because of a failure that lasted a second. The autonomous loop must not have to steer around
+     * that (the M14а gate chose its restart window to avoid exactly this), which is why the repair
+     * runs at boot rather than waiting for someone to notice.
+     *
+     * `failed` rather than `complete`, because that is what happened: no document was produced and
+     * no provider served it — and `generation_runs_completion_paired` would reject the alternative
+     * anyway. `attempt` is left where the dead process left it; it records what the chain actually
+     * did, and this sweep learned nothing new about that.
+     *
+     * The age bound carries the whole safety argument. A booting instance of a multi-instance
+     * deployment sees runs belonging to instances that are alive and streaming, so only a run older
+     * than any honest chain could be is declared dead (see `staleRunThresholdMs`).
+     */
+    async sweepStaleRuns(
+      olderThanMs: number,
+    ): Promise<{ id: string; sessionId: string; stage: string; ageMs: number }[]> {
+      const rows = await queryRows(
+        db,
+        sql`
+          UPDATE ${generationRuns}
+          SET status = 'failed'
+          WHERE status NOT IN ('complete', 'failed')
+            AND created_at < now() - make_interval(secs => ${olderThanMs / 1000})
+          RETURNING id, session_id, stage,
+                    EXTRACT(EPOCH FROM (now() - created_at)) * 1000 AS age_ms
+        `,
+        z.object({
+          id: z.uuid(),
+          session_id: z.uuid(),
+          stage: z.string(),
+          age_ms: z.coerce.number(),
+        }),
+      );
+
+      return rows.map((row) => ({
+        id: row.id,
+        sessionId: row.session_id,
+        stage: row.stage,
+        ageMs: Math.round(row.age_ms),
+      }));
+    },
+
     /** Everything the client has not rendered yet, in order. */
     async chunksAfter(runId: string, sequence: number): Promise<RecordedChunk[]> {
       return queryRows(
@@ -308,6 +357,24 @@ export function createGenerationStore(db: SchemaDatabase) {
       );
     },
   };
+}
+
+/**
+ * How old an unfinished run must be before a booting server may declare it dead (task 168).
+ *
+ * Derived from the configured chain rather than picked as a number, so a deployment that widens
+ * `LLM_REQUEST_TIMEOUT_MS` — a local Ollama needs minutes where a hosted provider needs seconds —
+ * widens this with it. A fixed constant would have been a second number describing the same
+ * machine, and the way that disagreement surfaces is a sweep killing a live generation.
+ *
+ * The chain budget is `timeout × providers`: every link may burn its full ceiling before the next
+ * is tried. Four times that, floored at thirty minutes, is the "decidedly larger than the chain
+ * budget" the task asks for — it leaves room for the rate-limit backoffs between attempts and for a
+ * request that is slow rather than hung, while still being short enough that a session orphaned by
+ * a crash is generatable again after one restart rather than never.
+ */
+export function staleRunThresholdMs(perProviderTimeoutMs: number, chainLength: number): number {
+  return Math.max(30 * 60_000, perProviderTimeoutMs * Math.max(chainLength, 1) * 4);
 }
 
 export type GenerationStore = ReturnType<typeof createGenerationStore>;

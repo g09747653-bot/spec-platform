@@ -20,6 +20,7 @@ const VARIABLES: { [Id in PromptId]: PromptVariables[Id] } = {
     initialPrompt: 'A tool for writing specs.',
     context: '',
     changeInstruction: '',
+    documentRules: '',
   },
   'spec.generation.methodology.v1': {
     documentLabel: 'Plan',

@@ -1,0 +1,83 @@
+{
+  "bundleId": "canonical-bundle",
+  "projectId": "canonical-project",
+  "tasks": [
+    {
+      "taskId": "1",
+      "title": "Инициализировать репозиторий и тулчейн",
+      "description": "- Node 22, TypeScript в strict-режиме, форматтер и линтер в CI.\n  - _Зависимости: —_",
+      "dependsOn": [],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "2",
+      "title": "Схема базы и первая миграция",
+      "description": "- Таблицы `notes` и `tags`, миграции версионируются в репозитории.\n  - _Зависимости: 1_",
+      "dependsOn": [
+        "1"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "3",
+      "title": "Репозиторий заметок",
+      "description": "- CRUD поверх схемы задачи 2, все входы валидируются на границе.\n  - _Зависимости: 2_",
+      "dependsOn": [
+        "2"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "4",
+      "title": "HTTP-слой",
+      "description": "- Маршруты чтения и записи поверх репозитория.\n  - _Зависимости: 3_",
+      "dependsOn": [
+        "3"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "5",
+      "title": "Полнотекстовый поиск",
+      "description": "- Индекс по заголовку и телу заметки.\n  - _Зависимости: 2, 3_",
+      "dependsOn": [
+        "2",
+        "3"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "6",
+      "title": "Сквозной тест критического пути",
+      "description": "- Создание заметки, поиск, удаление — одним прогоном.\n  - _Зависимости: 4, 5_",
+      "dependsOn": [
+        "4",
+        "5"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "7",
+      "title": "Сборка и запуск одной командой",
+      "description": "- README с тремя командами и проверкой окружения.\n  - _Зависимости: 6_",
+      "dependsOn": [
+        "6"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    }
+  ]
+}

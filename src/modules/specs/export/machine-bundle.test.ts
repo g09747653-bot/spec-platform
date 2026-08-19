@@ -4,6 +4,11 @@ import Ajv from 'ajv';
 import { describe, expect, it } from 'vitest';
 
 import { isSpecType, specFileName } from '../model/spec-files';
+import {
+  CANONICAL_TASK_RECORD,
+  DEPENDENCY_LABELS,
+  NO_DEPENDENCIES_MARK,
+} from '../model/task-notation';
 import type { ExportableFile } from '../repositories/spec-files';
 
 import {
@@ -136,6 +141,93 @@ describe('deriveTasks against the M14а live document — the bold-bullet shape'
     )}\n`;
 
     expect(derived).toBe(read('fixtures/spec-bundle/golden/m14a-live.tasks.json'));
+  });
+});
+
+describe('deriveTasks on a document written in the canonical form (task 169)', () => {
+  /*
+   * The third golden pair, and the one the instruction of task 169 asks a model to produce: a
+   * checkbox plan whose every entry states, on a line of its own, which tasks it waits for.
+   *
+   * The other two goldens are the historical record and stay byte-for-byte as they are — the M14а
+   * live plan in particular is honestly dependency-free, because its document named no dependencies
+   * anywhere. That is exactly the bundle a planner is blind to, and this pair is the shape that
+   * fixes it *at the source* rather than by having the mapping guess.
+   */
+  const CANONICAL_TASKS = () => read('fixtures/spec-bundle/golden/canonical.tasks.md');
+
+  it('carries a real dependency graph out of the export, not an empty one', () => {
+    const derived = deriveTasks(CANONICAL_TASKS(), 'canonical-bundle', 'canonical-project');
+
+    expect(validTasks(derived), ajv.errorsText(validTasks.errors)).toBe(true);
+    expect(derived.tasks).toHaveLength(7);
+
+    // Non-empty is the acceptance criterion; the shape of the graph is what makes it worth having.
+    expect(derived.tasks.filter((task) => task.dependsOn.length > 0)).toHaveLength(6);
+    expect(derived.tasks.map((task) => task.dependsOn)).toEqual([
+      [],
+      ['1'],
+      ['2'],
+      ['3'],
+      ['2', '3'],
+      ['4', '5'],
+      ['6'],
+    ]);
+
+    // Every stated dependency names a task that exists: a graph with a dangling edge is a graph the
+    // loop's topological pass cannot walk.
+    const ids = new Set(derived.tasks.map((task) => task.taskId));
+    for (const task of derived.tasks) {
+      for (const dependency of task.dependsOn) expect(ids).toContain(dependency);
+    }
+  });
+
+  it('reads the «none» mark as no dependencies rather than as an unread line', () => {
+    const derived = deriveTasks(CANONICAL_TASKS(), 'canonical-bundle', 'canonical-project');
+
+    expect(derived.tasks[0]?.dependsOn).toEqual([]);
+    expect(derived.tasks[0]?.description).toContain(NO_DEPENDENCIES_MARK);
+  });
+
+  it('matches the committed golden byte for byte', () => {
+    const derived = `${JSON.stringify(
+      deriveTasks(CANONICAL_TASKS(), 'canonical-bundle', 'canonical-project'),
+      null,
+      2,
+    )}\n`;
+
+    expect(derived).toBe(read('fixtures/spec-bundle/golden/canonical.tasks.json'));
+  });
+});
+
+describe('the canonical record and the mapping are one notation (task 169)', () => {
+  /*
+   * The mechanical half of task 169. `CANONICAL_TASK_RECORD` is quoted verbatim into the
+   * tasks-generation instruction, so a change here that the mapping cannot read would teach a model
+   * a form the export drops on the floor — silently, and only visible on a live walk. Running the
+   * instruction's own example lines through the parser makes that a red test instead.
+   */
+  it('parses the very lines the instruction shows a model', () => {
+    const tasks = parseTaskEntries(
+      [
+        CANONICAL_TASK_RECORD.entry,
+        `  ${CANONICAL_TASK_RECORD.dependencies}`,
+        CANONICAL_TASK_RECORD.entry.replace('- [ ] 1.', '- [ ] 4.'),
+        `  ${CANONICAL_TASK_RECORD.noDependencies}`,
+      ].join('\n'),
+    );
+
+    expect(tasks.map((task) => task.taskId)).toEqual(['1', '4']);
+    expect(tasks[0]?.dependsOn).toEqual(['2', '3']);
+    expect(tasks[1]?.dependsOn).toEqual([]);
+  });
+
+  it('recognises the dependency clause under either label', () => {
+    for (const label of DEPENDENCY_LABELS) {
+      const tasks = parseTaskEntries([CANONICAL_TASK_RECORD.entry, `  _${label}: 9_`].join('\n'));
+
+      expect(tasks[0]?.dependsOn, `${label} was not read`).toEqual(['9']);
+    }
   });
 });
 

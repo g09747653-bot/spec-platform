@@ -1,4 +1,9 @@
 import type { CoreSpecType } from '@/modules/specs/model/spec-files';
+import {
+  CANONICAL_TASK_RECORD,
+  DEPENDENCY_LABELS,
+  NO_DEPENDENCIES_MARK,
+} from '@/modules/specs/model/task-notation';
 
 import { assemblePrompt } from '../assemble-prompt';
 import type { AssembledPrompt } from '../registry';
@@ -43,6 +48,46 @@ function changeBlock(instruction: string | undefined): string {
     : `\nThe previous draft was returned for changes. Apply this instruction:\n${trimmed}`;
 }
 
+/**
+ * How the tasks document records a task, rendered from the notation the exporter parses (task 169).
+ *
+ * Written here rather than in the asset for the same reason `requiredSections` is derived: the
+ * canonical form and the dependency labels live in `specs/model/task-notation.ts`, and a second
+ * copy of them in a prompt file is the drift that ends with a bundle nobody can read. The example
+ * lines below are quoted from that module verbatim, and its own test runs each of them through the
+ * mapping — so a form this prompt teaches is by construction a form the export reads.
+ *
+ * **An instruction, never a rejection.** Structural validation is untouched: a document that ignores
+ * this still generates, still passes review and still exports (task 169 AC-3). What it buys is a
+ * document that *states* its dependencies — the M14а gate produced sixteen honest tasks whose
+ * `dependsOn` were all empty, because the document named no dependencies anywhere, and a planner
+ * given that bundle is blind to order.
+ */
+function documentRulesBlock(specType: CoreSpecType): string {
+  if (specType !== 'tasks') return '';
+
+  return [
+    '',
+    'Record every task as a markdown task-list item carrying its own identifier, like this:',
+    '',
+    `    ${CANONICAL_TASK_RECORD.entry}`,
+    '',
+    'Number the tasks from 1 upwards across the whole document, and never reuse an identifier.',
+    'Beneath each task, on a line of its own, state which tasks it waits for, by identifier:',
+    '',
+    `    ${CANONICAL_TASK_RECORD.dependencies}`,
+    '',
+    `A task that waits for nothing states that too, with ${NO_DEPENDENCIES_MARK}:`,
+    '',
+    `    ${CANONICAL_TASK_RECORD.noDependencies}`,
+    '',
+    `Write the label in the language of the document — "${DEPENDENCY_LABELS.join('" or "')}" — and`,
+    'name only task identifiers after it, never requirement identifiers or prose. Dependencies are',
+    'what makes the plan executable in the right order, so state them for every task, including the',
+    'ones that have none.',
+  ].join('\n');
+}
+
 export function specGenerationPrompt(input: SpecPromptInput): AssembledPrompt {
   return assemblePrompt(
     'spec.generation.v2',
@@ -51,6 +96,7 @@ export function specGenerationPrompt(input: SpecPromptInput): AssembledPrompt {
       initialPrompt: input.initialPrompt,
       context: contextBlock(input.context),
       changeInstruction: changeBlock(input.changeInstruction),
+      documentRules: documentRulesBlock(input.specType),
     },
     { contentLanguage: input.contentLanguage },
   );

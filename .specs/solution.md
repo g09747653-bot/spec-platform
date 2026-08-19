@@ -946,6 +946,7 @@ All endpoints are Next.js route handlers under `/api`. Every handler resolves th
 | `POST` | `/api/sessions/:id/autonomous/step` | One driver move; the browser ticks, the server decides. The policy (pure function over persisted facts) chooses the move; the model only fills the move already chosen, and its output is intersected with identifiers that were on screen (P1 preserved — амендмент А-19) | 200 / 409 |
 | `GET` | `/api/specs/:specFileId/content?mode=` | Raw markdown for clipboard | 200 |
 | `GET` | `/api/projects/:id/export?mode=` | ZIP download + omission manifest header | 200 |
+| `GET` | `/api/projects/:id/export/machine` | Machine-readable bundle for Программа А: ZIP of `bundle/constitution.md`, `bundle/architecture.md`, `bundle/requirements.json`, `bundle/tasks.json` — derived from the same approved default revisions the human ZIP prints, no model in the loop, byte-deterministic (fixed archive mtime); JSON valid against the shared schema fixtures `fixtures/spec-bundle/` (амендмент А-21; task 150) | 200 / 409 |
 
 **Quality selection endpoint.** `POST /api/sessions/:id/quality-selection` accepts `{ enabled: boolean }`. It returns `409 GATE_REJECTED` unless the session is at the tasks review decision or in `complete`, and `409 CAPABILITY_NOT_REGISTERED` when the Quality module is not installed. Enabling from `complete` performs the `complete → quality/collect` transition (FR-020 AC-5); disabling from `complete` changes export mode only and leaves the session in `complete` (FR-020 AC-8).
 

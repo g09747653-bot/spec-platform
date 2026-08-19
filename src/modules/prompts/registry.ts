@@ -58,6 +58,16 @@ export interface PromptVariables {
     context: string;
     /** What the user asked to change on a re-generation (FR-009 AC-4). Empty string otherwise. */
     changeInstruction: string;
+    /**
+     * How *this* document records its entries, when its type has a record notation (task 169).
+     *
+     * Rendered by the caller from `specs/model/task-notation.ts` — the same module the machine
+     * bundle parses with — for the reason `minOptions`/`maxOptions` are supplied rather than
+     * written here: the form the model is asked for and the form its output is read as have to be
+     * one form, and a second copy in this file is precisely the drift that gave the loop an empty
+     * task list at the M14а gate. Empty for the three document types that record no entries.
+     */
+    documentRules: string;
   };
   'spec.generation.methodology.v1': {
     /** The document as the methodology names it — «Plan», «Proposal», «Specs». */
@@ -223,13 +233,14 @@ const SPEC_GENERATION: PromptAsset = {
     '',
     'You may add sub-headings beneath them and additional sections between them, but every section',
     'listed above must be present, spelled as written, and in that order.',
+    '{{documentRules}}',
     '',
     'Product idea:',
     '{{initialPrompt}}',
     '{{context}}',
     '{{changeInstruction}}',
   ].join('\n'),
-  variables: ['specType', 'initialPrompt', 'context', 'changeInstruction'],
+  variables: ['specType', 'initialPrompt', 'context', 'changeInstruction', 'documentRules'],
   derived: ['requiredSections'],
 };
 
