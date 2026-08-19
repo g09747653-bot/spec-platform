@@ -1736,6 +1736,63 @@ Goal: the customer's second hands-on pass plus his video demo (`video demo/Deskt
   - _Dependencies: 142–145, 147_ · _Requirements: А-2.1; А-16_ · _Touches: `e2e/**`, `artifacts/gate-M13/**`_ · _Complexity: Large_ · _Parallel-safe: no_
 
 
+### Программа А — автономный контур доставки (Architect, 2026-08-19; план нарезан из бандла A0 — `.specs/research/programma-a/`; амендмент А-20)
+
+> Источник плана — бандл, который продукт сгенерировал сам (шаг 0, автономный прогон A0). Лестница бандла принята дословно: локальное ядро → handoff-конвейер → параллельность → Telegram. Сверка с реальностью репозитория — А-20: контур живёт новым пакетом `loop/` в этом же репозитории со своей SQLite; Spec Platform остаётся на своём стеке (Postgres/PGlite) и получает локальный режим и машинный экспорт; схемы бандла (`requirements.json`/`tasks.json`) — контракт между двумя приложениями, обе стороны тестируются против одних фикстур. M15а–M17а стоят скелетом: детальную декомпозицию каждого Архитектор пишет после приёмки предыдущего (порядок А-2). Номера закреплены сейчас, чтобы трассировка не перенумеровывалась.
+
+### Milestone 14а — Spec Platform local single-user mode & machine bundle (Программа А, первая часть по А-7 §4)
+
+- [x] 148\. Local single-user mode — auto-owner session without OAuth
+  - Behind an explicit env flag (e.g. `LOCAL_SINGLE_USER=1`, read at boot): every request resolves to one fixed local owner identity created on first boot; the OAuth surface is not rendered and its routes refuse; sign-out is absent in local mode. NOT a second auth branch scattered over the code: one substitution point at the same seam `currentOwnerScope()` reads today — every scope check, gate and repository call downstream stays byte-identical.
+  - The flag is a deployment property, not a session property: with the flag unset, behavior is byte-identical to today.
+  - Acceptance Criteria: with the flag on, opening `/` lands in the owner's projects with no login step (e2e with JS off proves the server made the session); the existing e2e suite passes with the flag ON against the local profile; a regression run with the flag OFF shows the present OAuth flow unchanged.
+  - _Dependencies: —_ · _Requirements: А-7 §4; бандл A0 (FR «Локальный однопользовательский режим»)_ · _Touches: `src/modules/projects/auth/**`, auth surface in `src/app/**`_ · _Complexity: Medium_ · _Parallel-safe: no_
+
+- [ ] 149\. Persistent local database profile
+  - A durable local DB profile reusing the machinery the throwaway harness already trusts (PGlite): data lives in a project-local gitignored directory, survives restarts, selected by the same env seam that picks the throwaway one today. One command brings the whole local stack up (DB + dev server with the local flag), one takes it down; a short RU README section for the заказчик (три команды).
+  - Explicitly NOT a migration to SQLite: Spec Platform stays on its Postgres dialect (18 миграций, партиальные уникальные индексы, триггеры); SQLite в Программе А — база оркестратора (`loop/`), не платформы (А-20).
+  - Acceptance Criteria: full journey (seed → sealed bundle) on the local profile with the dev server restarted mid-journey — session, revisions, boards and messages survive restart byte-for-byte; the throwaway gate harness is untouched and green.
+  - _Dependencies: 148_ · _Requirements: А-7 §4; NFR-003_ · _Touches: db bootstrap scripts, docs_ · _Complexity: Medium_ · _Parallel-safe: no_
+
+- [x] 150\. Machine-readable bundle export — the inter-app contract
+  - A new export shape alongside the ZIP (a mode, not a replacement): `bundle/constitution.md`, `bundle/architecture.md` (the approved solution revision), `bundle/requirements.json`, `bundle/tasks.json` — the JSON valid against the Программы А schemas (`requirements_schema.json`/`tasks_schema.json` из бандла A0), which become shared fixtures IN THIS REPO. IDs stable across re-export; `dependsOn` derived from the tasks document's stated dependencies; every requirement row present exactly once.
+  - Derived from the SAME approved revisions the ZIP prints — no separate generation, no model in the loop; deterministic for a fixed bundle.
+  - Acceptance Criteria: AJV validation of both JSON files against the shared schema fixtures is a unit test; a golden-fixture test pins the markdown→JSON mapping so schema drift is a red diff; ZIP export byte-identical to today.
+  - _Dependencies: 149_ · _Requirements: бандл A0 (Integration: Spec Platform Bundle); А-20_ · _Touches: `src/modules/specs/export/**` (new mode)_ · _Complexity: Medium_ · _Parallel-safe: no_
+
+- [ ] 151\. M14а gate — live walk on the local profile (self-run, А-2.1)
+  - Live walk: local stack up by the one-command script, auto-owner session, full autonomous run from a short RU seed to a sealed bundle (профиль гейта: свежий ключ спереди), machine export produced and AJV-validated, dev-server restart mid-walk proving persistence. Both themes, RU chrome; liveness invariant on every snapshot; the usual red conditions (truncation, structural rejection, console) plus one new: any OAuth surface visible in local mode = red.
+  - Acceptance Criteria: walk GREEN with artifacts `artifacts/gate-M14a/` (RESULT, screens, transcript, sha256 of the machine bundle); Architect artifact verification, then customer eyes-acceptance.
+  - _Dependencies: 148–150_ · _Requirements: А-2.1_ · _Touches: `e2e/**`, `artifacts/gate-M14a/**`_ · _Complexity: Medium_ · _Parallel-safe: no_
+
+### Milestones 15а–17а — сам контур (скелет; задачи получат полные тела с AC при детализации своего milestone)
+
+**Milestone 15а — Orchestrator core & single-cycle handoff (бандл A0: M1+M2).** Новый пакет `loop/` (pnpm workspace) со своей SQLite (WAL, busy_timeout 5000), монолит: оркестратор живёт в процессе сервера пакета. Docker Desktop становится системным требованием с этого milestone.
+
+- [ ] 152\. `loop/` bootstrap: SQLite схема+миграции (projects/milestones/tasks/reports/agent_logs/agent_decisions), `.env`-валидация (fail-fast на трёх обязательных), тест конкурентной записи в WAL
+- [ ] 153\. Локальный дашборд + SSE-лента логов (`/api/observability/stream-logs`, шина событий в том же процессе)
+- [ ] 154\. Docker Engine адаптер: named pipe на Windows / unix socket на CI (платформенный шов), трансляция путей Windows→Docker с golden-тестами, жизненный цикл контейнеров
+- [ ] 155\. Headless-обёртка исполнителя: Claude Code в контейнере, неинтерактивный запуск (фактические флаги CLI уточнить по документации на момент реализации — в бандле они названы «например»), монтирование workspace с трансляцией путей
+- [ ] 156\. Приём бандла + генерация handoff: AJV по общим фикстурам задачи 150, `milestones.json` + `task_*.json` (обязательный `filesToEdit`), архитектор-агент режет вехи
+- [ ] 157\. Одиночный цикл с гейтом: двухфазная верификация (отчёт исполнителя информационный — оркестратор перегоняет тесты в чистом контейнере), techStack-автодетект с перезаписью на диск, Artifact Walks по `expectedArtifacts`, BLOCKED_<taskId>-протокол (chokidar, шаблон из бандла), rationale через отчёт → `agent_decisions`
+- [ ] 158\. M15а gate: игрушечный nodejs-проект проходит бандл → веха → задача → исполнитель → чистый контейнер → COMPLETED живьём; убийство оркестратора посреди цикла и рестарт восстанавливают состояние с диска
+
+**Milestone 16а — Параллельность и «Красный CI» (бандл A0: M3).**
+
+- [ ] 159\. Параллельный планировщик (до 10 исполнителей, коллизии по `filesToEdit`)
+- [ ] 160\. Красный CI: hard stop, `docker pause` по имени `delivery-executor-${taskId}`, `POST /api/orchestrator/retry` + unpause
+- [ ] 161\. Контроллеры (линтеры по стеку до тестов) и Исследователи (контекстные отчёты архитектору)
+- [ ] 162\. Восстановление с диска (Шаг 0 против FK, вехи/задачи, автодетект утерянного techStack) + VRAM-аудит `nvidia-smi` (gate-only на машине заказчика; CI без GPU — именованное ограничение)
+- [ ] 163\. M16а gate: небольшой настоящий продукт (например «текстовый квест» из примера бандла) собирается контуром end-to-end при ≥3 параллельных исполнителях; инсценированный красный CI замораживает конвейер и возобновляется через retry
+
+**Milestone 17а — Telegram и голос (бандл A0: M4; ТГ — последним по А-7 §3).**
+
+- [ ] 164\. TG-бот (long polling, только owner chat id) + русскоязычные алерты (блокировка, красный CI, успех)
+- [ ] 165\. Голос: ogg→wav (ffmpeg) → локальный Whisper-совместимый API
+- [ ] 166\. Фасад `generate-bundle`/`start-loop` поверх РЕАЛЬНЫХ поверхностей Spec Platform (создание проекта + автономный прогон + машинный экспорт задачи 150) — не новый генератор
+- [ ] 167\. M17а gate: голосовая задумка → бандл → контур → готовый протестированный продукт без единого действия руками после голосового сообщения
+
+
 ## Requirement Coverage
 
 Every functional requirement maps to at least one task.

@@ -103,12 +103,22 @@ export default defineConfig({
        * identical to an outage — which is exactly the path FR-019 AC-4 requires the stage to survive,
        * so the suite exercises it on every run rather than never.
        */
+      /*
+       * `LOCAL_SINGLE_USER` passes through when the run sets it (task 148): the same suite then
+       * drives the local single-user deployment — anonymous requests resolve to the owner, the
+       * OAuth surface refuses — with the specs that assert the OAuth surface skipping themselves by
+       * the same variable (see `e2e/fixtures/local-mode.ts`). Unset, nothing is passed and the run
+       * is byte-identical to what it always was.
+       */
       env: {
         DATABASE_URL: TEST_DATABASE_URL,
         AUTH_URL: '',
         LLM_PROVIDER_ORDER: 'stub',
         BLOB_READ_WRITE_TOKEN: NO_CREDENTIAL,
         WEB_SEARCH_API_KEY: NO_CREDENTIAL,
+        ...(process.env.LOCAL_SINGLE_USER === undefined
+          ? {}
+          : { LOCAL_SINGLE_USER: process.env.LOCAL_SINGLE_USER }),
       },
     },
   ],

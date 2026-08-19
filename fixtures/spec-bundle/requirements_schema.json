@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SpecBundleRequirements",
+  "type": "object",
+  "properties": {
+    "bundleId": { "type": "string" },
+    "functionalRequirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": "string" }
+        },
+        "required": ["id", "title", "description"]
+      }
+    },
+    "nonFunctionalRequirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "category": { "type": "string" },
+          "description": { "type": "string" }
+        },
+        "required": ["id", "category", "description"]
+      }
+    }
+  },
+  "required": ["bundleId", "functionalRequirements", "nonFunctionalRequirements"]
+}

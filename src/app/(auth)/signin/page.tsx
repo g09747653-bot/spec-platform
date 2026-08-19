@@ -1,6 +1,7 @@
-import { redirect } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 
 import { auth, signIn } from '@/modules/projects/auth';
+import { isLocalSingleUser } from '@/modules/projects/auth/local-owner';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/modules/web';
 import type { PhraseKey } from '@/modules/web/i18n/dictionary';
 import { serverT } from '@/modules/web/i18n/server-locale';
@@ -41,6 +42,11 @@ export default async function SignInPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  // Local single-user mode has no sign-in: the surface is not rendered and the address answers as
+  // one that does not exist (task 148). Checked before `auth()`, which a local deployment may not
+  // be configured to serve at all.
+  if (isLocalSingleUser()) notFound();
+
   const session = await auth();
   if (session?.user) redirect('/projects');
 

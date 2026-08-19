@@ -223,6 +223,120 @@ export function validateStructure(specType: CoreSpecType, markdown: string): Str
   return validateAgainstSections(markdown, requiredSections(specType));
 }
 
+/**
+ * The requirements document's two requirement-bearing sections, sliced for the machine export
+ * (task 150; А-20).
+ *
+ * The machine bundle's `requirements.json` carries a functional and a non-functional array, and the
+ * parity document keeps each in a section of its own. Which headings those are is baseline
+ * knowledge, so the slicing lives here — in the baseline's one sanctioned reader — and the heading
+ * text never reaches the export module (constitution P3: the list has exactly one home).
+ *
+ * The two entries are picked from the schema by shape rather than by restated name: the
+ * non-functional one is the requirements heading that starts with «non-», the functional one is the
+ * other requirements heading that names no other qualifier. A rename in the schema that breaks the
+ * predicates is a loud throw in every test that touches export — never a silently empty bundle.
+ */
+export interface RequirementSectionBodies {
+  /** Body markdown of the functional-requirements section, `''` when the document lacks it. */
+  functional: string;
+  /** Body markdown of the non-functional-requirements section, `''` when the document lacks it. */
+  nonFunctional: string;
+}
+
+function requirementBearingEntries(): {
+  functional: RequiredSection;
+  nonFunctional: RequiredSection;
+} {
+  const entries = requiredSections('requirements').filter((section) =>
+    normaliseHeading(section.heading).endsWith('requirements'),
+  );
+
+  const nonFunctional = entries.filter((section) =>
+    normaliseHeading(section.heading).startsWith('non-'),
+  );
+  const functional = entries.filter((section) =>
+    normaliseHeading(section.heading).startsWith('functional'),
+  );
+
+  const [functionalEntry] = functional;
+  const [nonFunctionalEntry] = nonFunctional;
+
+  if (functional.length !== 1 || functionalEntry === undefined) {
+    throw new Error(
+      'the requirements baseline no longer has exactly one functional-requirements section; the machine export mapping (task 150) must be revisited',
+    );
+  }
+  if (nonFunctional.length !== 1 || nonFunctionalEntry === undefined) {
+    throw new Error(
+      'the requirements baseline no longer has exactly one non-functional-requirements section; the machine export mapping (task 150) must be revisited',
+    );
+  }
+
+  return { functional: functionalEntry, nonFunctional: nonFunctionalEntry };
+}
+
+/**
+ * The lines of the first section under `heading` at its required level, up to the next heading at
+ * the same or a shallower level. Fence-aware with the same rules as `parseHeadings`.
+ */
+function sliceSectionBody(markdown: string, section: RequiredSection): string {
+  const wanted = normaliseHeading(section.heading);
+  const lines = markdown.split(/\r?\n/);
+
+  const body: string[] = [];
+  let fence: string | null = null;
+  let inside = false;
+
+  for (const line of lines) {
+    const fenceMatch = FENCE.exec(line);
+
+    if (fence !== null) {
+      if (inside) body.push(line);
+      if (fenceMatch !== null) {
+        const marker = fenceMatch[1] ?? '';
+        if (marker.startsWith(fence.charAt(0)) && marker.length >= fence.length) fence = null;
+      }
+      continue;
+    }
+
+    if (fenceMatch !== null) {
+      fence = fenceMatch[1] ?? '';
+      if (inside) body.push(line);
+      continue;
+    }
+
+    const atx = ATX.exec(line);
+    if (atx !== null) {
+      const level = (atx[1] ?? '').length;
+      const text = normaliseHeading(atx[2] ?? '');
+
+      if (inside && level <= section.level) return body.join('\n');
+      if (!inside && level === section.level && text === wanted) {
+        inside = true;
+        continue;
+      }
+      // A deeper heading inside the section is body — the subsections are the rows the machine
+      // export reads, and a slice that swallowed them would collapse a section into one entry.
+      if (inside) body.push(line);
+      continue;
+    }
+
+    if (inside) body.push(line);
+  }
+
+  return inside ? body.join('\n') : '';
+}
+
+export function requirementSectionBodies(markdown: string): RequirementSectionBodies {
+  const entries = requirementBearingEntries();
+
+  return {
+    functional: sliceSectionBody(markdown, entries.functional),
+    nonFunctional: sliceSectionBody(markdown, entries.nonFunctional),
+  };
+}
+
 /** A one-line, user-safe summary of why a document was rejected. Carries no document content. */
 export function describeViolations(violations: readonly StructureViolation[]): string {
   return violations

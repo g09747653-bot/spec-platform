@@ -169,4 +169,43 @@ test.describe('bundle export and single-file copy', () => {
     // FR-016 AC-5, stated as the property that actually matters: one file, two routes, one answer.
     expect(strFromU8(archive['constitution.md'] ?? new Uint8Array())).toBe(copied);
   });
+
+  test('the machine bundle downloads beside the ZIP, and the ZIP is untouched by its existence (task 150)', async ({
+    page,
+  }) => {
+    await approveConstitution(page);
+
+    // The project id is in the session URL's row — read it off the export endpoint the page uses.
+    const sessionUrl = page.url();
+    await expect(page.getByTestId('export-included')).toContainText('constitution.md');
+
+    const projectId = await page.evaluate(async () => {
+      const found = await fetch('/api/projects', { cache: 'no-store' });
+      const body = (await found.json()) as { projects: { id: string }[] };
+      return body.projects[0]?.id ?? '';
+    });
+    expect(projectId).not.toBe('');
+
+    const machine = await page.request.get(`/api/projects/${projectId}/export/machine`);
+    expect(machine.status()).toBe(200);
+    expect(machine.headers()['x-spec-export-mode']).toBe('machine');
+
+    const entries = unzipSync(new Uint8Array(await machine.body()));
+    // Only the approved document travels; the rest is omitted, stated in the manifest header.
+    expect(Object.keys(entries)).toEqual(['bundle/constitution.md']);
+    expect(machine.headers()['x-spec-export-omitted']).toBe(
+      'bundle/architecture.md,bundle/requirements.json,bundle/tasks.json',
+    );
+
+    // The classic ZIP still answers exactly as before, from the same page.
+    await page.goto(sessionUrl);
+    const download = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByTestId('download-export').click(),
+    ]).then(([event]) => event);
+
+    const { readFile } = await import('node:fs/promises');
+    const archive = unzipSync(new Uint8Array(await readFile(await download.path())));
+    expect(Object.keys(archive)).toEqual(['constitution.md']);
+  });
 });
