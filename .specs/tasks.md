@@ -1781,7 +1781,7 @@ Goal: the customer's second hands-on pass plus his video demo (`video demo/Deskt
   - Acceptance Criteria: строка лога, выпущенная оркестратором, появляется в открытой странице без перезапроса (e2e); дашборд по-русски; холодный старт до интерактивной страницы ≤ 3 с на машине CI.
   - _Dependencies: 152_ · _Requirements: бандл A0 (Task 1.3, 1.4)_ · _Touches: `loop/**`_ · _Complexity: Medium_ · _Parallel-safe: no_
 
-- [ ] 154\. Docker Engine adapter: named pipe / socket seam + path translation
+- [x] 154\. Docker Engine adapter: named pipe / socket seam + path translation
   - Адаптер жизненного цикла контейнеров (create/start/stop/pause/unpause/remove, logs attach) поверх Docker Engine API; платформенный шов: `npipe://./pipe/docker_engine` на win32, unix socket на Linux/CI — один интерфейс, две транспортные реализации, выбор по `process.platform` с override в `.env`. Трансляция путей Windows→Docker (`C:\…` → `/c/…`, нижний регистр диска, прямые слэши) — чистая функция с golden-тестами (диски, вложенность, пробелы, кириллица в пути).
   - Acceptance Criteria: интеграционный тест на CI (unix socket): контейнер создаётся, запускается, пишет в смонтированный том, гасится и удаляется; golden-тесты трансляции зелёные; named-pipe ветка покрыта юнитом на выбор транспорта (живой пайп — на гейте, машина заказчика).
   - _Dependencies: 152_ · _Requirements: бандл A0 (Task 2.1, 2.2); Security Constraints_ · _Touches: `loop/**`_ · _Complexity: Medium_ · _Parallel-safe: yes (после 152)_
