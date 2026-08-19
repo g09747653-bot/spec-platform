@@ -9,6 +9,7 @@ import { AUTO_MODEL, modelRegistry } from '@/modules/adapters/llm';
 import { createGenerationStore } from '@/modules/adapters/llm/generation-store';
 import { requireOwnerScope } from '@/modules/projects/auth/scope';
 import { createAttachmentRepository } from '@/modules/projects/repositories/attachments';
+import { createAutonomousRunRepository } from '@/modules/projects/repositories/autonomous-runs';
 import { createProjectRepository } from '@/modules/projects/repositories/projects';
 import {
   createSessionRepository,
@@ -473,6 +474,15 @@ async function SessionBody({ session, scope }: { session: SessionDetail; scope: 
       ? position.stage
       : null;
 
+  /*
+   * The autonomous run, live or last (task 145).
+   *
+   * `findLatest` rather than `findLive`, because a chat that *was* driven has something to say after
+   * the driver stops: the panel names the ending, and a page that only knew about live runs would
+   * show a stopped session as though it had never been driven at all.
+   */
+  const latestRun = await createAutonomousRunRepository(db).findLatest(session.id);
+
   const actionsTarget = snapshot === null ? null : nextTarget(t, snapshot);
 
   const actions: StageActionsModel = {
@@ -616,6 +626,11 @@ async function SessionBody({ session, scope }: { session: SessionDetail; scope: 
         header={header}
         sidebar={sidebar}
         sessionId={session.id}
+        driver={{
+          running: latestRun?.status === 'running' ? { steps: latestRun.steps } : null,
+          lastStopReason: latestRun?.stopReason ?? null,
+          steps: latestRun?.steps ?? 0,
+        }}
         feed={feed}
         methodologyId={session.methodologyId}
         deadlineMs={requestDeadlineMs()}

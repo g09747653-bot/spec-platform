@@ -300,14 +300,17 @@ test.describe('workflow gates and the structured interview', () => {
     await expect(card.getByTestId('mcq-tags-no-preference')).toHaveCount(0);
 
     /*
-     * The link is model-authored content and is rendered as `viewer/markdown.tsx` renders one:
-     * `rel="noreferrer nofollow"`, and no `target` — the tab and the referrer stay the reader's.
-     * What makes the address itself safe is the schema's refinement, not this element.
+     * The link leaves for a **new** tab (А-18 §3): the round it stands in is unsent, so following it
+     * in place would cost the reader the picks they had already made. `noopener` is then a
+     * requirement and not a habit — `target="_blank"` is precisely what would otherwise hand a
+     * model-authored page a handle back to this one. What makes the address itself safe is the
+     * schema's refinement, not this element.
      */
     const link = card.getByTestId('mcq-link-anthropic');
     await expect(link).toHaveAttribute('href', 'https://www.anthropic.com');
-    await expect(link).toHaveAttribute('rel', 'noreferrer nofollow');
-    expect(await link.getAttribute('target')).toBeNull();
+    await expect(link).toHaveAttribute('target', '_blank');
+    const rel = (await link.getAttribute('rel'))?.split(/\s+/) ?? [];
+    expect(rel).toEqual(expect.arrayContaining(['noopener', 'noreferrer', 'nofollow']));
 
     /*
      * Neither control may sit inside the option's `<label>`: a label activates its input for a click

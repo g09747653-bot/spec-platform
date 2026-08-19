@@ -115,7 +115,7 @@ export interface FeedSourceProposal {
 export interface FeedSourceMessage {
   messageId: string;
   role: 'user' | 'assistant';
-  origin: 'chat' | 'bridge';
+  origin: 'chat' | 'bridge' | 'driver';
   stage: string;
   substage: string | null;
   body: string;

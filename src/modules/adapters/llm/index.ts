@@ -71,7 +71,18 @@ export {
   stubReplyAssessmentDocument,
   stubSessionSummaryDocument,
 } from './stub-interview';
-export { looksLikeReviewPrompt, specTypeFromReviewPrompt, stubReviewDocument } from './stub-review';
+export {
+  looksLikeRereviewPrompt,
+  looksLikeReviewPrompt,
+  specTypeFromReviewPrompt,
+  stubReviewDocument,
+} from './stub-review';
+export {
+  looksLikeDriverAnswerPrompt,
+  looksLikeDriverReviewPrompt,
+  stubDriverAnswerDocument,
+  stubDriverReviewDocument,
+} from './stub-driver';
 export {
   looksLikeRevisionNotePrompt,
   pointCountFromNotePrompt,

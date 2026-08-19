@@ -138,6 +138,7 @@ export function NewProjectForm() {
   const [audience, setAudience] = useState<AudienceProfile>(DEFAULT_AUDIENCE_PROFILE);
   const [style, setStyle] = useState<InterviewStyle>(DEFAULT_INTERVIEW_STYLE);
   const [methodology, setMethodology] = useState<string>(AUTO_METHODOLOGY);
+  const [autonomous, setAutonomous] = useState(false);
   const [error, setError] = useState<PhraseKey | null>(null);
   const [submitting, setSubmitting] = useState(false);
   /*
@@ -170,7 +171,7 @@ export function NewProjectForm() {
       const response = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, audience, style, methodology }),
+        body: JSON.stringify({ prompt, audience, style, methodology, autonomous }),
       });
       const payload: unknown = await response.json().catch(() => null);
 
@@ -299,6 +300,41 @@ export function NewProjectForm() {
           </label>
         ))}
       </fieldset>
+
+      {/*
+        Who answers the interview (task 145; А-7 — «Программа А»).
+
+        A checkbox rather than a fieldset of two, because the two are not a pair of alternatives a
+        reader weighs: one of them is what this product has always done, and the other is a thing you
+        ask for. Its own control, unchecked by default, so a chat created without touching it is
+        byte-for-byte the chat this form made yesterday.
+
+        It is below the three axes rather than above them, and deliberately: the profile, the style
+        and the workflow describe the interview that happens either way. This one says who sits on
+        the other side of it.
+      */}
+      <label
+        className="border-border-subtle hover:bg-background flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm"
+        data-testid="autonomous-mode"
+      >
+        <input
+          type="checkbox"
+          name="autonomous"
+          checked={autonomous}
+          onChange={(event) => {
+            setAutonomous(event.target.checked);
+          }}
+          data-testid="autonomous-toggle"
+          disabled={submitting}
+          className="mt-0.5"
+        />
+        <span>
+          <span className="font-medium">{t('projects.new-project.autonomous-label')}</span>
+          <span className="text-foreground-muted block text-xs">
+            {t('projects.new-project.autonomous-description')}
+          </span>
+        </span>
+      </label>
 
       {/*
         The workflow picker (task 117). `Auto` is a real value the API understands, not the absence

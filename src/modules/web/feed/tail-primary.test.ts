@@ -10,6 +10,7 @@ import { tailPrimary, type TailPrimaryInput } from './tail-primary';
  */
 const at = (over: Partial<TailPrimaryInput> = {}): TailPrimaryInput => ({
   tail: { kind: 'open' },
+  autonomousRunning: false,
   canGenerate: false,
   revisionOwed: false,
   documentApproved: false,

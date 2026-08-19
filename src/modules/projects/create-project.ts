@@ -46,6 +46,14 @@ export const CreateProjectRequest = z.object({
    */
   style: z.enum(INTERVIEW_STYLES).default(DEFAULT_INTERVIEW_STYLE),
   /**
+   * Whether the AI drives this chat from the description alone (task 145; А-7).
+   *
+   * Defaulted to `false`, and that default is a contract rather than a preference: a client that
+   * omits the field — an older page, a direct call, the Edit-chat route — gets the manual chat every
+   * caller written before this field meant, byte for byte.
+   */
+  autonomous: z.boolean().default(false),
+  /**
    * The workflow to walk, or `auto` to have it chosen (task 117; Эталон §1.4).
    *
    * `auto` is the default for the same reason the audience profile has one: a client that omits the

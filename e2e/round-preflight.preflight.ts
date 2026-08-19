@@ -51,8 +51,27 @@ import {
 const OUT = process.env.PREFLIGHT_OUT ?? 'artifacts/gate-M10/preflight';
 const BASE_URL = process.env.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434/v1';
 const CONTEXT_LENGTH = Number(process.env.OLLAMA_CONTEXT_LENGTH ?? '16384');
-const MODEL = process.env.PREFLIGHT_MODEL ?? DEFAULT_MODELS.ollama;
 const SAMPLES = Number(process.env.PREFLIGHT_SAMPLES ?? '3');
+
+/**
+ * Which model is being measured (task 146).
+ *
+ * The measurement was written for the gate's **local** fallback and still defaults to it. It takes a
+ * provider now because task 144's rubric turned it into a question about the *register*, and a
+ * register is a property of a model as much as of a prompt: «the local 8B cannot hold it» and «the
+ * prompt does not ask for it clearly enough» are different findings with different owners, and only
+ * running the same three rounds on the deployment's own chain tells them apart. One harness, one
+ * rubric, one variable.
+ */
+const MEASURABLE = ['ollama', 'google', 'anthropic', 'openai'] as const;
+type Measurable = (typeof MEASURABLE)[number];
+
+const requested = process.env.PREFLIGHT_PROVIDER ?? 'ollama';
+const PROVIDER: Measurable = (MEASURABLE as readonly string[]).includes(requested)
+  ? (requested as Measurable)
+  : 'ollama';
+
+const MODEL = process.env.PREFLIGHT_MODEL ?? DEFAULT_MODELS[PROVIDER];
 
 const IDEA =
   'A tool that tracks which of a small charity’s grant applications are due, and drafts the reminder emails';
@@ -77,16 +96,42 @@ interface Sample {
   text: string;
 }
 
-function localChain(sample: Sample): LlmAdapter {
-  const capacity = capacityFor('ollama', CONTEXT_LENGTH);
+/**
+ * The connection for the provider under measurement.
+ *
+ * A local runtime is reached by address and needs no credential; a hosted one is reached by key and
+ * has none to invent. Refusing loudly here rather than falling back to the local model is the whole
+ * point: a measurement that silently changed which model it measured would report the wrong finding
+ * with the right confidence.
+ */
+function connectionFor(provider: Measurable): { apiKey: string } | { baseUrl: string } {
+  if (provider === 'ollama') return { baseUrl: BASE_URL };
+
+  const key = process.env[PROVIDER_KEYS[provider]];
+  if (key === undefined || key === '') {
+    throw new Error(`${PROVIDER_KEYS[provider]} is not set — cannot measure ${provider}`);
+  }
+
+  return { apiKey: key };
+}
+
+const PROVIDER_KEYS: Record<Exclude<Measurable, 'ollama'>, string> = {
+  anthropic: 'ANTHROPIC_API_KEY',
+  openai: 'OPENAI_API_KEY',
+  google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+};
+
+function chainFor(sample: Sample): LlmAdapter {
+  const capacity = capacityFor(PROVIDER, CONTEXT_LENGTH);
+  const connection = connectionFor(PROVIDER);
   const chain = createFailoverClient({
     providers: [
       {
-        id: 'ollama',
+        id: PROVIDER,
         model: MODEL,
         priority: 1,
         capacity,
-        stream: createProviderStream('ollama', { baseUrl: BASE_URL }, MODEL, capacity),
+        stream: createProviderStream(PROVIDER, connection, MODEL, capacity),
       },
     ],
     timeoutMs: 900_000,
@@ -118,7 +163,7 @@ describe('a question round on the candidate local model (gate profile)', () => {
       const sample: Sample = { calls: 0, text: '' };
       const startedAt = Date.now();
 
-      const outcome = await createInterviewAgent(localChain(sample)).draftRound({
+      const outcome = await createInterviewAgent(chainFor(sample)).draftRound({
         stage: 'requirements',
         audience: 'non-technical',
         roundNumber: 1,
@@ -156,7 +201,7 @@ describe('the same round in the concrete register (task 144)', () => {
       const sample: Sample = { calls: 0, text: '' };
       const startedAt = Date.now();
 
-      const outcome = await createInterviewAgent(localChain(sample)).draftRound({
+      const outcome = await createInterviewAgent(chainFor(sample)).draftRound({
         /*
          * `solution` and a non-technical profile together, on purpose. The stage is where a question
          * about what to build and how has somewhere to go, and the profile is the claim of §0 under
@@ -221,7 +266,7 @@ describe('the record', () => {
       [
         '# JSON-раунд на кандидате гейтовой модели (профиль скорости, 2026-08-16)',
         '',
-        `Модель \`${MODEL}\`, окно ${String(CONTEXT_LENGTH)}. Через настоящего агента, то есть вместе`,
+        `Модель \`${MODEL}\` у провайдера \`${PROVIDER}\`, окно ${String(CONTEXT_LENGTH)}. Через настоящего агента, то есть вместе`,
         'со слоями Р-1: терпимый разбор, детерминированный ремонт, один пересэмпл.',
         '',
         '| прогон | вызовов модели | исход | вопросов | ремонт | секунд | претензии |',

@@ -2,7 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import type { SchemaDatabase } from '@/db';
-import { projects, sessions, workflowState } from '@/db/schema';
+import { autonomousRuns, projects, sessions, workflowState } from '@/db/schema';
 import { queryOneRow, queryRows } from '@/db/sql';
 
 import type { OwnerScope } from '@/db/owner-scope';
@@ -197,6 +197,15 @@ export function createProjectRepository(db: SchemaDatabase) {
         audience: string;
         /** Which questions the interview asks (task 144). A plain string, like `audience`. */
         style: string;
+        /**
+         * Whether this chat starts with a driver (task 145).
+         *
+         * Created in the same statement as the session rather than by a second request, and that is
+         * the point of putting it here: a chat that was asked for autonomously and came back manual
+         * because the follow-up call failed is a chat that silently did something other than what
+         * was asked. One statement, one outcome.
+         */
+        autonomous?: boolean;
         contentLanguage: string | null;
         /**
          * The session's methodology, and the position its graph starts at (task 117).
@@ -218,6 +227,7 @@ export function createProjectRepository(db: SchemaDatabase) {
       const methodologyId = input.methodologyId ?? 'myspec-greenfield-v1';
       const entryStage = input.entryStage ?? 'interview';
       const entrySubstage = input.entrySubstage ?? null;
+      const autonomous = input.autonomous ?? false;
 
       const created = await queryOneRow(
         db,
@@ -233,6 +243,15 @@ export function createProjectRepository(db: SchemaDatabase) {
         ), new_state AS (
           INSERT INTO ${workflowState} (session_id, stage, substage)
           SELECT id, ${entryStage}, ${entrySubstage} FROM new_session
+          RETURNING session_id
+        ), new_driver AS (
+          /*
+            The driver, when one was asked for (task 145). A data-modifying CTE runs whether or not
+            the final SELECT reads it, so this needs no join — and the WHERE is what makes «no
+            driver» the absence of a row rather than a row saying no.
+          */
+          INSERT INTO ${autonomousRuns} (session_id)
+          SELECT id FROM new_session WHERE ${autonomous}::boolean
           RETURNING session_id
         )
         SELECT new_session.project_id AS project_id, new_session.id AS session_id

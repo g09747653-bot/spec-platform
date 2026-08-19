@@ -13,8 +13,17 @@ import { sessions } from './projects';
 /** Renders a tuple of names as a SQL value list. The inputs are compile-time constants. */
 const list = (values: readonly string[]) => sql.raw(values.map((value) => `'${value}'`).join(', '));
 
-/** What wrote a message. Two kinds today, and each is a turn of the same conversation. */
-export const MESSAGE_ORIGINS = ['chat', 'bridge'] as const;
+/**
+ * What wrote a message. Each is a turn of the same conversation.
+ *
+ * `driver` is the autonomous driver's own voice (task 145): the one-line account of an answer it
+ * gave or a decision it took on the reader's behalf. It is an **origin** rather than a prefix on the
+ * prose, because «this was written by the machine acting for you» is a fact about the row that a
+ * walk, a filter and a badge can all read — and a prefix is a fact only a human re-reading the
+ * sentence can recover. `bridge` stays what it has always been: the interviewer's commentary between
+ * two rounds. Borrowing it for driver notes would make «who is speaking» unanswerable.
+ */
+export const MESSAGE_ORIGINS = ['chat', 'bridge', 'driver'] as const;
 
 /** Who is speaking. `system` blocks of the feed are derived, never written, so there are two. */
 export const MESSAGE_ROLES = ['user', 'assistant'] as const;

@@ -1710,14 +1710,14 @@ Goal: the customer's second hands-on pass plus his video demo (`video demo/Deskt
   - Acceptance Criteria: walking the full journey with locale=ru shows zero English chrome (e2e asserts a curated list of surfaces); gate-copy/ReasonCode explanations localized; auto-translate no longer has anything to mangle; both locales pass the existing e2e suite.
   - _Dependencies: 142_ · _Requirements: рекламации (автоперевод); У-1_ · _Touches: `src/modules/web/**`, string registry (new)_ · _Complexity: Large_ · _Parallel-safe: no_
 
-- [ ] 144\. Third interview mode — «Concrete» (по видео и формулировке заказчика)
+- [x] 144\. Third interview mode — «Concrete» (по видео и формулировке заказчика)
   - A third question style alongside the existing two profiles: **always tight and practical** — asks specifically WHAT to build, HOW the user wants it implemented and HOW they will use it; consistent direct second-person voice (никаких «что должен чувствовать муравей»); options remain but lean to implementation choices; answers may carry **справки** (short reference notes attached to an answer — the video shows answers that include context, not bare picks).
   - Built at ensemble quality (ultracode): generate N candidate prompt variants, judge panel scores them on concreteness/voice-consistency/actionability against transcripts of both reference sessions, best variant ships; the losers' best questions are folded in.
   - Style is chosen at chat creation next to the audience profile; existing modes untouched.
   - Acceptance Criteria: a live round in Concrete mode produces only implementation-and-usage questions (judged by a scripted rubric over 3 live rounds); voice is uniformly second-person (lint over the round text in tests); справки render attached to options and survive submit/reload.
   - _Dependencies: 142_ · _Requirements: директива заказчика 2026-08-18; видео-демо_ · _Touches: `src/modules/agents/interview/**`, round schema (optional fields)_ · _Complexity: Large_ · _Parallel-safe: no_
 
-- [ ] 145\. Autonomous generation mode — the Программа А subject
+- [x] 145\. Autonomous generation mode — the Программа А subject
   - A per-chat mode in which the AI drives the whole journey from the seed prompt alone: it answers its own interview rounds (each auto-answer recorded in the feed with a one-line rationale — the transparency IS the product), auto-decides reviews (Must Fix → request changes until Pass, bounded by the existing cycle budgets; recommendations judged against the seed), and carries the session seed → complete bundle **with zero human clicks**.
   - Human sovereignty preserved: the run is watchable live; Stop at any point drops the session into normal manual mode at exactly that position; every existing gate/budget/contract holds — autonomy is a driver over the same machine, never a bypass (P1/P2: the gates stay the law, the driver is just another user).
   - The driver itself is an agent module (prompt + policy) — built and red-teamed at ensemble quality (ultracode): adversarial panel attacks it with vague seeds, contradictory seeds, hostile seeds; failure modes get named handling, not hopes.
@@ -1730,7 +1730,7 @@ Goal: the customer's second hands-on pass plus his video demo (`video demo/Deskt
   - Acceptance Criteria: overlay matches the video's composition point-for-point (side-by-side frames in the report); all four views share one width; Raw shows a >200-char line fully wrapped with correct logical-line numbering; page never scrolls sideways (re-run of the 142 probe stays green); liveness holds with the overlay open over a live stream (Stop reachable — re-run of the M12п check).
   - _Dependencies: 142_ · _Requirements: видео-демо (разбор `.specs/research/video-demo-2026-08-18.md`); А-14.1_ · _Touches: `src/modules/web/viewer/**`_ · _Complexity: Large_ · _Parallel-safe: no_
 
-- [ ] 146\. M13п gate — ultracode red-team + live walks (self-run, А-2.1)
+- [x] 146\. M13п gate — ultracode red-team + live walks (self-run, А-2.1)
   - Video-demo conformance check first (the panel-preview flow and answer types per the video — list what the video shows vs what we ship, disposition each). Then the ultracode red-team pass over the two new agents (Concrete interviewer, autonomous driver) and the reworked surfaces; then live walks: one manual journey in Concrete mode + one full autonomous run, both themes, RU locale, gate profile (fresh key first, smallest passing local model).
   - Acceptance Criteria: red-team findings all dispositioned; both live walks GREEN (zero truncations/structural rejections, clean console); artifacts `artifacts/gate-M13/`; customer's eyes-acceptance follows the Architect's artifact verification.
   - _Dependencies: 142–145, 147_ · _Requirements: А-2.1; А-16_ · _Touches: `e2e/**`, `artifacts/gate-M13/**`_ · _Complexity: Large_ · _Parallel-safe: no_

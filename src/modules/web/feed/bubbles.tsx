@@ -79,6 +79,27 @@ export function SeedBubble({ block }: { block: SeedBlock }) {
   );
 }
 
+/**
+ * Which assistant turn this is, by origin.
+ *
+ * A revision note is prose like any other assistant turn and reads as one on purpose (task 113;
+ * Эталон §1.3): the writer saying what it is folding in is a turn of the conversation, not a system
+ * notice. The same is true of the analytical bridge (task 132) — the interviewer noticing that two
+ * answers disagree is the interviewer talking. Only the test id differs, so a walk can find each.
+ *
+ * `driver` is the exception that proves the rule, and it gets a badge as well as an id: the other
+ * origins differ in *who* is talking, and this one differs in **who acted**. A line reading «Answered
+ * round 2 for you» is indistinguishable from the interviewer's own prose unless the surface says
+ * otherwise, and a reader who cannot tell which of their answers they gave has lost the thing the
+ * autonomous mode is supposed to be transparent about (task 145).
+ */
+const ASSISTANT_TEST_ID: Partial<Record<MessageBlock['origin'], string>> = {
+  chat: 'chat-turn-assistant',
+  'revision-note': 'revision-note',
+  bridge: 'interview-bridge',
+  driver: 'driver-note',
+};
+
 export function MessageBubble({ block }: { block: MessageBlock }) {
   if (block.role === 'user') {
     return (
@@ -90,31 +111,37 @@ export function MessageBubble({ block }: { block: MessageBlock }) {
     );
   }
 
-  /*
-   * A revision note is prose like any other assistant turn, and reads as one on purpose (task 113;
-   * Эталон §1.3): the writer saying what it is folding in and what it decided for itself is a turn
-   * of the conversation, not a system notice. Only its test id differs, so a walk can find it.
-   *
-   * The same is true of the analytical bridge (task 132): the interviewer noticing that two answers
-   * disagree is the interviewer talking, not the system reporting.
-   */
-  const testId =
-    block.origin === 'chat'
-      ? 'chat-turn-assistant'
-      : block.origin === 'revision-note'
-        ? 'revision-note'
-        : block.origin === 'bridge'
-          ? 'interview-bridge'
-          : 'session-summary';
+  const testId = ASSISTANT_TEST_ID[block.origin] ?? 'session-summary';
 
   return (
     <FeedItem block={block}>
       {/* `chat-prose` is the typographic wrapper the reference gives AI prose (task 134; `1.5-11`). */}
       <div className="chat-prose whitespace-pre-wrap" data-testid={testId}>
+        {block.origin === 'driver' && <DriverBadge />}
         {block.text}
         {block.streaming && <span className="text-foreground-muted"> ▌</span>}
       </div>
     </FeedItem>
+  );
+}
+
+/**
+ * The mark on a line the machine wrote while acting for the reader (task 145).
+ *
+ * Inline rather than above the sentence, and small: it qualifies the line it opens rather than
+ * announcing a section, and a run has dozens of these — a banner each would turn the transparency
+ * into noise, which is its own way of hiding something.
+ */
+function DriverBadge() {
+  const t = useT();
+
+  return (
+    <span
+      data-testid="driver-badge"
+      className="border-border-subtle text-foreground-muted mr-2 rounded border px-1.5 py-0.5 align-middle text-[0.6875rem] tracking-wide uppercase"
+    >
+      {t('feed.driver.badge')}
+    </span>
   );
 }
 

@@ -76,6 +76,18 @@ const VARIABLES: { [Id in PromptId]: PromptVariables[Id] } = {
     initialPrompt: 'A tool for writing specs.',
     answered: '- audience: solo developers',
   },
+  'driver.answer.v1': {
+    stage: 'interview',
+    summaryBlock: '',
+    seed: 'A tool for writing specs.',
+    questions: '- q-audience | Who will use this? | single\n    solo — Solo developers',
+  },
+  'driver.review.v1': {
+    specType: 'constitution',
+    seed: 'A tool for writing specs.',
+    blocking: '- mf-1 — An untestable criterion: restate it.',
+    advisory: '(none)',
+  },
   'interview.bridge.v1': {
     context: '## Answers given during the interview\n- interview/q-audience: solo developers',
     unmetNeeds: 'budget',

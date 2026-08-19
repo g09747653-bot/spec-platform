@@ -46,7 +46,7 @@ export async function POST(request: Request): Promise<Response> {
     });
   }
 
-  const { prompt, audience, style, methodology } = parsed.data;
+  const { prompt, audience, style, methodology, autonomous } = parsed.data;
 
   /*
    * Auto (task 117): one cheap classification over the existing chain, and every failure — a bad
@@ -70,6 +70,8 @@ export async function POST(request: Request): Promise<Response> {
     /* Task 144: the second axis of the same choice — how the questions are worded, and what they ask
      * about. Stored beside the profile and read back per round, never re-decided. */
     style,
+    /* Task 145: the chat starts with a driver, or it does not. Written in the same statement. */
+    autonomous,
     methodologyId,
     entryStage: entry.stage,
     entrySubstage: entry.substage,

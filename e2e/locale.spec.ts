@@ -123,9 +123,11 @@ test.describe('the chrome locale', () => {
 
     await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
     await expectRussian(page, 'audience-profile');
-    // Task 144's fieldset joins the walk the day it is added, which is the only way this list stays
-    // an inventory of the surface rather than an inventory of what was translated once.
+    // Each new axis of the form joins the walk the day it is added, which is the only way this list
+    // stays an inventory of the surface rather than an inventory of what was translated once:
+    // task 144's style fieldset, then task 145's autonomous mode.
     await expectRussian(page, 'interview-style');
+    await expectRussian(page, 'autonomous-mode');
     await expectRussian(page, 'methodology-picker');
 
     await context.close();

@@ -13,7 +13,18 @@ import {
 } from './stub-interview';
 import { looksLikeEditPrompt, stubEditDocument } from './stub-edit';
 import { looksLikeRefinementPrompt, stubRefinementDocument } from './stub-refinement';
-import { looksLikeReviewPrompt, specTypeFromReviewPrompt, stubReviewDocument } from './stub-review';
+import {
+  looksLikeDriverAnswerPrompt,
+  looksLikeDriverReviewPrompt,
+  stubDriverAnswerDocument,
+  stubDriverReviewDocument,
+} from './stub-driver';
+import {
+  looksLikeRereviewPrompt,
+  looksLikeReviewPrompt,
+  specTypeFromReviewPrompt,
+  stubReviewDocument,
+} from './stub-review';
 import {
   looksLikeRevisionNotePrompt,
   pointCountFromNotePrompt,
@@ -186,6 +197,59 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  * so an end-to-end run against it exercises the whole path, including structural validation, without
  * a vendor. Delays are simulated so the streaming path is genuinely streaming rather than one batch.
  */
+/**
+ * Which stub answers which prompt, in precedence order (D-48; extended by task 145).
+ *
+ * A list rather than the nested conditional this used to be. The chain reached ten arms, and the
+ * shape of a ten-deep ternary hides the one property that matters here — that these are *ordered*,
+ * because more than one predicate can match a prompt. `driver.answer.v1` renders a whole question
+ * round into its user message, so anything looking for question text matches it too; the driver's
+ * arms sit above the interview's for that reason and no other, and a list says so where indentation
+ * only implied it.
+ */
+const STUB_ANSWERS: readonly {
+  matches: (prompt: string) => boolean;
+  answer: (prompt: string) => string;
+}[] = [
+  {
+    matches: looksLikeReviewPrompt,
+    answer: (prompt) =>
+      stubReviewDocument(specTypeFromReviewPrompt(prompt), looksLikeRereviewPrompt(prompt)),
+  },
+  { matches: looksLikeDriverAnswerPrompt, answer: stubDriverAnswerDocument },
+  { matches: looksLikeDriverReviewPrompt, answer: stubDriverReviewDocument },
+  {
+    matches: looksLikeRevisionNotePrompt,
+    answer: (prompt) => stubRevisionNoteDocument(pointCountFromNotePrompt(prompt)),
+  },
+  { matches: looksLikeEditPrompt, answer: stubEditDocument },
+  { matches: looksLikeRefinementPrompt, answer: stubRefinementDocument },
+  /*
+   * The interview prompts, answered here rather than by a test double the endpoint built for itself
+   * (round 2, Д-3). Until that milestone the interview routes constructed their own stub, so the
+   * interview never reached a provider at all — on any deployment.
+   */
+  {
+    matches: looksLikeInterviewRoundPrompt,
+    answer: (prompt) =>
+      stubInterviewRoundDocument(
+        stageFromInterviewPrompt(prompt),
+        roundNumberFromInterviewPrompt(prompt),
+        styleFromInterviewPrompt(prompt),
+      ),
+  },
+  { matches: looksLikeSummaryPrompt, answer: stubSessionSummaryDocument },
+  { matches: looksLikeReplyAssessmentPrompt, answer: () => stubReplyAssessmentDocument() },
+  { matches: looksLikeInterviewBridgePrompt, answer: stubInterviewBridgeDocument },
+];
+
+/**
+ * The double as a **provider**, for the registry (D-48).
+ *
+ * It answers the prompt it is given — writing exactly the sections the assembled prompt asked for —
+ * so an end-to-end run against it exercises the whole path, including structural validation, without
+ * a vendor. Delays are simulated so the streaming path is genuinely streaming rather than one batch.
+ */
 export function createStubProviderStream(): (input: {
   messages: readonly { role: string; content: string }[];
   onDelta: (text: string) => void;
@@ -193,32 +257,8 @@ export function createStubProviderStream(): (input: {
 }) => Promise<string> {
   return async ({ messages, onDelta, signal }) => {
     const prompt = messages.map((message) => message.content).join('\n');
-    const document = looksLikeReviewPrompt(prompt)
-      ? stubReviewDocument(specTypeFromReviewPrompt(prompt))
-      : looksLikeRevisionNotePrompt(prompt)
-        ? stubRevisionNoteDocument(pointCountFromNotePrompt(prompt))
-        : looksLikeEditPrompt(prompt)
-          ? stubEditDocument(prompt)
-          : looksLikeRefinementPrompt(prompt)
-            ? stubRefinementDocument(prompt)
-            : /*
-               * The interview prompts, answered here rather than by a test double the endpoint built for
-               * itself (round 2, Д-3). Until this milestone the interview routes constructed their own
-               * stub, so the interview never reached a provider at all — on any deployment.
-               */
-              looksLikeInterviewRoundPrompt(prompt)
-              ? stubInterviewRoundDocument(
-                  stageFromInterviewPrompt(prompt),
-                  roundNumberFromInterviewPrompt(prompt),
-                  styleFromInterviewPrompt(prompt),
-                )
-              : looksLikeSummaryPrompt(prompt)
-                ? stubSessionSummaryDocument(prompt)
-                : looksLikeReplyAssessmentPrompt(prompt)
-                  ? stubReplyAssessmentDocument()
-                  : looksLikeInterviewBridgePrompt(prompt)
-                    ? stubInterviewBridgeDocument(prompt)
-                    : documentFromPrompt(prompt);
+    const matched = STUB_ANSWERS.find((rule) => rule.matches(prompt));
+    const document = matched === undefined ? documentFromPrompt(prompt) : matched.answer(prompt);
 
     for (const chunk of chunkDocument(document, DEFAULT_WORDS_PER_CHUNK)) {
       signal?.throwIfAborted();

@@ -146,8 +146,12 @@ function OptionMark({ option }: { option: FeedOption }) {
  * its place on the review board buys nothing on this card either — every option here is a controlled
  * input, so the card does not work at all until React is running.
  *
- * The link follows `viewer/markdown.tsx` exactly — `rel="noreferrer nofollow"`, no `target` — because
- * it is the same kind of thing: an address a model wrote. What makes it safe is the schema's
+ * The link opens in a **new tab** (А-18 §3, parity with the reference): the round it stands in is
+ * unsent, and navigating away in the same tab costs the reader every option they had already picked.
+ * `noopener noreferrer` is therefore mandatory rather than decorative — `target="_blank"` is what
+ * hands the opened page a `window.opener` back to this one, and the address is model-authored. It
+ * keeps `nofollow` from `viewer/markdown.tsx` for the same reason that file has it: a link a model
+ * wrote is not an endorsement this product makes. What makes the address itself safe is the schema's
  * refinement, which accepts an https home page on the vendor's own host and drops everything else;
  * this renderer is downstream of that and does not pretend to be the boundary.
  */
@@ -176,7 +180,8 @@ function OptionReference({
             {href !== undefined && (
               <a
                 href={href}
-                rel="noreferrer nofollow"
+                target="_blank"
+                rel="noopener noreferrer nofollow"
                 data-testid={`mcq-link-${option.id}`}
                 aria-label={t('feed.round.site', { name: option.label })}
                 className="hover:text-foreground"

@@ -60,7 +60,9 @@ const TECHNICAL_RULES = [
 const CONCRETE_RULES = [
   'They want the build pinned down, not explored.',
   'Ask only three kinds of thing: what to build, how they want it built, and how they will use it',
-  'once it runs. Address them as "you" in every question and in every option, and sound the same in',
+  'once it runs. Address them as "you" in every question and in every option: every question must',
+  'contain the word "you" or "your", including the ones that count — write "how many of you", not',
+  '"how many people". Sound the same in',
   'round three as in round one: vary what you ask about, never how you ask it. Every option is',
   'something you say to them, never something they say back — no label and no description in the',
   'first person. Never ask what someone else would feel, want or notice, never invent a persona, a',
