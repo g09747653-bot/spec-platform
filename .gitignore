@@ -71,3 +71,5 @@ video demo/
 # The loop's own database, and the Next build of its dashboard (task 152).
 loop/.data/
 loop/.next/
+loop/playwright-report/
+loop/test-results/

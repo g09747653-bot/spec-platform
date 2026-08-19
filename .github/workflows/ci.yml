@@ -267,6 +267,15 @@ jobs:
       - name: End-to-end tests (local single-user profile)
         run: pnpm test:e2e --project=chromium
 
+      # The delivery loop's dashboard (task 153). It rides in this job because the browsers are
+      # already installed here and because the required check's name cannot change (D-202) — a red
+      # loop feed must block a merge exactly as a red platform journey does. Its own Playwright
+      # configuration builds and starts the loop's server; the two applications never share one.
+      - name: End-to-end tests (loop dashboard)
+        env:
+          LOCAL_SINGLE_USER: ''
+        run: pnpm loop:e2e
+
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4

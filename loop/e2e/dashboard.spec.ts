@@ -1,0 +1,165 @@
+import { expect, test, type Page } from '@playwright/test';
+
+/**
+ * The dashboard and its live feed (task 153).
+ *
+ * The acceptance criterion is a *browser* claim and cannot be made anywhere else: a line the
+ * orchestrator emits has to appear on an already-open page, without that page asking for it. The
+ * only way to know the page did not ask is to watch the requests it makes — so the case counts them.
+ */
+
+const PROJECT = 'e2e-loop-project';
+
+test.beforeEach(async ({ request }) => {
+  const response = await request.post('/api/harness', {
+    data: {
+      action: 'seed',
+      projectId: PROJECT,
+      title: 'Тестовый проект контура',
+      milestones: [
+        {
+          milestoneId: 'ms_01',
+          title: 'Каркас',
+          dependsOn: [],
+          tasks: [
+            { taskId: 'task_1', title: 'Инициализировать репозиторий', dependsOn: [] },
+            { taskId: 'task_2', title: 'Схема базы', dependsOn: ['task_1'] },
+          ],
+        },
+        {
+          milestoneId: 'ms_02',
+          title: 'Ядро',
+          dependsOn: ['ms_01'],
+          tasks: [{ taskId: 'task_3', title: 'Репозиторий заметок', dependsOn: ['task_2'] }],
+        },
+      ],
+    },
+  });
+
+  expect(response.ok()).toBe(true);
+});
+
+test('shows the project, its milestones and its tasks, in Russian', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
+  await expect(page.getByTestId('project-title')).toHaveText('Тестовый проект контура');
+  await expect(page.getByTestId('milestone')).toHaveCount(2);
+  await expect(page.getByTestId('task')).toHaveCount(3);
+  await expect(page.getByTestId('task-total')).toHaveText('3');
+
+  // Statuses are words the operator reads, not the tokens the database stores.
+  await expect(page.getByText('Ожидает').first()).toBeVisible();
+  await expect(page.getByText('В работе').first()).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('IN_PROGRESS');
+  await expect(page.locator('body')).not.toContainText('PENDING');
+
+  // Dependencies are on screen: the loop's whole ordering argument is invisible without them.
+  await expect(page.getByTestId('task').filter({ hasText: 'Схема базы' })).toContainText(
+    'Ждёт: task_1',
+  );
+});
+
+test('has no authentication surface at all', async ({ page, request }) => {
+  await page.goto('/');
+
+  await expect(page.locator('body')).not.toContainText(/войти|вход|sign in|log in/i);
+  await expect(page.locator('form')).toHaveCount(0);
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+
+  // Nothing that a signed-out visitor would be bounced to, because there is no such notion here.
+  expect((await request.get('/signin')).status()).toBe(404);
+  expect((await request.get('/api/auth/session')).status()).toBe(404);
+});
+
+test('a line the orchestrator emits reaches an open page, with no request from the page', async ({
+  page,
+  request,
+}) => {
+  await page.goto('/');
+  await expect(page.getByTestId('feed-state')).toHaveAttribute('data-live', 'yes');
+
+  const before = await countFeedLines(page);
+
+  /*
+   * Every request the page makes from here on, counted by URL predicate rather than by glob —
+   * Next's own navigations carry a `?_rsc=` query that a glob silently misses.
+   */
+  const requested: string[] = [];
+  page.on('request', (call) => {
+    const url = new URL(call.url());
+    if (url.pathname !== '/api/observability/stream-logs') requested.push(call.url());
+  });
+
+  const emitted = 'оркестратор: задача task_1 принята в работу';
+  const response = await request.post('/api/harness', {
+    data: { action: 'log', projectId: PROJECT, message: emitted, agentRole: 'ORCHESTRATOR' },
+  });
+  expect(response.ok()).toBe(true);
+
+  // The line arrives on the page that was already open.
+  await expect(page.getByTestId('feed-line')).toHaveCount(before + 1);
+  await expect(page.getByTestId('feed').getByText(emitted)).toBeVisible();
+
+  // And the page asked for nothing: no reload, no poll, no refetch. The stream did the work.
+  expect(requested).toEqual([]);
+});
+
+test('an error line is marked as one, and the level survives the stream', async ({
+  page,
+  request,
+}) => {
+  await page.goto('/');
+  await expect(page.getByTestId('feed-state')).toHaveAttribute('data-live', 'yes');
+  const before = await countFeedLines(page);
+
+  await request.post('/api/harness', {
+    data: {
+      action: 'log',
+      projectId: PROJECT,
+      message: 'красный CI: приёмочные тесты упали',
+      agentRole: 'CONTROLLER',
+      logLevel: 'ERROR',
+    },
+  });
+
+  await expect(page.getByTestId('feed-line')).toHaveCount(before + 1);
+  await expect(page.getByTestId('feed-line').last()).toHaveAttribute('data-level', 'ERROR');
+  await expect(page.getByTestId('feed-line').last()).toContainText('CONTROLLER');
+});
+
+test('a reload keeps the tail rather than starting from nothing', async ({ page, request }) => {
+  await request.post('/api/harness', {
+    data: { action: 'log', projectId: PROJECT, message: 'строка до перезагрузки' },
+  });
+
+  await page.goto('/');
+  await expect(page.getByTestId('feed').getByText('строка до перезагрузки')).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByTestId('feed').getByText('строка до перезагрузки')).toBeVisible();
+
+  // Reconnecting replays a tail that overlaps what is already rendered. Once, not twice.
+  await expect(page.getByTestId('feed').getByText('строка до перезагрузки')).toHaveCount(1);
+});
+
+test('cold start reaches an interactive page within three seconds', async ({ page }) => {
+  /*
+   * The bound of the A0 success criteria, measured the way an operator experiences it: from the
+   * navigation to a page whose feed is connected — that is, a page that is showing the state loaded
+   * from SQLite and is already receiving what happens next. A page that had painted but not attached
+   * would satisfy a weaker reading and would still leave the operator watching a dead feed.
+   */
+  const started = Date.now();
+
+  await page.goto('/');
+  await expect(page.getByTestId('project-title')).toBeVisible();
+  await expect(page.getByTestId('feed-state')).toHaveAttribute('data-live', 'yes');
+
+  const elapsed = Date.now() - started;
+  expect(elapsed, `холодный старт занял ${String(elapsed)} мс`).toBeLessThanOrEqual(3_000);
+});
+
+async function countFeedLines(page: Page): Promise<number> {
+  return page.getByTestId('feed-line').count();
+}

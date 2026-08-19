@@ -33,6 +33,13 @@ export default tseslint.config(
       'migrations/**',
       // Deliberate violations, linted only by `pnpm test:boundaries`.
       'src/modules/**/__fixtures__/**',
+      // The delivery loop's build output, database and test artifacts (А-20). Its *source* is
+      // linted by this same configuration — only what a tool generated is skipped.
+      'loop/.next/**',
+      'loop/.data/**',
+      'loop/next-env.d.ts',
+      'loop/playwright-report/**',
+      'loop/test-results/**',
     ],
   },
 
@@ -132,7 +139,7 @@ export default tseslint.config(
   // `EventSource` is deliberately NOT banned here: the loop's dashboard consumes a plain one-way SSE
   // feed with no POST body and no resume policy, which is the case D-8's reasoning does not cover.
   {
-    files: ['loop/**/*.{ts,tsx}'],
+    files: ['loop/src/**/*.{ts,tsx}', 'loop/e2e/**/*.ts'],
     rules: {
       'no-restricted-properties': [
         'error',

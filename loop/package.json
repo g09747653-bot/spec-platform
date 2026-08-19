@@ -7,15 +7,25 @@
     "node": ">=24.0.0"
   },
   "scripts": {
+    "dev": "next dev --webpack -H 127.0.0.1",
+    "build": "next build --webpack",
+    "start": "next start -H 127.0.0.1",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run",
+    "test:e2e": "playwright test",
     "db:migrate": "node src/db/migrate-cli.ts"
   },
   "dependencies": {
+    "next": "16.3.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@types/node": "24.13.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
   }

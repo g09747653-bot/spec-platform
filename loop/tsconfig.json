@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["esnext"],
+    "lib": [
+      "esnext",
+      "dom",
+      "dom.iterable"
+    ],
     "allowJs": false,
     "skipLibCheck": true,
     "strict": true,
@@ -15,20 +19,41 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
     "verbatimModuleSyntax": true,
     /*
-     * Relative imports carry their `.ts` extension throughout this package, so every module is
-     * runnable by bare `node` — Node 24 strips types natively but does no extension resolution.
-     * That matters here: the migration CLI, the concurrency probe's workers and the orchestrator's
-     * helper processes all run outside a bundler.
+     * Relative imports carry their extension throughout this package, so every module is runnable by
+     * bare `node` — Node 24 strips types natively but does no extension resolution. That matters
+     * here: the migration CLI, the concurrency probe's workers and the orchestrator's helper
+     * processes all run outside a bundler.
      */
     "allowImportingTsExtensions": true,
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
     "baseUrl": ".",
     "paths": {
-      "~/*": ["./src/*"]
+      "~/*": [
+        "./src/*"
+      ]
     }
   },
-  "include": ["**/*.ts"],
-  "exclude": ["node_modules", ".data", ".next"]
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".data",
+    ".next"
+  ]
 }

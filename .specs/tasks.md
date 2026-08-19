@@ -1776,7 +1776,7 @@ Goal: the customer's second hands-on pass plus his video demo (`video demo/Deskt
   - Acceptance Criteria: DB file created on first boot; concurrent-write test (10 parallel writers into `agent_logs`) passes with zero `database is locked`; missing mandatory var = immediate exit with named var in stderr.
   - _Dependencies: —_ · _Requirements: бандл A0 (Task 1.1, 1.2)_ · _Touches: `loop/**` (new)_ · _Complexity: Medium_ · _Parallel-safe: no_
 
-- [ ] 153\. Local dashboard + SSE log feed
+- [x] 153\. Local dashboard + SSE log feed
   - Next.js app of the `loop/` package on `127.0.0.1:<PORT>`, no auth surface at all (локальный контур); дашборд: проект, вехи/задачи со статусами, лента логов. `GET /api/observability/stream-logs` — SSE, fed by the in-process event bus (никакого поллинга БД); reload не теряет хвост (последние N строк из `agent_logs` доклеиваются до подписки).
   - Acceptance Criteria: строка лога, выпущенная оркестратором, появляется в открытой странице без перезапроса (e2e); дашборд по-русски; холодный старт до интерактивной страницы ≤ 3 с на машине CI.
   - _Dependencies: 152_ · _Requirements: бандл A0 (Task 1.3, 1.4)_ · _Touches: `loop/**`_ · _Complexity: Medium_ · _Parallel-safe: no_
