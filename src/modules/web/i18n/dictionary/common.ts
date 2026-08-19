@@ -12,9 +12,27 @@ import { definePhrases } from '../phrase';
 export const commonPhrases = definePhrases({
   'common.open': { en: 'Open', ru: 'Открыть' },
   'common.close': { en: 'Close', ru: 'Закрыть' },
-  'common.copy': { en: 'Copy', ru: 'Копировать' },
+  /*
+   * Perfective, like every other control in this file (§1.2 rule 1).
+   *
+   * «Копировать» was the one imperfective verb among «Открыть · Закрыть · Скачать · Остановить», and
+   * the imperfective names an occupation rather than an act: a button that says it promises copying
+   * as an activity, not a copy that will exist when the press is over. The product already writes it
+   * the other way on its two other copy controls — «Скопировать промпт», «Скопировать и открыть» —
+   * so this was drift, not a decision. Costs one character in a ghost `sm` button.
+   */
+  'common.copy': { en: 'Copy', ru: 'Скопировать' },
   'common.download': { en: 'Download', ru: 'Скачать' },
-  'common.cancel': { en: 'Cancel', ru: 'Отмена' },
+  /*
+   * A verb, because it is a button (§1.2 rule 1, and §6 names the noun-on-a-control by row).
+   *
+   * «Отмена» is what an OS dialog says, and it arrived here from that habit rather than from the
+   * standard. Both call sites stand it beside an infinitive — «Сохранить» in `project-actions.tsx`
+   * and «Восстановить ревизию 3» in `revert-card.tsx` — so the pair visibly mixed a noun with a
+   * verb in one row. The two licensed exceptions to rule 1 are «На доработку» and «Дальше»; this is
+   * neither, and a third exception would be a line in `decisions.md` rather than a silence.
+   */
+  'common.cancel': { en: 'Cancel', ru: 'Отменить' },
   'common.retry': { en: 'Try again', ru: 'Повторить' },
   'common.stop': { en: 'Stop', ru: 'Остановить' },
   'common.loading': { en: 'Loading', ru: 'Загрузка' },

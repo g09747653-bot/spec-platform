@@ -49,6 +49,10 @@ export const sessionPhrases = definePhrases({
    * exactly one thing, a folder on this machine, and the honest short name is the one that says so.
    * The stub keeps both of its sentences — the second is the promise that nothing on the disk is
    * touched, and a stub that drops its guarantee in the second language is a stub that lies there.
+   *
+   * «Пока не сделано» reported on the team rather than on the product — the workman's register, and
+   * the other stub in this bundle (`projects.mcp.description`) already says «Пока недоступно» about
+   * the same kind of state.
    */
   'session.workspace.title': { en: 'Local Workspace', ru: 'Локальная папка' },
   'session.workspace.mount': { en: 'Mount folder', ru: 'Подключить папку' },
@@ -57,7 +61,7 @@ export const sessionPhrases = definePhrases({
       'Mounting a folder from this machine is not built yet. Nothing here reads or writes your ' +
       'files.',
     ru:
-      'Подключение папки с этого компьютера пока не сделано. Ничего здесь не читает и не ' +
+      'Подключение папки с этого компьютера пока недоступно. Ничего здесь не читает и не ' +
       'записывает ваши файлы.',
   },
 
@@ -91,16 +95,22 @@ export const sessionPhrases = definePhrases({
 
   /*
    * The meta line, as one phrase rather than as three JSX fragments with two separators between
-   * them. Russian puts the stage in a prepositional frame the English «attached at {stage}» does
-   * not have, and a sentence assembled in markup cannot be given one.
+   * them.
    *
    * The stage arrives as a word (`session.stage.canonical.*`), not as the identifier the database
    * stores: a token printed as a word is a defect of presentation, and the token itself stays in
    * `data-stage` where a test can still read it (§3).
+   *
+   * The trap is that the word is a *label* — «Требования», «Архитектура» — and «прикреплён на этапе
+   * {stage}» dropped it into a frame that wants a case it cannot take: «на этапе Требования» is the
+   * agreement failure §5 item 11 forbids by name. The colon is the frame this panel already owns
+   * («Режим: обычный»): it needs no case, no quotes, and no second reading. «Прикреплён» went with
+   * it — it restated the panel the line is printed inside, and this is the narrowest text column in
+   * the product, where eleven characters are a wrapped line on every row.
    */
   'session.attachments.meta': {
     en: '{type} · {size} · attached at {stage}',
-    ru: '{type} · {size} · прикреплён на этапе {stage}',
+    ru: '{type} · {size} · этап: {stage}',
   },
 
   /*
@@ -109,11 +119,15 @@ export const sessionPhrases = definePhrases({
    * forgotten one. Only «text» is a word, and only the last entry is new: an unrecognised MIME type
    * used to be printed raw — `application/x-brochure` announced to a reader as though it were the
    * name of a thing — and it now says what it is while the type stays in `data-mime`.
+   *
+   * «Текст» takes its capital because this value *opens* the meta line: the rows read «PDF · …»,
+   * «Markdown · …», «Файл · …», and a lower-case one among them is a hole in the column, not a
+   * faithful copy of the English half's own inconsistency (§1.3).
    */
   'session.attachments.type-pdf': { en: 'PDF', ru: 'PDF' },
   'session.attachments.type-docx': { en: 'DOCX', ru: 'DOCX' },
   'session.attachments.type-xlsx': { en: 'XLSX', ru: 'XLSX' },
-  'session.attachments.type-text': { en: 'text', ru: 'текст' },
+  'session.attachments.type-text': { en: 'text', ru: 'Текст' },
   'session.attachments.type-markdown': { en: 'Markdown', ru: 'Markdown' },
   'session.attachments.type-png': { en: 'PNG', ru: 'PNG' },
   'session.attachments.type-jpeg': { en: 'JPEG', ru: 'JPEG' },
@@ -137,9 +151,14 @@ export const sessionPhrases = definePhrases({
     en: 'Read — its text grounds every later stage.',
     ru: 'Прочитан\u00A0— его текст ложится в основу каждого следующего этапа.',
   },
+  /*
+   * One object, one word: «Изображение… картинки» named the same thing twice in one sentence, and
+   * «картинка» is the friendly register this product does not have. A model that is vision-capable
+   * is one that sees it.
+   */
   'session.attachments.parse-passthrough': {
     en: 'Image — offered to vision-capable models as it is.',
-    ru: 'Изображение\u00A0— передаётся как есть моделям, которые умеют читать картинки.',
+    ru: 'Изображение\u00A0— передаётся как есть моделям, которые умеют его видеть.',
   },
   'session.attachments.parse-pending': {
     en: 'Stored; still being read.',
@@ -153,9 +172,19 @@ export const sessionPhrases = definePhrases({
 
   'session.attachments.remove': { en: 'Remove', ru: 'Убрать' },
 
+  /*
+   * Three failures, three objects, and the objects are what the words have to get right.
+   *
+   * «Загрузка не завершилась» named a third mechanism on a panel whose control is «Добавить» and
+   * whose busy state is «Добавление…» — and «Загрузка» is also `common.loading`, so a reader who
+   * had just pressed «Добавить» was told the page had not loaded. The thing that failed to be added
+   * is still a file at that moment (§2.1 keeps «файл» for where fileness matters); by the time it
+   * can be removed it is an attachment, and calling it a «документ» there merged the one
+   * distinction the glossary works hardest to hold.
+   */
   'session.attachments.upload-failed': {
     en: 'The upload did not complete.',
-    ru: 'Загрузка не завершилась.',
+    ru: 'Файл не удалось добавить.',
   },
   'session.attachments.refine-conflict': {
     en: 'That file already has a change awaiting your decision.',
@@ -167,7 +196,7 @@ export const sessionPhrases = definePhrases({
   },
   'session.attachments.remove-failed': {
     en: 'The document could not be removed.',
-    ru: 'Документ не удалось убрать.',
+    ru: 'Вложение не удалось убрать.',
   },
 
   /*
@@ -175,6 +204,12 @@ export const sessionPhrases = definePhrases({
    * about one of them and neither language should. English gained a singular form here, which it
    * never had: the list is «files were written» even when it holds exactly one, and that is the
    * defect the plural type exists to make impossible in the second language.
+   *
+   * Two traps in the tail. «Написан … он создан» said the same thing twice, and the second half
+   * pointed two masculine pronouns at two masculine antecedents in six words; the clause is now the
+   * dash alone, and the only pronoun left is the attachment. And «как прикрепили» was agentless —
+   * it read as somebody else having done it, when it was the reader, which is the one fact this
+   * notice is about.
    */
   'session.attachments.late-notice': {
     en: {
@@ -183,9 +218,9 @@ export const sessionPhrases = definePhrases({
         'These approved files were written before {fileName} was attached, so they were generated without it:',
     },
     ru: {
-      one: 'Этот одобренный документ написан до того, как прикрепили {fileName},\u00A0— он создан без него:',
-      few: 'Эти одобренные документы написаны до того, как прикрепили {fileName},\u00A0— они созданы без него:',
-      many: 'Эти одобренные документы написаны до того, как прикрепили {fileName},\u00A0— они созданы без него:',
+      one: 'Этот одобренный документ написан до того, как вы прикрепили {fileName},\u00A0— без него:',
+      few: 'Эти одобренные документы написаны до того, как вы прикрепили {fileName},\u00A0— без него:',
+      many: 'Эти одобренные документы написаны до того, как вы прикрепили {fileName},\u00A0— без него:',
     },
   },
 
@@ -198,9 +233,14 @@ export const sessionPhrases = definePhrases({
     en: 'Refine {fileName}',
     ru: 'Внести правку в {fileName}',
   },
+  /*
+   * «Правка предлагает изменение» made an abstract noun the agent of a verb it cannot perform, and
+   * then named its own object with a second word for the same thing. What actually arrives is the
+   * object §2.4 already named — «предложенная правка» — so the sentence says that instead.
+   */
   'session.attachments.late-note': {
     en: 'Nothing has been changed. Refining proposes an update you can review and accept.',
-    ru: 'Ничего не изменено. Правка предлагает изменение, которое можно рассмотреть и принять.',
+    ru: 'Ничего не изменено. Сначала придёт предложенная правка, которую можно рассмотреть и принять.',
   },
 
   /* §6: sentence case, so «Экспорт комплекта» and never «Экспорт Комплекта». */
@@ -211,8 +251,13 @@ export const sessionPhrases = definePhrases({
    *
    * Both mode words are written to stand in the nominative after a colon — «Режим: обычный» — and
    * every sentence below that mentions a mode uses that frame rather than putting the word into a
-   * case Russian would have to inflect. That is why the panel's own line reads «Режим: …» and the
-   * toasts read «… — ревизия режима: …»: one grammatical shape, two surfaces, no declension.
+   * case Russian would have to inflect: the panel's line, the two download sentences, and both
+   * toasts all open with «Режим: …». One grammatical shape, four surfaces, no declension.
+   *
+   * The copy toast used to be the exception, and it is where the cost showed: `{mode}` is a
+   * translated word, so «— ревизия режима: {mode}» printed «ревизия режима: с обогащением» — a
+   * genitive chain around a label-colon-value pair welded into the middle of a sentence. A form, not
+   * a product speaking, and the frame that fixes it was already three lines away.
    */
   'session.export.mode-label': { en: 'Mode:', ru: 'Режим:' },
   'session.export.mode-default': { en: 'default', ru: 'обычный' },
@@ -240,6 +285,7 @@ export const sessionPhrases = definePhrases({
     ru: '\u00A0— обогащённые документы плюс quality.md.',
   },
 
+  /* Plural over a list that is routinely one name — see the note on `session.export.omitted`. */
   'session.export.included': { en: 'Included: {files}', ru: 'Войдут: {files}' },
 
   /* §4 again, and §5 item 18: the empty archive is a sentence, not «0 документов одобрено». */
@@ -247,13 +293,31 @@ export const sessionPhrases = definePhrases({
     en: 'Nothing is approved yet, so the archive would be empty.',
     ru: 'Пока не одобрен ни один документ\u00A0— архив получится пустым.',
   },
+  /*
+   * «У них» pointed forward at a list that had not been printed yet. Cataphora is ordinary in
+   * English apposition and awkward in Russian, and the pronoun was carrying nothing the verb and the
+   * list after the colon do not already carry — so it goes, and the line loses eight characters in
+   * the 220-pixel column at the same time.
+   *
+   * What cannot be fixed from here: the verb is plural and this line routinely prints one name.
+   * The English half is number-blind and the shape is flat, so an honest singular needs the caller
+   * to pass a count — a change of shape, and therefore not this pass's to make.
+   */
   'session.export.omitted': {
     en: 'Omitted for want of an approved revision: {files}',
-    ru: 'Не войдут\u00A0— у них нет одобренной ревизии: {files}',
+    ru: 'Не войдут\u00A0— нет одобренной ревизии: {files}',
   },
 
   'session.export.copying': { en: 'Copying…', ru: 'Копирование…' },
-  'session.export.copied': { en: 'Copied ✓', ru: 'Скопировано ✓' },
+
+  /*
+   * The done state drops the tick. This row is `flex items-center gap-2` around a `font-mono` file
+   * name that cannot shrink and a `whitespace-nowrap` button, in a column whose minimum is 220 px:
+   * «Скопировано ✓» costs ≈ 14 px the English «Copied ✓» does not, and the word already says what
+   * the tick says. It does not buy the whole overrun — the row needs `min-w-0 truncate` on the name
+   * span, which is markup and not this file's to write — but it is the half the copy can pay.
+   */
+  'session.export.copied': { en: 'Copied ✓', ru: 'Скопировано' },
   'session.export.copy-error': {
     en: 'That file could not be read. Try again.',
     ru: 'Файл не удалось прочитать. Повторите попытку.',
@@ -264,7 +328,7 @@ export const sessionPhrases = definePhrases({
   },
   'session.export.copied-toast': {
     en: '{fileName} copied — the {mode}-mode revision.',
-    ru: 'Скопирован {fileName}\u00A0— ревизия режима: {mode}.',
+    ru: 'Режим: {mode}. Скопирован {fileName}.',
   },
   'session.export.copy-manual': {
     en: 'The clipboard was not available. Here is {fileName} — select and copy it.',
@@ -293,7 +357,15 @@ export const sessionPhrases = definePhrases({
     ru: '\u00A0— без {files}',
   },
 
-  /* «Скачано» before the number, impersonal, which also settles the gender question (§4). */
+  /*
+   * «Скачано» before the number, impersonal, which also settles the gender question (§4).
+   *
+   * The `many` form is right for 5, 11 and 25 and it is also what `Intl.PluralRules` hands zero — so
+   * an archive downloaded with nothing approved says «Скачано 0 файлов», the bare counter §4 rule 2
+   * bans by name. The wording for that case exists one key up (`session.export.downloaded-empty`);
+   * what is missing is the branch in `export-panel.tsx` that asks. No form here can fix it without
+   * lying to 5, 11 and 25.
+   */
   'session.export.downloaded-toast': {
     en: {
       one: 'Downloaded {count} file in {mode} mode.',

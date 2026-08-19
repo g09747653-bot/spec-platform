@@ -64,9 +64,23 @@ export const projectsPhrases = definePhrases({
     en: 'In technical terms',
     ru: 'В технических терминах',
   },
+  /**
+   * The word this hint may not spend: «решение».
+   *
+   * §2.3 refused «Решение» as the name of the `solution` stage because the product says «ждёт
+   * вашего решения» a dozen times a session, and one noun cannot carry both the user's decision and
+   * the engineering it is about. The same collision was sitting here — on the first screen, before
+   * the reader has learned either sense — so the same ruling applies. «Технические варианты» was
+   * the other candidate and loses to the label printed directly above it, «В технических терминах»:
+   * a hint that repeats its own label's adjective explains nothing.
+   *
+   * «Компромиссы» goes with it. *Trade-off* is not a compromise in Russian, and «их компромиссы»
+   * reads as concessions the choices themselves made; «его цену» is the idiom that says what a
+   * trade-off costs.
+   */
   'projects.new-project.audience-technical-hint': {
     en: 'Questions that name the engineering choices directly, with the trade-offs stated.',
-    ru: 'Вопросы прямо называют инженерные решения и их компромиссы.',
+    ru: 'Вопросы прямо называют инженерный выбор и его цену.',
   },
 
   /**
@@ -78,9 +92,17 @@ export const projectsPhrases = definePhrases({
    */
   'projects.new-project.methodology-legend': { en: 'Which workflow?', ru: 'Какая методология?' },
   'projects.new-project.methodology-auto': { en: 'Auto', ru: 'Автовыбор' },
+  /**
+   * Declarative, because it classifies rather than commands (§1.2 rule 3).
+   *
+   * The infinitive read as a button caption that had slipped under a radio — and the two hints in
+   * the fieldset above it are plain statements («Вопросы обычными словами, без инженерной
+   * терминологии»), so this one was the only microlabel on the form telling the reader to do
+   * something they had already done by selecting the option it sits under.
+   */
   'projects.new-project.methodology-auto-hint': {
     en: 'Pick the workflow that fits the description.',
-    ru: 'Подобрать методологию по описанию.',
+    ru: 'Методология подбирается по описанию.',
   },
 
   'projects.new-project.submit': { en: 'Start a session', ru: 'Начать сессию' },
@@ -153,13 +175,18 @@ export const projectsPhrases = definePhrases({
     ru: 'Чат не удалось архивировать. Ничего не изменилось.',
   },
   /**
-   * «из архива», lower case and unquoted on purpose: the filter this points at is a control on the
-   * project page with its own phrase, and copy that quotes another surface's label breaks the moment
-   * that label is reworded.
+   * Lower case and unquoted on purpose: the filter this points at is a control on the project page
+   * with its own phrase, and copy that quotes another surface's label breaks the moment that label
+   * is reworded.
+   *
+   * **But not «из архива».** §2.1 spends «архив» on the ZIP the export builds, and there is no place
+   * called that on this screen — the filter beside the tabs reads «Архивные», and the empty state
+   * two entries down already says «архивные чаты». The toast was sending the reader to a room that
+   * does not exist, in a word that means something else in the session they just left.
    */
   'projects.chat-list.archived': {
     en: 'Chat archived. Restore it from Archived.',
-    ru: 'Чат архивирован. Восстановить его можно из архива.',
+    ru: 'Чат архивирован. Восстановить его можно среди архивных чатов.',
   },
   'projects.chat-list.restored': { en: 'Chat restored.', ru: 'Чат восстановлен.' },
   'projects.chat-list.empty-title': { en: 'No chats here', ru: 'Здесь нет чатов' },
@@ -189,10 +216,16 @@ export const projectsPhrases = definePhrases({
    * нельзя отменить» are the load-bearing words and neither may soften in translation. The verb
    * leads the enumeration rather than trailing it, because a Russian subject chain this long
    * postpones the only word that matters to the end of the line (§4).
+   *
+   * «Добавленные вами вложения», not «прикреплённые»: a вложение is by definition the thing that was
+   * attached, so the participle restated its own noun — the tell of a word-by-word pass over «every
+   * document you attached». Dropping the person entirely was the other option and costs the sentence
+   * something DR-7 wants kept: these are the reader's own uploads, and that is the item on this list
+   * they will feel. «Добавили» is also the verb the attachments panel prints on its own control.
    */
   'projects.actions.delete-confirm': {
     en: 'Delete “{name}” permanently? Its session, questions, answers, every spec file and every revision, and every document you attached will be removed. This cannot be undone.',
-    ru: 'Удалить «{name}» навсегда? Будут удалены его сессия, вопросы, ответы, все документы и все ревизии, а также все прикреплённые вами вложения. Это нельзя отменить.',
+    ru: 'Удалить «{name}» навсегда? Будут удалены его сессия, вопросы, ответы, все документы и все ревизии, а также все добавленные вами вложения. Это нельзя отменить.',
   },
   'projects.actions.delete-confirmed': { en: 'Delete permanently', ru: 'Удалить навсегда' },
   'projects.actions.delete-cancel': { en: 'Keep it', ru: 'Оставить' },
@@ -237,9 +270,17 @@ export const projectsPhrases = definePhrases({
     en: 'Nothing in this bundle has been approved yet, so there is nothing to edit. Approve a document first.',
     ru: 'В этом комплекте пока ничего не одобрено, поэтому править нечего. Сначала одобрите документ.',
   },
+  /**
+   * «Откроется с незаконченной фразой», where the English opens *on* one.
+   *
+   * The instrumental without a preposition — «открывается фразой» — says the chat is opened *by
+   * means of* a phrase, which is a claim about the mechanism rather than about what will be on
+   * screen. The English is a promise about the next second, so the Russian is perfective and future:
+   * the composer will already hold half a sentence, and finishing it is the reader's move.
+   */
   'projects.edit-chat.pick': {
     en: 'Pick the documents this edit may touch. The chat opens on a sentence you finish.',
-    ru: 'Отметьте документы, которых может коснуться правка. Чат открывается фразой, которую вы дописываете.',
+    ru: 'Отметьте документы, которых может коснуться правка. Чат откроется с незаконченной фразой, которую вы допишете.',
   },
   /* The badge beside each file name is `common.revision-badge` — the viewer's chip and the specs
      panel's status print the same one, and «Рев. 3» is one decision about the word, not three. */

@@ -90,31 +90,70 @@ export const feedDocumentsPhrases = definePhrases({
    */
   'feed.document.preview-show': { en: 'Preview', ru: 'Показать текст' },
   'feed.document.preview-hide': { en: 'Hide preview', ru: 'Скрыть текст' },
+  /*
+   * «документ», not «файл»: every other line on this card says «документ» — « · одобрен — войдёт в
+   * экспорт», «пока вы не одобрите документ» — and §2.1 keeps «файл» for the export list and the
+   * mono paths.
+   *
+   * Object first, then «не удалось», then the infinitive — which is how the other fifteen failures
+   * in this dictionary are built («Проект не удалось создать», «Файл не удалось прочитать»,
+   * «Экспорт не удалось собрать»). `viewer.pane.read-failed` is this sentence about a revision
+   * instead of a document and was already in that shape, so the fronted infinitive left the same
+   * failure told two ways on two surfaces a reader opens one from the other.
+   */
   'feed.document.preview-failed': {
     en: 'That file could not be read just now.',
-    ru: 'Прочитать файл сейчас не удалось.',
+    ru: 'Документ сейчас не удалось прочитать.',
   },
   /*
    * `feed.refine.failed` is the same sentence in both languages. Two surfaces, not three, so it
    * stays two entries — and they are two different failures: a decision the server refused, and an
    * instruction that produced nothing. Either could one day say which, and neither should have to
    * ask the other's permission.
+   *
+   * **«Не удалось», not «Не получилось».** `errors.ts` struck the spoken register out of its own
+   * file by name — «Не отправилось» went, because «every other failure is «не удалось …» or a
+   * passive participle, and one line out of thirty in the wrong register is the line a reader
+   * notices» — and the register is the product's, not that file's. This card posts to the same
+   * endpoint family whose own refusal says «Не удалось. Повторите попытку.»
+   * (`errors.request.failed`), so the two registers met on one card. Russian marks nothing between
+   * «не получилось» and «не удалось» except how casually the product is speaking, which is the one
+   * thing here that had to stop varying by file.
    */
   'feed.document.decision-failed': {
     en: 'That did not work. Please try again.',
-    ru: 'Не получилось. Повторите попытку.',
+    ru: 'Не удалось. Повторите попытку.',
   },
 
   /* Sending it back is `common.request-changes` — the review card and the proposal card offer the
      same move, and §2.6 gave the product one word for it rather than one word per card. */
   'feed.document.approve': { en: 'Approve', ru: 'Одобрить' },
   'feed.document.approving': { en: 'Approving…', ru: 'Одобрение…' },
-  'feed.document.instruction-label': { en: 'What should change?', ru: 'Что изменить?' },
+  /*
+   * «Что нужно изменить?», one word away from `feed.review.suggestion-label` («Что изменить: »).
+   * §2.4 fixed the reviewer's line word for word, so it is this one that moves: two roles — what the
+   * model proposes and what you are instructing — printed identically on two cards that share a
+   * scroll is the drift a split-by-surface dictionary exists to catch.
+   *
+   * The placeholder keeps its infinitive, which is the answer form its caption asks for, and says
+   * «раздел о рамках»: «раздел рамок» is a bare genitive that does not read as the name of a section.
+   */
+  'feed.document.instruction-label': { en: 'What should change?', ru: 'Что нужно изменить?' },
   'feed.document.instruction-placeholder': {
     en: 'Tighten the scope section and add a non-goal.',
-    ru: 'Сузить раздел рамок и добавить, чего продукт делать не будет.',
+    ru: 'Сузить раздел о рамках и добавить, чего продукт делать не будет.',
   },
-  'feed.document.revising': { en: 'Revising…', ru: 'Правка…' },
+  /*
+   * «Переписывание…», not «Правка…».
+   *
+   * This button posts `decision: 'request_changes'` — a доработка — and «правка» is the word §2.4
+   * spends on the other mechanism entirely, the one `RefineBox` and `proposal-block` run. A busy
+   * caption naming the neighbouring mechanism is the one collision the two roots were separated to
+   * prevent. English says «Revising…» rather than «Sending…», so the caption names what the server
+   * does, and the product already has that noun: `feed.document.waiting-changes` calls it
+   * «переписывание документа» and `feed.review.hint-ticked` «те, что учтёт переписывание».
+   */
+  'feed.document.revising': { en: 'Revising…', ru: 'Переписывание…' },
   'feed.document.send-instruction': { en: 'Send instruction', ru: 'Отправить' },
 
   /*
@@ -154,6 +193,10 @@ export const feedDocumentsPhrases = definePhrases({
     en: { one: ' — ', other: ' — ' },
     ru: { one: '\u00A0— написан ', few: '\u00A0— написано ', many: '\u00A0— написано ' },
   },
+  /* The `one` form was inflected rather than rewritten: «написан 1 документ. У каждого есть
+     одобренная ревизия» distributes over a set of one, and «Дорабатывать документы» counts a
+     document that is not there. Both are singular now; `few` and `many` are §5 sample 19 verbatim
+     and are left alone. */
   'feed.completion.bundle-tail': {
     en: {
       one: ' spec file generated. Every file has an approved revision, and the session is sealed: no stage goes back. You can still refine any file — a refinement adds a new revision and leaves the session where it is.',
@@ -161,7 +204,7 @@ export const feedDocumentsPhrases = definePhrases({
         ' spec files generated. Every file has an approved revision, and the session is sealed: no stage goes back. You can still refine any file — a refinement adds a new revision and leaves the session where it is.',
     },
     ru: {
-      one: ' документ. У каждого есть одобренная ревизия, сессия закрыта: ни один этап не откатывается. Дорабатывать документы по-прежнему можно\u00A0— правка добавляет новую ревизию и не сдвигает сессию с места.',
+      one: ' документ. У него есть одобренная ревизия, сессия закрыта: ни один этап не откатывается. Дорабатывать документ по-прежнему можно\u00A0— правка добавляет новую ревизию и не сдвигает сессию с места.',
       few: ' документа. У каждого есть одобренная ревизия, сессия закрыта: ни один этап не откатывается. Дорабатывать документы по-прежнему можно\u00A0— правка добавляет новую ревизию и не сдвигает сессию с места.',
       many: ' документов. У каждого есть одобренная ревизия, сессия закрыта: ни один этап не откатывается. Дорабатывать документы по-прежнему можно\u00A0— правка добавляет новую ревизию и не сдвигает сессию с места.',
     },
@@ -190,16 +233,21 @@ export const feedDocumentsPhrases = definePhrases({
 
   'feed.completion.build-with-title': {
     en: 'Build with your favourite tool',
-    ru: 'Сборка в любимом инструменте',
+    ru: 'Разработка в любимом инструменте',
   },
   /*
    * The honesty of the panel, in five pieces for the same reason as the paragraph above: the promise
    * and the disclaimer are each their own element so a walk can assert that they are present without
    * asserting how they are worded.
+   *
+   * The recipient is «ИИ-агент», not «кодовый агент»: «кодовый» in Russian modifies a cipher —
+   * кодовый замок, кодовое слово — never a programmer, so the coinage named the wrong thing on one
+   * of the two panels a browser is most likely to offer to translate. §3 licenses exactly one
+   * Cyrillic abbreviation for this and spends it on «ИИ-рецензент»; this is its twin.
    */
   'feed.completion.build-with-lead': {
     en: 'Generate a prompt that hands this bundle to a coding agent. The platform buttons ',
-    ru: 'Сгенерируйте промпт, который передаёт этот комплект кодовому агенту. Кнопки платформ ',
+    ru: 'Сгенерируйте промпт, который передаёт этот комплект ИИ-агенту. Кнопки платформ ',
   },
   'feed.completion.build-with-buttons': {
     en: 'copy that prompt and open the platform',
@@ -212,7 +260,7 @@ export const feedDocumentsPhrases = definePhrases({
   },
   'feed.completion.build-with-unpack': {
     en: ', and there is no import to click through. Download the ZIP, unpack it into ',
-    ru: ', и никакого импорта проходить не нужно. Скачайте ZIP-архив, распакуйте его в ',
+    ru: ', и ничего импортировать не нужно. Скачайте ZIP-архив, распакуйте его в ',
   },
   'feed.completion.build-with-paste': {
     en: ', and paste the prompt.',
@@ -262,9 +310,17 @@ export const feedDocumentsPhrases = definePhrases({
     en: 'Reading current sources on the web…',
     ru: 'Чтение свежих источников в интернете…',
   },
+  /*
+   * Two sentences here used to make a noun do a verb's work — «остановка ничего не теряет»,
+   * «Остановка вернёт вам страницу». Russian has no such predication: an «остановка» loses nothing
+   * and hands nothing back. §5 sample 17 supplies the product's own idiom for the first claim, and
+   * `session.waiting.status` already prints it — «Прервать можно без потерь». The second is prose
+   * telling you what to do, which §1.2 rule 2 puts in the imperative on «вы», beside a button that
+   * keeps its infinitive.
+   */
   'feed.generation.waiting-first-words': {
     en: 'Waiting for the first words. A local model can think for a minute or two before it starts writing — nothing is stuck, and nothing is lost if you stop.',
-    ru: 'Ожидание первых слов. Локальная модель может думать минуту-другую, прежде чем начнёт писать,\u00A0— ничего не зависло, и остановка ничего не теряет.',
+    ru: 'Ожидание первых слов. Локальная модель может думать минуту-другую, прежде чем начнёт писать,\u00A0— ничего не зависло, и остановиться можно без потерь.',
   },
   'feed.generation.reconnecting': {
     en: 'The connection dropped. Reconnecting — nothing written so far is lost.',
@@ -276,7 +332,7 @@ export const feedDocumentsPhrases = definePhrases({
   },
   'feed.generation.reattaching': {
     en: 'A generation for this step is already running — this page is picking it up. Stop to take the page back; the run itself carries on either way.',
-    ru: 'Генерация для этого шага уже идёт\u00A0— страница её подхватывает. Остановка вернёт вам страницу; сама генерация в любом случае продолжится.',
+    ru: 'Генерация для этого шага уже идёт\u00A0— страница её подхватывает. Остановите, чтобы вернуть себе страницу; сама генерация в любом случае продолжится.',
   },
   'feed.generation.blocked': {
     en: 'A question card is waiting for your answers above — nothing generates until it is submitted.',
@@ -401,13 +457,25 @@ export const feedDocumentsPhrases = definePhrases({
   /** Lower case on purpose: this is the tail of a sentence beside the button, not a label. */
   'feed.actions.still-needed': { en: 'still needed: {list}', ru: 'ещё нужно: {list}' },
 
+  /*
+   * `{names}` is a list: `composer.tsx:115` joins every reference that matched nothing with a comma,
+   * so «Нет документа с именем @a.md, @b.md» nails a singular frame to a plural value. English is
+   * number-blind here and degrades quietly; a case-marked Russian frame does not. The phrase must
+   * stay flat — the component does not count — so both halves are written so that neither can be
+   * wrong: «ни один документ так не называется» holds one name and five, and «прикреплять нечего»
+   * replaces the singular «ссылка не прикреплена» with the same fact told without a number.
+   *
+   * The command notice names the noun its own ending agrees with. Without it the reader sees
+   * `/proceed` in mono followed by «недоступна» and has to reconstruct «команда» to parse the
+   * feminine — four characters buy the agreement outright.
+   */
   'feed.composer.unknown-reference': {
     en: 'No document called {names} — that reference was not attached.',
-    ru: 'Нет документа с именем {names}\u00A0— ссылка не прикреплена.',
+    ru: 'Ни один документ так не называется: {names}\u00A0— прикреплять нечего.',
   },
   'feed.composer.command-unavailable': {
     en: '{command} is not available at this point in the session.',
-    ru: '{command} на этом шаге сессии недоступна.',
+    ru: 'Команда {command} на этом шаге сессии недоступна.',
   },
   'feed.composer.reference-empty': { en: 'not written yet', ru: 'ещё не написан' },
   /*
@@ -436,9 +504,12 @@ export const feedDocumentsPhrases = definePhrases({
    * The slash commands' descriptions. The commands themselves — `/ask`, `/proceed` — are typed
    * identifiers and are never translated; only what they promise is.
    */
+  /* «Запросить», because по-русски задают вопрос, а не раунд. §6 bans «запросить» where it would
+     mean handing a document back; asking for information is what it governs, and
+     `errors.gate.no-answered-round` already says «Запросите раунд». */
   'feed.command.ask': {
     en: 'Ask another round of questions',
-    ru: 'Задать ещё раунд вопросов',
+    ru: 'Запросить ещё раунд вопросов',
   },
   'feed.command.proceed': { en: 'Move to the next step', ru: 'Перейти к следующему шагу' },
   'feed.command.generate': {
@@ -469,9 +540,16 @@ export const feedDocumentsPhrases = definePhrases({
     en: 'That generation did not complete. Nothing was lost.',
     ru: 'Генерация не завершилась. Ничего не потеряно.',
   },
+  /*
+   * Russian counts attempts with an ordinal — «с попытки 2» is the numeral left sitting in the
+   * English slot. The frame is «на {attempt}-й попытке» rather than the more idiomatic «с {attempt}-й
+   * попытки» for one reason the dictionary cannot escape: that preposition is «со» before «второй»
+   * and «с» before «третьей», and the phrase has no way to know which numeral it is holding. «На»
+   * has no such pair. The «-й» suffix is right for every ordinal this slot can take.
+   */
   'feed.surface.generation-failover': {
     en: 'Drafted on attempt {attempt} — an earlier provider did not answer.',
-    ru: 'Написано с попытки {attempt}\u00A0— предыдущий провайдер не ответил.',
+    ru: 'Написано на {attempt}-й попытке\u00A0— предыдущий провайдер не ответил.',
   },
 
   /*

@@ -71,6 +71,13 @@ export const methodologyPhrases = definePhrases({
    * `openspec-brownfield-v1`. «Изучение» for `Explore`: the step occupies the interview position and
    * what it does there is read a system that already exists. Its `Solution` step takes the canonical
    * «Архитектура», because that is what `design.md` is.
+   *
+   * Step 2 keeps the plural «Спецификации», and the §2.1 rule that a specification is never counted
+   * is not being broken here: OpenSpec genuinely writes one spec per capability, so the plural
+   * describes the position honestly rather than promising several rival documents — which is the
+   * thing §2.1 refused. The proposed «Возможности» would name the capability instead of the document
+   * the step produces, and would then disagree with the picker summary one screen away, which calls
+   * them «спецификации возможностей».
    */
   'session.stage.openspec-brownfield-v1.0': { en: 'Explore', ru: 'Изучение' },
   'session.stage.openspec-brownfield-v1.1': { en: 'Proposal', ru: 'Предложение' },
@@ -126,13 +133,26 @@ export const methodologyPhrases = definePhrases({
     en: "GitHub's spec-driven toolkit: constitution, feature spec, implementation plan, tasks.",
     ru: 'Подход GitHub «от спецификации»: конституция, спецификация функции, план реализации, задачи.',
   },
+  /*
+   * The one summary that outran its card. «Где всё начинается с изменения» is a relative clause
+   * where English has a compound adjective, and at 130 characters against the English 91 it wrapped
+   * to three lines in a `block text-xs` inside a radio card whose four neighbours take two — the odd
+   * card in a stack of five, on the first screen a new reader sees. A genitive says «change-first»
+   * in one word and loses nothing: what the process is *of* is the change.
+   */
   'session.methodology.openspec-brownfield-v1.summary': {
     en: 'A change-first pipeline for existing systems: proposal, capability specs, design, tasks.',
-    ru: 'Процесс для существующих систем, где всё начинается с изменения: предложение, спецификации возможностей, архитектура, задачи.',
+    ru: 'Процесс изменений в существующих системах: предложение, спецификации возможностей, архитектура, задачи.',
   },
+  /*
+   * Its first two clauses echo the step labels («Выбор документов», «Описание»), so the third has to
+   * echo the third — and *review* is «рецензия» in prose (§2.4). «Разбор» was a fourth word for a
+   * mechanism that already has one. The pill still says «Правки», which is a layout decision the
+   * docblock above defends and which no sentence has to repeat.
+   */
   'session.methodology.myspec-edit-v1.summary': {
     en: 'Reference spec files, describe changes, review and apply suggested edits.',
-    ru: 'Выбор документов, описание изменений, разбор и применение предложенных правок.',
+    ru: 'Выбор документов, описание изменений, рецензия и применение предложенных правок.',
   },
 });
 

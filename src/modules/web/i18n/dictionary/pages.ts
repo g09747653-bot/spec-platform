@@ -34,10 +34,27 @@ export const pagesPhrases = definePhrases({
    * The title is `shell.brand.name` — a product name is the same word in both languages, and a tab
    * that disagreed with the header about what this application is called would be the defect, not
    * the translation. The sentence beside it is ordinary copy and is translated like any other.
+   *
+   * **One English sentence, one Russian one.** `page.signin.tagline` carries the identical English
+   * string, and the two had drifted apart in three ways at once — «описание словами» against
+   * «промпт», «кодового агента» against «агента», third person against an imperative — on the two
+   * surfaces a browser is likeliest to offer to translate, one of which is the screenshot this task
+   * came from. Three decisions, taken once:
+   *
+   * - «промпт», because §2.2 chose it over «запрос» and «подсказка» and the product teaches it out
+   *   loud two screens later («интервью начнётся с этого промпта»). «Описание словами» is the vaguer
+   *   of the two renderings and drops the term;
+   * - «агента», because §2.1 already named the recipient in exactly this position — «промпт для
+   *   агента», «называет получателя, единственное, что пользователю нужно». «Кодовый агент» is a
+   *   coinage on top of a decision already taken, and «кодовый» in Russian modifies a cipher
+   *   (кодовый замок, кодовое слово), not a programmer;
+   * - third person, because a `<meta name="description">` read out of a search result addresses
+   *   nobody, so it is the one form both slots can hold. The imperative also read as an order to do
+   *   a thing a visitor at the sign-in screen cannot do until they are through it.
    */
   'page.meta.description': {
     en: 'Turn a plain-language prompt into an agent-ready specification bundle.',
-    ru: 'Превращает описание словами в комплект документов, готовый для кодового агента.',
+    ru: 'Превращает промпт на обычном языке в комплект документов, готовый для агента.',
   },
 
   'shell.account.nav': { en: 'Account', ru: 'Учётная запись' },
@@ -104,9 +121,11 @@ export const pagesPhrases = definePhrases({
   'page.not-found.back': { en: 'Back to your projects', ru: 'К вашим проектам' },
 
   'page.signin.title': { en: 'Sign in to Spec Platform', ru: 'Вход в Spec Platform' },
+  /* Word for word `page.meta.description`, and see its docblock for why all three of the differences
+     that used to stand between them were losses rather than choices. */
   'page.signin.tagline': {
     en: 'Turn a plain-language prompt into an agent-ready specification bundle.',
-    ru: 'Превратите промпт на обычном языке в комплект документов, готовый для агента.',
+    ru: 'Превращает промпт на обычном языке в комплект документов, готовый для агента.',
   },
 
   /**
@@ -128,13 +147,24 @@ export const pagesPhrases = definePhrases({
    * «Повторите попытку»: §1.4 strikes «пожалуйста» out of every string, the apology being an
    * intonation this product does not have.
    */
+  /**
+   * «Сервис входа», not «провайдер».
+   *
+   * §2.5 spends «провайдер» on the model provider, and the product prints it in that sense on the
+   * generation surface. Borrowing the LLM word for OAuth would put one Russian noun on two
+   * mechanisms — and on a screen whose two buttons say «Войти через Google» and «Войти через
+   * GitHub», the word a reader needs is the one that names those two. The animate «через того» went
+   * with it: a service is a thing, so «через тот».
+   */
   'page.signin.error-account-not-linked': {
     en: 'That email address is already registered through the other provider. Sign in with the provider you used first.',
-    ru: 'Этот адрес почты уже зарегистрирован через другого провайдера. Войдите через того, с которого начали.',
+    ru: 'Этот адрес почты уже зарегистрирован через другой сервис входа. Войдите через тот, с которого начали.',
   },
+  /* Same English clause as `errors.request.abandoned` («You can try again»), so the same Russian
+     word order: there was nothing here for the fronted object to front for. */
   'page.signin.error-access-denied': {
     en: 'The sign-in was cancelled, so no account was created. You can try again.',
-    ru: 'Вход отменён, учётная запись не создана. Попытку можно повторить.',
+    ru: 'Вход отменён, учётная запись не создана. Можно повторить попытку.',
   },
   'page.signin.error-configuration': {
     en: 'Sign-in is misconfigured on the server. The problem has been logged.',
@@ -194,10 +224,16 @@ export const pagesPhrases = definePhrases({
    * Flat rather than counted, because neither half has a noun to inflect: the badge counts approvals
    * of nothing named. The Russian puts the impersonal verb in front of the number, which §4 requires
    * of any sentence that would otherwise open with a numeral.
+   *
+   * **Capitalised, because it is a label and not a tail.** `chat-list.tsx` sets it in a row of three
+   * micro-labels — «MySpec · Greenfield · V1», this one, then `projects.chat-list.status-completed`
+   * or the methodology's own stage name — and the other two open with a capital. §1.3 asks for
+   * sentence case on a label; the licensed lower case belongs to a fragment that continues a
+   * sentence printed beside it, which is what `feed.actions.still-needed` is and this is not.
    */
   'page.project.bundle-approved': {
     en: '{approved}/{planned} approved',
-    ru: 'одобрено {approved} из {planned}',
+    ru: 'Одобрено {approved} из {planned}',
   },
 
   /**
@@ -229,9 +265,17 @@ export const pagesPhrases = definePhrases({
   },
   'page.session.door-generate': { en: 'Proceed to drafting', ru: 'Дальше: Генерация' },
   'page.session.door-review': { en: 'Proceed to review', ru: 'Дальше: Рецензия' },
+  /*
+   * The colon shape, like the three doors above it.
+   *
+   * «Открыть заново для этапа качества» was the widest control in the product (32 characters) and
+   * the only door in the family that did not put its target after a colon — and it lower-cased a
+   * stage name the rail prints as «Качество» one column away. Eight characters shorter, in the shape
+   * the reader has already met three times.
+   */
   'page.session.door-quality': {
     en: 'Re-open for the Quality stage',
-    ru: 'Открыть заново для этапа качества',
+    ru: 'Открыть заново: Качество',
   },
   'page.session.door-stage': { en: 'Proceed to {stage}', ru: 'Дальше: {stage}' },
 
@@ -239,8 +283,14 @@ export const pagesPhrases = definePhrases({
    * What the revert card calls the file when neither the revision row nor the bundle plan named one.
    *
    * A word, not a file name: file names never translate (§3), and this is what stands in when there
-   * is no file name to print. Lower case because the card prints it at the head of a sentence about
-   * revisions, exactly as the English does.
+   * is no file name to print.
+   *
+   * **Capitalised, where the English is not.** Both slots it reaches put it first — «{fileName}
+   * сейчас в ревизии 3» on the card and «{fileName} восстановлен из ревизии 2» in the toast — so the
+   * lower-case word opened a sentence with a small letter. English gets there through an article it
+   * cannot capitalise mid-thought; copying that is importing a defect rather than translating one.
+   * Safe, because the two real candidates for this slot are file names, which are never capitalised
+   * in either language and never land anywhere but here.
    */
-  'page.session.revert-unnamed-file': { en: 'the document', ru: 'документ' },
+  'page.session.revert-unnamed-file': { en: 'the document', ru: 'Документ' },
 });

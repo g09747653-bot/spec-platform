@@ -60,9 +60,15 @@ export const errorsPhrases = definePhrases({
     en: 'an approved revision of every file in the bundle',
     ru: 'одобренная ревизия у каждого документа комплекта',
   },
+  /*
+   * The trap: «следует из» is logical entailment in Russian — a premise entails a conclusion. A
+   * state machine does not entail its transitions, it permits them, so the literal word turned a
+   * table lookup into an argument. «доступный из …» says what the table actually answers, and the
+   * gate sentence below says it with the same root.
+   */
   'errors.needed.transition-not-in-table': {
     en: 'a step that follows from where the session is',
-    ru: 'шаг, который следует из текущего положения сессии',
+    ru: 'шаг, доступный из текущего положения сессии',
   },
   'errors.needed.session-sealed': {
     en: 'nothing — the session is sealed and does not reopen',
@@ -76,9 +82,10 @@ export const errorsPhrases = definePhrases({
     en: 'nothing further from this stage — its question rounds are used up',
     ru: 'ничего\u00A0— раунды вопросов этого этапа исчерпаны',
   },
+  /* One mechanism, one word: the gate sentence four keys down says «не подключён» about this fact. */
   'errors.needed.capability-not-registered': {
     en: 'an optional stage that is not installed',
-    ru: 'необязательный этап, который не установлен',
+    ru: 'необязательный этап, который не подключён',
   },
   'errors.needed.revision-limit-reached': {
     en: 'a decision on this review — its revision cycles are used up',
@@ -106,13 +113,19 @@ export const errorsPhrases = definePhrases({
     en: 'The review on this page is still undecided. Accept it, ignore it, or request changes first.',
     ru: 'По рецензии на этой странице ещё нет решения. Сначала примите её, отложите или отправьте документ на доработку.',
   },
+  /*
+   * The negation moves off the front. English fronts it («Not every file…»); Russian puts the rheme
+   * last, and «Не у каждого…» at the head reads as a translated word order rather than a translated
+   * sentence.
+   */
   'errors.gate.spec-missing': {
     en: 'Not every file in the bundle has an approved revision yet, so the session cannot be sealed.',
-    ru: 'Не у каждого документа комплекта есть одобренная ревизия\u00A0— закрыть сессию пока нельзя.',
+    ru: 'Одобренная ревизия есть не у всех документов комплекта\u00A0— закрыть сессию пока нельзя.',
   },
+  /* Same trap as `errors.needed.transition-not-in-table`: a table permits a step, it does not entail it. */
   'errors.gate.transition-not-in-table': {
     en: 'That step does not follow from where the session is. Reload the page to see its actual position.',
-    ru: 'Этот шаг не следует из текущего положения сессии. Перезагрузите страницу, чтобы увидеть, где она на самом деле.',
+    ru: 'Из текущего положения сессии этот шаг недоступен. Перезагрузите страницу, чтобы увидеть, где она на самом деле.',
   },
   /** §5 item 1: two facts, two sentences, present tense — a property of the session, not a forecast. */
   'errors.gate.session-sealed': {
@@ -128,9 +141,11 @@ export const errorsPhrases = definePhrases({
       'Все раунды вопросов этого этапа израсходованы\u00A0— новых вопросов здесь не будет. ' +
       'На то, что осталось невыясненным, можно ответить прямо в полях выше; иначе переходите к следующему шагу.',
   },
+  /* «Войти в этап» is «enter a stage» transliterated: в этап не входят — к нему переходят, and
+   * «перейти» is the verb the proceed button already uses for the same movement. */
   'errors.gate.capability-not-registered': {
     en: 'That stage is optional and is not installed on this deployment, so it cannot be entered.',
-    ru: 'Этот этап необязательный и в этой установке не подключён\u00A0— войти в него нельзя.',
+    ru: 'Этот этап необязательный и в этой установке не подключён\u00A0— перейти к нему нельзя.',
   },
   /** §5 item 3: the dead end becomes a fork in the same breath, and half the glossary meets here. */
   'errors.gate.revision-limit-reached': {
@@ -172,6 +187,10 @@ export const errorsPhrases = definePhrases({
    * sentence names a number the reader can check against how long they waited. «с» is the unit, glued
    * to the number with a non-breaking space (§1.4) — written as an escape because an invisible
    * character in a string literal is a defect nobody can see in review.
+   *
+   * «По существу» was courtroom Russian for *legitimately* (по существу дела) and left «занимать»
+   * without «времени», so the clause was wrong in register and unfinished in grammar at once.
+   * «Вообще может длиться» says the same thing about the same subject and finishes.
    */
   'errors.request.expired': {
     en:
@@ -179,15 +198,22 @@ export const errorsPhrases = definePhrases({
       'legitimately take, so waiting was stopped. The page has been re-read from the server and ' +
       'shows where the session actually is — if it did not move, try again.',
     ru:
-      'Сервер не ответил за {seconds}\u00A0с\u00A0— дольше, чем этот шаг может занимать по существу, ' +
+      'Сервер не ответил за {seconds}\u00A0с\u00A0— дольше, чем этот шаг вообще может длиться, ' +
       'поэтому ожидание прервано. Страница перечитана с сервера и показывает, где сессия на самом ' +
       'деле; если она не сдвинулась, повторите попытку.',
   },
 
-  /** A chat message that never landed (`useChatDecision.ts`). The card it might have decided is untouched. */
+  /**
+   * A chat message that never landed (`useChatDecision.ts`). The card it might have decided is
+   * untouched.
+   *
+   * «Не отправилось» is spoken register — the message declining to send itself. Every other failure
+   * in this file is «не удалось …» or a passive participle, and one line out of thirty in the wrong
+   * register is the line a reader notices.
+   */
   'errors.chat.send-failed': {
     en: 'That message did not go through. Please try again.',
-    ru: 'Сообщение не отправилось. Повторите попытку.',
+    ru: 'Сообщение не отправлено. Повторите попытку.',
   },
 
   /**
@@ -196,10 +222,14 @@ export const errorsPhrases = definePhrases({
    * «Ничего не потеряно» is load-bearing and not politeness: since D-95 the run genuinely carries on
    * server-side and persists its revision, so the sentence is a fact about the mechanism. A copy that
    * softened it would be lying in the safer direction, which A4 forbids as firmly as the other one.
+   *
+   * The first verb had to move: English can echo *lost / lost* across the two sentences, Russian
+   * reads «потеряно… не потеряно» in one breath as a slip rather than as a figure. «Оборвалась» is
+   * what a Russian says about a connection, and the load-bearing half is untouched.
    */
   'errors.stream.disconnected': {
     en: 'The connection to the generation was lost. Nothing has been lost — retry.',
-    ru: 'Соединение с генерацией потеряно. Ничего не потеряно\u00A0— повторите попытку.',
+    ru: 'Связь с генерацией оборвалась. Ничего не потеряно\u00A0— повторите попытку.',
   },
 
   /*
@@ -218,9 +248,16 @@ export const errorsPhrases = definePhrases({
     en: 'A decision is already pending for this file.',
     ru: 'Этот документ уже ждёт вашего решения.',
   },
+  /*
+   * The sentence points at a line the reader is about to look at, so it points at it in that line's
+   * own words: `feed.actions.still-needed` prints «ещё нужно: …», and the English half echoes itself
+   * — «still needed» on the page, «still needed» here. «Чего для него ещё не хватает» said the same
+   * thing in a second wording, which leaves a reader who follows the pointer working out whether the
+   * line they found is the line they were sent to.
+   */
   'errors.api.gate-rejected': {
     en: 'That step is not available yet — the page lists what is still needed for it.',
-    ru: 'Этот шаг пока недоступен\u00A0— на странице перечислено, чего для него ещё не хватает.',
+    ru: 'Этот шаг пока недоступен\u00A0— на странице перечислено, что для него ещё нужно.',
   },
   /*
    * The sibling of `errors.gate.round-limit-reached`, and deliberately not the same entry: the gate's
@@ -251,17 +288,30 @@ export const errorsPhrases = definePhrases({
    * «Устарели» with the obligatory tail naming *what* they no longer match (§2.6): A6 makes a stale
    * enrichment a correctness defect rather than a cosmetic one, and a sentence that dropped the tail
    * would demote it back.
+   *
+   * The tail is now the gloss §2.6 itself uses — «перестало соответствовать» — instead of «устарели
+   * относительно», which carried *out of date with* across on a preposition Russian keeps for
+   * mathematics and paperwork, and put «документы… документов» in one breath. The glossary word
+   * stays: `stale` is «устарело», and dropping it to fix the preposition would have paid for a
+   * calque with a term.
+   *
+   * The stage is named the way the rail and the door name it — «Качество», in quotes — and not as
+   * the lower-case genitive «этап качества». `page.session.door-quality` had the same defect and
+   * lost it («Открыть заново: Качество»); a stage that is a proper name on one surface and a
+   * common noun on another is two stages to a reader following an instruction from one to the
+   * other. §2.3 fixes the seven names; §1.4 gives a name «ёлочки» where a frame cannot hold it
+   * after a colon, which a sentence with two more clauses after it cannot.
    */
   'errors.api.export-stale': {
     en:
       'The enriched files are out of date with the specs they were built from. Re-run the Quality ' +
       'pass, or export the default bundle.',
     ru:
-      'Обогащённые документы устарели относительно документов, из которых они собраны. Запустите ' +
-      'этап качества заново или экспортируйте обычный комплект.',
+      'Обогащённые документы устарели: они больше не соответствуют тем, из которых собраны. ' +
+      'Запустите этап «Качество» заново или экспортируйте обычный комплект.',
   },
   'errors.api.generation-failed': {
     en: 'Generation did not complete. Your answers and approved specs are safe.',
-    ru: 'Генерация не завершилась. Ваши ответы и одобренные документы в сохранности.',
+    ru: 'Генерация не завершилась. Ваши ответы и одобренные документы сохранены.',
   },
 });

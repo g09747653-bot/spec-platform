@@ -278,9 +278,14 @@ export const feedConversationPhrases = definePhrases({
   'feed.review.ignore': { en: 'Ignore', ru: 'Отложить' },
   'feed.review.ignore-busy': { en: 'Ignoring…', ru: 'Откладывание…' },
 
+  /*
+   * «Отправить документ», not a bare «отправить»: the clause opens the sentence, so nothing in front
+   * of it can carry the object, and a reader left to supply one supplies «замечания» — the thing the
+   * button does not send.
+   */
   'feed.review.selection-hint': {
     en: 'Requesting changes needs at least one point ticked — only the ticked ones are applied.',
-    ru: 'Чтобы отправить на доработку, отметьте хотя бы одно замечание\u00A0— учтутся только отмеченные.',
+    ru: 'Чтобы отправить документ на доработку, отметьте хотя бы одно замечание\u00A0— учтутся только отмеченные.',
   },
 
   /* ------------------------------------------------------ the proposed change (proposal-block) */
@@ -315,14 +320,21 @@ export const feedConversationPhrases = definePhrases({
     },
   },
 
-  /** The tail of the counts line. It opens with the full stop that ends the counts before it. */
+  /**
+   * The tail of the counts line. It opens with the full stop that ends the counts before it.
+   *
+   * English lets «accept» and «approve» stand without an object here; Russian does not — «пока вы не
+   * примете» stops one word short and the reader waits for the noun. It is «правку» in both, singular
+   * even on the batch card, because the card's own heading one line up says «Предложена правка в
+   * {count} документах»: one edit, several documents.
+   */
   'feed.proposal.pending-tail-accept': {
     en: '. Nothing is saved until you accept.',
-    ru: '. Ничего не сохранится, пока вы не примете.',
+    ru: '. Ничего не сохранится, пока вы не примете правку.',
   },
   'feed.proposal.pending-tail-approve': {
     en: '. Nothing is saved until you approve.',
-    ru: '. Ничего не сохранится, пока вы не одобрите.',
+    ru: '. Ничего не сохранится, пока вы не одобрите правку.',
   },
 
   /* The same sentence as `feed.review.decision-error`, and deliberately still two entries: two
@@ -335,9 +347,11 @@ export const feedConversationPhrases = definePhrases({
   'feed.proposal.accept': { en: 'Accept', ru: 'Принять' },
   'feed.proposal.accept-busy': { en: 'Applying…', ru: 'Применение…' },
   'feed.proposal.approve-apply': { en: 'Approve and apply', ru: 'Одобрить и применить' },
+  /* «документам», not «файлам»: the heading one line above counts «в {count} документах», and §2.1
+     keeps «файл» for the export list and the mono paths, which this is neither. */
   'feed.proposal.approve-apply-busy': {
     en: 'Applying every file…',
-    ru: 'Применение ко всем файлам…',
+    ru: 'Применение ко всем документам…',
   },
   'feed.proposal.reject': { en: 'Reject', ru: 'Отклонить' },
   'feed.proposal.reject-busy': { en: 'Discarding…', ru: 'Отклонение…' },
@@ -351,9 +365,19 @@ export const feedConversationPhrases = definePhrases({
     en: 'Refine a file — say what should change',
     ru: 'Правка документа\u00A0— скажите, что изменить',
   },
+  /*
+   * «после введения», not «под обзором». «Обзор» is banned by §6 — it is what an autotranslator calls
+   * a review — and this box is printed in the same feed as cards captioned «РЕЦЕНЗИЯ», which is the
+   * one place the wrong reading is free.
+   *
+   * The infinitive is deliberate and shared with `feed.document.instruction-placeholder`: a
+   * placeholder is the ghost of what the reader would type, and both boxes are captioned with an
+   * infinitive question — «Что нужно изменить?», «скажите, что изменить». «Добавьте…» would answer
+   * that question in the wrong mood and read as the product giving an order it has no control for.
+   */
   'feed.refine.placeholder': {
     en: 'Add a non-goals section under the overview.',
-    ru: 'Добавьте раздел «Чего не делаем» под обзором.',
+    ru: 'Добавить раздел «Чего не делаем» после введения.',
   },
   'feed.refine.submit': { en: 'Propose change', ru: 'Предложить правку' },
 
@@ -364,9 +388,12 @@ export const feedConversationPhrases = definePhrases({
     en: 'That instruction would not change anything in this file.',
     ru: 'Эта инструкция ничего не меняет в документе.',
   },
+  /* One register for a failure across the whole product: «не удалось», never the spoken «не
+     получилось» — the argument is written out at `feed.document.decision-failed`, which says this
+     sentence on the card this box opens under. */
   'feed.refine.failed': {
     en: 'That did not work. Please try again.',
-    ru: 'Не получилось. Повторите попытку.',
+    ru: 'Не удалось. Повторите попытку.',
   },
 
   /* ------------------------------------------------------------- going back a step (revert-card) */
@@ -383,7 +410,7 @@ export const feedConversationPhrases = definePhrases({
    */
   'feed.revert.explanation': {
     en: '{fileName} is at revision {current}. Going back writes revision {next} with the content of revision {previous} — nothing is deleted, and the history keeps every one of them.',
-    ru: '{fileName} сейчас в ревизии {current}. Возврат запишет ревизию {next} с содержимым ревизии {previous}\u00A0— ничего не удаляется, и история хранит их все.',
+    ru: '{fileName} сейчас в ревизии {current}. Восстановление запишет ревизию {next} с содержимым ревизии {previous}\u00A0— ничего не удаляется, и история хранит их все.',
   },
   'feed.revert.apply': {
     en: 'Restore revision {revision}',
