@@ -131,6 +131,16 @@ test.describe('deciding from chat', () => {
     await expect(page.getByTestId('review-board')).toBeVisible();
     await expect(page.getByTestId('review-accept')).toBeEnabled();
 
+    /*
+     * Settled before reloading, and this is the Firefox lesson `bug-hunt-M12` already learned: a
+     * reload issued while a `fetch` is still open is aborted by Gecko with `NS_BINDING_ABORTED`, so
+     * the harness fails on a navigation the product never refused. The assistant's turn appearing is
+     * not the end of the request — the send is, and it says so.
+     */
+    await expect(page.getByTestId('chat-send')).toHaveAttribute('data-busy', 'false', {
+      timeout: 30_000,
+    });
+
     // …and it survives a reload as what it is: a turn of this visit, not a persisted decision.
     await page.reload();
     await expect(page.getByTestId('review-board')).toBeVisible();
