@@ -135,6 +135,17 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ matrix.engine }}
 
+      # `azure.archive.ubuntu.com` — the mirror GitHub's runners point apt at by default — was
+      # observed hanging for over an hour on 2026-08-19: three consecutive runs of the step below
+      # died at its 25-minute bound while `archive.ubuntu.com` answered instantly in the same logs.
+      # Re-running the job is mirror roulette; pinning apt to the canonical host is deterministic,
+      # and it is a *fix*, not the retry D-201/D-202 rejected. `|| true` on each file: which of the
+      # two layouts exists depends on the runner image, and a missing one is not an error.
+      - name: Pin apt to the canonical Ubuntu mirror
+        run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || true
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list 2>/dev/null || true
+
       - name: Install Playwright browser
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps ${{ matrix.engine }}
@@ -226,6 +237,12 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
+
+      # Same mirror pin as the engine matrix, same measured reason (see that job's comment).
+      - name: Pin apt to the canonical Ubuntu mirror
+        run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || true
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list 2>/dev/null || true
 
       - name: Install Playwright browser
         if: steps.playwright-cache.outputs.cache-hit != 'true'
