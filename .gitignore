@@ -67,3 +67,7 @@ artifacts/**/trace.zip
 # ~200 MB each: in git history that is permanent, and the discussion of them lives in
 # `.specs/research/` instead (see `video-demo-2026-08-18.md`).
 video demo/
+
+# The loop's own database, and the Next build of its dashboard (task 152).
+loop/.data/
+loop/.next/

@@ -1771,7 +1771,7 @@ Goal: the customer's second hands-on pass plus his video demo (`video demo/Deskt
 
 > Новый пакет `loop/` (pnpm workspace) со своей SQLite; монолит — оркестратор живёт в процессе сервера пакета. **Docker Desktop — системное требование с этого milestone**: первый шаг сессии — preflight `docker version` через named pipe; если Docker недоступен — честная остановка с рапортом, не BLOCKED. Правила пакета: интерфейс дашборда — по-русски сразу (реестр строк платформы на `loop/` не распространяется — своя поверхность, RU-only v1, названное решение); границы модулей и lint — те же инструменты репозитория.
 
-- [ ] 152\. `loop/` package bootstrap: SQLite core + config
+- [x] 152\. `loop/` package bootstrap: SQLite core + config
   - pnpm-workspace package `loop/`; SQLite (WAL) opened with `PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;` on EVERY connection; migrations for `projects`/`milestones`/`tasks`/`reports`/`agent_logs`/`agent_decisions` per the A0 solution schema; `.env` validation fail-fast on the three mandatory vars (`ANTHROPIC_API_KEY`, `PORT`, `WORKSPACE_ROOT_PATH` — остальные валидируются при фактическом присутствии), process exits with a readable stderr explanation when one is missing.
   - Acceptance Criteria: DB file created on first boot; concurrent-write test (10 parallel writers into `agent_logs`) passes with zero `database is locked`; missing mandatory var = immediate exit with named var in stderr.
   - _Dependencies: —_ · _Requirements: бандл A0 (Task 1.1, 1.2)_ · _Touches: `loop/**` (new)_ · _Complexity: Medium_ · _Parallel-safe: no_

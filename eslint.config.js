@@ -125,6 +125,27 @@ export default tseslint.config(
     },
   },
 
+  // The same one-reader discipline in the delivery loop (task 152; А-20). Its configuration lives in
+  // `loop/src/config/env.ts`, which grants itself the inline exemption exactly as the platform's does,
+  // and so do the loop's CLI entry points — they *are* the process.
+  //
+  // `EventSource` is deliberately NOT banned here: the loop's dashboard consumes a plain one-way SSE
+  // feed with no POST body and no resume policy, which is the case D-8's reasoning does not cover.
+  {
+    files: ['loop/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'process',
+          property: 'env',
+          message:
+            'Read configuration through `getEnv()` in loop/src/config/env.ts — it is Zod-validated and parsed once at boot.',
+        },
+      ],
+    },
+  },
+
   // Constitution A1 / D-17: the allowed-edge table is lint configuration, not convention.
   {
     files: ['src/**/*.{ts,tsx}'],

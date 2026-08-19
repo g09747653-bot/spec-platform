@@ -73,6 +73,17 @@ jobs:
       - name: Unit tests
         run: pnpm test:unit
 
+      # The delivery loop is a second package in the same workspace (А-20), and it reports through
+      # this job rather than through a new one on purpose: `main` requires this check by name, the
+      # executor account cannot edit the required-checks list (D-202), and a red loop must block a
+      # merge exactly as a red platform does. Same trick as the local single-user profile — grow
+      # what a required check requires, never its name.
+      - name: Typecheck (loop)
+        run: pnpm loop:typecheck
+
+      - name: Unit tests (loop)
+        run: pnpm loop:test
+
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4
