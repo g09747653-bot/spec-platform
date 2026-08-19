@@ -68,6 +68,8 @@ export interface DockerEngine {
   version(): Promise<{ version: string; apiVersion: string; os: string }>;
   pullImage(image: string): Promise<void>;
   hasImage(image: string): Promise<boolean>;
+  /** Builds `tag` from a tar build context (task 155). Throws with the daemon's own output. */
+  buildImage(tag: string, context: Buffer): Promise<void>;
   createContainer(spec: CreateContainerSpec): Promise<string>;
   startContainer(id: string): Promise<void>;
   stopContainer(id: string, timeoutSeconds?: number): Promise<void>;
@@ -145,6 +147,36 @@ export function createDockerEngine(
         query: { fromImage: nameOf(image), tag: tagOf(image) },
         timeoutMs: 20 * 60_000,
       });
+    },
+
+    async buildImage(tag: string, context: Buffer): Promise<void> {
+      /*
+       * The build endpoint answers 200 and then reports failure *inside* the progress stream — a
+       * Dockerfile that does not compile is a 200 with an `error` object in the body. Reading the
+       * status alone would call a failed build a success, and the loop would then run tasks against
+       * an image that is not there.
+       */
+      const body = await call({
+        method: 'POST',
+        path: '/build',
+        query: { t: tag, rm: true, forcerm: true, q: false },
+        rawBody: { bytes: context, contentType: 'application/x-tar' },
+        timeoutMs: 30 * 60_000,
+      });
+
+      for (const line of body.split('\n')) {
+        if (line.trim() === '') continue;
+
+        const parsed: unknown = safeJson(line);
+        if (
+          typeof parsed === 'object' &&
+          parsed !== null &&
+          'error' in parsed &&
+          typeof parsed.error === 'string'
+        ) {
+          throw new Error(`сборка образа ${tag} не удалась: ${parsed.error}`);
+        }
+      }
     },
 
     async createContainer(spec: CreateContainerSpec): Promise<string> {
@@ -262,6 +294,15 @@ export function createDockerEngine(
       return exact?.Id ?? null;
     },
   };
+}
+
+/** A progress line that is not JSON is progress, not a verdict. */
+function safeJson(line: string): unknown {
+  try {
+    return JSON.parse(line);
+  } catch {
+    return null;
+  }
 }
 
 /** `node:24-bookworm` → name `node`, tag `24-bookworm`; a bare name defaults to `latest`. */

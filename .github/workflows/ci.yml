@@ -41,7 +41,12 @@ jobs:
   verify:
     name: Lint, boundaries, types, unit
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 15 → 25 when the delivery loop's suites joined this job (task 155). They talk to the runner's
+    # Docker daemon and build the executor image — node, apt, and a global npm install — which is a
+    # few minutes on a cold layer cache and seconds on a warm one. A bound that cuts off a build
+    # which is visibly working reports «the box is too small» instead of anything about the product,
+    # which is the failure D-201/D-202 were about.
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v5

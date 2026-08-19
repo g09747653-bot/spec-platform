@@ -68,6 +68,8 @@ export interface EngineRequest {
   path: string;
   query?: Record<string, string | number | boolean | undefined>;
   body?: unknown;
+  /** A raw payload with its own content type — the tar of a build context (task 155). */
+  rawBody?: { bytes: Buffer; contentType: string };
   /** Bounds one call. A daemon that stops answering must not stall the orchestrator. */
   timeoutMs?: number;
   signal?: AbortSignal;
@@ -132,7 +134,12 @@ export function engineRequest(
   request: EngineRequest,
 ): Promise<EngineResponse> {
   return new Promise((settle, fail) => {
-    const payload = request.body === undefined ? undefined : JSON.stringify(request.body);
+    const payload =
+      request.rawBody !== undefined
+        ? request.rawBody.bytes
+        : request.body === undefined
+          ? undefined
+          : Buffer.from(JSON.stringify(request.body), 'utf8');
 
     const call = httpRequest(
       {
@@ -144,8 +151,8 @@ export function engineRequest(
           ...(payload === undefined
             ? {}
             : {
-                'content-type': 'application/json',
-                'content-length': String(Buffer.byteLength(payload)),
+                'content-type': request.rawBody?.contentType ?? 'application/json',
+                'content-length': String(payload.length),
               }),
         },
         signal: request.signal,
