@@ -346,7 +346,9 @@ async function fixTheBundle(context: BrowserContext, projectId: string): Promise
   const headers = response.headers();
   exportLog.push(`- режим экспорта: \`${headers['x-spec-export-mode'] ?? '—'}\``);
   exportLog.push(`- включено: \`${headers['x-spec-export-included'] ?? '—'}\``);
-  exportLog.push(`- опущено: \`${headers['x-spec-export-omitted'] === '' ? 'ничего' : (headers['x-spec-export-omitted'] ?? '—')}\``);
+  exportLog.push(
+    `- опущено: \`${headers['x-spec-export-omitted'] === '' ? 'ничего' : (headers['x-spec-export-omitted'] ?? '—')}\``,
+  );
 
   const zip = new Uint8Array(await response.body());
   writeFileSync(`${OUT}/bundle.zip`, zip);
@@ -380,7 +382,9 @@ async function run(browser: Browser): Promise<void> {
     consoleErrors.push(`pageerror: ${error.message}`);
   });
 
-  say(`dogfooding A0 — автономный прогон от seed Программы А (${String(SEED.trim().split(/\s+/u).length)} слов)`);
+  say(
+    `dogfooding A0 — автономный прогон от seed Программы А (${String(SEED.trim().split(/\s+/u).length)} слов)`,
+  );
   const sessionUrl = await createSession(page);
   const clicksAtStart = clicks;
   say(`clicks so far: ${String(clicksAtStart)} — this number must not move again`);
