@@ -16,6 +16,11 @@ export interface Toast {
   id: string;
   message: string;
   tone: ToastTone;
+  /**
+   * Which event raised this toast, as a machine identifier (task 143): the words are about to
+   * become translatable, and the identity of the thing that happened is not.
+   */
+  kind?: string;
 }
 
 /** How long a toast stays before the viewport dismisses it. */
@@ -35,11 +40,11 @@ function publish(next: readonly Toast[]): void {
 }
 
 /** Raises a toast and returns its id, so a caller can dismiss it early. */
-export function showToast(message: string, tone: ToastTone = 'info'): string {
+export function showToast(message: string, tone: ToastTone = 'info', kind?: string): string {
   counter += 1;
   const id = `toast-${String(counter)}`;
 
-  publish([...toasts, { id, message, tone }].slice(-MAX_VISIBLE_TOASTS));
+  publish([...toasts, { id, message, tone, kind }].slice(-MAX_VISIBLE_TOASTS));
 
   return id;
 }

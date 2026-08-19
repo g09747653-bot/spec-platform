@@ -149,10 +149,11 @@ test.describe('the page always offers a way forward', () => {
 
     await expectAlive(page, 'generation failed');
 
-    // The retry control is offered, enabled, and named as a retry.
+    // The retry control is offered, enabled, and offering a retry rather than a first attempt —
+    // `data-action` is what the control would do, worked out beside the label it prints.
     const retry = page.getByTestId('generate-spec');
     await expect(retry).toBeEnabled();
-    await expect(retry).toHaveText('Try again');
+    await expect(retry).toHaveAttribute('data-action', 'retry');
 
     // Clicking it starts a new generation that succeeds — the failure was not terminal.
     await retry.click();
@@ -247,7 +248,7 @@ test.describe('the page always offers a way forward', () => {
     await page.getByTestId('mcq-option-q-audience-solo-devs').check();
     await page.getByTestId('mcq-option-q-problem-context').check();
     await page.getByTestId('mcq-submit').click();
-    await expect(page.getByTestId('interview-panel')).toContainText('summary saved');
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-summary', 'saved');
 
     let release: () => void = () => undefined;
     const held = new Promise<void>((resolve) => {
@@ -267,23 +268,31 @@ test.describe('the page always offers a way forward', () => {
     await page.getByTestId('proceed').click();
 
     // Disabled door, live way out, honest status — the three the frozen page had none of.
+    // `data-busy` is the door's own account of the caption it swapped in while it waits.
     await expect(page.getByTestId('proceed')).toBeDisabled();
-    await expect(page.getByTestId('proceed')).toHaveText('Checking the gate…');
+    await expect(page.getByTestId('proceed')).toHaveAttribute('data-busy', 'true');
     await expect(page.getByTestId('stop-waiting')).toBeEnabled();
     await expectAlive(page, 'stage transition in flight');
 
     // The status is not a frozen caption: the count keeps moving, which is the whole difference
-    // between a page that is working and a page that is dead.
+    // between a page that is working and a page that is dead. `data-elapsed` is that count on its
+    // own, so the check no longer has to find it inside the sentence that frames it.
     const status = page.getByTestId('waiting-status');
-    await expect(status).toContainText(/\d+ s/);
-    const firstReading = await status.innerText();
-    await expect(status, 'the elapsed reading never moved').not.toHaveText(firstReading, {
-      timeout: 10_000,
-    });
+    await expect(status).toHaveAttribute('data-elapsed', /\d+/);
+    const firstReading = (await status.getAttribute('data-elapsed')) ?? '';
+    await expect(status, 'the elapsed reading never moved').not.toHaveAttribute(
+      'data-elapsed',
+      firstReading,
+      { timeout: 10_000 },
+    );
 
-    // Stopping says so, and gives the door back.
+    // Stopping says so, and gives the door back. `abandoned` is the user's own ending — the notice
+    // tells it apart from the deadline firing and from a request that never arrived.
     await page.getByTestId('stop-waiting').click();
-    await expect(page.getByTestId('interview-notice')).toContainText('You stopped waiting');
+    await expect(page.getByTestId('interview-notice')).toHaveAttribute(
+      'data-notice-kind',
+      'abandoned',
+    );
     await expect(page.getByTestId('proceed')).toBeEnabled();
     await expectAlive(page, 'transition abandoned');
 
@@ -291,7 +300,7 @@ test.describe('the page always offers a way forward', () => {
 
     // And the session is exactly where the server says it is — the click can simply be made again.
     await page.getByTestId('proceed').click();
-    await expect(page.getByTestId('stage-current')).toHaveText(/Constitution/i, {
+    await expect(page.getByTestId('stage-current')).toHaveAttribute('data-stage', 'constitution', {
       timeout: 20_000,
     });
   });
@@ -312,7 +321,7 @@ test.describe('the page always offers a way forward', () => {
     await page.getByTestId('mcq-option-q-audience-solo-devs').check();
     await page.getByTestId('mcq-option-q-problem-context').check();
     await page.getByTestId('mcq-submit').click();
-    await expect(page.getByTestId('interview-panel')).toContainText('summary saved');
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-summary', 'saved');
 
     await page.route('**/transition', (route) =>
       route.fulfill({
@@ -332,9 +341,12 @@ test.describe('the page always offers a way forward', () => {
 
     const notice = page.getByTestId('interview-notice');
     await expect(notice).toBeVisible();
-    await expect(notice).toContainText('question round');
-    await expect(notice).toContainText('next step');
-    // The identifier is never the explanation.
+    // Which gate refused, not merely that something did: the notice carries the server's own code
+    // beside the sentence it was worded into.
+    await expect(notice).toHaveAttribute('data-notice-kind', 'refused');
+    await expect(notice).toHaveAttribute('data-reason', 'ROUND_LIMIT_REACHED');
+    // The identifier is never the explanation — and `toContainText` reads text, not the attribute
+    // above it, so the code being carried here is exactly what keeps it out of the prose.
     await expect(notice).not.toContainText('ROUND_LIMIT_REACHED');
 
     await expect(page.getByTestId('proceed')).toBeEnabled();
@@ -353,7 +365,12 @@ test.describe('the page always offers a way forward', () => {
 
     await page.getByTestId('proceed').click();
 
-    await expect(page.getByTestId('interview-notice')).toContainText('did not reach the server');
+    // `unreachable` rather than `abandoned`: the request never arrived, and the notice keeps the two
+    // endings apart the same way its wording does.
+    await expect(page.getByTestId('interview-notice')).toHaveAttribute(
+      'data-notice-kind',
+      'unreachable',
+    );
     await expect(page.getByTestId('proceed')).toBeEnabled();
     await expectAlive(page, 'transition unreachable');
   });
@@ -378,11 +395,11 @@ test.describe('the page always offers a way forward', () => {
     await page.getByTestId('mcq-option-q-audience-solo-devs').check();
     await page.getByTestId('mcq-option-q-problem-context').check();
     await page.getByTestId('mcq-submit').click();
-    await expect(page.getByTestId('interview-panel')).toContainText('summary saved');
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-summary', 'saved');
     await expectAlive(page, 'interview, round answered');
 
     await proceedAliveInFlight(page, 'leaving the interview');
-    await expect(page.getByTestId('stage-current')).toHaveText(/Constitution/i);
+    await expect(page.getByTestId('stage-current')).toHaveAttribute('data-stage', 'constitution');
     await expectAlive(page, 'constitution/collect');
 
     await page.getByTestId('ask-round').click();
@@ -391,7 +408,7 @@ test.describe('the page always offers a way forward', () => {
     await page.getByTestId('mcq-submit').click();
 
     await proceedAliveInFlight(page, 'constitution collect → generate');
-    await expect(page.getByTestId('stage-substage')).toHaveText(/Generating/);
+    await expect(page.getByTestId('stage-substage')).toHaveAttribute('data-substage', 'generate');
     await expectAlive(page, 'constitution/generate, nothing drafted');
 
     await page.getByTestId('generate-spec').click();
@@ -399,7 +416,8 @@ test.describe('the page always offers a way forward', () => {
     await expectAlive(page, 'constitution/generate, awaiting approval');
 
     await page.getByTestId('approve-spec').click();
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    // The card *is* approved, as the persisted document says — not merely captioned that way.
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
     await expectAlive(page, 'constitution/generate, approved');
 
     // The transition that runs the review agent inside the request — the slowest door in the app,

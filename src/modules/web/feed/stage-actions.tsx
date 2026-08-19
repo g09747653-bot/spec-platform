@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { type PhraseKey } from '../i18n/dictionary';
+import { useT } from '../i18n/locale-context';
 import { Button } from '../ui/button';
 import { Input, Label } from '../ui/field';
 import { WaitingOn } from '../session/waiting-on';
@@ -28,6 +30,11 @@ export interface TransitionTargetModel {
   ready: boolean;
   /** What the gate said is missing, for honest UI copy. */
   unmet: readonly string[];
+  /**
+   * The machine's reason/condition identifiers behind the words in `unmet`, so a test can read the
+   * gate's verdict without reading its prose.
+   */
+  unmetCodes: readonly string[];
 }
 
 export interface StageActionsModel {
@@ -49,10 +56,18 @@ export interface StageActionsModel {
   alternates: readonly TransitionTargetModel[];
 }
 
-const WAITING_FOR: Record<string, string> = {
-  ask: 'the next round of questions',
-  proceed: 'the gate to answer',
-  fallback: 'your answers to be recorded',
+/**
+ * What the wait block is told the bar is waiting for, as keys (task 143).
+ *
+ * `WaitingOn` takes its words as a prop because both this bar and the document card fill it, so the
+ * choice of phrase belongs here. English frames them as infinitives after «Waiting for»; Russian
+ * frames them after «Ожидание:» and therefore needs the nominative — which is a fact about the two
+ * sentences, kept in the dictionary rather than in this table.
+ */
+const WAITING_FOR: Record<string, PhraseKey> = {
+  ask: 'feed.actions.waiting-ask',
+  proceed: 'feed.actions.waiting-proceed',
+  fallback: 'feed.actions.waiting-fallback',
 };
 
 export function StageActions({
@@ -80,10 +95,17 @@ export function StageActions({
 }) {
   const { state, elapsedSeconds, waiting, send, abandon } = useSessionRequest(deadlineMs);
   const [fallbackText, setFallbackText] = useState<Record<string, string>>({});
+  const t = useT();
 
   const busy = state.running;
   const notice = state.notice;
   const asking = actions.askingStage !== null;
+  /*
+   * Named rather than compared inside the JSX: a summary is a thing only the interview keeps, and
+   * saying so once is both clearer and what keeps the stage id out of a `{…}` where the copy rule
+   * reads it as a word (task 143).
+   */
+  const askingInterview = actions.askingStage === 'interview';
   const showFallback =
     asking && !awaitingRound && !actions.canAskMore && actions.unmetNeeds.length > 0;
 
@@ -91,11 +113,17 @@ export function StageActions({
     <div
       className="border-border-subtle bg-surface flex w-full flex-col gap-3 rounded-xl border p-4"
       data-testid="interview-panel"
+      data-answered-rounds={String(actions.answeredRounds)}
+      data-round-budget={String(actions.roundBudget)}
+      /*
+        Absent, not `none`, outside the interview: a summary is a thing only that stage keeps, so a
+        walk that finds the attribute at all learns where it is standing as well as what it has.
+      */
+      data-summary={askingInterview ? (actions.summaryPersisted ? 'saved' : 'none') : undefined}
     >
       {awaitingRound && (
         <p className="text-foreground-muted text-sm" data-testid="awaiting-round">
-          The questions above are waiting for your answers — nothing else moves until they are
-          submitted.
+          {t('feed.actions.awaiting-round')}
         </p>
       )}
 
@@ -109,17 +137,30 @@ export function StageActions({
       */}
       {asking && (
         <p className="text-foreground-muted text-xs">
-          {actions.answeredRounds} of {actions.roundBudget} question rounds answered
+          {t('feed.actions.rounds-answered', {
+            answered: actions.answeredRounds,
+            budget: actions.roundBudget,
+          })}
           <span data-testid="round-budget-remaining">
-            {` · ${String(Math.max(actions.roundBudget - actions.answeredRounds, 0))} left`}
+            {t('feed.actions.rounds-left', {
+              left: Math.max(actions.roundBudget - actions.answeredRounds, 0),
+            })}
           </span>
-          {actions.askingStage === 'interview' &&
-            (actions.summaryPersisted ? ' · summary saved' : ' · no summary yet')}
+          {askingInterview &&
+            (actions.summaryPersisted
+              ? t('feed.actions.summary-saved')
+              : t('feed.actions.summary-none'))}
         </p>
       )}
 
       {notice !== null && (
-        <p role="alert" data-testid="interview-notice" className="text-sm text-warning-ink">
+        <p
+          role="alert"
+          data-testid="interview-notice"
+          data-notice-kind={state.noticeKind ?? ''}
+          data-reason={state.noticeReason ?? ''}
+          className="text-sm text-warning-ink"
+        >
           {notice}
         </p>
       )}
@@ -131,22 +172,26 @@ export function StageActions({
       */}
       {asking && !awaitingRound && !actions.canAskMore && (
         <p className="text-foreground-muted text-sm" data-testid="rounds-exhausted">
-          {`All ${String(actions.roundBudget)} question rounds for this stage have been used, so nothing further will be asked here. `}
+          {t('feed.actions.rounds-exhausted', { count: actions.roundBudget })}
           {actions.unmetNeeds.length > 0
-            ? 'Answer what is still open below, then move on to the next step.'
-            : 'Everything this stage needed to ask has been answered — move on to the next step.'}
+            ? t('feed.actions.rounds-exhausted-open')
+            : t('feed.actions.rounds-exhausted-done')}
         </p>
       )}
 
       {showFallback && (
         <div className="flex flex-col gap-3" data-testid="fallback-panel">
-          <p className="text-sm">
-            The question budget for this stage is used up, and this is still open — answer directly:
-          </p>
+          <p className="text-sm">{t('feed.actions.fallback-lead')}</p>
           {actions.unmetNeeds.map((need) => (
             <div key={need} className="flex flex-col gap-1">
+              {/*
+                The need's own name is the agent's word and stays exactly as it was written; what is
+                new is the frame around it (task 143). A bare `deployment_target` above an input was
+                readable as a label only to whoever had read the prompt that produced it, and in
+                Russian it was a machine identifier standing in for a caption.
+              */}
               <Label htmlFor={`fallback-${need}`} className="text-xs">
-                {need}
+                {t('feed.actions.need-label', { need })}
               </Label>
               <Input
                 id={`fallback-${need}`}
@@ -156,7 +201,7 @@ export function StageActions({
                   const text = event.target.value;
                   setFallbackText((previous) => ({ ...previous, [need]: text }));
                 }}
-                placeholder="Answer in a sentence"
+                placeholder={t('feed.actions.fallback-placeholder')}
               />
             </div>
           ))}
@@ -176,7 +221,7 @@ export function StageActions({
             }}
             className="self-start"
           >
-            {busy === 'fallback' ? 'Recording…' : 'Record answers'}
+            {busy === 'fallback' ? t('feed.actions.recording') : t('feed.actions.record-answers')}
           </Button>
         </div>
       )}
@@ -191,7 +236,9 @@ export function StageActions({
               void send('ask', `/api/sessions/${sessionId}/rounds`);
             }}
           >
-            {busy === 'ask' ? 'Preparing questions…' : 'Ask questions'}
+            {busy === 'ask'
+              ? t('feed.actions.preparing-questions')
+              : t('feed.actions.ask-questions')}
           </Button>
         )}
 
@@ -234,6 +281,7 @@ export function StageActions({
             */
             variant={primary === 'proceed' ? 'primary' : 'secondary'}
             data-testid="proceed"
+            data-busy={String(busy === 'proceed')}
             disabled={busy === 'proceed'}
             onClick={() => {
               const target = actions.target;
@@ -245,7 +293,7 @@ export function StageActions({
               });
             }}
           >
-            {busy === 'proceed' ? 'Checking the gate…' : actions.target.label}
+            {busy === 'proceed' ? t('feed.actions.checking-gate') : actions.target.label}
           </Button>
         )}
 
@@ -253,8 +301,12 @@ export function StageActions({
           !awaitingRound &&
           !actions.target.ready &&
           actions.target.unmet.length > 0 && (
-            <span className="text-foreground-muted text-xs" data-testid="gate-unmet">
-              still needed: {actions.target.unmet.join(', ')}
+            <span
+              className="text-foreground-muted text-xs"
+              data-testid="gate-unmet"
+              data-reasons={actions.target.unmetCodes.join(' ')}
+            >
+              {t('feed.actions.still-needed', { list: actions.target.unmet.join(', ') })}
             </span>
           )}
       </div>
@@ -270,7 +322,7 @@ export function StageActions({
       */}
       {waiting && (
         <WaitingOn
-          what={WAITING_FOR[busy ?? ''] ?? 'the server'}
+          what={t(WAITING_FOR[busy ?? ''] ?? 'feed.waiting.server')}
           elapsedSeconds={elapsedSeconds}
           onStop={abandon}
         />

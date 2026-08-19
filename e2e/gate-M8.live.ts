@@ -369,6 +369,14 @@ ${asked}
 /* -------------------------------------------------------------- the review board */
 
 interface BoardView {
+  /**
+   * The verdict as a token — `pass` or `needs_revision` (task 143).
+   *
+   * Kept beside `verdict` rather than instead of it: the badge's words are what a reader of the
+   * artifact wants to see, and the token is what the walk decides on. Reading the decision off the
+   * words was reading it off a sentence that is about to exist in two languages.
+   */
+  outcome: string | null;
   verdict: string;
   summary: string;
   mustFix: string[];
@@ -397,6 +405,8 @@ async function readBoard(page: Page): Promise<BoardView | null> {
       );
 
     return {
+      outcome:
+        root.querySelector('[data-testid="review-outcome"]')?.getAttribute('data-outcome') ?? null,
       verdict: root.querySelector('[data-testid="review-outcome"]')?.textContent.trim() ?? '',
       summary: root.querySelector('[data-testid="review-summary"]')?.textContent.trim() ?? '',
       mustFix: ids('review-mustfix'),
@@ -427,7 +437,7 @@ function recordBoard(label: string, view: BoardView): void {
 
 /** The parity contract of Эталон §1.3, checked against what the card actually rendered. */
 function auditBoard(label: string, view: BoardView): void {
-  if (!/needs revision|pass/i.test(view.verdict)) {
+  if (view.outcome !== 'pass' && view.outcome !== 'needs_revision') {
     problem(`${label}: the board states no verdict (found ${JSON.stringify(view.verdict)})`);
   }
 
@@ -529,8 +539,8 @@ async function draftApproveAndReview(page: Page, stage: string, label: string): 
 
   if (!(await click(page, 'approve-spec', `${label}: approve`))) return false;
   await page
-    .getByTestId('spec-card')
-    .filter({ hasText: 'approved' })
+    // The card's own flag, not the word it prints (task 143): these walks run in Russian too.
+    .locator('[data-testid="spec-card"][data-approved="true"]')
     .waitFor({ timeout: 120_000 })
     .catch(() => {
       problem(`${label}: the revision was not marked approved`);
@@ -551,10 +561,10 @@ async function draftApproveAndReview(page: Page, stage: string, label: string): 
   if (!arrived) {
     const substage = await page
       .getByTestId('stage-substage')
-      .textContent()
+      .getAttribute('data-substage')
       .catch(() => null);
 
-    if (substage?.includes('review') === true) {
+    if (substage === 'review') {
       say(`${label}: the stage entered review with no board — the chain could not produce one`);
     } else {
       problem(`${label}: neither a review board nor a review position`);
@@ -632,8 +642,9 @@ async function walk(browser: Browser): Promise<void> {
       if (!(await click(page, 'proceed', 'leave the interview'))) break;
 
       left = await page
-        .getByTestId('stage-current')
-        .filter({ hasText: /constitution/i })
+        // The position, in the machine's spelling — a methodology may call it «Proposal» and a
+        // translation may call it something else again (task 143).
+        .locator('[data-testid="stage-current"][data-stage="constitution"]')
         .waitFor({ timeout: 180_000 })
         .then(() => true)
         .catch(() => false);
@@ -661,8 +672,8 @@ async function walk(browser: Browser): Promise<void> {
 
     if (!(await click(page, 'proceed', 'constitution: collect → generate'))) return;
     await page
-      .getByTestId('stage-substage')
-      .filter({ hasText: 'generate' })
+      // The substage the pill stands in, not the «Generating» it prints for it (task 143).
+      .locator('[data-testid="stage-substage"][data-substage="generate"]')
       .waitFor({ timeout: 180_000 })
       .catch(() => {
         problem('constitution: the session did not reach generate');
@@ -698,7 +709,7 @@ async function walk(browser: Browser): Promise<void> {
         break;
       }
 
-      if (/pass/i.test(view.verdict)) {
+      if (view.outcome === 'pass') {
         say('the reviewer returned Pass — the cycle has converged, and the walk accepts');
         break;
       }
@@ -747,8 +758,8 @@ async function walk(browser: Browser): Promise<void> {
         return;
 
       await page
-        .getByTestId('stage-substage')
-        .filter({ hasText: 'generate' })
+        // The substage the pill stands in, not the «Generating» it prints for it (task 143).
+        .locator('[data-testid="stage-substage"][data-substage="generate"]')
         .waitFor({ timeout: 120_000 })
         .catch(() => {
           problem(`cycle ${String(cycle)}: request-changes did not return the stage to generate`);

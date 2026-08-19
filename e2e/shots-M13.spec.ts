@@ -75,7 +75,8 @@ test.describe('M13п panel-state screenshots', () => {
     await page.getByTestId('mcq-option-q-audience-solo-devs').check();
     await page.getByTestId('mcq-option-q-problem-context').check();
     await page.getByTestId('mcq-submit').click();
-    await expect(page.getByTestId('interview-panel')).toContainText('summary saved');
+    // Persisted, read as the panel's own flag: this walk is photographed in both locales.
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-summary', 'saved');
 
     // 3 — the interview answered: the door is the next step.
     await state('03-interview-answered');
@@ -94,7 +95,7 @@ test.describe('M13п panel-state screenshots', () => {
     await state('05-pending-approval');
 
     await page.getByTestId('approve-spec').click();
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
 
     /*
      * 6 — THE ONE THE CUSTOMER PHOTOGRAPHED. An approved document at a position that still drafts,
@@ -121,7 +122,10 @@ test.describe('M13п panel-state screenshots', () => {
     await page.getByTestId('review-request-changes').click();
     await expect(page.getByTestId('review-board')).toHaveCount(0);
     await page.getByTestId('generate-spec').click();
-    await expect(page.getByTestId('spec-card').last()).toContainText('Rev 2', { timeout: 40_000 });
+    // The second revision, as the number the card holds rather than as the badge's «Rev 2».
+    await expect(page.getByTestId('spec-card').last()).toHaveAttribute('data-revision', '2', {
+      timeout: 40_000,
+    });
     await shootAt('review-superseded-badge', '09-superseded-board-folded');
 
     await page.getByTestId('approve-spec').last().click();
@@ -137,8 +141,21 @@ test.describe('M13п panel-state screenshots', () => {
     await expect(page.getByTestId('viewer-raw')).toBeVisible();
     await state('11-raw-inside-the-window');
 
+    /*
+     * The same injection the bug-hunt probe uses, in the product's own markup (task 147): one
+     * `.raw-line` span per logical line, so the shot shows the wrap the customer's video asked for
+     * rather than a `<pre>` full of loose text that no rule applies to.
+     */
     await page.getByTestId('viewer-raw').evaluate((node) => {
-      node.textContent = `${'x'.repeat(4000)}\nshort\n${'y'.repeat(4000)}`;
+      node.replaceChildren(
+        ...[`${'x'.repeat(4000)}\n`, 'short\n', `${'y'.repeat(4000)}\n`].map((text) => {
+          const line = document.createElement('span');
+          line.className = 'raw-line';
+          line.textContent = text;
+
+          return line;
+        }),
+      );
     });
     await state('12-raw-with-a-line-wider-than-the-pane');
   });

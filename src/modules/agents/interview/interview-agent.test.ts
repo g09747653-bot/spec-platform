@@ -272,6 +272,159 @@ describe('InterviewAgent (task 33)', () => {
 
     expect(repaired.questions.map((question) => question.id)).toEqual(['ok']);
   });
+
+  /**
+   * Task 144 — a bad link costs its chip, and a repair made for another reason keeps the good ones.
+   *
+   * Two facts in one draft, because they are one guarantee. The question below is broken in a way the
+   * repair exists to fix (`allowOther` missing), so the whole set travels through it; one option
+   * carries a note, a link and a logo that are all correct, and another carries a link the model
+   * invented. What comes out the far side is a valid round with the good reference intact and the
+   * invented address gone — never a `DRAFT_INVALID` over an address.
+   */
+  it('keeps a correct reference note through a repair and drops only the invented link', () => {
+    const result = validateQuestionSetDraft(
+      {
+        stage: 'interview',
+        questions: [
+          {
+            id: 'q-provider',
+            text: 'Which provider should the drafting run through?',
+            type: 'single',
+            informationNeeds: ['model-provider'],
+            options: [
+              {
+                id: 'anthropic',
+                label: 'Anthropic Claude',
+                note: 'Anthropic makes the Claude family of models and sells access through its own API.',
+                href: 'https://www.anthropic.com',
+                logo: 'anthropic',
+                tags: ['llm provider', 'one key'],
+              },
+              {
+                id: 'openai',
+                label: 'OpenAI',
+                note: 'OpenAI makes the GPT family and sells access through its own API.',
+                href: 'https://openai.com/docs/getting-started?ref=us',
+                logo: 'openai',
+              },
+              { id: 'no-preference', label: 'No preference — recommend the best fit' },
+            ],
+          },
+        ],
+      },
+      repairQuestionSetDraft('interview'),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.repaired).toBe(true);
+
+    const [kept, trimmed, bare] = result.set.questions[0]?.options ?? [];
+
+    expect(kept).toMatchObject({ href: 'https://www.anthropic.com', logo: 'anthropic' });
+    expect(kept?.tags).toEqual(['llm provider', 'one key']);
+    expect(trimmed?.href).toBeUndefined();
+    expect(trimmed?.note).toContain('OpenAI makes the GPT family');
+    expect(bare?.note).toBeUndefined();
+  });
+
+  /**
+   * Task 144 — the fixture is a well-behaved model, and it has to show both shapes of option.
+   *
+   * The end-to-end walk asserts on what the browser draws, which can only be as good as what the
+   * stub says. So the claims the walk depends on are made here, where they are cheap: the concrete
+   * round validates without repair, one question holds an annotated option beside a bare one, and the
+   * notes are long enough to lay out. A fixture that wrote only short lines would pass a layout that
+   * breaks on a real note — that lesson cost a gate run.
+   */
+  describe('the concrete fixture (task 144)', () => {
+    const concreteRound = (roundNumber: number) =>
+      validateQuestionSetDraft(
+        JSON.parse(stubInterviewRoundDocument('interview', roundNumber, 'concrete')) as unknown,
+      );
+
+    it('is a valid round in its own right, needing no repair', () => {
+      const result = concreteRound(1);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.repaired).toBe(false);
+    });
+
+    it('puts an option wearing note, link, logo and chips beside one wearing none', () => {
+      const result = concreteRound(1);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const question = result.set.questions.find((candidate) =>
+        candidate.options.some((option) => option.note !== undefined),
+      );
+
+      expect(question).toBeDefined();
+
+      const annotated = question?.options.filter((option) => option.note !== undefined) ?? [];
+      const bare = question?.options.filter((option) => option.note === undefined) ?? [];
+
+      expect(annotated.length).toBeGreaterThan(0);
+      expect(bare.length).toBeGreaterThan(0);
+      expect(annotated[0]?.href).toBeDefined();
+      expect(annotated[0]?.logo).toBeDefined();
+      expect(annotated[0]?.tags?.length).toBeGreaterThan(0);
+      // Round 1 also carries a question about behaviour, whose options name no technology at all.
+      expect(result.set.questions.some((q) => q.options.every((o) => o.note === undefined))).toBe(
+        true,
+      );
+    });
+
+    it('writes notes long enough to break a layout that cannot hold one', () => {
+      const result = concreteRound(1);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const notes = result.set.questions
+        .flatMap((question) => question.options)
+        .map((option) => option.note)
+        .filter((note): note is string => note !== undefined);
+
+      expect(notes.length).toBeGreaterThan(0);
+      for (const note of notes) expect(note.length).toBeGreaterThanOrEqual(160);
+    });
+
+    it('shows a technology with no vendored logo keeping its note and its link', () => {
+      const result = concreteRound(2);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const degraded = result.set.questions
+        .flatMap((question) => question.options)
+        .find((option) => option.note !== undefined && option.logo === undefined);
+
+      expect(degraded?.href).toBeDefined();
+    });
+
+    it('leaves the default curriculum alone — the ids nine suites name are still there', () => {
+      const result = concreteRound(3);
+
+      expect(result.ok).toBe(true);
+
+      const standard = validateQuestionSetDraft(
+        JSON.parse(stubInterviewRoundDocument('interview', 1)) as unknown,
+      );
+
+      expect(standard.ok).toBe(true);
+      if (standard.ok) {
+        expect(standard.set.questions.map((question) => question.id)).toEqual([
+          'q-audience',
+          'q-problem',
+        ]);
+        expect(standard.set.questions[0]?.options[0]?.note).toBeUndefined();
+      }
+    });
+  });
 });
 
 describe('reply assessment (task 36)', () => {

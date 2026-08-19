@@ -38,7 +38,7 @@ async function bundleWithTwoFiles(page: Page): Promise<{ sessionUrl: string; pro
   await page.getByTestId('generate-spec').click();
   await expect(page.getByTestId('spec-card')).toBeVisible({ timeout: GENERATION_TIMEOUT });
   await page.getByTestId('approve-spec').click();
-  await expect(page.getByTestId('spec-card')).toContainText('approved');
+  await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
   await page.getByTestId('proceed').click();
   await expect(page.getByTestId('review-board')).toBeVisible({ timeout: GENERATION_TIMEOUT });
   await page.getByTestId('review-accept').click();
@@ -71,7 +71,9 @@ test.describe('the project page (task 120)', () => {
 
     // The row says what the chat is and how long ago anything happened in it, from persisted rows.
     await expect(page.getByTestId('chat-methodology')).toContainText('MySpec');
-    await expect(page.getByTestId('chat-age')).toContainText('Last message');
+    // The age as the number the label was formatted from: a row with no persisted message would
+    // carry no reading at all, so the digits are the claim and the wording around them is not.
+    await expect(page.getByTestId('chat-age')).toHaveAttribute('data-age-seconds', /^\d+$/);
 
     // --- Archive, and the Active list loses it while Archived gains it (AC-1) ---
     await page.getByTestId('archive-chat').click();
@@ -104,7 +106,7 @@ test.describe('the project page (task 120)', () => {
 
     await page.goto(`/projects/${projectId}`);
     await expect(page.getByTestId('mcp-card')).toBeVisible();
-    await expect(page.getByTestId('mcp-project-count')).toHaveText('0 servers');
+    await expect(page.getByTestId('mcp-project-count')).toHaveAttribute('data-count', '0');
     await expect(page.getByTestId('mcp-add-server')).toBeDisabled();
 
     /*
@@ -140,10 +142,18 @@ test.describe('the Edit workflow (task 118)', () => {
     await page.getByTestId('start-edit-chat').click();
     await expect(page.getByTestId('session')).toBeVisible();
 
-    // The three steps of the edit config, from the configuration (AC-3).
-    for (const step of ['Reference', 'Describe', 'Review', 'Complete']) {
-      await expect(page.getByTestId('step-pills')).toContainText(step);
-    }
+    /*
+     * The three steps of the edit config plus its terminal, from the configuration (AC-3) — read as
+     * the positions the steps sit at rather than as the words they are labelled with. Describe and
+     * Review share `constitution` on purpose: they are the `collect` and the `generate`/`review` of
+     * one stage, which is the whole point of a step list that is not a stage list.
+     */
+    const stages = ['interview', 'constitution', 'constitution', 'complete'];
+    const pills = page.getByTestId('step-pills').locator('[data-step]');
+    await expect(pills).toHaveCount(stages.length);
+    expect(
+      await pills.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-stage'))),
+    ).toEqual(stages);
 
     // The reference pick is already an answered round, so the gate out of Reference is satisfied.
     await expect(page.getByTestId('round-answered').first()).toBeVisible();
@@ -198,7 +208,8 @@ test.describe('the Edit workflow (task 118)', () => {
     await expect(page.getByTestId('edit-card')).toBeVisible({ timeout: GENERATION_TIMEOUT });
 
     await page.getByTestId('reject-diff').click();
-    await expect(page.getByTestId('proposal-decided')).toContainText('Discarded');
+    // Rejected, in the proposal row's own word — not «Discarded», which is only how the card says it.
+    await expect(page.getByTestId('proposal-decided')).toHaveAttribute('data-status', 'rejected');
 
     /*
      * The archive is the strongest available statement of "byte-identical": every approved file, in
@@ -248,8 +259,12 @@ test.describe('the composer (task 121)', () => {
     const picker = page.getByTestId('model-picker');
     await expect(picker).toHaveValue('auto');
 
-    const options = await picker.locator('option').allTextContents();
-    expect(options[0]).toBe('Auto');
+    // The ids the picker submits rather than the labels it prints: the first entry is the automatic
+    // choice, which is the value the assertion above found already selected.
+    const options = await picker
+      .locator('option')
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('value')));
+    expect(options[0]).toBe('auto');
     // Only configured providers are offered; the e2e deployment runs the stub chain (D-48).
     expect(options).toHaveLength(2);
 
@@ -297,7 +312,10 @@ test.describe('the document viewer (task 122)', () => {
 
     // --- Diff of Rev 1: says there is no predecessor rather than erroring (AC-1) ---
     await page.getByTestId('viewer-tab-diff').click();
-    await expect(page.getByTestId('viewer-diff-empty')).toContainText('first revision');
+    await expect(page.getByTestId('viewer-diff-empty')).toHaveAttribute(
+      'data-empty-reason',
+      'no-predecessor',
+    );
 
     // --- The view and the revision are in the URL, so a reload restores both (AC-4) ---
     expect(page.url()).toContain('view=diff');

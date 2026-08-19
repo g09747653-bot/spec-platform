@@ -41,9 +41,11 @@ test.describe('document attachments', () => {
 
     await expect(page.getByTestId('attachment-item')).toHaveCount(1);
     await expect(page.getByTestId('attachment-name')).toHaveText('constraints.md');
-    await expect(page.getByTestId('attachment-meta')).toContainText('Markdown');
+    // The type the registry settled on, which is what the line's label is a rendering of.
+    const meta = page.getByTestId('attachment-meta');
+    await expect(meta).toHaveAttribute('data-mime', 'text/markdown');
     // AC-6: the stage it arrived at is listed, not inferred.
-    await expect(page.getByTestId('attachment-meta')).toContainText('attached at interview');
+    await expect(meta).toHaveAttribute('data-stage', 'interview');
     await expect(page.getByTestId('attachment-status-ok')).toBeVisible();
 
     await page.reload();
@@ -85,11 +87,17 @@ test.describe('document attachments', () => {
       buffer: Buffer.from('%PDF-1.7\nnot actually a document body'),
     });
 
+    /*
+     * The row that failed is the row for the file that failed (task 143). The status is already a
+     * token — the test id is `attachment-status-<parseStatus>` — so the sentence beside it was only
+     * ever proving that the copy promises to carry on, which is the part of this row that changes
+     * language. What the criterion is about is that the *named* document is the one reported.
+     */
     await expect(page.getByTestId('attachment-item')).toHaveCount(1);
-    await expect(page.getByTestId('attachment-status-failed')).toBeVisible();
-    await expect(page.getByTestId('attachment-status-failed')).toContainText(
-      'continues without it',
-    );
+    const failed = page
+      .getByTestId('attachment-item')
+      .filter({ has: page.getByTestId('attachment-status-failed') });
+    await expect(failed.getByTestId('attachment-name')).toHaveText('broken.pdf');
 
     // The interview is still usable: a parse failure is not a session failure.
     await page.getByTestId('ask-round').click();
@@ -114,7 +122,7 @@ test.describe('document attachments', () => {
     await page.getByTestId('generate-spec').click();
     await expect(page.getByTestId('spec-card')).toBeVisible({ timeout: 20_000 });
     await page.getByTestId('approve-spec').click();
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
     await expect(page.getByTestId('spec-revision-number')).toHaveText('1');
 
     await page.getByTestId('attachment-input').setInputFiles({
@@ -128,7 +136,7 @@ test.describe('document attachments', () => {
 
     // AC-10: the approved file is untouched — still revision 1, still approved.
     await expect(page.getByTestId('spec-revision-number')).toHaveText('1');
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
 
     // The direct action offers a change; it does not make one.
     await page.getByTestId('late-attachment-refine').click();

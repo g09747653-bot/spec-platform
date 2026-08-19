@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { encodeEvent, type GenerationEvent } from '@/modules/web/api/stream-protocol';
 
+import { translator } from '../i18n/translate';
+
 import {
   applyEvent,
   createResumableStream,
@@ -17,6 +19,14 @@ import {
  * together, and a reconnect happens on its own. All of it runs against a fake `fetch` — no server, no
  * timers to wait on, and every scenario reproducible on demand.
  */
+
+/**
+ * The English translator the reader writes its one sentence through (task 143).
+ *
+ * Real rather than stubbed, so a disconnect notice whose dictionary entry went missing fails here
+ * instead of rendering its own key at the top of a failed generation.
+ */
+const t = translator('en');
 
 /** Builds a response whose body yields the given events, optionally cutting off partway. */
 function streamOf(
@@ -167,6 +177,7 @@ function reader(responses: ((init?: RequestInit) => Response)[]) {
   const states: StreamState[] = [];
 
   const stream = createResumableStream({
+    t,
     fetchImpl,
     sleep: () => Promise.resolve(),
     backoff: [0, 0, 0],
@@ -200,6 +211,7 @@ function timedReader(responses: ((init?: RequestInit) => Response)[]) {
   const states: StreamState[] = [];
 
   const stream = createResumableStream({
+    t,
     fetchImpl,
     backoff: [0, 0, 0],
     idleTimeoutMs: IDLE_MS,

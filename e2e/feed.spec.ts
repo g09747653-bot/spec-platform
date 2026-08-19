@@ -58,11 +58,13 @@ test.describe('the conversation feed', () => {
     await expect(card.getByTestId('document-path')).toHaveText(
       /^specs\/[a-z0-9-]+\/constitution\.md$/,
     );
-    await expect(card.getByTestId('document-approved')).toHaveText('Approved');
+    // Both halves of the badge's claim: the card is approved, and it says so where Эталон says so.
+    await expect(card).toHaveAttribute('data-approved', 'true');
+    await expect(card.getByTestId('document-approved')).toBeVisible();
     await expect(card.getByTestId('spec-revision-number')).toHaveText('1');
 
     await decideReviewAndAdvance(page);
-    await expect(page.getByTestId('stage-current')).toHaveText(/Requirements/i);
+    await expect(page.getByTestId('stage-current')).toHaveAttribute('data-stage', 'requirements');
 
     /*
      * Moving on does not erase the document. It is no longer the card the session is working on, so
@@ -71,7 +73,8 @@ test.describe('the conversation feed', () => {
      */
     const earlier = page.getByTestId('document-card');
     await expect(earlier).toHaveCount(1);
-    await expect(earlier.getByTestId('document-approved')).toHaveText('Approved');
+    await expect(earlier).toHaveAttribute('data-approved', 'true');
+    await expect(earlier.getByTestId('document-approved')).toBeVisible();
     await expect(earlier.getByTestId('document-content')).toHaveCount(0);
 
     await earlier.getByTestId('document-preview-toggle').click();
@@ -104,9 +107,9 @@ test.describe('the conversation feed', () => {
     // Rev 2 is the card the session is working on; Rev 1 is still in the feed above it.
     await expect(page.getByTestId('spec-revision-number')).toHaveText('2', { timeout: 20_000 });
     await expect(page.getByTestId('document-card')).toHaveCount(1);
-    await expect(page.getByTestId('document-card').getByTestId('document-revision')).toHaveText(
-      'Rev 1',
-    );
+    await expect(
+      page.getByTestId('document-card').getByTestId('document-revision'),
+    ).toHaveAttribute('data-revision', '1');
 
     // The superseded revision keeps no decision of its own — there is one Approve on screen, and it
     // belongs to the revision the session is actually waiting on.

@@ -240,12 +240,14 @@ test.describe('parity checklist evidence (task 128)', () => {
     record({
       id: '1.4-7',
       claim: 'бюджет раундов — свойство методологии; поверхность обязана называть число гейта',
-      observed: `панель печатает: «${
-        (await page.getByTestId('interview-panel').innerText())
-          .split('\n')
-          .find((line) => line.includes('question rounds'))
-          ?.replace(/\s+/g, ' ') ?? '(строки нет)'
-      }»`,
+      /*
+       * The two numbers off the panel rather than the sentence that frames them (task 143): what
+       * the row is about is the budget the gate enforces, and «1 of 3 question rounds» is one
+       * wording of it.
+       */
+      observed: `панель называет: ${
+        (await page.getByTestId('interview-panel').getAttribute('data-answered-rounds')) ?? '—'
+      } из ${(await page.getByTestId('interview-panel').getAttribute('data-round-budget')) ?? '—'}`,
       screen: roundShot,
     });
 
@@ -254,10 +256,18 @@ test.describe('parity checklist evidence (task 128)', () => {
       id: '1.1-5',
       claim:
         'у вопроса — текст, красная звёздочка обязательности, подпись «Select one» / «Select all that apply»',
-      observed: `в карточке встречается: ${['*', 'Select one', 'Select all that apply']
-        .filter((needle) => card.includes(needle))
-        .map((needle) => `«${needle}»`)
-        .join(', ')}`,
+      /*
+       * The asterisk is a glyph and stays one; the caption is read as the choice it announces
+       * rather than as its English (task 143) — `data-select` is the question's own `single` or
+       * `multiple`, which is the fact «Select one» and «Select all that apply» are two wordings of.
+       */
+      observed: `звёздочка обязательности: ${card.includes('*') ? 'есть' : 'нет'}; подпись выбора объявляет ${
+        (await page
+          .locator('[data-testid^="mcq-hint-"]')
+          .first()
+          .getAttribute('data-select')
+          .catch(() => null)) ?? '(нет подписи)'
+      }`,
       screen: roundShot,
     });
 
@@ -265,7 +275,10 @@ test.describe('parity checklist evidence (task 128)', () => {
       id: '1.1-6',
       claim:
         'опция = радио/чекбокс + название + пометка (Recommended) + описание + (иногда) тег-чипы',
-      observed: `пометка «(Recommended)»: ${card.includes('(Recommended)') ? 'есть' : 'нет'}; опций с тег-чипами: ${String(
+      // The marker counted as nodes rather than found as a word in the card (task 143).
+      observed: `опций с пометкой «рекомендуется»: ${String(
+        await page.locator('[data-testid^="mcq-recommended-"]').count(),
+      )}; опций с тег-чипами: ${String(
         await page.locator('[data-testid^="mcq-tags-"]').count(),
       )}, на первой из них чипы ${await page
         .locator('[data-testid^="mcq-tags-"]')
@@ -406,7 +419,7 @@ test.describe('parity checklist evidence (task 128)', () => {
     await page.getByTestId('mcq-submit').click();
     await expect(page.getByTestId('interview-panel')).toBeVisible();
     await page.getByTestId('proceed').click();
-    await expect(page.getByTestId('stage-substage')).toHaveText(/Generating/);
+    await expect(page.getByTestId('stage-substage')).toHaveAttribute('data-substage', 'generate');
 
     await page.getByTestId('generate-spec').click();
     await expect(page.getByTestId('spec-card')).toBeVisible({ timeout: 60_000 });
@@ -431,7 +444,7 @@ test.describe('parity checklist evidence (task 128)', () => {
     attributeReadings.push(await msgAttributes(page, 'document'));
 
     await page.getByTestId('approve-spec').click();
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
     record({
       id: '1.1-11a',
       claim: 'бейдж Approved (success) на карточке документа',
@@ -446,8 +459,6 @@ test.describe('parity checklist evidence (task 128)', () => {
     const boardShot = await screen(page, 'review-board');
 
     /* ------------------------------------------------------------- §1.3 the board */
-
-    const board = await page.getByTestId('review-board').innerText();
 
     record({
       id: '1.3-1',
@@ -492,13 +503,11 @@ test.describe('parity checklist evidence (task 128)', () => {
         .locator('[data-testid^="review-item-section-"]')
         .first()
         .innerText()
-        .catch(() => '(заголовком служит не путь секции)')}»; в доске встречается: ${[
-        'Confidence',
-        'Suggestion',
-      ]
-        .filter((needle) => board.includes(needle))
-        .map((needle) => `«${needle}»`)
-        .join(', ')}`,
+        .catch(() => '(заголовком служит не путь секции)')}»; на доске бейджей уверенности ${String(
+        await page.locator('[data-testid^="review-item-confidence-"]').count(),
+      )}, строк-предложений ${String(
+        await page.locator('[data-testid^="review-item-suggestion-"]').count(),
+      )}`,
       screen: boardShot,
     });
 
@@ -653,7 +662,10 @@ test.describe('parity checklist evidence (task 128)', () => {
     const tail = await page.evaluate(() => {
       const feed = document.querySelector('[data-testid="feed"]');
       const children = feed === null ? [] : [...feed.children];
-      const panel = children.findIndex((node) => node.textContent.includes('Session completed'));
+      // The panel by its own name, not by the caption it prints (task 143).
+      const panel = children.findIndex(
+        (node) => node.querySelector('[data-testid="session-complete"]') !== null,
+      );
 
       return {
         last:
@@ -790,12 +802,10 @@ test.describe('parity checklist evidence (task 128)', () => {
     record({
       id: '1.4-8',
       claim: 'каждая методология экспортирует набор файлов своего конфига',
-      observed: `копия панели экспорта: «${
-        (await page.getByTestId('export-panel').innerText())
-          .split('\n')
-          .find((line) => line.startsWith('Mode:'))
-          ?.replace(/\s+/g, ' ') ?? '(строки нет)'
-      }»`,
+      // The mode as the panel's own token rather than as the «Mode: …» line it sits in (task 143).
+      observed: `режим панели экспорта: ${
+        (await page.getByTestId('export-mode').getAttribute('data-mode')) ?? '(режима нет)'
+      }`,
       screen: sidebarShot,
     });
 
@@ -930,12 +940,14 @@ test.describe('parity checklist evidence (task 128)', () => {
     record({
       id: '1.4-7a',
       claim: 'бюджет раундов — свойство методологии (brownfield объявляет два)',
-      observed: `панель печатает: «${
-        (await page.getByTestId('interview-panel').innerText())
-          .split('\n')
-          .find((line) => line.includes('question rounds'))
-          ?.replace(/\s+/g, ' ') ?? '(строки нет)'
-      }»`,
+      /*
+       * The two numbers off the panel rather than the sentence that frames them (task 143): what
+       * the row is about is the budget the gate enforces, and «1 of 3 question rounds» is one
+       * wording of it.
+       */
+      observed: `панель называет: ${
+        (await page.getByTestId('interview-panel').getAttribute('data-answered-rounds')) ?? '—'
+      } из ${(await page.getByTestId('interview-panel').getAttribute('data-round-budget')) ?? '—'}`,
       screen: opened,
     });
 

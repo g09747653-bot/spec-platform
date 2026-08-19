@@ -2,6 +2,8 @@
 
 import { methodologyConfig } from '@/modules/methodologies';
 
+import { type PhraseKey } from '../i18n/dictionary';
+import { useT } from '../i18n/locale-context';
 import { stageLabel } from '../session/stage-display';
 
 import { FeedItem } from './feed-item';
@@ -52,6 +54,7 @@ const BUBBLE =
  */
 export function SeedBubble({ block }: { block: SeedBlock }) {
   const methodologyId = useMethodologyId();
+  const t = useT();
   const prefilled = methodologyId !== null && methodologyConfig(methodologyId).chatClass === 'edit';
   const namesMore = !block.prompt.startsWith(block.projectName.replace(/…$/, ''));
 
@@ -59,11 +62,16 @@ export function SeedBubble({ block }: { block: SeedBlock }) {
     <FeedItem block={block} align="right">
       <div className={BUBBLE}>
         <p className="whitespace-pre-wrap" data-testid="session-prompt-line">
-          {prefilled ? null : namesMore ? (
-            <>I want to build {block.projectName}. My project description is: </>
-          ) : (
-            <>I want to build: </>
-          )}
+          {/*
+            One phrase per opening rather than a sentence built from fragments (task 143). The
+            template ends in a space and the prompt follows it in the same paragraph, so the space is
+            part of the copy and belongs where the second language can move it.
+          */}
+          {prefilled
+            ? null
+            : namesMore
+              ? t('feed.seed.intro-named', { name: block.projectName })
+              : t('feed.seed.intro')}
           <span data-testid="session-prompt">{block.prompt}</span>
         </p>
       </div>
@@ -129,6 +137,7 @@ export function MessageBubble({ block }: { block: MessageBlock }) {
  */
 export function StageChip({ block }: { block: TransitionBlock }) {
   const methodologyId = useMethodologyId();
+  const t = useT();
 
   return (
     <FeedItem block={block} align="center">
@@ -139,12 +148,12 @@ export function StageChip({ block }: { block: TransitionBlock }) {
         data-to={`${block.to.stage}${block.to.substage === null ? '' : `.${block.to.substage}`}`}
       >
         <span className="bg-background text-foreground-muted inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs">
-          <span>{positionLabel(block.from, methodologyId)}</span>
+          <span>{positionLabel(t, block.from, methodologyId)}</span>
           <span aria-hidden className="dash-flow opacity-60">
             ──▶
           </span>
           <span className="text-primary-ink font-medium">
-            {positionLabel(block.to, methodologyId)}
+            {positionLabel(t, block.to, methodologyId)}
           </span>
         </span>
       </span>
@@ -160,14 +169,22 @@ export function StageChip({ block }: { block: TransitionBlock }) {
  * their paths and the files that are coming. Derived — see `build-feed.ts`.
  */
 export function BundleCreated({ block }: { block: BundleBlock }) {
+  const t = useT();
+
   return (
     <FeedItem block={block} align="center">
       <p
         className="border-border-subtle text-foreground-muted rounded-full border px-3 py-1 text-xs"
         data-testid="bundle-created"
       >
-        Project bundle created: <span className="font-mono">{block.bundleName}</span> —{' '}
-        {block.fileNames.length} spec {block.fileNames.length === 1 ? 'file' : 'files'} to write
+        {/*
+          Two phrases with the mono name between them (task 143). The count is a counted phrase
+          rather than a word chosen by `=== 1`, because Russian needs three forms here and the
+          number reads next to its own noun in neither language the same way.
+        */}
+        {t('feed.bundle.created')}
+        <span className="font-mono">{block.bundleName}</span>
+        {t('feed.bundle.files', { count: block.fileNames.length })}
       </p>
     </FeedItem>
   );
@@ -180,6 +197,11 @@ export function BundleCreated({ block }: { block: BundleBlock }) {
  * a document card exactly one colour accent and puts it on the stage name, and ours was the same
  * muted grey as everything else on an otherwise achromatic card. `primary-ink` rather than
  * `primary` because this is small text and the ink token is the one contrast-checked for it.
+ *
+ * **`trailing` is a key, not a word** (task 143). Four components pass it and each one used to pass
+ * an English adjective — «drafting», «review», «edit» — so the caption was untranslatable from the
+ * inside no matter what this file did. A `PhraseKey` moves the words to the dictionary and makes a
+ * caption in a language nobody wrote a compile error rather than a screenshot from the customer.
  */
 export function BlockCaption({
   stage,
@@ -187,17 +209,18 @@ export function BlockCaption({
   tone = 'muted',
 }: {
   stage: string;
-  trailing?: string;
+  trailing?: PhraseKey;
   tone?: 'muted' | 'primary';
 }) {
   const methodologyId = useMethodologyId();
+  const t = useT();
 
   return (
     <p
       className={`text-label uppercase ${tone === 'primary' ? 'text-primary-ink' : 'text-foreground-muted'}`}
     >
-      {stageLabel(stage, methodologyId)}
-      {trailing !== undefined && ` · ${trailing}`}
+      {stageLabel(t, stage, methodologyId)}
+      {trailing !== undefined && `${t('common.separator')}${t(trailing)}`}
     </p>
   );
 }

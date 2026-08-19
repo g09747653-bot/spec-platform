@@ -2,10 +2,11 @@
 
 import { useState } from 'react';
 
+import { useT } from '../i18n/locale-context';
 import { Button } from '../ui/button';
 import { showToast } from '../ui/toast';
 
-import { downloadBundle, type ExportManifest } from './download-bundle';
+import { downloadBundle, modePhrase, type ExportManifest } from './download-bundle';
 import { SidePanel } from './side-panel';
 
 /**
@@ -63,6 +64,7 @@ type CopyState =
   | { kind: 'failed'; specFileId: string };
 
 export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: ExportPanelProps) {
+  const t = useT();
   const [manifest, setManifest] = useState<ExportManifest | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -73,6 +75,9 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
     included: files.map((file) => file.fileName),
     omitted: [...omittedFiles],
   };
+
+  /** The file whose text the clipboard refused, narrowed once so the markup below is a guard. */
+  const manual = copy.kind === 'manual' ? copy : null;
 
   /**
    * Fetches the file's markdown and puts it on the clipboard.
@@ -94,21 +99,36 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
 
       if (!response.ok) {
         setCopy({ kind: 'failed', specFileId: file.specFileId });
-        showToast(`${file.fileName} could not be copied.`, 'danger');
+        showToast(
+          t('session.export.copy-failed-toast', { fileName: file.fileName }),
+          'danger',
+          'file-copy-failed',
+        );
         return;
       }
 
       markdown = await response.text();
     } catch {
       setCopy({ kind: 'failed', specFileId: file.specFileId });
-      showToast(`${file.fileName} could not be copied.`, 'danger');
+      showToast(
+        t('session.export.copy-failed-toast', { fileName: file.fileName }),
+        'danger',
+        'file-copy-failed',
+      );
       return;
     }
 
     try {
       await navigator.clipboard.writeText(markdown);
       setCopy({ kind: 'copied', specFileId: file.specFileId });
-      showToast(`${file.fileName} copied — the ${mode}-mode revision.`, 'success');
+      showToast(
+        t('session.export.copied-toast', {
+          fileName: file.fileName,
+          mode: t(modePhrase(mode)),
+        }),
+        'success',
+        'file-copied',
+      );
     } catch {
       // AC-4: the text is offered for manual selection rather than lost with an apology.
       setCopy({
@@ -124,16 +144,20 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
     setBusy(true);
     setFailure(null);
 
-    const outcome = await downloadBundle(projectId, mode);
+    const outcome = await downloadBundle(projectId, mode, t);
 
     if (!outcome.ok) {
       setFailure(outcome.message);
-      showToast(outcome.message, 'danger');
+      showToast(outcome.message, 'danger', 'bundle-download-failed');
     } else {
       setManifest(outcome.manifest);
       showToast(
-        `Downloaded ${String(outcome.manifest.included.length)} ${outcome.manifest.included.length === 1 ? 'file' : 'files'} in ${outcome.manifest.mode} mode.`,
+        t('session.export.downloaded-toast', {
+          count: outcome.manifest.included.length,
+          mode: t(modePhrase(outcome.manifest.mode)),
+        }),
         'success',
+        'bundle-downloaded',
       );
     }
 
@@ -141,7 +165,7 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
   }
 
   return (
-    <SidePanel title="Export the bundle" testId="export-panel">
+    <SidePanel title={t('session.export.title')} testId="export-panel">
       <div className="flex flex-col gap-2">
         {/*
           The count comes from the plan, not from a literal (task 133; row `1.4-8`).
@@ -152,44 +176,60 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
           `bundlePlan`; only the sentence above it was guessing.
         */}
         <p className="text-foreground-muted text-xs">
-          Mode: <span data-testid="export-mode">{shown.mode}</span> —{' '}
+          {t('session.export.mode-label')}{' '}
+          <span data-testid="export-mode" data-mode={shown.mode}>
+            {t(modePhrase(shown.mode))}
+          </span>
           {shown.mode === 'default'
-            ? `this workflow's ${String(planned)} spec ${planned === 1 ? 'file' : 'files'}, each at its most recent pre-enrichment revision.`
-            : 'the enriched files plus quality.md.'}
+            ? t('session.export.plan-default', { count: planned })
+            : t('session.export.plan-quality')}
         </p>
         <p className="text-xs" data-testid="export-included">
           {shown.included.length === 0
-            ? 'Nothing is approved yet, so the archive would be empty.'
-            : `Included: ${shown.included.join(', ')}`}
+            ? t('session.export.empty')
+            : t('session.export.included', { files: shown.included.join(', ') })}
         </p>
 
         {/* One file at a time, straight to the clipboard as raw markdown (FR-016). */}
         {files.length > 0 && (
           <ul className="flex flex-col gap-1" data-testid="export-file-list">
-            {files.map((file) => (
-              <li key={file.specFileId} className="flex items-center gap-2 text-sm">
-                <span className="font-mono text-xs">{file.fileName}</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  data-testid={`copy-${file.fileName}`}
-                  disabled={copy.kind === 'copying'}
-                  onClick={() => void copyFile(file)}
-                >
-                  {copy.kind === 'copying' && copy.specFileId === file.specFileId
-                    ? 'Copying…'
-                    : copy.kind === 'copied' && copy.specFileId === file.specFileId
-                      ? 'Copied ✓'
-                      : 'Copy'}
-                </Button>
-                {copy.kind === 'failed' && copy.specFileId === file.specFileId && (
-                  <span className="text-danger text-xs" data-testid="copy-error">
-                    That file could not be read. Try again.
-                  </span>
-                )}
-              </li>
-            ))}
+            {files.map((file) => {
+              /*
+               * This row's copy state, named once before the markup (task 143). A token compared
+               * inside JSX — `copy.kind === 'failed' && …` — is indistinguishable to the rule that
+               * keeps copy out of components from a word printed there, and the rule is right to be
+               * blunt: naming the state is clearer than the comparison it replaces anyway.
+               */
+              const state =
+                copy.kind !== 'idle' && copy.specFileId === file.specFileId ? copy.kind : 'idle';
+              const failed = state === 'failed';
+
+              return (
+                <li key={file.specFileId} className="flex items-center gap-2 text-sm">
+                  <span className="font-mono text-xs">{file.fileName}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    data-testid={`copy-${file.fileName}`}
+                    data-copy-state={state}
+                    disabled={copy.kind === 'copying'}
+                    onClick={() => void copyFile(file)}
+                  >
+                    {state === 'copying'
+                      ? t('session.export.copying')
+                      : state === 'copied'
+                        ? t('session.export.copied')
+                        : t('common.copy')}
+                  </Button>
+                  {failed && (
+                    <span className="text-danger text-xs" data-testid="copy-error">
+                      {t('session.export.copy-error')}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
 
@@ -198,16 +238,16 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
          * A `textarea` rather than a `<pre>` because select-all is one keystroke inside one, and
          * because nothing in it can be mistaken for rendered content.
          */}
-        {copy.kind === 'manual' && (
+        {manual !== null && (
           <div className="flex flex-col gap-1" data-testid="copy-manual">
             <label className="text-foreground-muted text-xs" htmlFor="copy-manual-text">
-              The clipboard was not available. Here is {copy.fileName} — select and copy it.
+              {t('session.export.copy-manual', { fileName: manual.fileName })}
             </label>
             <textarea
               id="copy-manual-text"
               data-testid="copy-manual-text"
               readOnly
-              value={copy.content}
+              value={manual.content}
               rows={8}
               className="bg-background border-border-subtle rounded-md border p-2 font-mono text-xs"
             />
@@ -216,7 +256,7 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
 
         {shown.omitted.length > 0 && (
           <p className="text-foreground-muted text-xs" data-testid="export-omitted">
-            Omitted for want of an approved revision: {shown.omitted.join(', ')}
+            {t('session.export.omitted', { files: shown.omitted.join(', ') })}
           </p>
         )}
 
@@ -226,10 +266,35 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
          * download the lists above are an estimate; after it they are a record.
          */}
         {manifest !== null && (
-          <p className="text-sm font-medium" data-testid="export-downloaded">
-            Downloaded in {manifest.mode} mode:{' '}
-            {manifest.included.length === 0 ? 'an empty archive' : manifest.included.join(', ')}
-            {manifest.omitted.length > 0 && ` — without ${manifest.omitted.join(', ')}`}.
+          <p
+            className="text-sm font-medium"
+            data-testid="export-downloaded"
+            data-mode={manifest.mode}
+            data-included={manifest.included.join(',')}
+            data-omitted={manifest.omitted.join(',')}
+          >
+            {/*
+              One sentence, assembled by the dictionary rather than by JSX (task 143). This line was
+              four fragments — a word, a list, a conditional clause and a full stop — in an order
+              only English keeps: Russian moves the mode to the front of a clause of its own, and a
+              fragment cannot move. The omission clause is passed in as a whole clause for the same
+              reason, and it is the one place a phrase here is handed to another phrase.
+            */}
+            {t(
+              manifest.included.length === 0
+                ? 'session.export.downloaded-empty'
+                : 'session.export.downloaded',
+              {
+                mode: t(modePhrase(manifest.mode)),
+                files: manifest.included.join(', '),
+                omitted:
+                  manifest.omitted.length === 0
+                    ? ''
+                    : t('session.export.downloaded-without', {
+                        files: manifest.omitted.join(', '),
+                      }),
+              },
+            )}
           </p>
         )}
 
@@ -253,7 +318,7 @@ export function ExportPanel({ projectId, files, omittedFiles, mode, planned }: E
           data-testid="download-export"
           className="self-start"
         >
-          {busy ? 'Preparing…' : 'Download ZIP'}
+          {busy ? t('session.export.preparing') : t('session.export.download-zip')}
         </Button>
       </div>
     </SidePanel>

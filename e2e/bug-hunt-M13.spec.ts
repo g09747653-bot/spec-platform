@@ -55,7 +55,7 @@ async function expectNothingOffScreen(page: Page, where: string) {
 }
 
 test.describe('the customer’s 2026-08-18 reports', () => {
-  test('Raw keeps the pane inside the window at every width, and scrolls its own long lines', async ({
+  test('Raw keeps the pane inside the window at every width, and wraps its own long lines', async ({
     page,
     context,
   }) => {
@@ -86,17 +86,30 @@ test.describe('the customer’s 2026-08-18 reports', () => {
      *
      * The stub provider writes short lines, so the walk above cannot reach the defect: it is a
      * property of a document with a line wider than the pane, which is what a real `_Touches:_` line
-     * is. The line is put into the `<pre>` from here rather than generated, and the comment says so
+     * is. The lines are put into the `<pre>` from here rather than generated, and the comment says so
      * plainly — this half of the test measures **the stylesheet**, not the product. That is the
      * honest description of what it does, and it is worth doing: before the fix this measurement
      * put the pane's right edge at 28 516 px in a 1 280 px window.
+     *
+     * Built as `.raw-line` spans, because that is what the product renders (task 147) and what the
+     * rule under test applies to: one span per logical line, the number painted as a CSS counter,
+     * `overflow-wrap: anywhere` so a four-thousand-character token with nowhere to break still
+     * breaks.
      */
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.getByTestId('viewer-pane-tab-raw').click();
     await expect(page.getByTestId('viewer-raw')).toBeVisible();
 
     await page.getByTestId('viewer-raw').evaluate((node) => {
-      node.textContent = `${'x'.repeat(4000)}\nshort\n${'y'.repeat(4000)}`;
+      node.replaceChildren(
+        ...[`${'x'.repeat(4000)}\n`, 'short\n', `${'y'.repeat(4000)}\n`].map((text) => {
+          const line = document.createElement('span');
+          line.className = 'raw-line';
+          line.textContent = text;
+
+          return line;
+        }),
+      );
     });
 
     await expectNothingOffScreen(page, 'raw with a 4 000-character line');
@@ -104,21 +117,48 @@ test.describe('the customer’s 2026-08-18 reports', () => {
     const well = page.getByTestId('viewer-raw-well');
     await expect(well).toBeVisible();
 
-    const scrollable = await well.evaluate((node) => ({
-      scrollWidth: node.scrollWidth,
-      clientWidth: node.clientWidth,
-      overflowX: getComputedStyle(node).overflowX,
-    }));
+    /*
+     * **The rule inverted, deliberately** (амендмент А-17 §4, `.specs/decisions.md`).
+     *
+     * Task 142 answered the customer's clipping report with «long lines scroll sideways inside the
+     * code well». His video then showed the reference wrapping them instead, and the Architect took
+     * the reference's side: horizontal scrolling exists nowhere in the viewer. So the same well is
+     * measured for the opposite property — it must have nothing to scroll to, because the line is
+     * on screen in full, and the wrap is what put it there.
+     */
+    const measured = await well.evaluate((node) => {
+      const line = node.querySelector('.raw-line');
 
-    // The line is reachable — inside the well, which is where a long line belongs.
-    expect(scrollable.overflowX, 'the code well must own the sideways scroll').toBe('auto');
+      return {
+        scrollWidth: node.scrollWidth,
+        clientWidth: node.clientWidth,
+        overflowX: getComputedStyle(node).overflowX,
+        lineHeight: Math.round(line?.getBoundingClientRect().height ?? 0),
+        lineWidth: Math.round(line?.getBoundingClientRect().width ?? 0),
+      };
+    });
+
+    expect(measured.overflowX, 'the code well must not scroll sideways any more').not.toBe('auto');
+    expect(measured.overflowX, 'the code well must not scroll sideways any more').not.toBe(
+      'scroll',
+    );
     expect(
-      scrollable.scrollWidth,
-      'the long line must be scrollable inside the well',
-    ).toBeGreaterThan(scrollable.clientWidth);
+      measured.scrollWidth,
+      'nothing inside the well may be wider than the well',
+    ).toBeLessThanOrEqual(measured.clientWidth + 1);
+
+    // Wrapped, not clipped: a 4 000-character line occupies many line boxes and no extra width.
+    expect(measured.lineWidth, 'the long line must stay inside the well').toBeLessThanOrEqual(
+      measured.clientWidth,
+    );
     expect(
-      scrollable.clientWidth,
-      'the well must be no wider than the pane that contains it',
+      measured.lineHeight,
+      'a 4 000-character line must wrap onto many visual lines',
+    ).toBeGreaterThan(100);
+
+    expect(
+      measured.clientWidth,
+      'the well must be no wider than the panel that contains it',
     ).toBeLessThanOrEqual((await page.getByTestId('viewer-pane').boundingBox())?.width ?? 0);
   });
 
@@ -148,10 +188,13 @@ test.describe('the customer’s 2026-08-18 reports', () => {
      */
     await page.getByTestId('review-request-changes').click();
     await expect(page.getByTestId('review-board')).toHaveCount(0);
-    await expect(page.getByTestId('stage-substage')).toHaveText(/Generating/);
+    await expect(page.getByTestId('stage-substage')).toHaveAttribute('data-substage', 'generate');
 
     await page.getByTestId('generate-spec').click();
-    await expect(page.getByTestId('spec-card').last()).toContainText('Rev 2', { timeout: 40_000 });
+    // A second revision of the same file — read as the number the card holds, not as «Rev 2».
+    await expect(page.getByTestId('spec-card').last()).toHaveAttribute('data-revision', '2', {
+      timeout: 40_000,
+    });
 
     /*
      * The decided board is still in the conversation — it happened — but it now says what it is,
@@ -160,8 +203,9 @@ test.describe('the customer’s 2026-08-18 reports', () => {
      */
     const superseded = page.getByTestId('review-board-decided').first();
     await expect(superseded).toHaveAttribute('data-superseded', 'true');
+    // The badge is rendered for a superseded board and for no other, so it being on screen is the
+    // statement being made — whichever language it makes it in (task 143).
     await expect(superseded.getByTestId('review-superseded-badge')).toBeVisible();
-    await expect(superseded.getByTestId('review-superseded-badge')).toContainText('Superseded');
     await expect(superseded.getByTestId('review-accept')).toHaveCount(0);
 
     // Folded on arrival — the `open` attribute is the browser's own record of a `<details>` state.
@@ -227,7 +271,8 @@ test.describe('the customer’s 2026-08-18 reports', () => {
     await page.getByTestId('mcq-option-q-audience-solo-devs').check();
     await page.getByTestId('mcq-option-q-problem-context').check();
     await page.getByTestId('mcq-submit').click();
-    await expect(page.getByTestId('interview-panel')).toContainText('summary saved');
+    // The panel's own record that the round was persisted, rather than the line it says so on.
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-summary', 'saved');
     await countLoud('the interview, answered and ready to leave');
 
     await page.getByTestId('proceed').click();
@@ -240,7 +285,7 @@ test.describe('the customer’s 2026-08-18 reports', () => {
     await countLoud('a draft waiting for approval');
 
     await page.getByTestId('approve-spec').click();
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
 
     /*
      * THE SCREENSHOT. An approved document, a position that still drafts, refinement offered and a

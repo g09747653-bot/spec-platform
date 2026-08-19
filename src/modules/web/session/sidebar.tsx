@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from 'react';
 
+import { useT } from '../i18n/locale-context';
 import { cn } from '../lib/cn';
 import {
   clampSidebarWidth,
@@ -48,6 +49,7 @@ export interface SessionSidebarProps {
 }
 
 export function SessionSidebar({ children }: SessionSidebarProps) {
+  const t = useT();
   const [width] = useUiState(sidebarWidthValue);
   const [collapsed] = useUiState(sidebarCollapsedValue);
   const dragging = useRef(false);
@@ -107,7 +109,7 @@ export function SessionSidebar({ children }: SessionSidebarProps) {
       <div
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize the sidebar"
+        aria-label={t('session.sidebar.resize')}
         aria-valuenow={width}
         aria-valuemin={SIDEBAR_MIN_WIDTH}
         aria-valuemax={SIDEBAR_MAX_WIDTH}
@@ -129,7 +131,7 @@ export function SessionSidebar({ children }: SessionSidebarProps) {
         className="bg-surface flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-3"
         data-testid="sidebar-panel"
         data-width={String(width)}
-        aria-label="Session panels"
+        aria-label={t('session.sidebar.panels')}
       >
         {children}
       </aside>
@@ -145,6 +147,7 @@ export function SessionSidebar({ children }: SessionSidebarProps) {
  * surface guaranteed to be on screen, which makes it the only correct home for this.
  */
 export function SidebarToggle({ className }: { className?: string }) {
+  const t = useT();
   const [collapsed, setCollapsed] = useUiState(sidebarCollapsedValue);
 
   return (
@@ -152,8 +155,13 @@ export function SidebarToggle({ className }: { className?: string }) {
       type="button"
       data-testid="sidebar-toggle"
       aria-expanded={!collapsed}
-      aria-label={collapsed ? 'Show the sidebar' : 'Hide the sidebar'}
-      title={`${collapsed ? 'Show' : 'Hide'} the sidebar (B)`}
+      /*
+        Two whole phrases rather than one with a verb substituted into it (task 143): «Show» and
+        «Hide» are one word in English and two different verbs elsewhere, and a sentence that
+        interpolates its own predicate is a sentence no translator can make agree.
+      */
+      aria-label={collapsed ? t('session.sidebar.show') : t('session.sidebar.hide')}
+      title={collapsed ? t('session.sidebar.show-title') : t('session.sidebar.hide-title')}
       className={cn(
         'border-border-subtle text-foreground-muted hover:bg-background hover:text-foreground inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors',
         className,
@@ -176,19 +184,25 @@ export function SidebarToggle({ className }: { className?: string }) {
  * is the dead click D-28 already ruled out once.
  */
 export function LocalWorkspace() {
+  const t = useT();
+
   return (
-    <SidePanel title="Local Workspace" testId="local-workspace">
+    <SidePanel title={t('session.workspace.title')} testId="local-workspace">
       <button
         type="button"
         disabled
         data-testid="mount-folder"
         className="border-border-subtle text-foreground-muted cursor-not-allowed rounded-md border border-dashed px-3 py-1.5 text-sm opacity-60"
       >
-        Mount folder
+        {t('session.workspace.mount')}
       </button>
-      <p className="text-foreground-muted text-xs">
-        Mounting a folder from this machine is not built yet. Nothing here reads or writes your
-        files.
+      {/*
+        The honesty of the stub is a fact about the product, so it is asserted as one (task 143). A
+        walk that proved it by finding «is not built yet» in the sentence was proving it about the
+        English copy; this attribute is what stays true when the sentence is written in Russian.
+      */}
+      <p className="text-foreground-muted text-xs" data-stub="true">
+        {t('session.workspace.stub')}
       </p>
     </SidePanel>
   );

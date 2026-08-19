@@ -2,6 +2,10 @@ import Link from 'next/link';
 
 import type { BundleEntry } from '@/modules/methodologies';
 
+import type { PhraseKey } from '../i18n/dictionary';
+import type { PhraseParams } from '../i18n/phrase';
+import { serverT } from '../i18n/server-locale';
+
 import { SidePanel } from './side-panel';
 
 /**
@@ -33,18 +37,48 @@ export interface SpecsPanelProps {
   files: readonly SpecFileModel[];
 }
 
-function statusOf(file: SpecFileModel | undefined): { label: string; tone: string } {
+/**
+ * The three states a row can be in, as a phrase, a colour and a token (task 143).
+ *
+ * `kind` is the same distinction the label already draws, said in a way that survives translation:
+ * a walk that recognised «Approved» by reading it would stop recognising anything the moment the
+ * chrome is written in Russian, and «Rev 2» is not a state anyone can match on at all.
+ *
+ * The words themselves are a key rather than a sentence, and the key is resolved by the caller: the
+ * three states must agree in gender with the thing they describe — a document is «Одобрен», not
+ * «Одобрено» — so they belong beside this surface rather than in the shared dictionary, and a
+ * function that returned a rendered string would need a translator this deep for nothing.
+ */
+function statusOf(file: SpecFileModel | undefined): {
+  phrase: PhraseKey;
+  params?: PhraseParams;
+  tone: string;
+  kind: 'not-started' | 'draft' | 'approved';
+} {
   if (file === undefined || file.revisionCount === 0) {
-    return { label: 'Not started', tone: 'text-foreground-muted' };
+    return {
+      phrase: 'session.specs.status-not-started',
+      tone: 'text-foreground-muted',
+      kind: 'not-started',
+    };
   }
-  if (file.approved) return { label: 'Approved', tone: 'text-success-ink' };
+  if (file.approved) {
+    return { phrase: 'session.specs.status-approved', tone: 'text-success-ink', kind: 'approved' };
+  }
 
-  return { label: `Rev ${String(file.revisionCount)}`, tone: 'text-foreground-muted' };
+  return {
+    phrase: 'common.revision-badge',
+    params: { revision: file.revisionCount },
+    tone: 'text-foreground-muted',
+    kind: 'draft',
+  };
 }
 
-export function SpecsPanel({ plan, files }: SpecsPanelProps) {
+export async function SpecsPanel({ plan, files }: SpecsPanelProps) {
+  const t = await serverT();
+
   return (
-    <SidePanel title="Specs" testId="specs-panel">
+    <SidePanel title={t('session.specs.title')} testId="specs-panel">
       <ul className="flex flex-col gap-1.5">
         {plan.map((document) => {
           const file = files.find((candidate) => candidate.specType === document.specType);
@@ -89,14 +123,15 @@ export function SpecsPanel({ plan, files }: SpecsPanelProps) {
                     className="text-primary-ink text-xs hover:underline"
                     data-testid="specs-panel-diff"
                   >
-                    Diff
+                    {t('common.view-diff')}
                   </Link>
                 )}
                 <span
                   className={`text-xs whitespace-nowrap ${status.tone}`}
                   data-testid="specs-panel-status"
+                  data-status={status.kind}
                 >
-                  {status.label}
+                  {t(status.phrase, status.params)}
                 </span>
               </span>
             </li>

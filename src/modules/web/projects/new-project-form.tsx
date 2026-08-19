@@ -3,14 +3,23 @@
 import { useRouter } from 'next/navigation';
 import { useState, useSyncExternalStore, type SubmitEvent } from 'react';
 
-import { methodologiesForChatClass } from '@/modules/methodologies';
+import { methodologiesForChatClass, type MethodologyConfig } from '@/modules/methodologies';
 import {
   AUDIENCE_PROFILES,
   DEFAULT_AUDIENCE_PROFILE,
   type AudienceProfile,
 } from '@/modules/projects/audience';
 import { AUTO_METHODOLOGY } from '@/modules/projects/create-project';
+import {
+  DEFAULT_INTERVIEW_STYLE,
+  INTERVIEW_STYLES,
+  type InterviewStyle,
+} from '@/modules/projects/interview-style';
 
+import { type PhraseKey } from '../i18n/dictionary';
+import { methodologySummaryKey, stagePhraseKey } from '../i18n/dictionary/methodology';
+import { useT } from '../i18n/locale-context';
+import { type Translate } from '../i18n/translate';
 import { Button } from '../ui/button';
 import { Label, Textarea } from '../ui/field';
 
@@ -25,23 +34,45 @@ import { Label, Textarea } from '../ui/field';
  * The submit state is visible throughout, so the request never looks frozen (NFR-002).
  */
 
-const EMPTY_MESSAGE = 'Describe your idea in a sentence or two before starting.';
+const EMPTY_MESSAGE: PhraseKey = 'projects.new-project.prompt-empty';
 
 /**
  * How each profile reads to the person choosing it (У-5; task 106).
  *
  * The question is about *them*, not about the product: a founder who cannot tell a data model from a
  * deployment target should be able to answer it, and the wording has to make that possible.
+ *
+ * The table holds phrase keys rather than words (task 143), which keeps both properties it was built
+ * for: the `Record` still makes a profile without copy a compile error — task 144 adds a third — and
+ * the wording it points at is now the same object in both languages.
  */
-const AUDIENCE_COPY: Record<AudienceProfile, { label: string; description: string }> = {
+const AUDIENCE_COPY: Record<AudienceProfile, { label: PhraseKey; description: PhraseKey }> = {
   'non-technical': {
-    label: 'In plain language',
-    description: 'Questions in everyday words, with no engineering vocabulary.',
+    label: 'projects.new-project.audience-plain',
+    description: 'projects.new-project.audience-plain-hint',
   },
   technical: {
-    label: 'In technical terms',
-    description:
-      'Questions that name the engineering choices directly, with the trade-offs stated.',
+    label: 'projects.new-project.audience-technical',
+    description: 'projects.new-project.audience-technical-hint',
+  },
+};
+
+/**
+ * How each style reads to the person choosing it (task 144; директива заказчика 2026-08-18).
+ *
+ * The same table shape as the profile above, and beside it on screen, because the customer asked for
+ * the choice to be made **next to** the audience rather than inside it. The two axes are genuinely
+ * different questions — one is about the words, one is about the subject — and a reader who has just
+ * answered the first has to be able to see that the second is not it again.
+ */
+const STYLE_COPY: Record<InterviewStyle, { label: PhraseKey; description: PhraseKey }> = {
+  default: {
+    label: 'projects.new-project.style-default',
+    description: 'projects.new-project.style-default-hint',
+  },
+  concrete: {
+    label: 'projects.new-project.style-concrete',
+    description: 'projects.new-project.style-concrete-hint',
   },
 };
 
@@ -54,6 +85,34 @@ const AUDIENCE_COPY: Record<AudienceProfile, { label: string; description: strin
  * so choosing deliberately is possible for the person who does have a basis.
  */
 const GENERATE_METHODOLOGIES = methodologiesForChatClass('generate');
+
+/**
+ * The two fields of a configuration this surface prints as prose (task 143).
+ *
+ * Neither is translated in `methodologies/configs/*.ts`, and neither may be: the summary is rendered
+ * into the classifier's prompt, and a step label into the prompt that writes the document. The
+ * Russian lives in `i18n/dictionary/methodology.ts`, addressed by the configuration's id and — for a
+ * step — its index, because «Proposal» and «Tasks» each name a step in more than one workflow.
+ *
+ * A configuration the dictionary does not name falls back to its own English rather than to a gap:
+ * the picker must still be able to offer a workflow this build ships.
+ */
+function summaryOf(t: Translate, config: MethodologyConfig): string {
+  const key = methodologySummaryKey(config.id);
+
+  return key === null ? config.summary : t(key);
+}
+
+/** The step chain under an option, in the words the session's rail will use. */
+function stepChain(t: Translate, config: MethodologyConfig): string {
+  return config.steps
+    .map((step, index) => {
+      const key = stagePhraseKey(config.id, index);
+
+      return key === null ? step.label : t(key);
+    })
+    .join(' → ');
+}
 
 interface CreatedProject {
   projectId: string;
@@ -74,10 +133,12 @@ function isCreatedProject(value: unknown): value is CreatedProject {
 
 export function NewProjectForm() {
   const router = useRouter();
+  const t = useT();
   const [prompt, setPrompt] = useState('');
   const [audience, setAudience] = useState<AudienceProfile>(DEFAULT_AUDIENCE_PROFILE);
+  const [style, setStyle] = useState<InterviewStyle>(DEFAULT_INTERVIEW_STYLE);
   const [methodology, setMethodology] = useState<string>(AUTO_METHODOLOGY);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<PhraseKey | null>(null);
   const [submitting, setSubmitting] = useState(false);
   /*
    * The form is JavaScript-driven: it posts with `fetch` and navigates on the response. Before
@@ -109,12 +170,12 @@ export function NewProjectForm() {
       const response = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, audience, methodology }),
+        body: JSON.stringify({ prompt, audience, style, methodology }),
       });
       const payload: unknown = await response.json().catch(() => null);
 
       if (!response.ok || !isCreatedProject(payload)) {
-        setError('The project could not be created. Please try again.');
+        setError('projects.new-project.failed');
         return;
       }
 
@@ -122,7 +183,7 @@ export function NewProjectForm() {
       // been created has exactly one conversation, and it is the one the user came here to have.
       router.push(`/sessions/${payload.sessionId}`);
     } catch {
-      setError('The project could not be created. Please try again.');
+      setError('projects.new-project.failed');
     } finally {
       setSubmitting(false);
     }
@@ -136,7 +197,7 @@ export function NewProjectForm() {
       className="flex flex-col gap-3"
       noValidate
     >
-      <Label htmlFor="prompt">What do you want to build?</Label>
+      <Label htmlFor="prompt">{t('projects.new-project.prompt-label')}</Label>
       <Textarea
         id="prompt"
         name="prompt"
@@ -146,7 +207,7 @@ export function NewProjectForm() {
           setPrompt(event.target.value);
           if (error !== null) setError(null);
         }}
-        placeholder="A recipe app for cooks who hate scrolling past life stories."
+        placeholder={t('projects.new-project.prompt-placeholder')}
         aria-invalid={error !== null}
         aria-describedby={error === null ? undefined : 'prompt-error'}
         disabled={submitting}
@@ -159,7 +220,7 @@ export function NewProjectForm() {
           data-testid="prompt-error"
           className="text-sm text-danger-ink"
         >
-          {error}
+          {t(error)}
         </p>
       )}
 
@@ -169,7 +230,7 @@ export function NewProjectForm() {
         as the first — an interviewer who changed voice halfway through would read as two people.
       */}
       <fieldset className="flex flex-col gap-2" data-testid="audience-profile">
-        <legend className="text-sm font-medium">How should the questions be worded?</legend>
+        <legend className="text-sm font-medium">{t('projects.new-project.audience-legend')}</legend>
         {AUDIENCE_PROFILES.map((profile) => (
           <label
             key={profile}
@@ -188,9 +249,51 @@ export function NewProjectForm() {
               className="mt-0.5"
             />
             <span>
-              <span className="font-medium">{AUDIENCE_COPY[profile].label}</span>
+              <span className="font-medium">{t(AUDIENCE_COPY[profile].label)}</span>
               <span className="text-foreground-muted block text-xs">
-                {AUDIENCE_COPY[profile].description}
+                {t(AUDIENCE_COPY[profile].description)}
+              </span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+
+      {/*
+        The interview's subject, beside its register (task 144; директива заказчика 2026-08-18).
+
+        Its own fieldset rather than a third radio in the one above, because the two are not
+        alternatives: «in plain language» and «what to build and how you will use it» are answers to
+        different questions, and a session picks one of each. The style then displaces the profile's
+        register inside the prompt — that ruling belongs to `audienceRules`, and the form's job is
+        only to ask both questions plainly.
+
+        The profile's fieldset above is untouched, ids and all: `e2e/interview.spec.ts` pins
+        `audience-profile` and its radios as the proof that the register is asked once and never
+        again, and a claim about У-5 must not start failing because a second axis moved in beside it.
+      */}
+      <fieldset className="flex flex-col gap-2" data-testid="interview-style">
+        <legend className="text-sm font-medium">{t('projects.new-project.style-legend')}</legend>
+        {INTERVIEW_STYLES.map((available) => (
+          <label
+            key={available}
+            className="border-border-subtle hover:bg-background flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm"
+          >
+            <input
+              type="radio"
+              name="style"
+              value={available}
+              checked={style === available}
+              onChange={() => {
+                setStyle(available);
+              }}
+              data-testid={`style-${available}`}
+              disabled={submitting}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium">{t(STYLE_COPY[available].label)}</span>
+              <span className="text-foreground-muted block text-xs">
+                {t(STYLE_COPY[available].description)}
               </span>
             </span>
           </label>
@@ -203,7 +306,9 @@ export function NewProjectForm() {
         workflow on any failure, silently — the user asked for a recommendation, not a report.
       */}
       <fieldset className="flex flex-col gap-2" data-testid="methodology-picker">
-        <legend className="text-sm font-medium">Which workflow?</legend>
+        <legend className="text-sm font-medium">
+          {t('projects.new-project.methodology-legend')}
+        </legend>
 
         <label className="border-border-subtle hover:bg-background flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm">
           <input
@@ -219,9 +324,9 @@ export function NewProjectForm() {
             className="mt-0.5"
           />
           <span>
-            <span className="font-medium">Auto</span>
+            <span className="font-medium">{t('projects.new-project.methodology-auto')}</span>
             <span className="text-foreground-muted block text-xs">
-              Pick the workflow that fits the description.
+              {t('projects.new-project.methodology-auto-hint')}
             </span>
           </span>
         </label>
@@ -244,7 +349,14 @@ export function NewProjectForm() {
               className="mt-0.5"
             />
             <span>
-              <span className="font-medium">
+              {/*
+                Identity, not copy (task 143). A methodology is named by its vendor, its flavour and
+                its version, and those three are the same three words in every language — the
+                voice standard keeps product names in Latin for the same reason it keeps
+                `constitution.md` in Latin. `data-identity` says so out loud, so the locale walk can
+                tell a name it must not translate from a label somebody forgot to.
+              */}
+              <span className="font-medium" data-identity>
                 {config.badge.vendor} · {config.badge.flavour} · {config.badge.version}
               </span>
               {/*
@@ -257,12 +369,13 @@ export function NewProjectForm() {
               <span
                 className="text-foreground-muted block text-xs"
                 data-testid={`methodology-name-${config.id}`}
+                data-identity
               >
                 {config.name}
               </span>
-              <span className="text-foreground-muted block text-xs">{config.summary}</span>
+              <span className="text-foreground-muted block text-xs">{summaryOf(t, config)}</span>
               <span className="text-foreground-muted mt-1 block font-mono text-[11px]">
-                {config.steps.map((step) => step.label).join(' → ')}
+                {stepChain(t, config)}
               </span>
             </span>
           </label>
@@ -275,7 +388,7 @@ export function NewProjectForm() {
         disabled={!ready || submitting}
         className="self-start"
       >
-        {submitting ? 'Starting…' : 'Start a session'}
+        {submitting ? t('projects.new-project.submitting') : t('projects.new-project.submit')}
       </Button>
     </form>
   );

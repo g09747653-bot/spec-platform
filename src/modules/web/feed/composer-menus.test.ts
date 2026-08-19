@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { LOCALES } from '../i18n/phrase';
+import { translator } from '../i18n/translate';
+
 import {
   applyReference,
   matchingCommands,
@@ -50,6 +53,41 @@ describe('slash commands', () => {
 
     expect(controls.every((control) => control.length > 0)).toBe(true);
     expect(new Set(controls).size).toBe(controls.length);
+  });
+
+  /**
+   * The label is typed and the description is read (task 143).
+   *
+   * `/proceed` is what a person types and what `slashQuery` matches on, so it is an identifier and
+   * stays the same in every language; the line underneath is the only copy in this table, and it is
+   * a key. `satisfies` already makes a key that does not exist a compile error — what it cannot see
+   * is a key that exists and is *wrong*, and the way that happens here is a copy-paste: two entries
+   * pointing at one description is a menu telling the reader that two commands do the same thing.
+   *
+   * Asserted in both languages because that is where the cost of the mistake lands. A missing
+   * Russian half is a type error; a Russian half quietly left as a duplicate of its neighbour's is
+   * not, and this menu is eight lines of near-identical shape read at a glance.
+   */
+  it('describes every command distinctly, in both languages', () => {
+    for (const locale of LOCALES) {
+      const t = translator(locale);
+      const described = SLASH_COMMANDS.map((command) => t(command.description));
+
+      for (const [index, text] of described.entries()) {
+        expect(text.trim(), `${SLASH_COMMANDS[index]?.id ?? ''} in ${locale}`).not.toBe('');
+      }
+
+      expect(new Set(described).size, `two commands share a description in ${locale}`).toBe(
+        described.length,
+      );
+    }
+  });
+
+  /** The typed half: a slash command is a thing a person types, so it is never translated. */
+  it('keeps the command itself an identifier', () => {
+    for (const command of SLASH_COMMANDS) {
+      expect(command.label, command.id).toBe(`/${command.id}`);
+    }
   });
 });
 

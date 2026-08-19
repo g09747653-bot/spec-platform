@@ -31,6 +31,31 @@ describe('the toast store', () => {
     expect(toastSnapshot()[0]?.tone).toBe('info');
   });
 
+  /*
+   * Task 143. A walk that waits for «Chat archived.» is a walk that breaks the day the sentence is
+   * translated, so the store carries the identity of the event alongside the words that report it.
+   * Optional, because a toast is still a toast without one and the store is not the place to force
+   * every call site to have been updated.
+   */
+  it('carries the kind of event that raised it', () => {
+    const id = showToast('Chat archived. Restore it from Archived.', 'success', 'chat-archived');
+
+    expect(toastSnapshot()).toEqual([
+      {
+        id,
+        message: 'Chat archived. Restore it from Archived.',
+        tone: 'success',
+        kind: 'chat-archived',
+      },
+    ]);
+  });
+
+  it('leaves the kind absent when the caller names no event', () => {
+    showToast('Something happened.');
+
+    expect(toastSnapshot()[0]?.kind).toBeUndefined();
+  });
+
   it('keeps ids unique so two identical messages are two toasts', () => {
     const first = showToast('Copied.');
     const second = showToast('Copied.');

@@ -4,12 +4,16 @@ import { createSignedInUser, signIn } from './fixtures/auth';
 import { reachDrafting, startSession } from './fixtures/journey';
 
 /**
- * The document viewer as a door on every card (task 138).
+ * The document viewer as a door on every card (task 138), as the overlay of task 147.
  *
  * The customer's words: their reference opens a generated file into a full reading surface, ours
  * opened «a small window». These tests assert the three states the acceptance criterion names —
  * being written, drafted, approved — plus the two things the header was asked for (line and word
  * counts that are true) and the invariant an open viewer must not cost (Stop stays reachable).
+ *
+ * Task 147 added the composition to that list: one width in every view, the outline dropped over a
+ * document that stays visible, Copy and Download in the header naming the revision on screen, and
+ * three ways out — the ✕, Escape and the scrim.
  */
 test.describe('the document viewer pane', () => {
   test('opens from a drafted card and from an approved one, in all four views', async ({
@@ -31,36 +35,64 @@ test.describe('the document viewer pane', () => {
 
     await expect(page.getByTestId('viewer-pane')).toBeVisible();
     await expect(page.getByTestId('viewer-pane-name')).toHaveText('constitution.md');
-    await expect(page.getByTestId('viewer-metric-revision')).toHaveText('Rev 1');
+    // Which revision the pane is reading, from the header's own attribute rather than «Rev 1».
+    await expect(page.getByTestId('viewer-metric-revision')).toHaveAttribute('data-revision', '1');
+
+    /*
+     * One width in every view (task 147 AC), measured rather than eyeballed: the overlay's width is
+     * a decision — `max-w-4xl` — and no view may widen it by being wide. That is the property whose
+     * absence made D-205 possible.
+     */
+    const widths = new Map<string, number>();
 
     for (const view of ['outline', 'preview', 'raw', 'diff'] as const) {
       await page.getByTestId(`viewer-pane-tab-${view}`).click();
       await expect(page.getByTestId('viewer-pane')).toHaveAttribute('data-view', view);
+      // The control the reader pressed says it is the one showing, and the others say they are not.
+      await expect(page.getByTestId(`viewer-pane-tab-${view}`)).toHaveAttribute(
+        'data-state',
+        'current',
+      );
+
+      const box = await page.getByTestId('viewer-pane').boundingBox();
+      widths.set(view, Math.round(box?.width ?? 0));
     }
 
+    expect(
+      new Set(widths.values()).size,
+      `the four views differ in width: ${JSON.stringify([...widths])}`,
+    ).toBe(1);
+
     // Rev 1 has no predecessor, and the Diff view says so rather than erroring.
+    await page.getByTestId('viewer-pane-tab-diff').click();
     await expect(page.getByTestId('viewer-pane-diff-empty')).toBeVisible();
+
+    /*
+     * Outline is a panel dropped from its own button, not a fourth pane (task 147; video §1): the
+     * document stays on screen underneath it, which is the difference a reader notices.
+     */
+    await page.getByTestId('viewer-pane-tab-outline').click();
+    await expect(page.getByTestId('viewer-pane-outline')).toBeVisible();
+    await expect(page.getByTestId('viewer-pane-diff-empty')).toBeVisible();
+    await page.getByTestId('viewer-pane-tab-outline').click();
+    await expect(page.getByTestId('viewer-pane-outline')).toHaveCount(0);
 
     // Raw carries a number for every line of the document (task 138 AC).
     await page.getByTestId('viewer-pane-tab-raw').click();
     const raw = (await page.getByTestId('viewer-raw').textContent()) ?? '';
     const lines = raw.replace(/\n$/u, '').split('\n').length;
-    await expect(page.getByTestId('viewer-raw-gutter')).toHaveAttribute(
-      'data-lines',
-      String(lines),
-    );
-    /*
-     * Located by element rather than by role: the gutter is `aria-hidden`, so its items are not in
-     * the accessibility tree at all — which is the intended behaviour (a screen reader should not
-     * read a column of digits before the document) and would make a role query find nothing.
-     */
-    await expect(page.getByTestId('viewer-raw-gutter').locator('li')).toHaveCount(lines);
-    await expect(page.getByTestId('viewer-raw-gutter').locator('li').first()).toHaveText('1');
-    await expect(page.getByTestId('viewer-raw-gutter').locator('li').last()).toHaveText(
-      String(lines),
-    );
 
-    // The whole document is on screen, not an excerpt: the pane is far wider than the card's well.
+    /*
+     * The numbers are a CSS counter over one span per logical line, not a parallel `<ol>` of `<li>`
+     * (task 147): a line that wraps must not carry its number onto the second visual line, and a
+     * column of numbered elements beside the text cannot do that — it aligns only while every
+     * logical line occupies exactly one line box. So `data-lines` moved onto the `<pre>` and the
+     * count is taken from the spans the counter increments.
+     */
+    await expect(page.getByTestId('viewer-raw')).toHaveAttribute('data-lines', String(lines));
+    await expect(page.getByTestId('viewer-raw').locator('.raw-line')).toHaveCount(lines);
+
+    // The whole document is on screen, not an excerpt: the panel is far wider than the card's well.
     const pane = await page.getByTestId('viewer-pane').boundingBox();
     expect(Math.round(pane?.width ?? 0)).toBeGreaterThan(400);
 
@@ -71,11 +103,12 @@ test.describe('the document viewer pane', () => {
 
     // 2 — approved: the same door, on a card that has been decided.
     await page.getByTestId('approve-spec').click();
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
 
     await page.getByTestId('spec-card').getByTestId('open-viewer').click();
     await expect(page.getByTestId('viewer-pane')).toBeVisible();
-    await expect(page.getByTestId('viewer-pane-metrics')).toContainText('approved');
+    // The decision travels with the document: the pane's own header knows it, not just the card.
+    await expect(page.getByTestId('viewer-pane-metrics')).toHaveAttribute('data-approved', 'true');
 
     /*
      * The counts are the exported bytes' own counts (task 138 AC). Fetched from the endpoint the
@@ -92,12 +125,38 @@ test.describe('the document viewer pane', () => {
     const expectedLines = exported.replace(/\n$/u, '').split('\n').length;
     const expectedWords = exported.trim().split(/\s+/u).length;
 
-    await expect(page.getByTestId('viewer-metric-lines')).toHaveText(
-      `${String(expectedLines)} lines`,
+    await expect(page.getByTestId('viewer-metric-lines')).toHaveAttribute(
+      'data-lines',
+      String(expectedLines),
     );
-    await expect(page.getByTestId('viewer-metric-words')).toHaveText(
-      `${String(expectedWords)} words`,
+    await expect(page.getByTestId('viewer-metric-words')).toHaveAttribute(
+      'data-words',
+      String(expectedWords),
     );
+
+    /*
+     * Copy and Download live in the header now (task 147), which is why they are asked for here
+     * rather than from inside Raw: they are about the document, not about one way of reading it.
+     *
+     * Both name the revision on screen. Download's `href` is the assertion that closes the defect —
+     * without `?rev=` the endpoint answers «which bytes would be exported», which is the latest
+     * *approved* revision and not necessarily the one being read. The `download` attribute is what
+     * turns that same URL from a page into a save.
+     */
+    await page.getByTestId('viewer-pane-tab-preview').click();
+    await expect(page.getByTestId('viewer-copy')).toBeVisible();
+
+    const download = page.getByTestId('viewer-download');
+    await expect(download).toHaveAttribute('href', `/api/specs/${specFileId}/content?rev=1`);
+    await expect(download).toHaveAttribute('download', 'constitution.md');
+
+    /*
+     * And the bytes on screen are the bytes that leave. The Raw view's `textContent` is compared
+     * with the endpoint's answer character for character — the property the CSS-counter gutter
+     * exists to preserve, and the one an interleaved column of numbers would have destroyed.
+     */
+    await page.getByTestId('viewer-pane-tab-raw').click();
+    expect(await page.getByTestId('viewer-raw').textContent()).toBe(exported);
   });
 
   test('opens on a document still being written, and Stop stays reachable', async ({
@@ -142,7 +201,11 @@ test.describe('the document viewer pane', () => {
 
     await page.getByTestId('viewer-pane-tab-raw').click();
     await expect(page.getByTestId('viewer-raw')).toContainText('# Constitution');
-    await expect(page.getByTestId('viewer-metric-revision')).toHaveText('Draft in progress');
+    // No stored revision behind these words yet — the header reads the draft, not a numbered one.
+    await expect(page.getByTestId('viewer-metric-revision')).toHaveAttribute(
+      'data-revision',
+      'draft',
+    );
 
     /*
      * Д-1 with the viewer open: the control that ends the wait is on the surface being looked at.
@@ -180,6 +243,16 @@ test.describe('the document viewer pane', () => {
     }
 
     await page.keyboard.press('Escape');
+    await expect(page.getByTestId('viewer-pane')).toHaveCount(0);
+
+    /*
+     * The third way out, which the overlay owes its reader (task 147): the page around it is
+     * visible, so pressing it means «put this away» — the same behaviour the shortcuts dialog has.
+     * Pressed at the very corner of the scrim, where nothing but the scrim can be.
+     */
+    await page.keyboard.press('v');
+    await expect(page.getByTestId('viewer-pane')).toBeVisible();
+    await page.getByTestId('viewer-overlay').click({ position: { x: 4, y: 4 } });
     await expect(page.getByTestId('viewer-pane')).toHaveCount(0);
   });
 });

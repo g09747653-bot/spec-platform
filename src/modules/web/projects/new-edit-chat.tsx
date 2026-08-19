@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { z } from 'zod';
 
+import { type PhraseKey } from '../i18n/dictionary';
+import { useT } from '../i18n/locale-context';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 
@@ -34,9 +36,10 @@ export function NewEditChat({
   files: readonly ReferenceableFile[];
 }) {
   const router = useRouter();
+  const t = useT();
   const [picked, setPicked] = useState<string[]>(files.map((file) => file.specFileId));
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<PhraseKey | null>(null);
 
   async function start() {
     setBusy(true);
@@ -51,19 +54,19 @@ export function NewEditChat({
       const payload: unknown = await response.json().catch(() => null);
 
       if (!response.ok) {
-        setError('That edit could not be started. Please try again.');
+        setError('projects.edit-chat.failed');
         return;
       }
 
       const parsed = CreatedChat.safeParse(payload);
       if (!parsed.success) {
-        setError('That edit could not be started. Please try again.');
+        setError('projects.edit-chat.failed');
         return;
       }
 
       router.push(`/sessions/${parsed.data.sessionId}`);
     } catch {
-      setError('That edit could not be started. Please try again.');
+      setError('projects.edit-chat.failed');
     } finally {
       setBusy(false);
     }
@@ -72,11 +75,11 @@ export function NewEditChat({
   return (
     <Card data-testid="new-edit-chat">
       <CardHeader>
-        <CardTitle>Edit this bundle</CardTitle>
+        <CardTitle>{t('projects.edit-chat.title')}</CardTitle>
         <CardDescription>
           {files.length === 0
-            ? 'Nothing in this bundle has been approved yet, so there is nothing to edit. Approve a document first.'
-            : 'Pick the documents this edit may touch. The chat opens on a sentence you finish.'}
+            ? t('projects.edit-chat.nothing-approved')
+            : t('projects.edit-chat.pick')}
         </CardDescription>
       </CardHeader>
 
@@ -103,7 +106,7 @@ export function NewEditChat({
                 <span>
                   {file.fileName}
                   <span className="text-foreground-muted ml-2 text-xs">
-                    Rev {file.revisionNumber}
+                    {t('common.revision-badge', { revision: file.revisionNumber })}
                   </span>
                 </span>
               </label>
@@ -112,7 +115,7 @@ export function NewEditChat({
 
           {error !== null && (
             <p role="alert" className="text-sm text-danger-ink" data-testid="edit-chat-error">
-              {error}
+              {t(error)}
             </p>
           )}
 
@@ -124,7 +127,7 @@ export function NewEditChat({
               void start();
             }}
           >
-            {busy ? 'Opening…' : 'Start edit chat'}
+            {busy ? t('projects.edit-chat.starting') : t('projects.edit-chat.start')}
           </Button>
         </CardContent>
       )}

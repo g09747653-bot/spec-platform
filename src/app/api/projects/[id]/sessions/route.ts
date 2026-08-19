@@ -106,8 +106,17 @@ export async function POST(
     methodologyId: editConfig.id,
     entryStage: entry.stage,
     entrySubstage: entry.substage,
-    /* The chat inherits how the project speaks: audience register (У-5) and language (У-1). */
-    audience: 'non-technical',
+    /*
+     * The chat inherits how the project speaks: audience register (У-5), interview style (task 144)
+     * and language (У-1) — all three read from the chat that produced the bundle.
+     *
+     * The register used to be the literal `'non-technical'` under this same comment, so a project
+     * interviewed in engineering terms switched to plain words the moment its owner edited it —
+     * two interviewers on one project, which is the defect У-5 was written to remove. The language
+     * was inherited correctly all along; the other two now are as well.
+     */
+    audience: project.audienceProfile,
+    style: project.interviewStyle,
     contentLanguage: project.contentLanguage,
   });
 

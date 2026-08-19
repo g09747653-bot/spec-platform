@@ -1,5 +1,3 @@
-import { methodologyConfig } from '@/modules/methodologies';
-
 import type { StagePosition } from './model/stages';
 import type { WorkflowSnapshot } from './snapshot';
 import { transitionTable } from './transition-table';
@@ -93,12 +91,19 @@ export function nextPosition(snapshot: WorkflowSnapshot): StagePosition | null {
  */
 export interface ForwardDoor {
   to: StagePosition;
-  /** What the door is called: the next step's label, or `Complete`. */
-  label: string;
 }
 
+/**
+ * A door is a position and nothing else since task 143.
+ *
+ * It used to carry a `label` as well — the next step's name out of the methodology's configuration,
+ * or the word `Complete`. That made this module the second place naming a position to a person, and
+ * a place with no way of knowing which language the person reads: `workflow` may not import `web`,
+ * so the string could only ever have been English. The page names the door with `stageLabel`, which
+ * is the same function the step pill and the stage chip use, so all three now agree in both
+ * languages instead of agreeing by coincidence in one.
+ */
 export function forwardDoors(snapshot: WorkflowSnapshot): ForwardDoor[] {
-  const config = methodologyConfig(snapshot.methodologyId);
   const { position } = snapshot;
 
   return transitionTable(snapshot.methodologyId)
@@ -111,11 +116,5 @@ export function forwardDoors(snapshot: WorkflowSnapshot): ForwardDoor[] {
         (row.gate !== 'tasks-to-quality' || qualityIsTheWayOn(snapshot)) &&
         (row.gate !== 'tasks-to-complete' || !qualityIsTheWayOn(snapshot)),
     )
-    .map((row) => ({
-      to: row.to,
-      label:
-        row.to.stage === 'complete'
-          ? 'Complete'
-          : (config.steps.find((step) => step.stage === row.to.stage)?.label ?? row.to.stage),
-    }));
+    .map((row) => ({ to: row.to }));
 }

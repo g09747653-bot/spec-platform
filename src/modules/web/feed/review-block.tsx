@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { type PhraseKey } from '../i18n/dictionary';
+import { useT } from '../i18n/locale-context';
 import { REASON_EXPLANATION } from '../session/gate-copy';
 import { Button } from '../ui/button';
 
@@ -36,21 +38,17 @@ import type { FeedReviewItem, ReviewBlock as ReviewBlockModel } from './model';
  */
 type Action = 'accept' | 'ignore' | 'request_changes';
 
-const CONFIDENCE_TOOLTIP =
-  'How certain the AI reviewer is that this feedback is accurate. It is the reviewer’s own estimate, not a measurement.';
-
-const LINTER_TOOLTIP =
-  'Found by a deterministic check over the document itself — a cross-reference, an identifier, or a requirement’s form. No model was asked.';
-
 function ConfidenceBadge({ item }: { item: FeedReviewItem }) {
+  const t = useT();
+
   if (item.source === 'linter') {
     return (
       <span
         className="border-border-subtle text-foreground-muted rounded-full border px-2 py-0.5 text-[0.7rem] whitespace-nowrap"
-        title={LINTER_TOOLTIP}
+        title={t('feed.review.linter-tooltip')}
         data-testid={`review-item-source-${item.id}`}
       >
-        Automated check
+        {t('feed.review.source-linter')}
       </span>
     );
   }
@@ -58,10 +56,15 @@ function ConfidenceBadge({ item }: { item: FeedReviewItem }) {
   return (
     <span
       className="border-border-subtle text-foreground-muted rounded-full border px-2 py-0.5 text-[0.7rem] whitespace-nowrap"
-      title={CONFIDENCE_TOOLTIP}
+      title={t('feed.review.confidence-tooltip')}
       data-testid={`review-item-confidence-${item.id}`}
+      /*
+        The score on its own, away from the sentence and the `/10` it is printed in (task 143):
+        what a suite wants to know is the number the reviewer gave, not how this badge phrases it.
+      */
+      data-confidence={String(item.confidence)}
     >
-      Confidence score {item.confidence}/10
+      {t('feed.review.confidence', { score: item.confidence })}
     </span>
   );
 }
@@ -80,6 +83,8 @@ function ItemRow({
   onToggle: ((id: string) => void) | null;
   testIdPrefix: string;
 }) {
+  const t = useT();
+
   /*
    * The section path is the heading, and the title opens the body (task 134; row `1.3-4`).
    *
@@ -100,7 +105,8 @@ function ItemRow({
         <span className="font-medium">{item.title}</span> — {item.body}
       </span>
       <span className="block text-xs italic" data-testid={`review-item-suggestion-${item.id}`}>
-        Suggestion: {item.suggestion}
+        {t('feed.review.suggestion-label')}
+        {item.suggestion}
       </span>
     </span>
   );
@@ -137,7 +143,7 @@ function ItemRow({
 }
 
 function ItemGroup({
-  title,
+  heading,
   items,
   tone,
   testId,
@@ -146,7 +152,13 @@ function ItemGroup({
   selected,
   onToggle,
 }: {
-  title: string;
+  /**
+   * The group's heading, as a key: «Must Fix» is a decision about vocabulary, not a caption.
+   *
+   * Named `heading` rather than `title` because `title` is an attribute a browser paints, and the
+   * lint rule that keeps copy out of components reads it as one wherever it appears (task 143).
+   */
+  heading: PhraseKey;
   items: readonly FeedReviewItem[];
   tone: 'blocking' | 'advisory';
   testId: string;
@@ -155,6 +167,8 @@ function ItemGroup({
   selected: ReadonlySet<string>;
   onToggle: ((id: string) => void) | null;
 }) {
+  const t = useT();
+
   if (items.length === 0) return null;
 
   /*
@@ -166,7 +180,7 @@ function ItemGroup({
     <details open className="flex flex-col gap-2" data-testid={testId}>
       <summary className="cursor-pointer text-sm font-semibold">
         <span className={tone === 'blocking' ? 'text-danger-ink' : undefined}>
-          {title} ({items.length})
+          {t(heading)} ({items.length})
         </span>
       </summary>
       <ul className="mt-2 flex flex-col gap-2">
@@ -187,6 +201,8 @@ function ItemGroup({
 }
 
 function VerdictBadge({ outcome }: { outcome: 'pass' | 'needs_revision' }) {
+  const t = useT();
+
   return (
     <span
       className={
@@ -195,20 +211,34 @@ function VerdictBadge({ outcome }: { outcome: 'pass' | 'needs_revision' }) {
           : 'rounded-full border border-warning-ink/40 px-2 py-0.5 text-xs text-warning-ink'
       }
       data-testid="review-outcome"
+      /*
+        The verdict as the review itself spells it (task 143). A walk that asserted «Needs Revision»
+        was asserting the English on the badge, and the English is the one thing about this badge
+        that is free to change.
+      */
+      data-outcome={outcome}
     >
-      {outcome === 'pass' ? 'Pass' : 'Needs Revision'}
+      {outcome === 'pass' ? t('feed.review.outcome-pass') : t('feed.review.outcome-needs-revision')}
     </span>
   );
 }
 
-const DECISION_COPY: Record<Action, string> = {
-  accept: 'You accepted this feedback and moved on with the document as it stands.',
-  ignore: 'You set this feedback aside.',
-  request_changes: 'You sent the document back with these points ticked.',
+/**
+ * What the user decided, said back to them.
+ *
+ * Keys rather than sentences (task 143), so the table keeps the exhaustiveness it has over `Action`
+ * — a fourth decision would still be a type error — while the three sentences move to where both
+ * languages of each can be read on one screen.
+ */
+const DECISION_COPY: Record<Action, PhraseKey> = {
+  accept: 'feed.review.decided-accept',
+  ignore: 'feed.review.decided-ignore',
+  request_changes: 'feed.review.decided-request-changes',
 };
 
 export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; pending: boolean }) {
   const router = useRouter();
+  const t = useT();
 
   const mustFix = block.items.filter((item) => item.severity === 'blocking');
   const recommendations = block.items.filter((item) => item.severity === 'advisory');
@@ -260,13 +290,13 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
       });
 
       if (!response.ok) {
-        setError('That decision did not go through. Please try again.');
+        setError(t('feed.review.decision-error'));
         return;
       }
 
       router.refresh();
     } catch {
-      setError('That decision did not go through. Please try again.');
+      setError(t('feed.review.decision-error'));
     } finally {
       setBusy(null);
     }
@@ -274,7 +304,11 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
 
   const header = (
     <div className="flex flex-wrap items-center gap-2">
-      <BlockCaption stage={block.specType} trailing="review" tone={pending ? 'primary' : 'muted'} />
+      <BlockCaption
+        stage={block.specType}
+        trailing="feed.caption.review"
+        tone={pending ? 'primary' : 'muted'}
+      />
       <VerdictBadge outcome={block.outcome} />
     </div>
   );
@@ -305,10 +339,10 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
      */
     const decisionLine =
       decided !== null
-        ? DECISION_COPY[decided]
+        ? t(DECISION_COPY[decided])
         : superseded
           ? null
-          : 'Something else is in front of you just now — this board is still open.';
+          : t('feed.review.still-open');
 
     return (
       <FeedItem block={block}>
@@ -333,12 +367,19 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
           */}
           <div className="flex flex-wrap items-center gap-2">
             {header}
+            {/*
+              The one layout change the translation asks for (task 143; voice standard §1.3).
+              `uppercase` is gone from this badge and stays on every other micro-label: Cyrillic
+              capitals are a row of near-identical rectangles, so a caps string much past two dozen
+              characters stops reading as words. «Заменена — новая рецензия ниже» is exactly at that
+              edge, and it is the only micro-label in the product long enough to reach it.
+            */}
             {superseded && (
               <span
                 data-testid="review-superseded-badge"
-                className="border-border-subtle text-foreground-subtle text-label rounded-full border px-2 py-0.5 uppercase"
+                className="border-border-subtle text-foreground-subtle text-label rounded-full border px-2 py-0.5"
               >
-                Superseded — a newer review is below
+                {t('feed.review.superseded')}
               </span>
             )}
           </div>
@@ -355,20 +396,39 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
             open={!superseded}
             className="mt-3 flex flex-col gap-3"
           >
+            {/*
+              A board that raised nothing says so in words (task 143; voice standard §4). «0 points
+              in all» is a counter reporting an absence as a measurement — the same defect the empty
+              archive and the unwritten document already avoid — and it is a sentence in both
+              languages rather than a plural form of zero.
+            */}
             <summary className="text-foreground-muted cursor-pointer text-sm">
-              {total} {total === 1 ? 'point' : 'points'} in all
+              {total === 0
+                ? t('feed.review.points-none')
+                : t('feed.review.points-total', { count: total })}
             </summary>
 
             <div className="mt-3 flex flex-col gap-3">
               {summary}
               {decisionLine !== null && (
-                <p className="text-foreground-muted text-sm" data-testid="review-decision">
+                <p
+                  className="text-foreground-muted text-sm"
+                  data-testid="review-decision"
+                  /*
+                    The decision in the table's own spelling, and absent when there is none
+                    (task 143). The third case above gives this line to a board nobody has decided
+                    yet, and a token minted to fill that gap would state a decision the
+                    `review_feedback` row does not have — the same lie the copy is careful not to
+                    tell there.
+                  */
+                  data-decision={decided ?? undefined}
+                >
                   {decisionLine}
                 </p>
               )}
 
               <ItemGroup
-                title="Must Fix"
+                heading="feed.review.group-must-fix"
                 items={mustFix}
                 tone="blocking"
                 testId="review-mustfix"
@@ -378,7 +438,7 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
                 onToggle={null}
               />
               <ItemGroup
-                title="Recommendations"
+                heading="feed.review.group-recommendations"
                 items={recommendations}
                 tone="advisory"
                 testId="review-recommendations"
@@ -413,13 +473,11 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
         {summary}
 
         <p className="text-foreground-muted text-sm">
-          {total === 0
-            ? 'The reviewer found nothing to raise. Nothing advances until you decide.'
-            : 'Ticked points are the ones a rewrite would apply. Nothing advances until you decide.'}
+          {total === 0 ? t('feed.review.hint-empty') : t('feed.review.hint-ticked')}
         </p>
 
         <ItemGroup
-          title="Must Fix"
+          heading="feed.review.group-must-fix"
           items={mustFix}
           tone="blocking"
           testId="review-mustfix"
@@ -429,7 +487,7 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
           onToggle={toggle}
         />
         <ItemGroup
-          title="Recommendations"
+          heading="feed.review.group-recommendations"
           items={recommendations}
           tone="advisory"
           testId="review-recommendations"
@@ -447,7 +505,7 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
 
         {exhausted && (
           <p className="text-foreground-muted text-sm" data-testid="review-cycles-exhausted">
-            {REASON_EXPLANATION.REVISION_LIMIT_REACHED}
+            {t(REASON_EXPLANATION.REVISION_LIMIT_REACHED)}
           </p>
         )}
 
@@ -459,7 +517,7 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
               void decide('accept');
             }}
           >
-            {busy === 'accept' ? 'Accepting…' : 'Accept feedback'}
+            {busy === 'accept' ? t('feed.review.accept-busy') : t('feed.review.accept')}
           </Button>
           {!exhausted && (
             <Button
@@ -470,7 +528,7 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
                 void decide('request_changes');
               }}
             >
-              {busy === 'request_changes' ? 'Sending…' : 'Request changes'}
+              {busy === 'request_changes' ? t('common.sending') : t('common.request-changes')}
             </Button>
           )}
           <Button
@@ -481,13 +539,13 @@ export function ReviewBlockCard({ block, pending }: { block: ReviewBlockModel; p
               void decide('ignore');
             }}
           >
-            {busy === 'ignore' ? 'Ignoring…' : 'Ignore'}
+            {busy === 'ignore' ? t('feed.review.ignore-busy') : t('feed.review.ignore')}
           </Button>
         </div>
 
         {!exhausted && selected.size === 0 && total > 0 && (
           <p className="text-foreground-muted text-xs" data-testid="review-selection-hint">
-            Requesting changes needs at least one point ticked — only the ticked ones are applied.
+            {t('feed.review.selection-hint')}
           </p>
         )}
       </div>

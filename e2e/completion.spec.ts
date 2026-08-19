@@ -50,8 +50,13 @@ test.describe('the completion panel', () => {
     // The handoff panel is below it, and it says what the buttons do before they are pressed.
     const buildWith = page.getByTestId('build-with');
     await expect(buildWith).toBeVisible();
-    await expect(buildWith).toContainText('copy that prompt and open the platform');
-    await expect(buildWith).toContainText('we do not send your bundle anywhere');
+    /*
+     * Each of the two promises is on its own element, so what is asserted is that the panel still
+     * makes them — the clause about what the buttons do, and the clause about what we never do
+     * with the bundle — rather than that either is still worded in English.
+     */
+    await expect(buildWith.getByTestId('build-with-copy-open')).toBeVisible();
+    await expect(buildWith.getByTestId('build-with-no-upload')).toBeVisible();
 
     await page.getByTestId('generate-ai-prompt').click();
 

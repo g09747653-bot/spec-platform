@@ -462,9 +462,14 @@ async function askAndAnswer(page: Page, stage: string): Promise<'answered' | 'no
  * does this now.
  */
 async function atStage(page: Page, stage: string): Promise<boolean> {
+  /*
+   * Read as the position the header carries rather than as the word it prints (task 143). The
+   * regex over the label was always doing two jobs at once — matching the name a methodology gives
+   * the position as well as the position itself — and a Russian header would have made it match
+   * nothing at all.
+   */
   const arrived = await page
-    .getByTestId('stage-current')
-    .filter({ hasText: new RegExp(stage, 'i') })
+    .locator(`[data-testid="stage-current"][data-stage="${stage}"]`)
     .waitFor({ timeout: 120_000 })
     .then(() => true)
     .catch(() => false);
@@ -472,7 +477,7 @@ async function atStage(page: Page, stage: string): Promise<boolean> {
   if (!arrived) {
     const shown = await page
       .getByTestId('stage-current')
-      .textContent()
+      .getAttribute('data-stage')
       .catch(() => null);
     problem(`expected the session to be on ${stage}, but the page says ${JSON.stringify(shown)}`);
   }
@@ -490,8 +495,8 @@ async function walkStage(page: Page, stage: string, isFirst: boolean): Promise<v
 
   if (!(await click(page, 'proceed', `${stage}: collect → generate`))) return;
   await page
-    .getByTestId('stage-substage')
-    .filter({ hasText: 'generate' })
+    // The substage the pill stands in, not the «Generating» it prints for it (task 143).
+    .locator('[data-testid="stage-substage"][data-substage="generate"]')
     .waitFor({ timeout: 120_000 })
     .catch(() => {
       problem(`${stage}: the session did not reach generate`);
@@ -710,8 +715,8 @@ async function walkStage(page: Page, stage: string, isFirst: boolean): Promise<v
 
   await click(page, 'approve-spec', `${stage}: approve`);
   await page
-    .getByTestId('spec-card')
-    .filter({ hasText: 'approved' })
+    // The card's own flag, not the word it prints (task 143): these walks run in Russian too.
+    .locator('[data-testid="spec-card"][data-approved="true"]')
     .waitFor({ timeout: 120_000 })
     .catch(() => {
       problem(`${stage}: the revision was not marked approved`);
@@ -745,10 +750,10 @@ async function walkStage(page: Page, stage: string, isFirst: boolean): Promise<v
     // A review that could not be produced is not a failed transition (FR-010; the route says so).
     const substage = await page
       .getByTestId('stage-substage')
-      .textContent()
+      .getAttribute('data-substage')
       .catch(() => null);
 
-    if (substage?.includes('review') === true) {
+    if (substage === 'review') {
       say(`${stage}: the stage entered review with no board — the chain could not produce one`);
     } else {
       problem(`${stage}: neither a review board nor a review position`);
@@ -948,8 +953,9 @@ async function walk(browser: Browser): Promise<void> {
 
     if (!(await click(page, 'proceed', 'leave the interview'))) return;
     await page
-      .getByTestId('stage-current')
-      .filter({ hasText: /constitution/i })
+      // The position, in the machine's spelling — a methodology may call it «Proposal» and a
+      // translation may call it something else again (task 143).
+      .locator('[data-testid="stage-current"][data-stage="constitution"]')
       .waitFor({ timeout: 120_000 })
       .catch(() => {
         problem('the session did not leave the interview');

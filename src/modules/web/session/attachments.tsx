@@ -4,6 +4,12 @@ import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
 import { z } from 'zod';
 
+import { isStage, type Stage } from '@/modules/workflow/model/stages';
+
+import type { PhraseKey } from '../i18n/dictionary';
+import { useLocale, useT } from '../i18n/locale-context';
+import type { Locale } from '../i18n/phrase';
+import type { Translate } from '../i18n/translate';
 import { Button } from '../ui/button';
 
 import { SidePanel } from './side-panel';
@@ -45,26 +51,69 @@ interface AttachmentsProps {
   attachments: readonly AttachmentModel[];
 }
 
-const TYPE_LABELS: Readonly<Record<string, string>> = {
-  'application/pdf': 'PDF',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
-  'text/plain': 'text',
-  'text/markdown': 'Markdown',
-  'image/png': 'PNG',
-  'image/jpeg': 'JPEG',
+/**
+ * What kind of document this is, in words (task 143).
+ *
+ * The map used to end in `?? attachment.mimeType`, which printed `application/x-brochure` into a
+ * sentence as though it were the name of a thing — a machine token shown as a word, which the voice
+ * standard §3 calls a defect of presentation rather than a string to translate. The unrecognised
+ * case now says what it is; the type itself stays in `data-mime`, where it was always the half a
+ * test should be reading.
+ */
+const TYPE_PHRASE: Readonly<Record<string, PhraseKey>> = {
+  'application/pdf': 'session.attachments.type-pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+    'session.attachments.type-docx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+    'session.attachments.type-xlsx',
+  'text/plain': 'session.attachments.type-text',
+  'text/markdown': 'session.attachments.type-markdown',
+  'image/png': 'session.attachments.type-png',
+  'image/jpeg': 'session.attachments.type-jpeg',
 };
 
-function statusLine(attachment: AttachmentModel): string {
+/**
+ * The stage a document was attached at, as its name rather than as its identifier (task 143).
+ *
+ * The row said «attached at solution» — the value the database stores, printed to a person. The
+ * canonical names are shared with everything else that has to name a position when a methodology
+ * does not (`session.stage.canonical.*`), so the sidebar and the rail cannot end up calling the
+ * same stage two things; `data-stage` still carries the identifier for anything reading the row by
+ * machine.
+ */
+const STAGE_PHRASE: Readonly<Record<Stage, PhraseKey>> = {
+  interview: 'session.stage.canonical.interview',
+  constitution: 'session.stage.canonical.constitution',
+  requirements: 'session.stage.canonical.requirements',
+  solution: 'session.stage.canonical.solution',
+  tasks: 'session.stage.canonical.tasks',
+  quality: 'session.stage.canonical.quality',
+  complete: 'session.stage.canonical.complete',
+};
+
+const stagePhrase = (stage: string): PhraseKey =>
+  isStage(stage) ? STAGE_PHRASE[stage] : 'session.stage.canonical.unknown';
+
+/**
+ * What happened to the document's text, as a phrase (FR-004 AC-5).
+ *
+ * The exhaustive switch is the point of the function and it survives translation intact: a parse
+ * status added to the model without a sentence is still a compile error, and now it is one in both
+ * languages at once. `parseReason` is the parser's own words about a user's file and is passed
+ * through untranslated — it is data, not copy (S3).
+ */
+function statusLine(attachment: AttachmentModel, t: Translate): string {
   switch (attachment.parseStatus) {
     case 'ok':
-      return 'Read — its text grounds every later stage.';
+      return t('session.attachments.parse-ok');
     case 'passthrough':
-      return 'Image — offered to vision-capable models as it is.';
+      return t('session.attachments.parse-passthrough');
     case 'pending':
-      return 'Stored; still being read.';
+      return t('session.attachments.parse-pending');
     case 'failed':
-      return `Could not be read: ${attachment.parseReason ?? 'unknown reason'}. The session continues without it.`;
+      return t('session.attachments.parse-failed', {
+        reason: attachment.parseReason ?? t('session.attachments.parse-reason-unknown'),
+      });
   }
 }
 
@@ -87,14 +136,35 @@ function affectedFilesOf(payload: unknown): AffectedFileModel[] {
   return parsed.success ? (parsed.data.affectedFiles ?? []) : [];
 }
 
-const sizeLabel = (bytes: number): string =>
-  bytes < 1_024
-    ? `${String(bytes)} B`
-    : bytes < 1_048_576
-      ? `${(bytes / 1_024).toFixed(0)} KB`
-      : `${(bytes / 1_048_576).toFixed(1)} MB`;
+/**
+ * How big the document is, in the reader's units and the reader's numbers (task 143).
+ *
+ * Both halves of «4,2 МБ» are language and neither could be built here: Russian writes the unit in
+ * Cyrillic and separates the fraction with a comma, so the unit comes from the dictionary and the
+ * number from `Intl.NumberFormat`. Grouping is off because it would turn the English reading this
+ * panel has always printed — `1023 KB` — into `1,023 KB`, and a translation is not a licence to
+ * change the language it came from.
+ */
+function sizeLabel(bytes: number, t: Translate, locale: Locale): string {
+  const [phrase, value, digits]: [PhraseKey, number, number] =
+    bytes < 1_024
+      ? ['session.attachments.size-bytes', bytes, 0]
+      : bytes < 1_048_576
+        ? ['session.attachments.size-kilobytes', bytes / 1_024, 0]
+        : ['session.attachments.size-megabytes', bytes / 1_048_576, 1];
+
+  const size = new Intl.NumberFormat(locale, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+    useGrouping: false,
+  }).format(value);
+
+  return t(phrase, { size });
+}
 
 export function Attachments({ sessionId, attachments }: AttachmentsProps) {
+  const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -129,7 +199,7 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
           'message' in payload.error &&
           typeof payload.error.message === 'string'
             ? payload.error.message
-            : 'The upload did not complete.';
+            : t('session.attachments.upload-failed');
 
         setError(message);
         return;
@@ -148,7 +218,7 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
       // The server is the source of the list, including the parse outcome it has just recorded.
       router.refresh();
     } catch {
-      setError('The upload did not complete.');
+      setError(t('session.attachments.upload-failed'));
     } finally {
       setBusy(false);
       if (inputRef.current !== null) inputRef.current.value = '';
@@ -177,9 +247,11 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
 
       if (!response.ok) {
         setError(
-          response.status === 409
-            ? 'That file already has a change awaiting your decision.'
-            : 'The refinement could not be started.',
+          t(
+            response.status === 409
+              ? 'session.attachments.refine-conflict'
+              : 'session.attachments.refine-failed',
+          ),
         );
         return;
       }
@@ -194,7 +266,7 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
       );
       router.refresh();
     } catch {
-      setError('The refinement could not be started.');
+      setError(t('session.attachments.refine-failed'));
     } finally {
       setBusy(false);
     }
@@ -208,13 +280,13 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
       const response = await fetch(`/api/attachments/${id}`, { method: 'DELETE' });
 
       if (!response.ok && response.status !== 404) {
-        setError('The document could not be removed.');
+        setError(t('session.attachments.remove-failed'));
         return;
       }
 
       router.refresh();
     } catch {
-      setError('The document could not be removed.');
+      setError(t('session.attachments.remove-failed'));
     } finally {
       setBusy(false);
     }
@@ -222,7 +294,7 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
 
   return (
     <SidePanel
-      title="Attachments"
+      title={t('session.attachments.title')}
       testId="attachments-panel"
       action={
         /*
@@ -242,14 +314,14 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
             inputRef.current?.click();
           }}
         >
-          {busy ? 'Adding…' : 'Add'}
+          {busy ? t('session.attachments.adding') : t('session.attachments.add')}
         </Button>
       }
     >
       <div className="flex flex-col gap-3">
         {attachments.length === 0 ? (
           <p className="text-foreground-muted text-xs" data-testid="attachments-empty">
-            Nothing attached. Anything you add here grounds every later stage.
+            {t('session.attachments.empty')}
           </p>
         ) : (
           <ul className="flex flex-col gap-2" data-testid="attachments-list">
@@ -263,9 +335,17 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
                   <span className="text-sm font-medium" data-testid="attachment-name">
                     {attachment.fileName}
                   </span>
-                  <span className="text-foreground-muted text-xs" data-testid="attachment-meta">
-                    {TYPE_LABELS[attachment.mimeType] ?? attachment.mimeType} ·{' '}
-                    {sizeLabel(attachment.sizeBytes)} · attached at {attachment.attachedAtStage}
+                  <span
+                    className="text-foreground-muted text-xs"
+                    data-testid="attachment-meta"
+                    data-stage={attachment.attachedAtStage}
+                    data-mime={attachment.mimeType}
+                  >
+                    {t('session.attachments.meta', {
+                      type: t(TYPE_PHRASE[attachment.mimeType] ?? 'session.attachments.type-other'),
+                      size: sizeLabel(attachment.sizeBytes, t, locale),
+                      stage: t(stagePhrase(attachment.attachedAtStage)),
+                    })}
                   </span>
                   <span
                     className={
@@ -275,7 +355,7 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
                     }
                     data-testid={`attachment-status-${attachment.parseStatus}`}
                   >
-                    {statusLine(attachment)}
+                    {statusLine(attachment, t)}
                   </span>
                 </div>
 
@@ -288,7 +368,7 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
                     void remove(attachment.id);
                   }}
                 >
-                  Remove
+                  {t('session.attachments.remove')}
                 </Button>
               </li>
             ))}
@@ -300,9 +380,19 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
             data-testid="late-attachment-notice"
             className="border-border-subtle bg-background flex flex-col gap-2 rounded-md border p-3"
           >
+            {/*
+              One phrase, and the file name inside it rather than in a `<strong>` of its own (task
+              143). The emphasis was the price of the sentence: Russian puts the name in a different
+              position and joins it with a comma the English does not have, so a sentence built from
+              three JSX pieces around a bold middle cannot be translated without being rewritten in
+              markup. The name is a file name in a sentence about file names, and the list directly
+              below repeats it in medium weight.
+            */}
             <p className="text-sm">
-              These approved files were written before <strong>{late.fileName}</strong> was
-              attached, so they were generated without it:
+              {t('session.attachments.late-notice', {
+                count: late.affected.length,
+                fileName: late.fileName,
+              })}
             </p>
             <ul className="flex flex-col gap-2">
               {late.affected.map((file) => (
@@ -319,14 +409,12 @@ export function Attachments({ sessionId, attachments }: AttachmentsProps) {
                       void refine(file, late.fileName);
                     }}
                   >
-                    Refine {file.fileName}
+                    {t('session.attachments.late-refine', { fileName: file.fileName })}
                   </Button>
                 </li>
               ))}
             </ul>
-            <p className="text-foreground-muted text-xs">
-              Nothing has been changed. Refining proposes an update you can review and accept.
-            </p>
+            <p className="text-foreground-muted text-xs">{t('session.attachments.late-note')}</p>
           </div>
         )}
 

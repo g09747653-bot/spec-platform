@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { translator } from '../i18n/translate';
+
 import { REASON_EXPLANATION } from './gate-copy';
 import {
   ABANDONED_NOTICE,
@@ -21,6 +23,16 @@ import {
  * server, exactly as the stream reader's tests do it.
  */
 const NEVER = () => new Promise<void>(() => undefined);
+
+/**
+ * The real English translator, not a stub (task 143).
+ *
+ * A stub returning its own key would make every assertion below pass against a dictionary with the
+ * entry missing, which is the one failure the phrase table exists to prevent. Rendering for real
+ * means `expect(notice).toBe(t(ABANDONED_NOTICE))` fails if the key is gone — and `en` rather than
+ * `ru` so the assertions that read the copy («615 s») stay legible to every reader of this suite.
+ */
+const t = translator('en');
 
 /** A server that never answers, and rejects the way `fetch` does when the signal aborts. */
 function hangingFetch(): typeof fetch {
@@ -48,6 +60,7 @@ describe('a session-moving request', () => {
 
     const request = createSessionRequest({
       onState,
+      t,
       fetchImpl: answering(200, { stage: 'constitution' }),
       sleep: NEVER,
       now: () => 1_000,
@@ -55,8 +68,20 @@ describe('a session-moving request', () => {
 
     const result = await request.send('proceed', '/api/sessions/s/transition', { toStage: 'x' });
 
-    expect(states[0]).toEqual({ running: 'proceed', startedAt: 1_000, notice: null });
-    expect(states.at(-1)).toEqual({ running: null, startedAt: null, notice: null });
+    expect(states[0]).toEqual({
+      running: 'proceed',
+      startedAt: 1_000,
+      notice: null,
+      noticeKind: null,
+      noticeReason: null,
+    });
+    expect(states.at(-1)).toEqual({
+      running: null,
+      startedAt: null,
+      notice: null,
+      noticeKind: null,
+      noticeReason: null,
+    });
     expect(result).toEqual({ ok: true, payload: { stage: 'constitution' } });
   });
 
@@ -65,6 +90,7 @@ describe('a session-moving request', () => {
 
     const request = createSessionRequest({
       onState,
+      t,
       sleep: NEVER,
       fetchImpl: answering(409, {
         error: {
@@ -78,7 +104,11 @@ describe('a session-moving request', () => {
     const result = await request.send('proceed', '/api/sessions/s/transition');
 
     expect(result.ok).toBe(false);
-    expect(request.state.notice).toBe(REASON_EXPLANATION.NO_ANSWERED_ROUND);
+    expect(request.state.notice).toBe(t(REASON_EXPLANATION.NO_ANSWERED_ROUND));
+    // Task 143: the sentence is the user's, the code is the test's — asserted against the same
+    // refusal so a hand-written RU explanation cannot make this suite red.
+    expect(request.state.noticeKind).toBe('refused');
+    expect(request.state.noticeReason).toBe('NO_ANSWERED_ROUND');
     expect(request.state.running).toBeNull();
   });
 
@@ -87,6 +117,7 @@ describe('a session-moving request', () => {
 
     const request = createSessionRequest({
       onState,
+      t,
       sleep: NEVER,
       fetchImpl: answering(409, {
         error: {
@@ -99,24 +130,77 @@ describe('a session-moving request', () => {
 
     await request.send('ask', '/api/sessions/s/rounds');
 
-    expect(request.state.notice).toBe(REASON_EXPLANATION.ROUND_LIMIT_REACHED);
+    expect(request.state.notice).toBe(t(REASON_EXPLANATION.ROUND_LIMIT_REACHED));
     expect(request.state.notice).not.toContain('ROUND_LIMIT_REACHED');
+    // The code the words deliberately do not name is still there for anything that has to know it.
+    expect(request.state.noticeKind).toBe('refused');
+    expect(request.state.noticeReason).toBe('ROUND_LIMIT_REACHED');
   });
 
-  it("falls back to the handler's message when the rejection carries no reason", async () => {
+  /*
+   * The second rung of the seam (task 143). A rejection with no reason code still carries an error
+   * code, and the browser has its own sentence for every code it knows — so the reader gets Russian
+   * here even though the server, which answers in one language on purpose, wrote English.
+   */
+  it('words a rejection by its error code when the gate attached no reason', async () => {
     const { onState } = recorder();
 
     const request = createSessionRequest({
       onState,
+      t,
       sleep: NEVER,
-      fetchImpl: answering(422, {
-        error: { code: 'VALIDATION_FAILED', message: 'The request was not valid.' },
+      fetchImpl: answering(409, {
+        error: { code: 'CONFLICT', message: 'The session moved on; refresh and try again.' },
       }),
     });
 
     await request.send('fallback', '/api/sessions/s/answers');
 
-    expect(request.state.notice).toBe('The request was not valid.');
+    expect(request.state.notice).toBe(t('errors.api.conflict'));
+    // Still a refusal; there was simply no reason code to carry with it.
+    expect(request.state.noticeKind).toBe('refused');
+    expect(request.state.noticeReason).toBeNull();
+  });
+
+  /*
+   * The third rung, and the reason the map answers `null` rather than omitting the entry: an upload
+   * rejection names the limit it hit, and only the guard that refused knows which (FR-004 AC-4). A
+   * client-side sentence for that code would be a worse answer in every language.
+   */
+  it("keeps the handler's own message where it knows more than the dictionary", async () => {
+    const { onState } = recorder();
+
+    const request = createSessionRequest({
+      onState,
+      t,
+      sleep: NEVER,
+      fetchImpl: answering(413, {
+        error: { code: 'UPLOAD_REJECTED', message: 'That file is larger than 10 MB.' },
+      }),
+    });
+
+    await request.send('attach', '/api/sessions/s/attachments');
+
+    expect(request.state.notice).toBe('That file is larger than 10 MB.');
+  });
+
+  it("falls back to the handler's message for a code the browser has never heard of", async () => {
+    const { onState } = recorder();
+
+    const request = createSessionRequest({
+      onState,
+      t,
+      sleep: NEVER,
+      fetchImpl: answering(418, {
+        error: { code: 'SOMETHING_NEW', message: 'A handler from a later milestone.' },
+      }),
+    });
+
+    await request.send('fallback', '/api/sessions/s/answers');
+
+    // Degrading to the server's English is the point: a code added tomorrow ships a sentence today.
+    expect(request.state.notice).toBe('A handler from a later milestone.');
+    expect(request.state.noticeKind).toBe('refused');
   });
 
   it('says something even when the failure carries nothing at all', async () => {
@@ -124,13 +208,16 @@ describe('a session-moving request', () => {
 
     const request = createSessionRequest({
       onState,
+      t,
       sleep: NEVER,
       fetchImpl: answering(500, 'not json at all'),
     });
 
     await request.send('proceed', '/api/sessions/s/transition');
 
-    expect(request.state.notice).toBe(FALLBACK_FAILURE_NOTICE);
+    expect(request.state.notice).toBe(t(FALLBACK_FAILURE_NOTICE));
+    expect(request.state.noticeKind).toBe('refused');
+    expect(request.state.noticeReason).toBeNull();
   });
 
   /*
@@ -144,6 +231,7 @@ describe('a session-moving request', () => {
 
     const request = createSessionRequest({
       onState,
+      t,
       fetchImpl: hangingFetch(),
       sleep,
       deadlineMs: 615_000,
@@ -154,9 +242,12 @@ describe('a session-moving request', () => {
     expect(sleep).toHaveBeenCalledWith(615_000);
     expect(result.ok).toBe(false);
     expect(request.state.running).toBeNull();
-    expect(request.state.notice).toBe(expiredNotice(615_000));
+    expect(request.state.notice).toBe(expiredNotice(t, 615_000));
     // Named in seconds, because that is the unit the user waited in.
     expect(request.state.notice).toContain('615 s');
+    // The backstop firing is its own ending, not the user's choice to stop waiting.
+    expect(request.state.noticeKind).toBe('expired');
+    expect(request.state.noticeReason).toBeNull();
   });
 
   it('can be abandoned while it is still running, and says so', async () => {
@@ -164,6 +255,7 @@ describe('a session-moving request', () => {
 
     const request = createSessionRequest({
       onState,
+      t,
       fetchImpl: hangingFetch(),
       sleep: NEVER,
     });
@@ -179,7 +271,9 @@ describe('a session-moving request', () => {
 
     expect(result.ok).toBe(false);
     expect(request.state.running).toBeNull();
-    expect(request.state.notice).toBe(ABANDONED_NOTICE);
+    expect(request.state.notice).toBe(t(ABANDONED_NOTICE));
+    expect(request.state.noticeKind).toBe('abandoned');
+    expect(request.state.noticeReason).toBeNull();
   });
 
   it('tells a dropped connection apart from a request the user abandoned', async () => {
@@ -187,13 +281,17 @@ describe('a session-moving request', () => {
 
     const request = createSessionRequest({
       onState,
+      t,
       sleep: NEVER,
       fetchImpl: () => Promise.reject(new TypeError('Failed to fetch')),
     });
 
     await request.send('proceed', '/api/sessions/s/transition');
 
-    expect(request.state.notice).toBe(UNREACHABLE_NOTICE);
+    expect(request.state.notice).toBe(t(UNREACHABLE_NOTICE));
+    // The token keeps the two apart the same way the words do — and without reading the words.
+    expect(request.state.noticeKind).toBe('unreachable');
+    expect(request.state.noticeReason).toBeNull();
   });
 
   it('refuses a second request while one is in flight', async () => {
@@ -201,6 +299,7 @@ describe('a session-moving request', () => {
 
     const request = createSessionRequest({
       onState,
+      t,
       fetchImpl: hangingFetch(),
       sleep: NEVER,
     });
@@ -227,6 +326,7 @@ describe('a session-moving request', () => {
 
       const request = createSessionRequest({
         onState,
+        t,
         sleep: NEVER,
         onReachability: reachability,
         fetchImpl: answering(409, {
@@ -246,6 +346,7 @@ describe('a session-moving request', () => {
 
       const request = createSessionRequest({
         onState,
+        t,
         sleep: NEVER,
         onReachability: reachability,
         fetchImpl: () => Promise.reject(new TypeError('Failed to fetch')),
@@ -262,6 +363,7 @@ describe('a session-moving request', () => {
 
       const request = createSessionRequest({
         onState,
+        t,
         sleep: NEVER,
         onReachability: reachability,
         fetchImpl: hangingFetch(),
@@ -283,6 +385,7 @@ describe('a session-moving request', () => {
 
       const request = createSessionRequest({
         onState,
+        t,
         deadlineMs: 1_000,
         onReachability: reachability,
         fetchImpl: hangingFetch(),
@@ -295,7 +398,7 @@ describe('a session-moving request', () => {
       });
       await inFlight;
 
-      expect(request.state.notice).toBe(expiredNotice(1_000));
+      expect(request.state.notice).toBe(expiredNotice(t, 1_000));
       // A server past its own worst case may still be working. "Slow" is not "gone".
       expect(reachability).not.toHaveBeenCalled();
     });
@@ -306,14 +409,19 @@ describe('a session-moving request', () => {
 
     const request = createSessionRequest({
       onState,
+      t,
       sleep: NEVER,
       fetchImpl: answering(409, { error: { code: 'CONFLICT', message: 'The session moved on.' } }),
     });
 
     await request.send('proceed', '/api/sessions/s/transition');
     expect(request.state.notice).not.toBeNull();
+    expect(request.state.noticeKind).toBe('refused');
 
     request.dismiss();
     expect(request.state.notice).toBeNull();
+    // Dismissing takes the whole ending with it: a token left behind would outlive its own sentence.
+    expect(request.state.noticeKind).toBeNull();
+    expect(request.state.noticeReason).toBeNull();
   });
 });

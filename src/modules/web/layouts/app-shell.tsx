@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
 
+import { serverT } from '../i18n/server-locale';
 import { ConnectionBanner } from '../session/connection-banner';
 import { ShortcutsButton } from '../session/shortcuts-ui';
 import { BrandMark } from '../theme/brand-mark';
+import { LocaleToggle } from '../i18n/locale-toggle';
 import { ThemeToggle } from '../theme/theme-toggle';
 import { ToastViewport } from '../ui/toast-viewport';
 
@@ -29,8 +31,21 @@ import { ToastViewport } from '../ui/toast-viewport';
  * The connection banner and the toast region are here, once, for the whole authenticated area
  * (task 125): both are about the application rather than about any one page, and a page that
  * rendered its own would announce twice on the pages that nest.
+ *
+ * Asynchronous since task 143: the frame prints two words of its own — the product's name and the
+ * account region's label — and the chrome language is a cookie, which only the server can read while
+ * it renders. Every route under this shell already reads the session and the database per request,
+ * so the dynamic rendering it opts into costs nothing that was not already being paid.
  */
-export function AppShell({ children, account }: { children: ReactNode; account?: ReactNode }) {
+export async function AppShell({
+  children,
+  account,
+}: {
+  children: ReactNode;
+  account?: ReactNode;
+}) {
+  const t = await serverT();
+
   /*
    * Minted per server render, and used for nothing but its freshness: the banner watches it to learn
    * that a render actually arrived, which is how Reconnect finds out the server came back without
@@ -43,14 +58,15 @@ export function AppShell({ children, account }: { children: ReactNode; account?:
       <header className="border-border-subtle bg-surface z-20 flex h-12 shrink-0 items-center justify-between gap-4 border-b px-4">
         <span className="flex items-center gap-2 text-sm font-semibold tracking-tight">
           <BrandMark />
-          Spec Platform
+          {t('shell.brand.name')}
         </span>
         <nav
-          aria-label="Account"
+          aria-label={t('shell.account.nav')}
           className="text-foreground-muted text-caption flex items-center gap-2"
         >
           {account}
           <ShortcutsButton />
+          <LocaleToggle />
           <ThemeToggle />
         </nav>
       </header>

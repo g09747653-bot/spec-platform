@@ -131,6 +131,8 @@ export async function POST(
       stage,
       // У-5: how the questions are worded, from the session's stored profile (task 106).
       audience: session.audienceProfile,
+      // Task 144: what they ask about, from the same row and by the same rule — chosen once.
+      style: session.interviewStyle,
       // У-1: the session's own language, read from the column, never re-detected (task 108).
       contentLanguage: session.contentLanguage,
       roundNumber: nextRoundNumber,

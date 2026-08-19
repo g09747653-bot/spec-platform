@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { documentMetrics, lineCount, newlineCount } from './metrics';
+import { documentMetrics, lineCount, linesOf, newlineCount } from './metrics';
 
 /**
  * The viewer's counts (task 138 AC — «counts match `wc -l`/word count of the exported bytes»).
@@ -40,6 +40,26 @@ describe('documentMetrics', () => {
     const unterminated = 'one\ntwo';
     expect(newlineCount(unterminated)).toBe(1);
     expect(lineCount(unterminated)).toBe(2);
+  });
+
+  /**
+   * The property the Raw pane's markup rests on (task 147): the line spans put together are the
+   * file, character for character. If this fails, Copy and Download still agree with the endpoint —
+   * they never read the DOM — but the pane on screen is no longer showing the bytes they hand over,
+   * which is the whole claim of a Raw view.
+   */
+  it('splits into lines that put the document back together exactly', () => {
+    const cases = ['', 'one line', 'one line\n', 'one\ntwo', 'a\n\nb\n', 'a\r\nb\r\n', '\n\n\n'];
+
+    for (const content of cases) {
+      expect(linesOf(content).join(''), JSON.stringify(content)).toBe(content);
+      expect(linesOf(content).length, JSON.stringify(content)).toBe(lineCount(content));
+    }
+
+    // A blank line is a line: it is numbered, and it carries the newline that made it blank.
+    expect(linesOf('a\n\nb')).toEqual(['a\n', '\n', 'b']);
+    // The carriage return belongs to the line the file put it on, not to the split.
+    expect(linesOf('a\r\nb')).toEqual(['a\r\n', 'b']);
   });
 
   it('agrees with the real `wc` on this machine, where there is one', () => {

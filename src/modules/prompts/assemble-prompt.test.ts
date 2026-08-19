@@ -80,6 +80,8 @@ describe('assemblePrompt', () => {
       minOptions: '2',
       maxOptions: '8',
       maxQuestions: '5',
+      maxNoteChars: '240',
+      logoSlugs: 'anthropic, openai',
     });
 
     expect(withoutSummary.user).not.toMatch(/\n{3,}/);

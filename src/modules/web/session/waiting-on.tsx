@@ -1,5 +1,6 @@
 'use client';
 
+import { useT } from '../i18n/locale-context';
 import { Button } from '../ui/button';
 
 /**
@@ -18,21 +19,38 @@ import { Button } from '../ui/button';
  * and whatever the server had already done stands. That is Р-2's lesson applied to a plain POST.
  */
 export interface WaitingOnProps {
-  /** What is being waited for, phrased to follow "Waiting for …". */
+  /**
+   * What is being waited for, already in the reader's language.
+   *
+   * A word rather than a key (task 143): the six things this product waits for are named by the
+   * three surfaces that do the waiting, and each of them knows which one applies. The frame is
+   * theirs to fit, not to fill — English follows «Waiting for …» and Russian follows «Ожидание: …»,
+   * so a value has to be a noun group in the nominative, and the callers were rewritten for it.
+   */
   what: string;
   elapsedSeconds: number;
   onStop: () => void;
 }
 
 export function WaitingOn({ what, elapsedSeconds, onStop }: WaitingOnProps) {
+  const t = useT();
+
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="waiting-on">
       <Button variant="secondary" data-testid="stop-waiting" onClick={onStop}>
-        Stop waiting
+        {t('session.waiting.stop')}
       </Button>
-      <span className="text-foreground-muted text-xs" data-testid="waiting-status">
-        Waiting for {what} — {String(elapsedSeconds)} s. Stopping loses nothing: the page re-reads
-        the session from the server either way.
+      {/*
+        The reading itself, next to the sentence that frames it (task 143). «A number that keeps
+        moving» is the property the walk has to check, and checking it by parsing «— 3 s.» out of a
+        sentence makes the check a hostage of how that sentence is worded in each locale.
+      */}
+      <span
+        className="text-foreground-muted text-xs"
+        data-testid="waiting-status"
+        data-elapsed={String(elapsedSeconds)}
+      >
+        {t('session.waiting.status', { what, seconds: elapsedSeconds })}
       </span>
     </div>
   );

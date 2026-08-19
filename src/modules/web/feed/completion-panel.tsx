@@ -4,11 +4,12 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { z } from 'zod';
 
-import { buildHandoffPrompt } from '@/modules/specs/handoff/handoff-prompt';
+import { BUNDLE_DIRECTORY, buildHandoffPrompt } from '@/modules/specs/handoff/handoff-prompt';
 
+import { useT } from '../i18n/locale-context';
 import { Button } from '../ui/button';
 import { showToast } from '../ui/toast';
-import { downloadBundle } from '../session/download-bundle';
+import { downloadBundle, modePhrase } from '../session/download-bundle';
 
 import { FeedItem } from './feed-item';
 import type { CompletionBlock } from './model';
@@ -67,18 +68,28 @@ export function CompletionPanel({
   const router = useRouter();
   const [busy, setBusy] = useState<'download' | 'edit' | null>(null);
   const [prompt, setPrompt] = useState<string | null>(null);
+  const t = useT();
 
   const fileCount = completion.files.length;
 
   async function download(): Promise<void> {
     setBusy('download');
 
-    const outcome = await downloadBundle(completion.projectId, completion.exportMode);
+    const outcome = await downloadBundle(completion.projectId, completion.exportMode, t);
+    /*
+       The export panel's own toast, said by this button too (task 143). One archive, one
+       implementation, and now one sentence about it — the two used to be two dictionary entries
+       with one English sentence and two different Russian ones between them.
+    */
     showToast(
       outcome.ok
-        ? `Downloaded ${String(outcome.manifest.included.length)} ${outcome.manifest.included.length === 1 ? 'file' : 'files'} in ${outcome.manifest.mode} mode.`
+        ? t('session.export.downloaded-toast', {
+            count: outcome.manifest.included.length,
+            mode: t(modePhrase(outcome.manifest.mode)),
+          })
         : outcome.message,
       outcome.ok ? 'success' : 'danger',
+      outcome.ok ? 'bundle-downloaded' : 'bundle-download-failed',
     );
 
     setBusy(null);
@@ -103,13 +114,13 @@ export function CompletionPanel({
       const parsed = CreatedChat.safeParse(await response.json().catch(() => null));
 
       if (!response.ok || !parsed.success) {
-        showToast('That edit could not be started. Please try again.', 'danger');
+        showToast(t('feed.completion.edit-failed'), 'danger', 'edit-chat-failed');
         return;
       }
 
       router.push(`/sessions/${parsed.data.sessionId}`);
     } catch {
-      showToast('That edit could not be started. Please try again.', 'danger');
+      showToast(t('feed.completion.edit-failed'), 'danger', 'edit-chat-failed');
     } finally {
       setBusy(null);
     }
@@ -156,9 +167,10 @@ export function CompletionPanel({
 
     showToast(
       copied
-        ? `Prompt copied. Paste it into ${platform.label} — the tab is open.`
-        : `Could not reach the clipboard. Copy the prompt below, then paste it into ${platform.label}.`,
+        ? t('feed.completion.prompt-copied-open', { platform: platform.label })
+        : t('feed.completion.prompt-copy-failed-open', { platform: platform.label }),
       copied ? 'success' : 'danger',
+      copied ? 'handoff-prompt-copied' : 'handoff-prompt-copy-failed',
     );
   }
 
@@ -169,7 +181,7 @@ export function CompletionPanel({
           className="border-border-subtle bg-surface rounded-xl border p-4"
           data-testid="session-complete"
         >
-          <p className="text-h3">Session completed</p>
+          <p className="text-h3">{t('feed.completion.title')}</p>
           {/*
             Task 133, row `1.1-13`. This paragraph used to print requirement identifiers at the
             person reading it — «no stage reopens (FR-020 AC-9)» — and the paraphrase was wrong
@@ -177,18 +189,23 @@ export function CompletionPanel({
             immediately below. The identifiers were the only ones anywhere in user-facing JSX, so
             this was a leak rather than a house style. Said plainly, and true.
           */}
+          {/*
+            Three phrases rather than one (task 143). The bundle name and the file count each sit in
+            an element a suite reads by test id, so the sentence cannot become a single phrase
+            without taking those away — and both languages happen to want the same five slots, which
+            is what makes the split a translation rather than an English word order in JSX.
+          */}
           <p className="text-foreground-muted mt-1 text-sm">
-            Bundle: <span data-testid="completion-bundle">{completion.bundleName}</span> —{' '}
-            <span data-testid="completion-file-count">{fileCount}</span> spec{' '}
-            {fileCount === 1 ? 'file' : 'files'} generated. Every file has an approved revision, and
-            the session is sealed: no stage goes back. You can still refine any file — a refinement
-            adds a new revision and leaves the session where it is.
+            {t('feed.completion.bundle-lead')}
+            <span data-testid="completion-bundle">{completion.bundleName}</span>
+            {t('feed.completion.bundle-mid', { count: fileCount })}
+            <span data-testid="completion-file-count">{fileCount}</span>
+            {t('feed.completion.bundle-tail', { count: fileCount })}
           </p>
 
           {block.completionCount > 1 && (
             <p className="text-foreground-muted mt-1 text-xs">
-              Sealed {block.completionCount} times — the session has been re-opened and completed
-              again.
+              {t('feed.completion.sealed-count', { count: block.completionCount })}
             </p>
           )}
 
@@ -201,7 +218,7 @@ export function CompletionPanel({
                 void edit();
               }}
             >
-              {busy === 'edit' ? 'Opening…' : 'Edit'}
+              {busy === 'edit' ? t('feed.completion.editing') : t('feed.completion.edit')}
             </Button>
             <Button
               data-testid="completion-download"
@@ -210,7 +227,7 @@ export function CompletionPanel({
                 void download();
               }}
             >
-              {busy === 'download' ? 'Preparing…' : 'Download'}
+              {busy === 'download' ? t('feed.completion.preparing') : t('common.download')}
             </Button>
           </div>
         </div>
@@ -219,13 +236,30 @@ export function CompletionPanel({
           className="border-border-subtle bg-surface rounded-xl border p-4"
           data-testid="build-with"
         >
-          <p className="text-h3">Build with your favourite tool</p>
+          <p className="text-h3">{t('feed.completion.build-with-title')}</p>
+          {/*
+            Task 143: the two clauses a walk checks — what the buttons do, and what we do not do
+            with the bundle — are the honesty of this panel, so each is addressable on its own
+            element. The suite asserts the promise is present rather than that this sentence is
+            still worded in English; the `<span>` adds nothing visible, only somewhere to point.
+          */}
           <p className="text-foreground-muted mt-1 text-sm">
-            Generate a prompt that hands this bundle to a coding agent. The platform buttons{' '}
-            <strong className="font-medium">copy that prompt and open the platform</strong> — we do
-            not send your bundle anywhere, and there is no import to click through. Download the
-            ZIP, unpack it into <code className="font-mono text-xs">.specs/</code>, and paste the
-            prompt.
+            {t('feed.completion.build-with-lead')}
+            <strong className="font-medium" data-testid="build-with-copy-open">
+              {t('feed.completion.build-with-buttons')}
+            </strong>
+            {t('feed.completion.build-with-dash')}
+            <span data-testid="build-with-no-upload">
+              {t('feed.completion.build-with-no-upload')}
+            </span>
+            {t('feed.completion.build-with-unpack')}
+            {/*
+              The folder name comes from the prompt's own constant rather than from this sentence: it
+              is a path, so it is the same in every language, and it is the same path the prompt tells
+              the agent to read from. Two spellings of it would be a defect no translation caused.
+            */}
+            <code className="font-mono text-xs">{BUNDLE_DIRECTORY}</code>
+            {t('feed.completion.build-with-paste')}
           </p>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -236,7 +270,7 @@ export function CompletionPanel({
                 generatePrompt();
               }}
             >
-              Generate AI Prompt
+              {t('feed.completion.generate-prompt')}
             </Button>
 
             {PLATFORMS.map((platform) => (
@@ -248,7 +282,7 @@ export function CompletionPanel({
                   void openWith(platform);
                 }}
               >
-                Copy &amp; open {platform.label}
+                {t('feed.completion.copy-open', { platform: platform.label })}
               </Button>
             ))}
           </div>
@@ -270,13 +304,16 @@ export function CompletionPanel({
                 onClick={() => {
                   void copyPrompt(prompt).then((copied) => {
                     showToast(
-                      copied ? 'Prompt copied to the clipboard.' : 'Could not reach the clipboard.',
+                      copied
+                        ? t('feed.completion.prompt-copied')
+                        : t('feed.completion.prompt-copy-failed'),
                       copied ? 'success' : 'danger',
+                      copied ? 'handoff-prompt-copied' : 'handoff-prompt-copy-failed',
                     );
                   });
                 }}
               >
-                Copy prompt
+                {t('feed.completion.copy-prompt')}
               </Button>
             </div>
           )}

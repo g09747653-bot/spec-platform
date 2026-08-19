@@ -33,8 +33,16 @@ import {
 interface Walk {
   /** The picker's value. */
   id: string;
-  /** The step labels the header must show, in order (Эталон §1.4). */
-  steps: string[];
+  /**
+   * The positions the header's numbered steps stand at, in order (Эталон §1.4).
+   *
+   * The steps used to be listed by their labels, and the labels are the half of a methodology that
+   * task 143 translates — «Specify» and «Explore» are copy, `requirements` and `interview` are the
+   * machine's alphabet (D-119). Three of the four graphs walk the same positions and differ only in
+   * what they call them, so this list no longer tells those three apart on its own; what does is the
+   * badge's `data-methodology` above it and the archive's file names below.
+   */
+  stepStages: string[];
   /** The canonical stages to walk, in order. */
   stages: ParityStage[];
   /** The archive's entry names, in bundle order. */
@@ -45,37 +53,40 @@ interface Walk {
 const WALKS: Walk[] = [
   {
     id: 'myspec-greenfield-v1',
-    steps: ['Interview', 'Constitution', 'Requirements', 'Solution', 'Tasks', 'Complete'],
+    stepStages: ['interview', 'constitution', 'requirements', 'solution', 'tasks', 'complete'],
     stages: ['constitution', 'requirements', 'solution', 'tasks'],
     files: ['constitution.md', 'requirements.md', 'solution.md', 'tasks.md'],
     badge: ['MySpec', 'Greenfield', 'V1'],
   },
   {
     id: 'speckit-greenfield-v1',
-    steps: ['Interview', 'Constitution', 'Specify', 'Plan', 'Tasks', 'Complete'],
+    stepStages: ['interview', 'constitution', 'requirements', 'solution', 'tasks', 'complete'],
     stages: ['constitution', 'requirements', 'solution', 'tasks'],
     files: ['constitution.md', 'spec.md', 'plan.md', 'tasks.md'],
     badge: ['SpecKit', 'Greenfield', 'V1'],
   },
   {
     id: 'openspec-brownfield-v1',
-    steps: ['Explore', 'Proposal', 'Specs', 'Solution', 'Tasks', 'Complete'],
+    stepStages: ['interview', 'constitution', 'requirements', 'solution', 'tasks', 'complete'],
     stages: ['constitution', 'requirements', 'solution', 'tasks'],
     files: ['proposal.md', 'spec.md', 'design.md', 'tasks.md'],
     badge: ['OpenSpec', 'Brownfield', 'V1'],
   },
   {
     id: 'myspec-brownfield-v1',
-    steps: ['Interview', 'Proposal', 'Requirements', 'Tasks', 'Complete'],
+    stepStages: ['interview', 'constitution', 'requirements', 'tasks', 'complete'],
     stages: ['constitution', 'requirements', 'tasks'],
     files: ['proposal.md', 'requirements.md', 'tasks.md'],
     badge: ['MySpec', 'Brownfield', 'V1'],
   },
 ];
 
-/** The header's step labels, read in order. */
-async function stepLabels(page: Page): Promise<string[]> {
-  return page.getByTestId('step-pills').locator('li > span > span:nth-child(2)').allInnerTexts();
+/** The positions the header's numbered steps stand at, read in order. */
+async function stepPositions(page: Page): Promise<(string | null)[]> {
+  return page
+    .getByTestId('step-pills')
+    .locator('[data-step]')
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-stage')));
 }
 
 /**
@@ -119,7 +130,7 @@ for (const walk of WALKS) {
       await expect(page.getByTestId('methodology-flavour')).toHaveText(walk.badge[1]);
       await expect(page.getByTestId('methodology-version')).toHaveText(walk.badge[2]);
 
-      expect(await stepLabels(page)).toEqual(walk.steps);
+      expect(await stepPositions(page)).toEqual(walk.stepStages);
 
       await completeInterview(page);
       for (const stage of walk.stages) await completeStage(page, stage);

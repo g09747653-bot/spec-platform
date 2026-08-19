@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { type PhraseKey } from '../i18n/dictionary';
+import { useT } from '../i18n/locale-context';
 import { Button } from '../ui/button';
 import { PaperclipIcon } from '../ui/icons';
 
@@ -43,6 +45,19 @@ import {
  * session's attachments, and the chosen one travels with the message as an id. The picker chooses
  * which model answers, and persists on the session.
  */
+
+/**
+ * What kind of thing an `@` entry is, as a word (task 143).
+ *
+ * The menu printed the union member itself — `spec`, `attachment` — which reads as English to an
+ * English reader and as nothing at all to anybody else. The member still decides which phrase is
+ * shown, and still travels with the message inside the reference id.
+ */
+const REFERENCE_KIND: Record<ReferenceTarget['kind'], PhraseKey> = {
+  spec: 'feed.composer.kind-spec',
+  attachment: 'feed.composer.kind-attachment',
+};
+
 export function Composer({
   value,
   onChange,
@@ -78,6 +93,7 @@ export function Composer({
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
 }) {
   const [notice, setNotice] = useState<string | null>(null);
+  const t = useT();
 
   const slash = slashQuery(value);
   const commands = slash === null ? [] : matchingCommands(slash);
@@ -96,7 +112,9 @@ export function Composer({
     setNotice(
       unknown.length === 0
         ? null
-        : `No document called ${unknown.map((name) => `@${name}`).join(', ')} — that reference was not attached.`,
+        : t('feed.composer.unknown-reference', {
+            names: unknown.map((name) => `@${name}`).join(', '),
+          }),
     );
 
     onSend(ids);
@@ -137,12 +155,12 @@ export function Composer({
                     setNotice(
                       dispatched
                         ? null
-                        : `${command.label} is not available at this point in the session.`,
+                        : t('feed.composer.command-unavailable', { command: command.label }),
                     );
                   }}
                 >
                   <span className="font-medium">{command.label}</span>
-                  <span className="text-foreground-muted text-xs">{command.description}</span>
+                  <span className="text-foreground-muted text-xs">{t(command.description)}</span>
                 </button>
               </li>
             ))}
@@ -166,7 +184,9 @@ export function Composer({
                 >
                   <span>{target.name}</span>
                   <span className="text-foreground-muted text-xs">
-                    {target.empty === true ? 'not written yet' : target.kind}
+                    {target.empty === true
+                      ? t('feed.composer.reference-empty')
+                      : t(REFERENCE_KIND[target.kind])}
                   </span>
                 </button>
               </li>
@@ -190,7 +210,7 @@ export function Composer({
           <textarea
             ref={inputRef}
             id="chat-message"
-            aria-label="Message"
+            aria-label={t('feed.composer.message-aria')}
             data-testid="chat-message"
             value={value}
             rows={2}
@@ -206,8 +226,8 @@ export function Composer({
             }}
             placeholder={
               hasPendingDecision
-                ? 'Ask a question, or type your decision — “approve it” works as well as the button. / for commands, @ for a document.'
-                : 'Ask anything about this session. / for commands, @ for a document.'
+                ? t('feed.composer.placeholder-decision')
+                : t('feed.composer.placeholder-plain')
             }
           />
 
@@ -223,8 +243,8 @@ export function Composer({
               <Button
                 variant="ghost"
                 size="sm"
-                aria-label="Attach a document"
-                title="Attach a document"
+                aria-label={t('feed.composer.attach')}
+                title={t('feed.composer.attach')}
                 data-testid="composer-attach"
                 disabled={busy}
                 className="text-foreground-muted h-8 w-8 px-0"
@@ -234,7 +254,7 @@ export function Composer({
               </Button>
 
               <label className="sr-only" htmlFor="model-picker">
-                Model
+                {t('feed.composer.model-label')}
               </label>
               <select
                 id="model-picker"
@@ -253,14 +273,20 @@ export function Composer({
               </select>
             </div>
 
+            {/*
+              Task 143: in-flight as a flag, not as «Sending…». A wait for the request to finish is
+              the commonest thing a walk does here, and reading the label to know is the one thing a
+              translated build would break.
+            */}
             <Button
               variant="brand"
               size="sm"
               data-testid="chat-send"
+              data-busy={String(busy)}
               disabled={busy || value.trim() === ''}
               onClick={send}
             >
-              {busy ? 'Sending…' : 'Send'}
+              {busy ? t('common.sending') : t('feed.composer.send')}
             </Button>
           </div>
         </div>

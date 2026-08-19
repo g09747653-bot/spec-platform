@@ -175,4 +175,51 @@
       animation: none;
     }
   }
+
+  /*
+   * Line numbers in the Raw view, painted by CSS rather than printed into the DOM (task 147).
+   *
+   * The reference wraps a long line onto a second visual line **without a number**, and the gutter
+   * we had could not: it was a parallel `<ol>` beside the text, aligned only because both columns
+   * had the same line-height and `whitespace-pre` guaranteed one text line per line box. The moment
+   * a line wraps, item k stops facing line k and every number below it is wrong.
+   *
+   * Pairing them per logical line fixes the alignment and breaks something more important: the
+   * pane's own rule that «a number printed inside `viewer-raw` would be a byte that is not in the
+   * file». Interleaved number cells put digits into `textContent`, and `textContent` is how the
+   * suite compares what is on screen with the bytes of the revision.
+   *
+   * A CSS counter is the one arrangement that has both. The digits are generated content: they are
+   * painted in the gutter, they align per row because the row *is* the line, they cannot be
+   * selected or read by a screen reader, and they are not in the document's text at all — so
+   * `viewer-raw`.textContent stays byte-identical to the file, which is what task 122 asks of Copy
+   * and Download and what the wrap must not cost.
+   *
+   * `overflow-wrap: anywhere` rather than `break-word`: the probe injects a four-thousand-character
+   * unbroken token, and `break-word` leaves it unbroken — which is the defect, not the test.
+   */
+  .raw-lines {
+    counter-reset: raw-line;
+    display: block;
+    /* Room for the gutter the counters are painted into, plus the rule that separates it. */
+    padding-left: 3.5rem;
+  }
+
+  .raw-line {
+    counter-increment: raw-line;
+    display: block;
+    position: relative;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .raw-line::before {
+    content: counter(raw-line);
+    position: absolute;
+    left: -3.5rem;
+    width: 2.75rem;
+    text-align: right;
+    color: var(--color-foreground-muted);
+    user-select: none;
+  }
 }

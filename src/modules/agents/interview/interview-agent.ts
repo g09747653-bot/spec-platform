@@ -7,6 +7,8 @@ import type { AskingStage } from '@/modules/workflow/model/stages';
 
 import { constrainedOutput } from '../schemas/constrained-output';
 import {
+  OPTION_LOGO_SLUGS,
+  OPTION_NOTE,
   OPTIONS_PER_QUESTION,
   QUESTIONS_PER_ROUND,
   QuestionSetSchema,
@@ -41,7 +43,7 @@ const QUESTION_SET_OUTPUT = constrainedOutput('question_set', QuestionSetSchema)
  */
 export interface InterviewAgentInput extends Omit<
   InterviewQuestionsPromptInput,
-  'stage' | 'questionsPerRound' | 'optionsPerQuestion'
+  'stage' | 'questionsPerRound' | 'optionsPerQuestion' | 'optionNote' | 'logoSlugs'
 > {
   /** Typed here, not in the prompt asset: `prompts` may not import the stage union (A1). */
   stage: AskingStage;
@@ -149,6 +151,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * minutes a go, discarded again for the same reason, and the stage could not leave `collect`. There
  * is nothing to re-sample *for*: keeping the first flag and clearing the rest removes a marker, which
  * is repair in exactly the sense this function already means it, and it costs no model call.
+ *
+ * The reference note of task 144 asks nothing of this function, and that is worth saying out loud. A
+ * hallucinated link, an unknown logo slug or a note three paragraphs long is dropped **by the schema**,
+ * field by field, so none of them ever reaches a repair: a guess costs its own chip, never the round
+ * (the compatibility contract of D-188). What the fields need from here is only that they survive a
+ * repair made for another reason — every option travels through the spreads below whole, and the two
+ * places that rebuild one copy the rest of it.
  */
 /**
  * Keeps the first recommendation and clears the rest — the model's own first choice, not ours.
@@ -260,6 +269,10 @@ export function createInterviewAgent(adapter: LlmAdapter) {
       ...input,
       questionsPerRound: QUESTIONS_PER_ROUND,
       optionsPerQuestion: OPTIONS_PER_QUESTION,
+      // The same arrangement for the reference note (task 144): the length asked for is the length
+      // checked, and the slugs offered are the slugs the schema will accept back.
+      optionNote: OPTION_NOTE,
+      logoSlugs: OPTION_LOGO_SLUGS,
     });
 
     const result = await adapter.generateStreaming({

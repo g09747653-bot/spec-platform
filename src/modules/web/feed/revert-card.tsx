@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { useT } from '../i18n/locale-context';
 import { Button } from '../ui/button';
 import { DiffBody } from '../ui/diff-body';
 import { showToast } from '../ui/toast';
@@ -33,6 +34,7 @@ export interface RevertModel {
 
 export function RevertCard({ sessionId, revert }: { sessionId: string; revert: RevertModel }) {
   const router = useRouter();
+  const t = useT();
   const [showing, setShowing] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -47,18 +49,22 @@ export function RevertCard({ sessionId, revert }: { sessionId: string; revert: R
       });
 
       if (!response.ok) {
-        showToast('That step could not be reverted. Nothing changed.', 'danger');
+        showToast(t('feed.revert.toast-failed'), 'danger', 'revert-failed');
         return;
       }
 
       showToast(
-        `${revert.fileName} restored from revision ${String(revert.previousRevision)} — as a new revision.`,
+        t('feed.revert.toast-applied', {
+          fileName: revert.fileName,
+          revision: revert.previousRevision,
+        }),
         'success',
+        'revert-applied',
       );
       setShowing(false);
       router.refresh();
     } catch {
-      showToast('That step could not be reverted. Nothing changed.', 'danger');
+      showToast(t('feed.revert.toast-failed'), 'danger', 'revert-failed');
     } finally {
       setBusy(false);
     }
@@ -68,6 +74,16 @@ export function RevertCard({ sessionId, revert }: { sessionId: string; revert: R
     <div
       className="border-border-subtle bg-surface flex w-full flex-col gap-3 rounded-xl border p-4"
       data-testid="revert-card"
+      /*
+        The three revisions the sentence beside the button names, as numbers (task 143).
+        «writes revision N+1 with the content of revision M» is the claim worth asserting, and the
+        only way to assert it was to match the prose that states it. `next` is spelled out rather
+        than left as an addition for the reader, because the append is precisely the part of this
+        card people expect to be an unwind.
+      */
+      data-current-revision={String(revert.currentRevision)}
+      data-previous-revision={String(revert.previousRevision)}
+      data-next-revision={String(revert.currentRevision + 1)}
     >
       <div className="flex flex-wrap items-center gap-3">
         <Button
@@ -77,12 +93,20 @@ export function RevertCard({ sessionId, revert }: { sessionId: string; revert: R
             setShowing((current) => !current);
           }}
         >
-          Go back to previous step
+          {t('feed.revert.open')}
         </Button>
         <span className="text-foreground-muted text-caption">
-          {revert.fileName} is at revision {revert.currentRevision}. Going back writes revision{' '}
-          {revert.currentRevision + 1} with the content of revision {revert.previousRevision} —
-          nothing is deleted, and the history keeps every one of them.
+          {/*
+            One phrase, four numbers (task 143). The sentence is the card's honesty about being an
+            append, and a translation that took it in fragments could not reorder «ревизию {next}
+            с содержимым ревизии {previous}» without leaving a stray article behind.
+          */}
+          {t('feed.revert.explanation', {
+            fileName: revert.fileName,
+            current: revert.currentRevision,
+            next: revert.currentRevision + 1,
+            previous: revert.previousRevision,
+          })}
         </span>
       </div>
 
@@ -102,7 +126,9 @@ export function RevertCard({ sessionId, revert }: { sessionId: string; revert: R
                 void apply();
               }}
             >
-              {busy ? 'Restoring…' : `Restore revision ${String(revert.previousRevision)}`}
+              {busy
+                ? t('feed.revert.apply-busy')
+                : t('feed.revert.apply', { revision: revert.previousRevision })}
             </Button>
             <Button
               variant="ghost"
@@ -112,7 +138,7 @@ export function RevertCard({ sessionId, revert }: { sessionId: string; revert: R
                 setShowing(false);
               }}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
         </>

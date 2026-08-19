@@ -84,6 +84,50 @@ export function CloseIcon({ className }: { className?: string }) {
   );
 }
 
+/**
+ * The ⓘ on an option that carries a справка (task 144; видео §5).
+ *
+ * Drawn rather than typed: `ⓘ` is one code point that a fallback font renders as a bare `i` in a
+ * box, and the reference's mark is a filled disc. A glyph the theme cannot colour and the font may
+ * not have is not an icon, it is a hope.
+ */
+export function InfoIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className={className ?? 'h-3.5 w-3.5'}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      aria-hidden
+    >
+      <circle cx="8" cy="8" r="6.2" />
+      <path d="M8 7.2v4" />
+      <circle cx="8" cy="4.8" r="0.75" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** The ↗ on a link that leaves for the technology's own site (task 144; видео §5). */
+export function ExternalLinkIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className={className ?? 'h-3.5 w-3.5'}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M6.5 3.2H3.4v9.4h9.4V9.5" />
+      <path d="M9.6 3.2h3.2v3.2M12.8 3.2 7.6 8.4" />
+    </svg>
+  );
+}
+
 /** The paperclip on the composer's attach control (row `1.5-2`). */
 export function PaperclipIcon({ className }: { className?: string }) {
   return (

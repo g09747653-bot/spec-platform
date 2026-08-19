@@ -53,6 +53,25 @@ export interface ApiError {
   error: { code: ErrorCode; message: string; details?: unknown };
 }
 
+/**
+ * The English a handler answers with, and deliberately the only language on the wire (task 143).
+ *
+ * **These are not the sentences the browser prints.** The client matches `error.code` against
+ * `API_EXPLANATION` in `web/session/gate-copy.ts` and renders the phrase it finds, in whichever
+ * language the reader chose; these defaults answer the case it has no phrase for. That is one seam
+ * with three properties worth having:
+ *
+ * - **the wire stays machine-readable.** A response is a code plus a message, in one language, and a
+ *   suite or an integration reading it does not have to know what the caller's cookie said. Localising
+ *   here would mean a handler reaching for `cookies()` to write an error, and an error path that
+ *   depends on request state is an error path that can fail while failing;
+ * - **an unknown code degrades to a sentence rather than to nothing.** A milestone that adds a code
+ *   ships an English message immediately and a translated one when it is worded — which is a working
+ *   product in between, not a blank notice;
+ * - **the specific message still wins.** `uploadRejectedResponse` names the limit or the supported
+ *   types because FR-004 AC-4 requires it, and `API_EXPLANATION` answers `null` for that code
+ *   precisely so the guard's own words survive the trip.
+ */
 const DEFAULT_MESSAGE: Record<ErrorCode, string> = {
   UNAUTHENTICATED: 'Sign in to continue.',
   NOT_FOUND: 'Not found.',

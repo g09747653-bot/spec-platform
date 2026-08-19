@@ -66,7 +66,8 @@ test.describe('M12п screenshots', () => {
       await page.getByTestId('mcq-option-q-audience-solo-devs').check();
       await page.getByTestId('mcq-option-q-problem-context').check();
       await page.getByTestId('mcq-submit').click();
-      await expect(page.getByTestId('interview-panel')).toContainText('summary saved');
+      // Persisted, read as the panel's own flag: this walk is photographed in both locales.
+      await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-summary', 'saved');
       await page.getByTestId('proceed').click();
       await expect(page.locator('[data-state="current"][data-stage="constitution"]')).toBeVisible();
 
@@ -95,7 +96,7 @@ test.describe('M12п screenshots', () => {
 
       // 5 — the review board.
       await page.getByTestId('approve-spec').click();
-      await expect(page.getByTestId('spec-card')).toContainText('approved');
+      await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
       await page.getByTestId('proceed').click();
       await expect(page.getByTestId('review-board')).toBeVisible({ timeout: 40_000 });
       await shoot(page, `07-review-board-${theme}`);

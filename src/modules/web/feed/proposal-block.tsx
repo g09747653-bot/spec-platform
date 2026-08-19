@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { z } from 'zod';
 
+import { useT } from '../i18n/locale-context';
 import { Button } from '../ui/button';
 import { DiffBody } from '../ui/diff-body';
 import { Label, Textarea } from '../ui/field';
@@ -49,9 +50,16 @@ const ErrorBody = z.object({
   }),
 });
 
-function refusalMessage(payload: unknown): string {
+/**
+ * The refusal's own words, or `null` when the body was not one.
+ *
+ * Null rather than a fallback sentence (task 143): the fallback is copy and belongs in the
+ * dictionary, and a pure parser that reached for a translator would have to be handed one by every
+ * caller. The message it does return is the server's, which is the point of parsing it.
+ */
+function refusalMessage(payload: unknown): string | null {
   const parsed = ErrorBody.safeParse(payload);
-  if (!parsed.success) return 'That did not work. Please try again.';
+  if (!parsed.success) return null;
 
   return parsed.data.error.details?.issues[0]?.message ?? parsed.data.error.message;
 }
@@ -65,6 +73,7 @@ export function ProposalBlockCard({
   proposal: PendingProposalModel | null;
 }) {
   const router = useRouter();
+  const t = useT();
   const [busy, setBusy] = useState<'accept' | 'reject' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,20 +89,25 @@ export function ProposalBlockCard({
       });
 
       if (!response.ok) {
-        setError('That decision did not go through. Please try again.');
+        setError(t('feed.proposal.decision-error'));
         return;
       }
 
       router.refresh();
     } catch {
-      setError('That decision did not go through. Please try again.');
+      setError(t('feed.proposal.decision-error'));
     } finally {
       setBusy(null);
     }
   }
 
   const edit = block.editBatchId !== null;
-  const label = edit ? 'edit' : 'refinement';
+  /*
+   * Which mechanism this card belongs to, as a caption key (task 143). Both are «правка» in Russian
+   * and one root apart from the review's «доработка», which is the distinction the two words exist
+   * to hold: an edit batch and a refinement change a finished file, a review sends it back.
+   */
+  const label = edit ? 'feed.caption.edit' : 'feed.caption.refinement';
 
   if (proposal === null) {
     return (
@@ -101,10 +115,19 @@ export function ProposalBlockCard({
         <div
           className="border-border-subtle bg-surface flex w-full flex-col gap-1 rounded-xl border p-4"
           data-testid="proposal-decided"
+          /*
+            Which way it went, in the column's own word (task 143). «Applied» and «Discarded» are
+            the sentence's business; this card is one of two outcomes and should say which without
+            anyone having to read it.
+          */
+          data-status={block.status}
         >
           <BlockCaption stage={block.stage} trailing={label} />
           <p className="text-sm">
-            {block.status === 'accepted' ? 'Applied' : 'Discarded'}: {block.instruction}
+            {block.status === 'accepted'
+              ? t('feed.proposal.applied')
+              : t('feed.proposal.discarded')}
+            : {block.instruction}
           </p>
           <p className="text-foreground-muted text-xs" data-testid="proposal-decided-files">
             {block.files.map((file) => file.fileName).join(', ')}
@@ -126,10 +149,8 @@ export function ProposalBlockCard({
         <BlockCaption stage={block.stage} trailing={label} />
         <p className="text-sm font-medium">
           {edit
-            ? `Proposed edit across ${String(proposal.files.length)} ${
-                proposal.files.length === 1 ? 'document' : 'documents'
-              }`
-            : 'Proposed change'}
+            ? t('feed.proposal.edit-title', { count: proposal.files.length })
+            : t('feed.proposal.title')}
         </p>
         <p className="text-foreground-muted text-xs">
           <span data-testid="diff-instruction">{proposal.instruction}</span>
@@ -137,7 +158,11 @@ export function ProposalBlockCard({
           <span data-testid="diff-counts">
             +{added} −{removed}
           </span>
-          . Nothing is saved until you {edit ? 'approve' : 'accept'}.
+          {/*
+            The tail carries the full stop that ends the counts, because the sentence around the two
+            spans is one phrase and the spans are the only thing in it the dictionary cannot hold.
+          */}
+          {edit ? t('feed.proposal.pending-tail-approve') : t('feed.proposal.pending-tail-accept')}
         </p>
 
         {proposal.files.map((file) => (
@@ -169,11 +194,11 @@ export function ProposalBlockCard({
           >
             {busy === 'accept'
               ? edit
-                ? 'Applying every file…'
-                : 'Applying…'
+                ? t('feed.proposal.approve-apply-busy')
+                : t('feed.proposal.accept-busy')
               : edit
-                ? 'Approve and apply'
-                : 'Accept'}
+                ? t('feed.proposal.approve-apply')
+                : t('feed.proposal.accept')}
           </Button>
           <Button
             variant="secondary"
@@ -183,7 +208,11 @@ export function ProposalBlockCard({
               void decide('reject');
             }}
           >
-            {busy === 'reject' ? 'Discarding…' : edit ? 'Request changes' : 'Reject'}
+            {busy === 'reject'
+              ? t('feed.proposal.reject-busy')
+              : edit
+                ? t('common.request-changes')
+                : t('feed.proposal.reject')}
           </Button>
         </div>
       </div>
@@ -201,6 +230,7 @@ export function ProposalBlockCard({
  */
 export function RefineBox({ specFileId }: { specFileId: string }) {
   const router = useRouter();
+  const t = useT();
   const [instruction, setInstruction] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -221,13 +251,13 @@ export function RefineBox({ specFileId }: { specFileId: string }) {
 
       if (!response.ok) {
         // The section-removal refusal names the section, and that message is the whole point of it.
-        setError(refusalMessage(payload));
+        setError(refusalMessage(payload) ?? t('feed.refine.failed'));
         return;
       }
 
       const parsed = RefinementResponse.safeParse(payload);
       if (!parsed.success) {
-        setError('That did not work. Please try again.');
+        setError(t('feed.refine.failed'));
         return;
       }
 
@@ -237,14 +267,14 @@ export function RefineBox({ specFileId }: { specFileId: string }) {
       }
 
       if (parsed.data.status === 'no-change') {
-        setError('That instruction would not change anything in this file.');
+        setError(t('feed.refine.no-change'));
         return;
       }
 
       setInstruction('');
       router.refresh();
     } catch {
-      setError('That did not work. Please try again.');
+      setError(t('feed.refine.failed'));
     } finally {
       setBusy(false);
     }
@@ -273,12 +303,12 @@ export function RefineBox({ specFileId }: { specFileId: string }) {
       open={speaking}
     >
       <summary className="text-foreground-muted cursor-pointer text-sm" data-testid="refine-toggle">
-        Refine a file — say what should change
+        {t('feed.refine.heading')}
       </summary>
 
       <div className="mt-3 flex w-full flex-col gap-2">
         <Label htmlFor="refine-instruction" className="sr-only">
-          Refine a file — say what should change
+          {t('feed.refine.heading')}
         </Label>
         <Textarea
           id="refine-instruction"
@@ -287,7 +317,7 @@ export function RefineBox({ specFileId }: { specFileId: string }) {
           onChange={(event) => {
             setInstruction(event.target.value);
           }}
-          placeholder="Add a non-goals section under the overview."
+          placeholder={t('feed.refine.placeholder')}
         />
 
         {question !== null && (
@@ -315,7 +345,7 @@ export function RefineBox({ specFileId }: { specFileId: string }) {
           }}
           className="self-start"
         >
-          {busy ? 'Working…' : 'Propose change'}
+          {busy ? t('feed.refine.busy') : t('feed.refine.submit')}
         </Button>
       </div>
     </details>

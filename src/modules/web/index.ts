@@ -24,3 +24,7 @@ export { ThemeToggle } from './theme/theme-toggle';
 export { SERVER_DEFAULT_THEME, THEME_ATTRIBUTE, THEME_STORAGE_KEY } from './theme/theme';
 export { ConnectionBanner } from './session/connection-banner';
 export { cn } from './lib/cn';
+export { LocaleProvider, useLocale, useT } from './i18n/locale-context';
+export { DEFAULT_LOCALE, LOCALE_COOKIE } from './i18n/locale';
+export { LOCALES, isLocale, type Locale } from './i18n/phrase';
+export { translator, type Translate } from './i18n/translate';

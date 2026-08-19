@@ -83,7 +83,13 @@ test.describe('when the server stops answering', () => {
 
     const banner = page.getByTestId('connection-lost');
     await expect(banner).toBeVisible({ timeout: 20_000 });
-    await expect(banner).toContainText('Nothing is lost');
+    /*
+     * The reassurance is chosen from this state and from nothing else (task 143): `lost` is the
+     * sentence that says a running generation carries on and everything approved is saved, `checking`
+     * the one that says it is still trying. Reading the state is reading which of the two is on
+     * screen, in either language.
+     */
+    await expect(banner).toHaveAttribute('data-connection-state', 'lost');
     await expect(page.getByTestId('connection-reconnect')).toBeEnabled();
 
     // Д-1: the banner is not a wall. The session's own controls are still there to press.
@@ -153,7 +159,8 @@ test.describe('toasts', () => {
 
     const toast = page.getByTestId('toast').first();
     await expect(toast).toBeVisible();
-    await expect(toast).toContainText('Chat archived');
+    // Which event was announced, not how it was worded — a restore raises the same tone (task 143).
+    await expect(toast).toHaveAttribute('data-toast-kind', 'chat-archived');
     await expect(toast).toHaveAttribute('data-tone', 'success');
 
     await page.getByTestId('toast-dismiss').first().click();

@@ -7,7 +7,17 @@ import { describe, expect, it } from 'vitest';
 
 import { capacityFor, createFailoverClient, type LlmAdapter } from '@/modules/adapters/llm';
 import { createProviderStream, DEFAULT_MODELS } from '@/modules/adapters/llm/providers';
-import { createInterviewAgent } from '@/modules/agents/interview/interview-agent';
+import {
+  CONCRETE_CHECKS,
+  CONCRETE_UNDECIDED,
+  checkConcreteRound,
+  type ConcreteCheck,
+  type ConcreteFinding,
+} from '@/modules/agents/interview/concrete-rubric';
+import {
+  createInterviewAgent,
+  parseJsonDocument,
+} from '@/modules/agents/interview/interview-agent';
 
 /**
  * **The JSON round, on the gate's candidate model** (gate profile of 2026-08-16; task 129 pre-flight).
@@ -24,7 +34,18 @@ import { createInterviewAgent } from '@/modules/agents/interview/interview-agent
  * layers that stand between the model and a usable round: the tolerant parse, the deterministic
  * repair, and the single re-draft of Р-1.
  *
- * Not part of any suite and never run in CI — see `vitest.live.config.ts`.
+ * **The second pass measures the concrete register** (task 144; AC «judged by a scripted rubric over 3
+ * live rounds»). It is the same three samples with `style: 'concrete'`, scored by
+ * `checkConcreteRound` — so what the table says is not that the round parsed, but whether the model
+ * can hold a register while holding a shape, which is the harder of the two and the one the customer
+ * complained about. The rubric costs nothing and needs no second model: a round is green when it
+ * carries no blocking finding, and the advisories are printed to be read rather than obeyed (§4.7).
+ *
+ * The score is taken over the **raw** draft rather than the validated set, because the schema drops a
+ * hallucinated link and an unknown logo slug in silence (D-221) and a measurement that read the
+ * repaired round would report a clean one every time.
+ *
+ * Not part of any suite and never run in CI — see `vitest.live.config.ts` (NFR-012 AC-5).
  */
 
 const OUT = process.env.PREFLIGHT_OUT ?? 'artifacts/gate-M10/preflight';
@@ -46,7 +67,17 @@ interface Round {
   issues: string;
 }
 
-function localChain(count: { calls: number }): LlmAdapter {
+interface ConcreteRound extends Round {
+  findings: readonly ConcreteFinding[];
+}
+
+/** One sample's bookkeeping: how many calls it took, and the last text the model actually wrote. */
+interface Sample {
+  calls: number;
+  text: string;
+}
+
+function localChain(sample: Sample): LlmAdapter {
   const capacity = capacityFor('ollama', CONTEXT_LENGTH);
   const chain = createFailoverClient({
     providers: [
@@ -62,23 +93,32 @@ function localChain(count: { calls: number }): LlmAdapter {
   });
 
   return {
-    generateStreaming: (options) => {
-      count.calls += 1;
+    generateStreaming: async (options) => {
+      sample.calls += 1;
+      const result = await chain.generateStreaming(options);
 
-      return chain.generateStreaming(options);
+      /*
+       * The raw text is kept because the rubric needs the draft the model wrote, not the round the
+       * schema allowed through. On a re-draft this holds the second sample, which is the one the
+       * returned outcome came from.
+       */
+      sample.text = result.text;
+
+      return result;
     },
   };
 }
 
 const rounds: Round[] = [];
+const concrete: ConcreteRound[] = [];
 
 describe('a question round on the candidate local model (gate profile)', () => {
   for (let index = 1; index <= SAMPLES; index += 1) {
     it(`drafts a usable round (${String(index)} of ${String(SAMPLES)})`, async () => {
-      const count = { calls: 0 };
+      const sample: Sample = { calls: 0, text: '' };
       const startedAt = Date.now();
 
-      const outcome = await createInterviewAgent(localChain(count)).draftRound({
+      const outcome = await createInterviewAgent(localChain(sample)).draftRound({
         stage: 'requirements',
         audience: 'non-technical',
         roundNumber: 1,
@@ -93,7 +133,7 @@ describe('a question round on the candidate local model (gate profile)', () => {
       const round: Round = {
         label: `round-${String(index)}`,
         seconds: Math.round((Date.now() - startedAt) / 100) / 10,
-        calls: count.calls,
+        calls: sample.calls,
         kind: outcome.kind,
         questions: outcome.kind === 'round' ? outcome.set.questions.length : 0,
         repaired: outcome.kind === 'round' && outcome.repaired,
@@ -108,8 +148,73 @@ describe('a question round on the candidate local model (gate profile)', () => {
       expect(round.calls).toBe(1);
     });
   }
+});
 
-  it('records the measurement', () => {
+describe('the same round in the concrete register (task 144)', () => {
+  for (let index = 1; index <= SAMPLES; index += 1) {
+    it(`drafts a round in the register it was asked for (${String(index)} of ${String(SAMPLES)})`, async () => {
+      const sample: Sample = { calls: 0, text: '' };
+      const startedAt = Date.now();
+
+      const outcome = await createInterviewAgent(localChain(sample)).draftRound({
+        /*
+         * `solution` and a non-technical profile together, on purpose. The stage is where a question
+         * about what to build and how has somewhere to go, and the profile is the claim of §0 under
+         * test: the style **displaces** the register rather than composing with it, so a round that
+         * comes back hedging every option into a category has falsified that claim rather than the
+         * model.
+         */
+        stage: 'solution',
+        audience: 'non-technical',
+        style: 'concrete',
+        roundNumber: 1,
+        initialPrompt: IDEA,
+        summary: null,
+        satisfiedNeeds: [],
+        unmetNeeds: [],
+        contentLanguage: 'en',
+        runId: `preflight-concrete-${String(index)}`,
+      });
+
+      const findings = checkConcreteRound({
+        draft: parseJsonDocument(sample.text),
+        set: outcome.kind === 'round' ? outcome.set : null,
+        language: 'en',
+        initialPrompt: IDEA,
+      });
+
+      concrete.push({
+        label: `concrete-${String(index)}`,
+        seconds: Math.round((Date.now() - startedAt) / 100) / 10,
+        calls: sample.calls,
+        kind: outcome.kind,
+        questions: outcome.kind === 'round' ? outcome.set.questions.length : 0,
+        repaired: outcome.kind === 'round' && outcome.repaired,
+        issues: outcome.kind === 'draft-invalid' ? outcome.issues.join('; ') : '',
+        findings,
+      });
+
+      expect(outcome.kind).toBe('round');
+    });
+  }
+});
+
+/** `✓`, or what the check found — blocking first, because that is what decides the verdict. */
+function verdict(findings: readonly ConcreteFinding[], check: ConcreteCheck): string {
+  const mine = findings.filter((finding) => finding.check === check);
+  const blocking = mine.filter((finding) => finding.severity === 'blocking').length;
+  const advisory = mine.length - blocking;
+
+  if (mine.length === 0) return '✓';
+
+  return [
+    ...(blocking > 0 ? [`**${String(blocking)} блок.**`] : []),
+    ...(advisory > 0 ? [`${String(advisory)} сов.`] : []),
+  ].join(' · ');
+}
+
+describe('the record', () => {
+  it('writes the measurement', () => {
     mkdirSync(OUT, { recursive: true });
     writeFileSync(
       `${OUT}/ROUND.md`,
@@ -131,6 +236,43 @@ describe('a question round on the candidate local model (gate profile)', () => {
         'Столбец «ремонт» — сработал ли детерминированный ремонт набора (лишние рекомендации, размеры',
         'списков). «да» здесь не отказ: черновик был пригоден после ремонта, и ремонт оставляет строку',
         'в логе (задача 131).',
+        '',
+        '## Режим «Concrete»: те же прогоны под скриптованной рубрикой (задача 144, §4)',
+        '',
+        'Стадия `solution`, профиль `non-technical`, `style: concrete` — стиль обязан вытеснить регистр',
+        'профиля, а не сложиться с ним. Рубрика считается по **сырому** черновику: то, что схема',
+        'молча отбрасывает (выдуманная ссылка, чужой слаг), обязано быть названо.',
+        '',
+        'Зелено = ноль **блокирующих** находок. «сов.» — совещательные: их читают, по ним не блокируют.',
+        '',
+        `| прогон | вызовов | исход | вопросов | ${CONCRETE_CHECKS.join(' | ')} | секунд |`,
+        `|---|---|---|---|${CONCRETE_CHECKS.map(() => '---').join('|')}|---|`,
+        ...concrete.map(
+          (row) =>
+            `| ${row.label} | ${String(row.calls)} | ${row.kind === 'round' ? '**round**' : `\`${row.kind}\``} | ` +
+            `${String(row.questions)} | ` +
+            `${CONCRETE_CHECKS.map((check) => verdict(row.findings, check)).join(' | ')} | ` +
+            `${String(row.seconds)} |`,
+        ),
+        '',
+        '### Находки построчно',
+        '',
+        ...concrete.flatMap((row) =>
+          row.findings.length === 0
+            ? [`- **${row.label}** — чисто.`]
+            : row.findings.map(
+                (finding) =>
+                  `- **${row.label}** · \`${finding.id}\` (${finding.severity}) — ${finding.message} ` +
+                  `Найдено: «${finding.evidence.slice(0, 120)}».`,
+              ),
+        ),
+        '',
+        '### Чего рубрика не решает',
+        '',
+        'Зелёная таблица выше не означает, что проверено всё: ниже — то, что текстом не решается и',
+        'остаётся судейскому проходу гейта 146.',
+        '',
+        ...CONCRETE_UNDECIDED.map((entry) => `- **${entry.subject}** — ${entry.reason}`),
       ].join('\n'),
       'utf8',
     );
@@ -138,5 +280,18 @@ describe('a question round on the candidate local model (gate profile)', () => {
     expect(rounds.filter((round) => round.kind === 'round' && round.calls === 1)).toHaveLength(
       SAMPLES,
     );
+
+    /*
+     * The acceptance criterion of task 144, as an assertion: three live rounds in the concrete
+     * register, each carrying no blocking finding. The file is written above first, so a failure
+     * leaves the evidence behind rather than only a red line.
+     */
+    expect(
+      concrete.filter(
+        (round) =>
+          round.kind === 'round' &&
+          !round.findings.some((finding) => finding.severity === 'blocking'),
+      ),
+    ).toHaveLength(SAMPLES);
   });
 });

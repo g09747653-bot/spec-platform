@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { isMethodologyId } from '@/modules/methodologies';
 
 import { AUDIENCE_PROFILES, DEFAULT_AUDIENCE_PROFILE } from './audience';
+import { DEFAULT_INTERVIEW_STYLE, INTERVIEW_STYLES } from './interview-style';
 
 /** The picker's default: let the classification choose (task 117). */
 export const AUTO_METHODOLOGY = 'auto';
@@ -35,6 +36,15 @@ export const CreateProjectRequest = z.object({
    * older page still open in a tab, a direct call — gets the plain register, which is the safe one.
    */
   audience: z.enum(AUDIENCE_PROFILES).default(DEFAULT_AUDIENCE_PROFILE),
+  /**
+   * Which questions the interview will ask (task 144), chosen beside the audience rather than
+   * within it.
+   *
+   * Defaulted for the same reason the audience is, and to the same effect: a client that omits it —
+   * an older page, a direct call — gets the register the profile already chose, which is what every
+   * caller written before this field meant.
+   */
+  style: z.enum(INTERVIEW_STYLES).default(DEFAULT_INTERVIEW_STYLE),
   /**
    * The workflow to walk, or `auto` to have it chosen (task 117; Эталон §1.4).
    *

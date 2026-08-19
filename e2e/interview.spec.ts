@@ -28,14 +28,22 @@ test.describe('workflow gates and the structured interview', () => {
     await page.getByTestId('create-project').click();
 
     await expect(page.getByTestId('session')).toBeVisible();
-    await expect(page.getByTestId('stage-current')).toHaveText(/Interview/);
+    await expect(page.getByTestId('stage-current')).toHaveAttribute('data-stage', 'interview');
 
     // --- The exit is shut and says why (FR-006 AC-2; task 29: 409 + machine-readable reason) ---
     await expect(page.getByTestId('interview-panel')).toBeVisible();
-    await expect(page.getByTestId('gate-unmet')).toContainText('one answered question round');
+    /*
+     * `data-reasons` is the gate's own unmet conditions, space-joined (task 143). The claim is that
+     * the missing answered round is among them, which is what the wording said; the bounded match
+     * keeps it from being satisfied by some future condition that merely ends in this one's name.
+     */
+    await expect(page.getByTestId('gate-unmet')).toHaveAttribute(
+      'data-reasons',
+      /(^| )answered-round( |$)/,
+    );
     await page.getByTestId('proceed').click();
     await expect(page.getByTestId('interview-notice')).toBeVisible();
-    await expect(page.getByTestId('stage-current')).toHaveText(/Interview/);
+    await expect(page.getByTestId('stage-current')).toHaveAttribute('data-stage', 'interview');
 
     // --- Asking presents a validated MCQ card (FR-005 AC-1/AC-2) ---
     await page.getByTestId('ask-round').click();
@@ -76,16 +84,22 @@ test.describe('workflow gates and the structured interview', () => {
 
     // The panel reflects persisted state: a round answered, the summary saved (task 38).
     await expect(page.getByTestId('interview-panel')).toBeVisible();
-    await expect(page.getByTestId('interview-panel')).toContainText('1 of 3 question rounds');
-    await expect(page.getByTestId('interview-panel')).toContainText('summary saved');
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-answered-rounds', '1');
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-round-budget', '3');
+    // `data-summary` is `saved` or `none`; only the interview keeps one, so it is absent elsewhere.
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-summary', 'saved');
 
     // --- The gate that refused now permits (FR-006 AC-3; task 38) ---
     await page.getByTestId('proceed').click();
-    await expect(page.getByTestId('stage-current')).toHaveText(/Constitution/);
-    await expect(page.getByTestId('stage-substage')).toHaveText(/Collecting/);
+    await expect(page.getByTestId('stage-current')).toHaveAttribute('data-stage', 'constitution');
+    await expect(page.getByTestId('stage-substage')).toHaveAttribute('data-substage', 'collect');
 
     // --- The next stage collects for itself (FR-007 AC-2: rounds are per stage) ---
-    await expect(page.getByTestId('gate-unmet')).toContainText('answered question round');
+    // This gate refuses with a reason code rather than the interview's condition list.
+    await expect(page.getByTestId('gate-unmet')).toHaveAttribute(
+      'data-reasons',
+      'NO_ANSWERED_ROUND',
+    );
     await page.getByTestId('ask-round').click();
     await expect(page.getByTestId('mcq-card')).toBeVisible();
     await page.getByTestId('mcq-option-q-constitution-scope-strict').check();
@@ -93,7 +107,7 @@ test.describe('workflow gates and the structured interview', () => {
 
     await expect(page.getByTestId('interview-panel')).toBeVisible();
     await page.getByTestId('proceed').click();
-    await expect(page.getByTestId('stage-substage')).toHaveText(/Generating/);
+    await expect(page.getByTestId('stage-substage')).toHaveAttribute('data-substage', 'generate');
 
     // --- At generate, the drafting path is open again (no pending card), and it streams ---
     await expect(page.getByTestId('generate-spec')).toBeVisible();
@@ -120,7 +134,8 @@ test.describe('workflow gates and the structured interview', () => {
     await page.getByTestId('mcq-option-q-audience-solo-devs').check();
     await page.getByTestId('mcq-option-q-problem-context').check();
     await page.getByTestId('mcq-submit').click();
-    await expect(page.getByTestId('interview-panel')).toContainText('1 of 3');
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-answered-rounds', '1');
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-round-budget', '3');
 
     // Round 2 answered by replying instead of submitting the card (task 36).
     await page.getByTestId('ask-round').click();
@@ -138,7 +153,8 @@ test.describe('workflow gates and the structured interview', () => {
     // Answer the follow-up; three rounds are now spent.
     await page.getByTestId('mcq-option-q-success-narrow-no-rewrite').check();
     await page.getByTestId('mcq-submit').click();
-    await expect(page.getByTestId('interview-panel')).toContainText('3 of 3');
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-answered-rounds', '3');
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-round-budget', '3');
 
     // --- Exhaustion: the fallback lists what stayed open, and records it directly (task 37) ---
     await expect(page.getByTestId('fallback-panel')).toBeVisible();
@@ -150,7 +166,7 @@ test.describe('workflow gates and the structured interview', () => {
 
     // The exit gate was never blocked by needs — and is open with round + summary in place.
     await page.getByTestId('proceed').click();
-    await expect(page.getByTestId('stage-current')).toHaveText(/Constitution/);
+    await expect(page.getByTestId('stage-current')).toHaveAttribute('data-stage', 'constitution');
   });
   /**
    * Task 106 — the round as the reference product presents it, and as the feed keeps it.
@@ -184,19 +200,32 @@ test.describe('workflow gates and the structured interview', () => {
     await page.getByTestId('ask-round').click();
     await expect(page.getByTestId('mcq-card')).toBeVisible();
 
-    // The header names the round and how much it asks (Эталон §1.1).
-    await expect(page.getByTestId('round-heading').first()).toContainText('Round 1 — 2 questions');
+    // The header names the round and how much it asks (Эталон §1.1) — the two numbers it reads out.
+    const heading = page.getByTestId('round-heading').first();
+    await expect(heading).toHaveAttribute('data-round', '1');
+    await expect(heading).toHaveAttribute('data-questions', '2');
 
-    // Required markers and the select-one/select-all captions.
+    // Required markers, and how many answers each question takes: `single` is the select-one caption.
     await expect(page.getByTestId('mcq-required-q-audience')).toBeVisible();
-    await expect(page.getByTestId('mcq-hint-q-audience')).toHaveText('Select one');
-    await expect(page.getByTestId('mcq-hint-q-problem')).toHaveText('Select all that apply');
+    await expect(page.getByTestId('mcq-hint-q-audience')).toHaveAttribute('data-select', 'single');
+    await expect(page.getByTestId('mcq-hint-q-problem')).toHaveAttribute('data-select', 'multiple');
 
-    // One recommendation, on the one option the model marked — and nowhere else.
-    await expect(page.getByTestId('mcq-recommended-teams')).toHaveText('(Recommended)');
+    // One recommendation, on the one option the model marked — the id says which — and nowhere else.
+    await expect(page.getByTestId('mcq-recommended-teams')).toBeVisible();
     await expect(
       page.getByTestId('mcq-card').locator('[data-testid^="mcq-recommended-"]'),
     ).toHaveCount(1);
+
+    /*
+     * Tag chips, on the one option the model tagged (task 134; row `1.1-6`; D-188).
+     *
+     * The same asymmetry the badge above is checked for, and until now nothing checked it: the chips
+     * shipped with a projection, a renderer and a fixture, and no walk that would notice them
+     * disappearing. They are a property of the **option**, so the count is what carries the claim —
+     * one tagged option in this round, two untagged beside it.
+     */
+    await expect(page.getByTestId('mcq-tags-solo-devs')).toContainText('fastest to ship');
+    await expect(page.getByTestId('mcq-card').locator('[data-testid^="mcq-tags-"]')).toHaveCount(1);
 
     // Select-all takes more than one; Other carries free text.
     await page.getByTestId('mcq-option-q-audience-solo-devs').check();
@@ -219,5 +248,118 @@ test.describe('workflow gates and the structured interview', () => {
     await page.reload();
     await expect(page.getByTestId('round-answered')).toBeVisible();
     expect(await page.getByTestId('round-answered').textContent()).toBe(fixed);
+  });
+
+  /**
+   * Task 144 — the справка, and the asymmetry that is the whole of it (видео §5).
+   *
+   * The reference product's finding is not «options can carry a note». It is that the note belongs
+   * to the **option**: inside one question, `Anthropic Claude` wears a mark, a link, an ⓘ and a row
+   * of chips, and `No preference — recommend the best fit` wears none of them, because one of them
+   * names a thing that exists in the world and the other does not. A walk that only proved the
+   * decorated case would pass just as happily over a renderer that decorated everything.
+   *
+   * The concrete style is what puts technologies in the options at all, so it is chosen here — beside
+   * the audience profile, where the customer asked for it to be chosen.
+   */
+  test('an option carries its справка; the one beside it stays bare (task 144)', async ({
+    page,
+    context,
+  }) => {
+    await signIn(context, await createSignedInUser('spravka'));
+
+    await page.goto('/projects');
+    await expect(page.getByTestId('create-project')).toBeEnabled();
+
+    // Asked beside the profile, not inside it: two axes, two fieldsets, one session.
+    await expect(page.getByTestId('audience-profile')).toBeVisible();
+    await expect(page.getByTestId('interview-style')).toBeVisible();
+    await page.getByTestId('style-concrete').check();
+
+    await page.getByTestId('prompt-input').fill('An assistant that drafts replies to a mailbox');
+    await page.getByTestId('create-project').click();
+    await expect(page.getByTestId('session')).toBeVisible();
+
+    // …and never again, for the same reason the register is never asked again (У-5).
+    await expect(page.getByTestId('interview-style')).toHaveCount(0);
+
+    await page.getByTestId('ask-round').click();
+    const card = page.getByTestId('mcq-card');
+    await expect(card).toBeVisible();
+
+    // --- The decorated option wears all four markers ---
+    await expect(card.getByTestId('mcq-logo-anthropic')).toBeVisible();
+    await expect(card.getByTestId('mcq-link-anthropic')).toBeVisible();
+    await expect(card.getByTestId('mcq-note-anthropic')).toBeVisible();
+    await expect(card.getByTestId('mcq-tags-anthropic')).toContainText('llm provider');
+
+    // --- Its neighbour in the same question wears none. This is the assertion that matters. ---
+    await expect(card.getByTestId('mcq-logo-no-preference')).toHaveCount(0);
+    await expect(card.getByTestId('mcq-link-no-preference')).toHaveCount(0);
+    await expect(card.getByTestId('mcq-note-no-preference')).toHaveCount(0);
+    await expect(card.getByTestId('mcq-tags-no-preference')).toHaveCount(0);
+
+    /*
+     * The link is model-authored content and is rendered as `viewer/markdown.tsx` renders one:
+     * `rel="noreferrer nofollow"`, and no `target` — the tab and the referrer stay the reader's.
+     * What makes the address itself safe is the schema's refinement, not this element.
+     */
+    const link = card.getByTestId('mcq-link-anthropic');
+    await expect(link).toHaveAttribute('href', 'https://www.anthropic.com');
+    await expect(link).toHaveAttribute('rel', 'noreferrer nofollow');
+    expect(await link.getAttribute('target')).toBeNull();
+
+    /*
+     * Neither control may sit inside the option's `<label>`: a label activates its input for a click
+     * anywhere within it, so an ⓘ nested there would choose the option a reader only wanted to read
+     * about. Asserted structurally as well as behaviourally, because the behavioural half passes on
+     * an engine that happens to be lenient and the structural half passes only on the fix.
+     */
+    for (const testId of ['mcq-note-anthropic', 'mcq-link-anthropic']) {
+      const nested = await card
+        .getByTestId(testId)
+        .evaluate((node) => node.closest('label') !== null);
+      expect(nested, `${testId} must stand outside the option's label`).toBe(false);
+    }
+
+    // The note is folded until it is asked for, and opening it chooses nothing.
+    const note = card.getByTestId('mcq-note-text-anthropic');
+    await expect(note).toBeHidden();
+    await card.getByTestId('mcq-note-anthropic').click();
+    await expect(note).toBeVisible();
+    await expect(note).toContainText('Claude');
+    await expect(card.getByTestId('mcq-option-q-provider-anthropic')).not.toBeChecked();
+
+    // A question whose options name no technology carries no справка anywhere in it.
+    await expect(
+      card.getByTestId('mcq-question-q-key-handling').locator('[data-testid^="mcq-note-"]'),
+    ).toHaveCount(0);
+
+    // --- Both halves survive submission ---
+    await page.getByTestId('mcq-option-q-provider-anthropic').check();
+    await page.getByTestId('mcq-option-q-key-handling-os-keychain').check();
+    await page.getByTestId('mcq-submit').click();
+
+    const answered = page.getByTestId('round-answered');
+    await expect(answered).toBeVisible();
+    await expect(page.getByTestId('mcq-card')).toHaveCount(0);
+    await expect(answered.getByTestId('mcq-logo-anthropic')).toBeVisible();
+    await expect(answered.getByTestId('mcq-link-anthropic')).toBeVisible();
+    await expect(answered.getByTestId('mcq-note-anthropic')).toBeVisible();
+    // The bare pick is bare on this branch too — the fixed round is not decorating what it fixed.
+    await expect(answered.getByTestId('mcq-logo-os-keychain')).toHaveCount(0);
+    await expect(answered.getByTestId('mcq-note-os-keychain')).toHaveCount(0);
+
+    // --- …and a reload, which is where the claim is really made (FR-017 AC-2) ---
+    await page.reload();
+    const reloaded = page.getByTestId('round-answered');
+    await expect(reloaded.getByTestId('mcq-logo-anthropic')).toBeVisible();
+    await expect(reloaded.getByTestId('mcq-link-anthropic')).toHaveAttribute(
+      'href',
+      'https://www.anthropic.com',
+    );
+    await reloaded.getByTestId('mcq-note-anthropic').click();
+    await expect(reloaded.getByTestId('mcq-note-text-anthropic')).toContainText('Claude');
+    await expect(reloaded.getByTestId('mcq-note-os-keychain')).toHaveCount(0);
   });
 });

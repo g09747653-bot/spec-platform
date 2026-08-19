@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useT } from '../i18n/locale-context';
+
 import { connectionFromStream, reportServerAnswered, reportServerUnreachable } from './connection';
 import {
   createResumableStream,
@@ -15,8 +17,9 @@ import {
  *
  * Deliberately thin. Everything worth testing — sequence tracking, restart semantics, reconnect
  * backoff — lives in `resumable-stream.ts` and is exercised without a renderer; this hook only owns
- * the React-shaped concerns: one reader instance per mount, state in a `useState`, and an abort on
- * unmount so a navigated-away page stops reading.
+ * the React-shaped concerns: one reader instance per mount, state in a `useState`, an abort on
+ * unmount so a navigated-away page stops reading, and the translator the reader needs for the one
+ * sentence it writes itself (task 143).
  */
 export interface UseResumableStream {
   state: StreamState;
@@ -30,9 +33,17 @@ export interface UseResumableStream {
 export function useResumableStream(): UseResumableStream {
   const [state, setState] = useState<StreamState>(initialStreamState);
   const streamRef = useRef<ResumableStream | null>(null);
+  const t = useT();
 
-  const stream = (): ResumableStream => {
+  /*
+   * A `useCallback` since task 143, and only because the reader now closes over the translator: `t`
+   * is a value the render produced, so the two callbacks below genuinely depend on it and saying so
+   * is cheaper than arguing with the dependency check. The instance itself is still created once —
+   * `??=` sees to that — so a re-render with a new `t` does not build a second reader.
+   */
+  const stream = useCallback((): ResumableStream => {
     streamRef.current ??= createResumableStream({
+      t,
       onState: (next) => {
         setState(next);
 
@@ -48,7 +59,7 @@ export function useResumableStream(): UseResumableStream {
       },
     });
     return streamRef.current;
-  };
+  }, [t]);
 
   useEffect(() => {
     return () => {
@@ -58,11 +69,11 @@ export function useResumableStream(): UseResumableStream {
     };
   }, []);
 
-  const start = useCallback((sessionId: string) => stream().start(sessionId), []);
+  const start = useCallback((sessionId: string) => stream().start(sessionId), [stream]);
 
   const resume = useCallback(
     (runId: string, from?: number, attempt?: number) => stream().resume(runId, from, attempt),
-    [],
+    [stream],
   );
 
   const stop = useCallback(() => {

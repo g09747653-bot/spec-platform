@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useT } from '../i18n/locale-context';
+
 import { reportServerAnswered, reportServerUnreachable } from './connection';
 import {
   createSessionRequest,
@@ -20,6 +22,11 @@ import {
  * is exercised without a renderer. This hook owns only the React-shaped concerns:
  *
  * - one request instance per mount, aborted when the page goes away;
+ * - the translator. `session-request.ts` has no React in it and therefore no way to reach the chrome
+ *   language, so this is where the two meet: the hook reads it from context once and hands it to the
+ *   instance it creates (task 143). The instance is created on the first `send`, so the language it
+ *   captures is the one the page was rendered in — which is the right one, because changing the
+ *   language is a server action that re-renders the page;
  * - the elapsed counter, which is what turns a frozen caption into an honest one: a number that
  *   keeps moving is the difference between "the page is working" and "the page is dead", and the
  *   frozen `Rendering…` of the gate could say neither;
@@ -53,6 +60,7 @@ export interface UseSessionRequest {
 
 export function useSessionRequest(deadlineMs?: number): UseSessionRequest {
   const router = useRouter();
+  const t = useT();
   const [state, setState] = useState<SessionRequestState>(initialSessionRequestState);
   /** Last tick of the clock, written only by the interval — never from an effect body. */
   const [tickedAt, setTickedAt] = useState(0);
@@ -71,6 +79,7 @@ export function useSessionRequest(deadlineMs?: number): UseSessionRequest {
   const getRequest = useCallback((): SessionRequest => {
     requestRef.current ??= createSessionRequest({
       onState: setState,
+      t,
       // Task 125: every session-moving request already learns whether the server is there. This is
       // where that knowledge reaches the connection banner — no extra request is made for it.
       onReachability: (reachable) => {
@@ -80,7 +89,7 @@ export function useSessionRequest(deadlineMs?: number): UseSessionRequest {
       ...(deadlineMs === undefined ? {} : { deadlineMs }),
     });
     return requestRef.current;
-  }, [deadlineMs]);
+  }, [deadlineMs, t]);
 
   useEffect(() => {
     return () => {

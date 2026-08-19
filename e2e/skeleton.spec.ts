@@ -43,7 +43,8 @@ test.describe('walking skeleton', () => {
 
     await expect(page.getByTestId('session')).toBeVisible();
     await expect(page.getByTestId('session-prompt')).toHaveText(prompt);
-    await expect(page.getByTestId('stage-current')).toHaveText(/Interview/);
+    // The position off the pill's own `data-stage`, not off its label (task 143).
+    await expect(page.getByTestId('stage-current')).toHaveAttribute('data-stage', 'interview');
     /*
      * The session's URL, and the project it belongs to — two different identifiers since А-6. Read
      * here, while the page is unambiguously the session page: later in this test it has been through
@@ -85,7 +86,7 @@ test.describe('walking skeleton', () => {
 
     // --- Approving marks that revision approved (FR-009 AC-3) ---
     await page.getByTestId('approve-spec').click();
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
     await expect(page.getByTestId('approve-spec')).toHaveCount(0);
     await expect(page.getByTestId('export-included')).toContainText('constitution.md');
 
@@ -103,7 +104,8 @@ test.describe('walking skeleton', () => {
     await page.goto('/projects');
     // The name is derived from the prompt (D-20); this one is short enough to be used whole.
     await expect(page.getByTestId('project-name')).toHaveText(prompt);
-    await expect(page.getByTestId('project-stage')).toHaveText('Constitution');
+    // The row prints the methodology's label and carries the canonical stage; the stage is the claim.
+    await expect(page.getByTestId('project-stage')).toHaveAttribute('data-stage', 'constitution');
 
     // --- Another user cannot see or open it: 404, not 403 (NFR-005 AC-2; AR-2) ---
     const intruder = await createSignedInUser('intruder');
@@ -119,7 +121,8 @@ test.describe('walking skeleton', () => {
 
       const response = await intruderPage.goto(projectUrl);
       expect(response?.status()).toBe(404);
-      await expect(intruderPage.getByText('Not found')).toBeVisible();
+      // The generic not-found view, identified by the one control only that page renders.
+      await expect(intruderPage.getByTestId('not-found-back')).toBeVisible();
       await expect(intruderPage.getByText('recipe app')).toHaveCount(0);
 
       // Export is a *project* route, and the page URL now names the session (А-6), so the project

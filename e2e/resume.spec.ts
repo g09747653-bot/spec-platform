@@ -129,7 +129,8 @@ test.describe('session resume', () => {
     await page.getByTestId('mcq-option-q-problem-context').check();
     await page.getByTestId('mcq-submit').click();
 
-    await expect(page.getByTestId('interview-panel')).toContainText('summary saved');
+    // The panel's own account of the summary, rather than the line it prints about one.
+    await expect(page.getByTestId('interview-panel')).toHaveAttribute('data-summary', 'saved');
 
     /*
      * The answers are shown back where they were given — the round itself, fixed in place, by the
@@ -178,7 +179,7 @@ test.describe('session resume', () => {
     await page.getByTestId('generate-spec').click();
     await expect(page.getByTestId('spec-card')).toBeVisible({ timeout: 20_000 });
     await page.getByTestId('approve-spec').click();
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
 
     await openRefine(page);
     await page.getByTestId('refine-instruction').fill('Add a section about non-goals.');
@@ -205,7 +206,7 @@ test.describe('session resume', () => {
     await page.getByTestId('generate-spec').click();
     await expect(page.getByTestId('spec-card')).toBeVisible({ timeout: 20_000 });
     await page.getByTestId('approve-spec').click();
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
     await page.getByTestId('proceed').click();
     await expect(page.getByTestId('review-board')).toBeVisible({ timeout: 20_000 });
 
@@ -215,7 +216,7 @@ test.describe('session resume', () => {
 
     await expect(page.getByTestId('review-board')).toBeVisible();
     expect(await page.getByTestId('review-board').textContent()).toBe(board);
-    await expect(page.getByTestId('stage-substage')).toHaveText(/Reviewing/);
+    await expect(page.getByTestId('stage-substage')).toHaveAttribute('data-substage', 'review');
   });
 
   /*
@@ -314,8 +315,13 @@ test.describe('session resume', () => {
      * refresh — the assertion below is about persisted state, and it should be taken after the page
      * has finished saying what happened, not in the middle of it.
      */
-    // The door lives at the tail of the feed now, so its notice is the tail's (task 105).
-    await expect(page.getByTestId('interview-notice')).toContainText('did not reach the server');
+    // The door lives at the tail of the feed now, so its notice is the tail's (task 105). Which
+    // ending it is reporting is the claim: the request never arrived, as against a server that
+    // answered with a refusal — a distinction the sentence made only by being that sentence.
+    await expect(page.getByTestId('interview-notice')).toHaveAttribute(
+      'data-notice-kind',
+      'unreachable',
+    );
     await page.unroute('**/api/sessions/*/transition');
 
     // Tolerant of that refresh being in flight: a navigation interrupted by the page's own re-read

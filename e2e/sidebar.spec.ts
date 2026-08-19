@@ -63,7 +63,10 @@ test.describe('the session sidebar', () => {
      */
     const rows = page.getByTestId('specs-panel-row');
     await expect(rows).toHaveCount(4);
-    await expect(page.getByTestId('specs-panel-status').first()).toHaveText('Not started');
+    await expect(page.getByTestId('specs-panel-status').first()).toHaveAttribute(
+      'data-status',
+      'not-started',
+    );
 
     await reachDrafting(page);
     await draftAndApprove(page);
@@ -72,7 +75,10 @@ test.describe('the session sidebar', () => {
       .getByTestId('specs-panel-row')
       .filter({ has: page.getByText('constitution.md') });
 
-    await expect(constitution.getByTestId('specs-panel-status')).toHaveText('Approved');
+    await expect(constitution.getByTestId('specs-panel-status')).toHaveAttribute(
+      'data-status',
+      'approved',
+    );
   });
 
   test('the Local Workspace stub makes no network call and promises nothing', async ({
@@ -97,6 +103,9 @@ test.describe('the session sidebar', () => {
     await page.waitForTimeout(500);
 
     expect(requests, 'the stub reached the network').toEqual([]);
-    await expect(page.getByTestId('local-workspace')).toContainText('not built yet');
+    // AC-4's other half: the panel admits in its own copy that nothing is behind it. The flag is
+    // what carries that admission across a translation — a panel that quietly dropped the sentence
+    // would lose the element, not merely re-word it.
+    await expect(page.getByTestId('local-workspace').locator('[data-stub="true"]')).toBeVisible();
   });
 });

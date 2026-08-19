@@ -242,10 +242,12 @@ test.describe('M12п bug hunt', () => {
     /*
      * Settled before reloading, and this is a Firefox lesson rather than a nicety: a reload issued
      * while a `fetch` is still open is aborted by Gecko with `NS_BINDING_ABORTED`, so the harness
-     * fails on a navigation the product never refused. The control saying «Send» is the same
-     * evidence a person has that the last message landed.
+     * fails on a navigation the product never refused. The send having dropped its busy flag is the
+     * same evidence the person reading its label has that the last message landed (task 143).
      */
-    await expect(page.getByTestId('chat-send')).toHaveText('Send', { timeout: 30_000 });
+    await expect(page.getByTestId('chat-send')).toHaveAttribute('data-busy', 'false', {
+      timeout: 30_000,
+    });
 
     // Reload at this state and at every state a stage passes through.
     await page.reload();
@@ -274,7 +276,7 @@ test.describe('M12п bug hunt', () => {
     await stillAlive(page, 'reloaded at pending approval');
 
     await page.getByTestId('approve-spec').click();
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
     await page.getByTestId('proceed').click();
     await expect(page.getByTestId('review-board')).toBeVisible({ timeout: 40_000 });
     await page.reload();
@@ -315,11 +317,31 @@ test.describe('M12п bug hunt', () => {
     const count = await cards.count();
     for (let index = 0; index < count; index += 1) {
       const card = cards.nth(index);
-      const revision = (await card.getByTestId('document-revision').innerText()).trim();
+      /*
+       * The number the card carries, not the sentence it prints it in (task 143). The badge and the
+       * pane's metric each say «Rev N» out of their own phrase, so comparing the two strings would
+       * be comparing two spellings of the same fact; the fact is the number.
+       */
+      const revision =
+        (await card.getByTestId('document-revision').getAttribute('data-revision')) ?? '';
+      expect(revision, 'the card names no revision').not.toBe('');
 
       await card.getByTestId('open-viewer').click();
-      await expect(page.getByTestId('viewer-metric-revision')).toHaveText(revision);
+      await expect(page.getByTestId('viewer-metric-revision')).toHaveAttribute(
+        'data-revision',
+        revision,
+      );
       await expect(page.getByTestId('viewer-metric-lines')).toBeVisible();
+
+      /*
+       * Closed before the next card, because the viewer is a modal overlay now (task 147): the
+       * conversation is visible under the scrim but not clickable through it, so «open the next
+       * document» is a two-step move for a person and has to be one here too. The docked pane let
+       * this loop press the next eye directly; the property being tested — the pane follows the
+       * card it was opened from, rather than showing whichever revision loaded last — is unchanged.
+       */
+      await page.keyboard.press('Escape');
+      await expect(page.getByTestId('viewer-pane')).toHaveCount(0);
     }
 
     // A reload closes the pane rather than restoring a stale one — and leaves the session usable.

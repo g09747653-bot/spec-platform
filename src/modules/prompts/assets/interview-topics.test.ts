@@ -66,6 +66,8 @@ describe('interview topics (round 2, Д-3)', () => {
         // this suite asserts is the topic block, not the round's size.
         questionsPerRound: { max: 5 },
         optionsPerQuestion: { min: 2, max: 8 },
+        optionNote: { max: 240 },
+        logoSlugs: ['anthropic', 'sqlite'],
         stage,
         audience: 'non-technical',
         roundNumber: 1,
@@ -112,6 +114,8 @@ describe('interview topics (round 2, Д-3)', () => {
         // this suite asserts is the topic block, not the round's size.
         questionsPerRound: { max: 5 },
         optionsPerQuestion: { min: 2, max: 8 },
+        optionNote: { max: 240 },
+        logoSlugs: ['anthropic', 'sqlite'],
         stage: 'solution',
         audience: 'technical',
         roundNumber: 1,
@@ -134,6 +138,8 @@ describe('interview topics (round 2, Д-3)', () => {
         // this suite asserts is the topic block, not the round's size.
         questionsPerRound: { max: 5 },
         optionsPerQuestion: { min: 2, max: 8 },
+        optionNote: { max: 240 },
+        logoSlugs: ['anthropic', 'sqlite'],
         stage: 'solution',
         audience: 'martian',
         roundNumber: 1,
@@ -146,12 +152,77 @@ describe('interview topics (round 2, Д-3)', () => {
       expect(unknown.system).toContain('They are not technical');
     });
 
+    /**
+     * Task 144 — the third block, and the two things it must not do.
+     *
+     * The style is a second axis, not a third profile, and the whole reason it displaces the
+     * profile's register rather than joining it is that «they are not technical» beside «name the
+     * actual technology» produces the round the customer complained about. So the assertions are
+     * about absence as much as presence — and the prohibition standing above the slot survives all
+     * three registers, because it is about the process, not the reader.
+     */
+    describe('the concrete style', () => {
+      const styled = (style: string | undefined, audience = 'non-technical') =>
+        interviewQuestionsPrompt({
+          // Literals, not the schema's constants: `prompts` may not import `agents` (A1).
+          questionsPerRound: { max: 5 },
+          optionsPerQuestion: { min: 2, max: 8 },
+          optionNote: { max: 240 },
+          logoSlugs: ['anthropic', 'sqlite'],
+          stage: 'solution',
+          audience,
+          style,
+          roundNumber: 1,
+          initialPrompt: 'An app for tracking what my family spends',
+          summary: null,
+          satisfiedNeeds: [],
+          unmetNeeds: [],
+        });
+
+      it('displaces the profile register rather than composing with it', () => {
+        const concrete = styled('concrete');
+
+        expect(concrete.system).toContain('vary what you ask about');
+        expect(concrete.system).not.toContain('They are not technical');
+        expect(concrete.system).not.toContain('comfortable with engineering vocabulary');
+      });
+
+      it('displaces the technical register too — the style is the second axis, not a third profile', () => {
+        const concrete = styled('concrete', 'technical');
+
+        expect(concrete.system).toContain('vary what you ask about');
+        expect(concrete.system).not.toContain('comfortable with engineering vocabulary');
+      });
+
+      it('leaves the prohibition on asking about our own artifacts exactly where it was', () => {
+        expect(styled('concrete').system).toContain('Never ask about documents');
+      });
+
+      it('falls back to the profile for a style it does not recognise, and for none at all', () => {
+        expect(styled('impressionist').system).toContain('They are not technical');
+        expect(styled(undefined).system).toContain('They are not technical');
+      });
+
+      /*
+       * The list the model reads is the list the renderer can draw (task 144). An empty slot here
+       * would be a prompt inviting a slug from nowhere, and it would render as an empty sentence.
+       */
+      it('renders the logo slugs it was given, in the sentence that closes the list', () => {
+        const concrete = styled('concrete');
+
+        expect(concrete.system).toContain('anthropic, sqlite');
+        expect(concrete.system).toContain('at most 240 characters');
+      });
+    });
+
     it('still carries the needs bookkeeping the gates depend on', () => {
       const assembled = interviewQuestionsPrompt({
         // Literals, not the schema's constants: `prompts` may not import `agents` (A1), and what
         // this suite asserts is the topic block, not the round's size.
         questionsPerRound: { max: 5 },
         optionsPerQuestion: { min: 2, max: 8 },
+        optionNote: { max: 240 },
+        logoSlugs: ['anthropic', 'sqlite'],
         stage: 'requirements',
         audience: 'non-technical',
         roundNumber: 2,

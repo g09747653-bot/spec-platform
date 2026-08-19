@@ -1,15 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
+import { type PhraseKey } from '../i18n/dictionary';
+import { useT } from '../i18n/locale-context';
 import { Button } from '../ui/button';
 import { Input, Label, Textarea } from '../ui/field';
+import { ExternalLinkIcon, InfoIcon } from '../ui/icons';
+import { TechnologyLogo } from '../ui/logos';
 import { WaitingOn } from '../session/waiting-on';
 import { useSessionRequest } from '../session/useSessionRequest';
 
 import { BlockCaption } from './bubbles';
 import { FeedItem } from './feed-item';
-import type { FeedAnswer, FeedQuestion, RoundBlock as RoundBlockModel } from './model';
+import type { FeedAnswer, FeedOption, FeedQuestion, RoundBlock as RoundBlockModel } from './model';
 
 /**
  * A question round, inside the conversation (tasks 105, 106; FR-005 AC-1..AC-6; Эталон §1.1).
@@ -33,10 +37,16 @@ interface RoundBlockProps {
   freeTextPrefill?: string | null;
 }
 
-/** What each action is waiting for, in the words the status line reads out. */
-const WAITING_FOR: Record<string, string> = {
-  submit: 'your answers to be recorded',
-  reply: 'your reply to be read',
+/**
+ * What each action is waiting for, in the words the status line reads out.
+ *
+ * Keys rather than words (task 143): the table keeps deciding which wait this is, and the sentence
+ * it lands in is resolved where the translator is — the status line frames these differently in the
+ * two languages, and a table of English fragments could not follow it.
+ */
+const WAITING_FOR: Record<string, PhraseKey> = {
+  submit: 'feed.round.waiting-submit',
+  reply: 'feed.round.waiting-reply',
 };
 
 interface QuestionState {
@@ -62,32 +72,169 @@ const emptyState = (
 
 function RoundHeading({ block }: { block: RoundBlockModel }) {
   const count = block.questions.length;
+  const t = useT();
 
   return (
-    <p className="text-foreground-muted text-label uppercase" data-testid="round-heading">
-      Round {block.roundNumber} — {count} {count === 1 ? 'question' : 'questions'}
+    <p
+      className="text-foreground-muted text-label uppercase"
+      data-testid="round-heading"
+      /*
+        The two numbers the heading reads out, as numbers (task 143). Reading them back out of
+        «Round 2 — 3 questions» means parsing a plural rule as well as a language, and the plural is
+        the half of that sentence most likely to be the first thing a translation changes.
+      */
+      data-round={String(block.roundNumber)}
+      data-questions={String(count)}
+    >
+      {t('feed.round.heading', { round: block.roundNumber, count })}
     </p>
   );
 }
 
 function SelectionHint({ question }: { question: FeedQuestion }) {
+  const t = useT();
+
   return (
-    <span className="text-foreground-muted text-xs" data-testid={`mcq-hint-${question.id}`}>
-      {question.type === 'single' ? 'Select one' : 'Select all that apply'}
+    <span
+      className="text-foreground-muted text-xs"
+      data-testid={`mcq-hint-${question.id}`}
+      /*
+        How many answers the question takes, in the schema's own word (task 143) — the same fact the
+        inputs below switch on, said once more where a walk can read it without inferring it from
+        «Select all that apply».
+      */
+      data-select={question.type}
+    >
+      {question.type === 'single' ? t('feed.round.select-one') : t('feed.round.select-many')}
     </span>
   );
 }
 
+/**
+ * The technology's mark, immediately before its name (task 144; видео §5, part 2).
+ *
+ * Shared by the pending card and the answered round because it is the same claim in both: this
+ * option names a thing that exists in the world. `TechnologyLogo` draws nothing for a slug this
+ * build has no mark for, and the test id goes with the drawing rather than with the intention.
+ */
+function OptionMark({ option }: { option: FeedOption }) {
+  if (option.logo === undefined) return null;
+
+  return (
+    <TechnologyLogo
+      slug={option.logo}
+      testId={`mcq-logo-${option.id}`}
+      className="text-foreground-muted mr-1.5 inline-flex align-middle"
+    />
+  );
+}
+
+/**
+ * The справка around one option: the ⓘ that unfolds it, the ↗ that leaves for the vendor's own site
+ * (task 144; видео §5, parts 5–6).
+ *
+ * `children` is whatever names the option — the pending card's `<label>`, the answered round's fixed
+ * value — and the two controls are its **siblings**, never its descendants. That is the whole of the
+ * trap the surface sets here: a `<label>` activates its control for a click anywhere inside it, so a
+ * link nested there would choose the option a reader was only reading about, and stopping the event
+ * cannot undo it (React listens at the root, by which time the label has already seen the click and
+ * acted). Standing the controls outside the label deletes the question rather than answering it.
+ *
+ * A button with `aria-expanded` rather than the `<details>` this codebase reaches for elsewhere, and
+ * the reason is placement, not taste: the note has to open under the **whole** row, and a
+ * `<summary>`'s panel opens under the `<summary>`. The pre-hydration argument that earns `<details>`
+ * its place on the review board buys nothing on this card either — every option here is a controlled
+ * input, so the card does not work at all until React is running.
+ *
+ * The link follows `viewer/markdown.tsx` exactly — `rel="noreferrer nofollow"`, no `target` — because
+ * it is the same kind of thing: an address a model wrote. What makes it safe is the schema's
+ * refinement, which accepts an https home page on the vendor's own host and drops everything else;
+ * this renderer is downstream of that and does not pretend to be the boundary.
+ */
+function OptionReference({
+  option,
+  panelId,
+  className,
+  children,
+}: {
+  option: FeedOption;
+  /** Unique across the page: an option id repeats between questions, `aria-controls` may not. */
+  panelId: string;
+  className: string;
+  children: ReactNode;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const { note, href } = option;
+
+  return (
+    <div className={className}>
+      <div className="flex items-start gap-2">
+        {children}
+        {(note !== undefined || href !== undefined) && (
+          <span className="text-foreground-muted flex shrink-0 items-center gap-1.5">
+            {href !== undefined && (
+              <a
+                href={href}
+                rel="noreferrer nofollow"
+                data-testid={`mcq-link-${option.id}`}
+                aria-label={t('feed.round.site', { name: option.label })}
+                className="hover:text-foreground"
+              >
+                <ExternalLinkIcon />
+              </a>
+            )}
+            {note !== undefined && (
+              <button
+                type="button"
+                data-testid={`mcq-note-${option.id}`}
+                aria-expanded={open}
+                aria-controls={panelId}
+                aria-label={t(open ? 'feed.round.note-hide' : 'feed.round.note-show', {
+                  name: option.label,
+                })}
+                className="hover:text-foreground"
+                onClick={() => {
+                  setOpen(!open);
+                }}
+              >
+                <InfoIcon />
+              </button>
+            )}
+          </span>
+        )}
+      </div>
+      {/*
+        Rendered folded rather than not rendered: `aria-controls` above names this element, and a
+        name pointing at nothing is worse than no name. `hidden` is what a disclosure means.
+      */}
+      {note !== undefined && (
+        <p
+          id={panelId}
+          hidden={!open}
+          data-testid={`mcq-note-text-${option.id}`}
+          className="text-foreground-muted border-border-subtle mt-1.5 border-t pt-1.5 text-xs"
+        >
+          {note}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function OptionBody({ option }: { option: FeedQuestion['options'][number] }) {
+  const t = useT();
+
   return (
     <span>
+      <OptionMark option={option} />
       <span className="font-medium">{option.label}</span>
       {option.recommended === true && (
         <span
           className="text-primary-strong ml-1.5 text-xs"
           data-testid={`mcq-recommended-${option.id}`}
         >
-          (Recommended)
+          {t('feed.round.recommended')}
         </span>
       )}
       {option.description !== undefined && (
@@ -117,8 +264,16 @@ function OptionBody({ option }: { option: FeedQuestion['options'][number] }) {
 /**
  * The answered round: the same form, fixed.
  *
- * Every control is `disabled`, so nothing here can move the session and the liveness count is not
- * inflated by a form nobody can submit — the distinction the round-2 invariant rests on.
+ * Nothing here can move the session, and the liveness count is not inflated by a form nobody can
+ * submit — the distinction the round-2 invariant rests on. What holds it is that the answers are
+ * **markup**: a chosen option is a span of text, not an input wearing `disabled`, and there is no
+ * submit control on this branch at all.
+ *
+ * The `disabled` this fieldset used to carry has gone with task 144, and the reason is the ⓘ. It
+ * disabled nothing — the branch has held no form control since the answers became spans — but
+ * `fieldset[disabled]` reaches every descendant button, so the first control ever added under it
+ * would be inert with no visible cause. The справка is that control: it opens a note, which is the
+ * one thing a fixed round still has to be able to do (task 144 AC — «справки survive submit»).
  */
 function AnsweredRound({ block }: { block: RoundBlockModel }) {
   const byQuestion = new Map<string, FeedAnswer>(
@@ -140,19 +295,29 @@ function AnsweredRound({ block }: { block: RoundBlockModel }) {
         const selected = new Set(answer?.selectedOptionIds ?? []);
 
         return (
-          <fieldset key={question.id} className="flex flex-col gap-1.5" disabled>
+          <fieldset key={question.id} className="flex flex-col gap-1.5">
             <legend className="text-sm font-medium">{question.text}</legend>
             <div className="flex flex-col gap-1">
               {question.options
                 .filter((option) => selected.has(option.id))
                 .map((option) => (
-                  <span
+                  /*
+                    The chosen option keeps its справка (task 144 AC). The data survives submission on
+                    its own — it lives in the round's jsonb and is re-read on every load — but nothing
+                    rendered it here, so «survives submit and reload» was true of the row and false of
+                    the screen. The mark, the ⓘ and the ↗ are the same three the card offered.
+                  */
+                  <OptionReference
                     key={option.id}
+                    option={option}
+                    panelId={`answered-note-${block.roundId}-${question.id}-${option.id}`}
                     className="border-border-subtle bg-background rounded-md border px-3 py-1.5 text-sm"
-                    data-testid="answered-value"
                   >
-                    {option.label}
-                  </span>
+                    <span className="flex-1" data-testid="answered-value">
+                      <OptionMark option={option} />
+                      {option.label}
+                    </span>
+                  </OptionReference>
                 ))}
               {answer?.freeText !== undefined && answer.freeText !== null && (
                 <span
@@ -197,6 +362,7 @@ export function RoundBlock({
   const [replyMode, setReplyMode] = useState(false);
   const [reply, setReply] = useState('');
   const { state: request, elapsedSeconds, waiting, send, abandon } = useSessionRequest(deadlineMs);
+  const t = useT();
 
   const busy = request.running;
   const error = request.notice;
@@ -245,7 +411,7 @@ export function RoundBlock({
                   {question.text}
                   {question.required && (
                     <span
-                      aria-label="required"
+                      aria-label={t('feed.round.required')}
                       className="ml-1 text-danger-ink"
                       data-testid={`mcq-required-${question.id}`}
                     >
@@ -258,30 +424,34 @@ export function RoundBlock({
 
               <div className="flex flex-col gap-1.5">
                 {question.options.map((option) => (
-                  <label
+                  <OptionReference
                     key={option.id}
-                    className="border-border-subtle hover:bg-background flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm"
+                    option={option}
+                    panelId={`note-${block.roundId}-${question.id}-${option.id}`}
+                    className="border-border-subtle hover:bg-background rounded-md border px-3 py-2 text-sm"
                   >
-                    <input
-                      type={question.type === 'single' ? 'radio' : 'checkbox'}
-                      name={`${block.roundId}-${question.id}`}
-                      value={option.id}
-                      checked={current.selected.includes(option.id)}
-                      onChange={() => {
-                        toggleOption(question, option.id);
-                      }}
-                      data-testid={`mcq-option-${question.id}-${option.id}`}
-                      className="mt-0.5"
-                    />
-                    <OptionBody option={option} />
-                  </label>
+                    <label className="flex flex-1 cursor-pointer items-start gap-2">
+                      <input
+                        type={question.type === 'single' ? 'radio' : 'checkbox'}
+                        name={`${block.roundId}-${question.id}`}
+                        value={option.id}
+                        checked={current.selected.includes(option.id)}
+                        onChange={() => {
+                          toggleOption(question, option.id);
+                        }}
+                        data-testid={`mcq-option-${question.id}-${option.id}`}
+                        className="mt-0.5"
+                      />
+                      <OptionBody option={option} />
+                    </label>
+                  </OptionReference>
                 ))}
               </div>
 
               {question.allowOther && (
                 <div className="flex flex-col gap-1">
                   <Label htmlFor={`other-${block.roundId}-${question.id}`} className="text-xs">
-                    Other — your own answer
+                    {t('feed.round.other-label')}
                   </Label>
                   <Input
                     id={`other-${block.roundId}-${question.id}`}
@@ -294,7 +464,7 @@ export function RoundBlock({
                         [question.id]: { ...questionState(question.id), other },
                       }));
                     }}
-                    placeholder="Type an answer not listed above"
+                    placeholder={t('feed.round.other-placeholder')}
                   />
                 </div>
               )}
@@ -332,7 +502,7 @@ export function RoundBlock({
             }}
             className="self-start"
           >
-            {busy === 'submit' ? 'Submitting…' : 'Submit Answers'}
+            {busy === 'submit' ? t('feed.round.submit-busy') : t('feed.round.submit')}
           </Button>
 
           {!replyMode ? (
@@ -344,7 +514,7 @@ export function RoundBlock({
                 setReplyMode(true);
               }}
             >
-              Answer in your own words instead
+              {t('feed.round.reply-open')}
             </button>
           ) : (
             <div className="flex flex-col gap-2">
@@ -359,7 +529,7 @@ export function RoundBlock({
                 you a paragraph.
               */}
               <div className="flex items-baseline justify-between gap-2">
-                <Label htmlFor={`reply-${block.roundId}`}>Your answer, in free text</Label>
+                <Label htmlFor={`reply-${block.roundId}`}>{t('feed.round.reply-label')}</Label>
                 <button
                   type="button"
                   data-testid="mcq-reply-cancel"
@@ -368,7 +538,7 @@ export function RoundBlock({
                     setReplyMode(false);
                   }}
                 >
-                  Use the options instead
+                  {t('feed.round.reply-cancel')}
                 </button>
               </div>
               <Textarea
@@ -378,7 +548,7 @@ export function RoundBlock({
                 onChange={(event) => {
                   setReply(event.target.value);
                 }}
-                placeholder="Describe it the way you would to a colleague."
+                placeholder={t('feed.round.reply-placeholder')}
               />
               <Button
                 variant="secondary"
@@ -389,7 +559,7 @@ export function RoundBlock({
                 }}
                 className="self-start"
               >
-                {busy === 'reply' ? 'Sending…' : 'Send reply'}
+                {busy === 'reply' ? t('common.sending') : t('feed.round.reply-send')}
               </Button>
             </div>
           )}
@@ -400,7 +570,7 @@ export function RoundBlock({
           */}
           {waiting && (
             <WaitingOn
-              what={WAITING_FOR[busy ?? ''] ?? 'the server'}
+              what={t(WAITING_FOR[busy ?? ''] ?? 'feed.waiting.server')}
               elapsedSeconds={elapsedSeconds}
               onStop={abandon}
             />

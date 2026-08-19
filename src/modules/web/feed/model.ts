@@ -106,6 +106,32 @@ export interface FeedOption {
   recommended?: boolean | undefined;
   /** Short tags the model attached to this option, when it did (task 134; Эталон §1.1). */
   tags?: readonly string[] | undefined;
+  /**
+   * The справка: what this option is, in two sentences (task 144; видео §5).
+   *
+   * A property of the **option**, never of the question, which is what makes the asymmetry the
+   * reference product shows possible — «Anthropic Claude» carries one and «No preference» does not,
+   * inside one question. Optional on the same compatibility contract `recommended` and `tags` carry:
+   * every round drafted before this renders exactly as it did.
+   */
+  note?: string | undefined;
+  /**
+   * The technology's own home page, when the option names a technology that has one.
+   *
+   * Model-authored, and therefore narrowed before it ever reaches here: the schema accepts only an
+   * https home page on the vendor's own host and drops anything else (`HomePageUrl`). The renderer
+   * is not the security boundary and does not act as though it were.
+   */
+  href?: string | undefined;
+  /**
+   * Which vendored mark to draw beside the label, as a plain slug.
+   *
+   * A **string**, not the schema's union: `web` may not import `agents` (constitution A1), so the
+   * closed set crosses the boundary the way `questionsPerRound` does — as a value the renderer looks
+   * up. A slug this build has no drawing for renders no mark, which is the same nothing an option
+   * without a logo renders.
+   */
+  logo?: string | undefined;
 }
 
 export interface FeedQuestion {

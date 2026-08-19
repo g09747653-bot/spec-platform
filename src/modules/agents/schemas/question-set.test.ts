@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { validateQuestionSetDraft } from './question-set';
+import { OPTION_NOTE, validateQuestionSetDraft } from './question-set';
 
 /**
  * Task 32 — the question-set contract and its repair-once discipline (FR-005 AC-2/AC-3; D-2).
@@ -295,5 +295,171 @@ describe('option tags (task 134)', () => {
   it('refuses five tags, and one that is a sentence', () => {
     expect(validateQuestionSetDraft(withTags(['a', 'b', 'c', 'd', 'e'])).ok).toBe(false);
     expect(validateQuestionSetDraft(withTags(['x'.repeat(25)])).ok).toBe(false);
+  });
+});
+
+/**
+ * Task 144 — the reference note, and the rule that it is **dropped, not rejected**.
+ *
+ * Three optional fields carrying the one thing the model could invent: an address. So the contract
+ * has two halves and both are asserted here. A round that names a technology keeps its note, its link
+ * and its logo; and a round whose note, link or logo is wrong loses exactly that field and stays a
+ * round. The second half is the one that matters at three in the morning on a live walk — a draft is
+ * repaired once and then discarded with `DRAFT_INVALID`, and a hallucinated URL has no business
+ * costing a person the whole round of questions they were about to answer.
+ */
+describe('option reference notes (task 144)', () => {
+  const withOptions = (options: unknown[]) => ({
+    stage: 'interview',
+    questions: [
+      {
+        id: 'q-provider',
+        text: 'Which provider should the drafting run through?',
+        type: 'single' as const,
+        options,
+        allowOther: true as const,
+        informationNeeds: ['model-provider'],
+      },
+    ],
+  });
+
+  const firstOption = (draft: unknown) => {
+    const result = validateQuestionSetDraft(draft);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.issues.join('; '));
+
+    return result.set.questions[0]?.options[0];
+  };
+
+  const annotated = (extra: Record<string, unknown>) =>
+    withOptions([
+      { id: 'a', label: 'Anthropic Claude', ...extra },
+      { id: 'b', label: 'No preference — recommend the best fit' },
+    ]);
+
+  it('keeps a note, a vendor home page and a known slug, and leaves the bare option bare', () => {
+    const result = validateQuestionSetDraft(
+      annotated({
+        note: 'Anthropic makes the Claude family of models and sells access through its own API.',
+        href: 'https://www.anthropic.com',
+        logo: 'anthropic',
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const [question] = result.set.questions;
+      expect(question?.options[0]).toMatchObject({
+        note: 'Anthropic makes the Claude family of models and sells access through its own API.',
+        href: 'https://www.anthropic.com',
+        logo: 'anthropic',
+      });
+      // The asymmetry is the point: an option naming no technology carries none of it.
+      expect(question?.options[1]?.note).toBeUndefined();
+      expect(question?.options[1]?.href).toBeUndefined();
+      expect(question?.options[1]?.logo).toBeUndefined();
+    }
+  });
+
+  it('still accepts every option that carries none of the three — the compatibility contract', () => {
+    const result = validateQuestionSetDraft(validSet());
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.set.questions[0]?.options[0]?.note).toBeUndefined();
+      expect(result.set.questions[0]?.options[0]?.href).toBeUndefined();
+    }
+  });
+
+  it('drops a slug outside the closed set and keeps the note and the link with it', () => {
+    // PostgreSQL, the case the design names: no vendored SVG, so the logo goes and nothing else does.
+    const option = firstOption(
+      annotated({
+        note: 'PostgreSQL is the open-source SQL database most of this list runs or imitates.',
+        href: 'https://www.postgresql.org',
+        logo: 'postgresql',
+      }),
+    );
+
+    expect(option?.logo).toBeUndefined();
+    expect(option?.href).toBe('https://www.postgresql.org');
+    expect(option?.note).toContain('PostgreSQL is the open-source SQL database');
+  });
+
+  it.each([
+    ['plain http', 'http://anthropic.com'],
+    ['a documentation page', 'https://anthropic.com/en/docs/get-started'],
+    ['a search result', 'https://anthropic.com/?q=claude'],
+    ['an anchor', 'https://anthropic.com#pricing'],
+    ['credentials', 'https://user:pass@anthropic.com'],
+    ['a port', 'https://anthropic.com:8443'],
+    ['a host with no dot', 'https://localhost'],
+    ['prose rather than an address', 'their website'],
+  ])('drops an href that is %s, and keeps the note beside it', (_case, href) => {
+    const option = firstOption(
+      annotated({ note: 'Anthropic makes the Claude family of models.', href, logo: 'anthropic' }),
+    );
+
+    expect(option?.href).toBeUndefined();
+    expect(option?.note).toBe('Anthropic makes the Claude family of models.');
+    expect(option?.logo).toBe('anthropic');
+  });
+
+  it('drops a link that points somewhere else than the logo it arrived with', () => {
+    // A known slug is its own allow-list: a link on a foreign host is a guess, not an address.
+    const option = firstOption(
+      annotated({
+        note: 'Anthropic makes the Claude family of models.',
+        href: 'https://example.com',
+        logo: 'anthropic',
+      }),
+    );
+
+    expect(option?.href).toBeUndefined();
+    expect(option?.logo).toBe('anthropic');
+  });
+
+  it('drops a link and a logo that arrive with no note — the note is what they hang on', () => {
+    const option = firstOption(annotated({ href: 'https://www.anthropic.com', logo: 'anthropic' }));
+
+    expect(option?.href).toBeUndefined();
+    expect(option?.logo).toBeUndefined();
+  });
+
+  it('drops a note longer than the bound, and an empty one, without losing the round', () => {
+    expect(firstOption(annotated({ note: 'x'.repeat(OPTION_NOTE.max + 1) }))?.note).toBeUndefined();
+    expect(firstOption(annotated({ note: '   ' }))?.note).toBeUndefined();
+    expect(firstOption(annotated({ note: 42 }))?.note).toBeUndefined();
+  });
+
+  it('drops a logo that is a URL or a file name, which is what the field name invites', () => {
+    expect(
+      firstOption(annotated({ note: 'Anthropic makes Claude.', logo: 'https://cdn/anthropic.svg' }))
+        ?.logo,
+    ).toBeUndefined();
+    expect(
+      firstOption(annotated({ note: 'Anthropic makes Claude.', logo: 'anthropic.svg' }))?.logo,
+    ).toBeUndefined();
+  });
+
+  it('accepts the vendor home page with or without www, and normalises neither', () => {
+    const bare = firstOption(
+      annotated({
+        note: 'Neon runs PostgreSQL as a managed service.',
+        href: 'https://neon.com',
+        logo: 'neon',
+      }),
+    );
+    const prefixed = firstOption(
+      annotated({
+        note: 'Neon runs PostgreSQL as a managed service.',
+        href: 'https://www.neon.com',
+        logo: 'neon',
+      }),
+    );
+
+    expect(bare?.href).toBe('https://neon.com');
+    expect(prefixed?.href).toBe('https://www.neon.com');
   });
 });

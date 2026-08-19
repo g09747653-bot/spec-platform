@@ -1,5 +1,8 @@
 import { decodeEvents, type GenerationEvent } from '@/modules/web/api/stream-protocol';
 
+import type { PhraseKey } from '../i18n/dictionary';
+import type { Translate } from '../i18n/translate';
+
 /**
  * The resumable stream reader (task 46; FR-008 AC-2; FR-017; NFR-002 AC-2; D-8).
  *
@@ -19,6 +22,15 @@ import { decodeEvents, type GenerationEvent } from '@/modules/web/api/stream-pro
  * rendered once, and a batch lost to a dropped socket comes back on the next connection (SC-3, SC-5).
  */
 
+/**
+ * Why a stream ended badly, in a shape the card can print.
+ *
+ * `message` stays a plain string through task 143, and the two sources it has are why: an `error`
+ * event carries the server's own sentence, which this reader has no key for and must not invent one
+ * for, while the disconnect below is the reader's own and is resolved from the dictionary before it
+ * is put here. Making the field a `PhraseKey` would have forced the server's half into the
+ * dictionary; making it a union would have pushed the branch into every renderer.
+ */
 export interface StreamFailure {
   code: string;
   message: string;
@@ -123,6 +135,14 @@ const isTerminal = (state: StreamState) => state.status === 'complete' || state.
 
 export interface ResumableStreamOptions {
   onState: (state: StreamState) => void;
+  /**
+   * The caller's translator, for the one sentence this reader writes itself (task 143).
+   *
+   * Passed in rather than looked up for the same reason `session-request.ts` takes one: this file is
+   * framework-free, and the chrome language lives in a React context on one side and a cookie on the
+   * other. `useResumableStream` calls `useT()` and hands it down.
+   */
+  t: Translate;
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   /** Reconnect delays in milliseconds. Running out of them ends the stream in `failed`. */
@@ -173,6 +193,9 @@ export const DEFAULT_IDLE_TIMEOUT_MS = 45_000;
  */
 export const STREAM_DISCONNECTED = 'STREAM_DISCONNECTED';
 
+/** What that code says to a person. A key, so it says it in the reader's language (task 143). */
+export const DISCONNECTED_NOTICE: PhraseKey = 'errors.stream.disconnected';
+
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** Marker for a connection that delivered nothing for the whole idle deadline. */
@@ -189,6 +212,7 @@ export interface ResumableStream {
 }
 
 export function createResumableStream(options: ResumableStreamOptions): ResumableStream {
+  const t = options.t;
   const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
   const sleep = options.sleep ?? defaultSleep;
   const backoff = options.backoff ?? DEFAULT_BACKOFF;
@@ -317,7 +341,7 @@ export function createResumableStream(options: ResumableStreamOptions): Resumabl
           status: 'failed',
           error: {
             code: STREAM_DISCONNECTED,
-            message: 'The connection to the generation was lost. Nothing has been lost — retry.',
+            message: t(DISCONNECTED_NOTICE),
             retryable: true,
           },
         });

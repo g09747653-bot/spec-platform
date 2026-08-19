@@ -1,3 +1,4 @@
+import { serverT } from '../i18n/server-locale';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 
@@ -13,27 +14,35 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
  * A server component with no client behaviour at all: the acceptance criterion is that this card
  * performs no network call, and the surest way to hold it is to render nothing that could.
  */
-export function McpCard() {
+export async function McpCard() {
+  const t = await serverT();
+
   return (
     <Card data-testid="mcp-card">
       <CardHeader>
-        <CardTitle>MCP Servers</CardTitle>
-        <CardDescription>
-          Tools an agent could reach while it works on this bundle. Not yet available — this is the
-          shape it will take, not a feature waiting to be switched on.
-        </CardDescription>
+        <CardTitle>{t('projects.mcp.title')}</CardTitle>
+        <CardDescription>{t('projects.mcp.description')}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-4">
-          <span className="text-sm font-medium">This project</span>
-          <span className="text-foreground-muted text-xs" data-testid="mcp-project-count">
-            0 servers
+          <span className="text-sm font-medium">{t('projects.mcp.scope-project')}</span>
+          {/*
+            Task 143: the count as a number, so a test asserts on it rather than on «0 servers».
+            A literal, because the card is a frame and there is no runtime behind it to count yet —
+            when one arrives, the attribute and the label take their value from the same place.
+          */}
+          <span
+            className="text-foreground-muted text-xs"
+            data-testid="mcp-project-count"
+            data-count="0"
+          >
+            {t('projects.mcp.count-none')}
           </span>
         </div>
         <div className="flex items-center justify-between gap-4">
-          <span className="text-sm font-medium">User profile</span>
+          <span className="text-sm font-medium">{t('projects.mcp.scope-profile')}</span>
           <span className="text-foreground-muted text-xs" data-testid="mcp-profile-count">
-            0 servers
+            {t('projects.mcp.count-none')}
           </span>
         </div>
         <Button
@@ -43,7 +52,7 @@ export function McpCard() {
           data-testid="mcp-add-server"
           className="self-start"
         >
-          Add server
+          {t('projects.mcp.add')}
         </Button>
       </CardContent>
     </Card>

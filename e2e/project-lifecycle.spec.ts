@@ -18,7 +18,7 @@ test.describe('project lifecycle', () => {
     await page.getByTestId('generate-spec').click();
     await expect(page.getByTestId('spec-card')).toBeVisible({ timeout: 20_000 });
     await page.getByTestId('approve-spec').click();
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
 
     await page.goto('/projects');
     await page.getByTestId('rename-project').click();
@@ -32,7 +32,7 @@ test.describe('project lifecycle', () => {
     await expect(page.getByTestId('session-project-name')).toHaveText('Renamed, same work');
     await expect(page.getByTestId('session-prompt')).toHaveText('A project that will be renamed');
     await expect(page.getByTestId('spec-revision-number')).toHaveText('1');
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
     await expect(page.getByTestId('export-included')).toContainText('constitution.md');
   });
 
@@ -48,9 +48,9 @@ test.describe('project lifecycle', () => {
 
     const dialog = page.getByTestId('delete-confirm-text');
     await expect(dialog).toBeVisible();
-    // AC-4: the confirmation states that deletion is permanent (DR-7).
-    await expect(dialog).toContainText('permanently');
-    await expect(dialog).toContainText('cannot be undone');
+    // AC-4: the confirmation states that deletion is permanent (DR-7) — the claim the paragraph
+    // raises, rather than the two clauses this locale happens to raise it with.
+    await expect(dialog).toHaveAttribute('data-permanent', 'true');
 
     await page.getByTestId('delete-cancel').click();
     await expect(page.getByTestId('projects-list')).toBeVisible();
@@ -88,7 +88,7 @@ test.describe('project lifecycle', () => {
     await page.getByTestId('generate-spec').click();
     await expect(page.getByTestId('spec-card')).toBeVisible({ timeout: 20_000 });
     await page.getByTestId('approve-spec').click();
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
 
     await page.goto('/projects');
     await page.getByTestId('duplicate-project').click();
@@ -102,7 +102,7 @@ test.describe('project lifecycle', () => {
     await expect(page.getByTestId('session')).toBeVisible();
     await expect(page.getByTestId('session-prompt')).toHaveText('A project worth forking');
     await expect(page.getByTestId('spec-revision-number')).toHaveText('1');
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
     // AC-6: the gates pass on the first attempt — the door out of drafting is open, not blocked.
     // The answers came with the copy, and in the feed they are the rounds themselves, fixed in place.
     await expect(page.getByTestId('round-answered').first()).toBeVisible();

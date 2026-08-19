@@ -43,10 +43,17 @@ test.describe('going back a step', () => {
     await startSession(page, SEED);
     await twoRevisions(page);
 
-    // The offer is there, and it says what it will do — write, not unwind.
+    /*
+     * The offer is there, and it says what it will do — write, not unwind. Read from the three
+     * revisions the card names rather than from the sentence naming them (task 143): the next one is
+     * one *past* the current one, which is the whole of «nothing is deleted», and the revision it
+     * will copy from is still there to be pointed at.
+     */
     const card = page.getByTestId('revert-card');
     await expect(card).toBeVisible();
-    await expect(card).toContainText('nothing is deleted');
+    await expect(card).toHaveAttribute('data-current-revision', '2');
+    await expect(card).toHaveAttribute('data-previous-revision', '1');
+    await expect(card).toHaveAttribute('data-next-revision', '3');
 
     // Nothing is written by asking to see it.
     await page.getByTestId('go-back').click();

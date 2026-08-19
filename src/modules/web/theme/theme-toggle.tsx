@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useSyncExternalStore } from 'react';
 
+import { useT } from '../i18n/locale-context';
 import { cn } from '../lib/cn';
 import {
   isTheme,
@@ -75,6 +76,7 @@ function prefersDark(): boolean {
  * silently ignoring the stored preference (Next.js — "Preventing flash before hydration").
  */
 export function ThemeToggle({ className }: { className?: string }) {
+  const t = useT();
   const theme = useSyncExternalStore(subscribe, appliedTheme, () => SERVER_DEFAULT_THEME);
 
   useLayoutEffect(() => {
@@ -82,6 +84,14 @@ export function ThemeToggle({ className }: { className?: string }) {
   }, []);
 
   const next = otherTheme(theme);
+
+  /*
+   * Two phrases rather than one template (task 143). The old label interpolated `next` — the value
+   * `<html data-theme>` and `localStorage` carry — so the sentence a screen reader announced was
+   * built around a machine token. English survives that because the token happens to be the word;
+   * no other language does, and the token has a case to decline in Russian.
+   */
+  const label = next === 'dark' ? t('shell.theme.to-dark') : t('shell.theme.to-light');
 
   function toggle() {
     applyTheme(next);
@@ -99,8 +109,8 @@ export function ThemeToggle({ className }: { className?: string }) {
       onClick={toggle}
       data-testid="theme-toggle"
       data-theme-state={theme}
-      aria-label={`Switch to ${next} theme`}
-      title={`Switch to ${next} theme`}
+      aria-label={label}
+      title={label}
       className={cn(
         'border-border-subtle text-foreground-muted hover:bg-surface-muted hover:text-foreground inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors',
         className,

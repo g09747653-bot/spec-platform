@@ -37,16 +37,18 @@ async function generateApproveAndEnterReview(page: Page): Promise<void> {
   /*
    * The door is shut until the draft is approved, and it says what is missing. The control itself
    * stays clickable — the gate is the server's answer, never the page's (P1; task 105) — so what is
-   * asserted is the reason on offer, not a disabled attribute.
+   * asserted is the reason on offer, not a disabled attribute. The gate's own reason code, not the
+   * sentence it is printed as (task 143): the words are written for a person and are therefore the
+   * one part of this line that is free to change.
    */
-  await expect(page.getByTestId('gate-unmet')).toContainText('approval');
+  await expect(page.getByTestId('gate-unmet')).toHaveAttribute('data-reasons', 'SPEC_NOT_APPROVED');
 
   await page.getByTestId('approve-spec').click();
-  await expect(page.getByTestId('spec-card')).toContainText('approved');
+  await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
 
   await expect(page.getByTestId('proceed')).toBeEnabled();
   await page.getByTestId('proceed').click();
-  await expect(page.getByTestId('stage-substage')).toHaveText(/Reviewing/);
+  await expect(page.getByTestId('stage-substage')).toHaveAttribute('data-substage', 'review');
 }
 
 const startSession = (page: Page): Promise<string> =>
@@ -71,15 +73,24 @@ test.describe('review board', () => {
     await expect(page.getByTestId('review-recommendations').getByRole('checkbox')).toHaveCount(1);
 
     // --- An overall verdict and a summary are stated (AC-3; task 112) ---
-    await expect(page.getByTestId('review-outcome')).toHaveText('Needs Revision');
+    await expect(page.getByTestId('review-outcome')).toHaveAttribute(
+      'data-outcome',
+      'needs_revision',
+    );
     await expect(page.getByTestId('review-summary')).toBeVisible();
 
     // --- Every item carries its confidence and its suggestion (Эталон §1.3) ---
-    await expect(page.getByTestId('review-item-confidence-mf-untestable-criterion')).toHaveText(
-      'Confidence score 9/10',
-    );
+    await expect(
+      page.getByTestId('review-item-confidence-mf-untestable-criterion'),
+    ).toHaveAttribute('data-confidence', '9');
+    /*
+     * The suggestion is read by the reviewer's own sentence rather than by the label in front of it
+     * (task 143): the label is ours and is about to be translated, while this sentence is the stub
+     * provider's and is the same in either interface language — and it is the thing whose presence
+     * the claim above is actually about.
+     */
     await expect(page.getByTestId('review-item-suggestion-mf-untestable-criterion')).toContainText(
-      'Suggestion:',
+      'Restate it as a criterion an automated test could assert.',
     );
 
     // --- All three actions are offered, and the board waits for one of them (AC-4) ---
@@ -120,12 +131,12 @@ test.describe('review board', () => {
      * constraint — and the card says what was decided rather than showing tick marks nobody kept.
      */
     await expect(page.getByTestId('review-board-decided')).toBeVisible();
-    await expect(page.getByTestId('review-decision')).toContainText('accepted');
+    await expect(page.getByTestId('review-decision')).toHaveAttribute('data-decision', 'accept');
     await expect(page.getByTestId('review-mustfix').getByRole('checkbox')).toHaveCount(0);
 
     await page.reload();
     await expect(page.getByTestId('review-board-decided')).toBeVisible();
-    await expect(page.getByTestId('review-decision')).toContainText('accepted');
+    await expect(page.getByTestId('review-decision')).toHaveAttribute('data-decision', 'accept');
   });
 
   test('request-changes submits only the ticked items and returns the stage to generate (AC-6/AC-7)', async ({
@@ -137,7 +148,7 @@ test.describe('review board', () => {
     await generateApproveAndEnterReview(page);
 
     await expect(page.getByTestId('review-board')).toBeVisible();
-    await expect(page.getByTestId('stage-substage')).toHaveText(/Reviewing/);
+    await expect(page.getByTestId('stage-substage')).toHaveAttribute('data-substage', 'review');
 
     // One of the three, and not the two that arrive ticked — the subset is what the endpoint must
     // record (AC-7), and a subset that happened to be the default would prove nothing.
@@ -147,7 +158,7 @@ test.describe('review board', () => {
     await page.getByTestId('review-request-changes').click();
 
     // The stage goes back to drafting (AC-6), and the decided board is no longer pending.
-    await expect(page.getByTestId('stage-substage')).toHaveText(/Generating/);
+    await expect(page.getByTestId('stage-substage')).toHaveAttribute('data-substage', 'generate');
     await expect(page.getByTestId('review-board')).toHaveCount(0);
 
     /*
@@ -178,7 +189,7 @@ test.describe('review board', () => {
 
     await expect(page.getByTestId('review-board')).toHaveCount(0);
     // The stage stays where it was: a decision opens the gate, it does not walk through it.
-    await expect(page.getByTestId('stage-substage')).toHaveText(/Reviewing/);
+    await expect(page.getByTestId('stage-substage')).toHaveAttribute('data-substage', 'review');
   });
 
   /**
@@ -199,12 +210,15 @@ test.describe('review board', () => {
     await generateApproveAndEnterReview(page);
 
     await expect(page.getByTestId('review-board')).toBeVisible();
-    await expect(page.getByTestId('review-outcome')).toHaveText('Needs Revision');
+    await expect(page.getByTestId('review-outcome')).toHaveAttribute(
+      'data-outcome',
+      'needs_revision',
+    );
 
     // --- Request changes, with a subset that is not the default ---
     await page.getByTestId('review-item-checkbox-mf-unnamed-actor').uncheck();
     await page.getByTestId('review-request-changes').click();
-    await expect(page.getByTestId('stage-substage')).toHaveText(/Generating/);
+    await expect(page.getByTestId('stage-substage')).toHaveAttribute('data-substage', 'generate');
 
     // --- Rev 2, and the paragraph that precedes it (Эталон §1.3) ---
     await page.getByTestId('generate-spec').click();
@@ -228,7 +242,7 @@ test.describe('review board', () => {
 
     // --- Approve Rev 2 and re-enter review: a second board, on the new bytes ---
     await page.getByTestId('approve-spec').click();
-    await expect(page.getByTestId('spec-card')).toContainText('approved');
+    await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
     await page.getByTestId('proceed').click();
 
     await expect(page.getByTestId('review-board')).toBeVisible({ timeout: 30_000 });

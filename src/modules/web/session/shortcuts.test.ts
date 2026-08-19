@@ -8,9 +8,38 @@ import { SHORTCUTS, isTypingTarget, shortcutFor } from './shortcuts';
  * The mapping is pure precisely so this file can exist: "does typing a `b` into the composer
  * collapse the sidebar" is a question about a function, not something to be discovered in a browser
  * by someone who happened to type a word containing that letter.
+ *
+ * A press now carries two things — the character a layout produced and the key it came from — and
+ * the helper below supplies the second from a US-QWERTY table so the cases that are about *meaning*
+ * stay readable. The cases that are about *layout* pass a `code` of their own.
  */
+const QWERTY: Readonly<Record<string, string>> = {
+  b: 'KeyB',
+  B: 'KeyB',
+  c: 'KeyC',
+  C: 'KeyC',
+  v: 'KeyV',
+  V: 'KeyV',
+  '/': 'Slash',
+  '?': 'Slash',
+  '1': 'Digit1',
+  '2': 'Digit2',
+  '3': 'Digit3',
+  '4': 'Digit4',
+  Escape: 'Escape',
+  Enter: 'Enter',
+};
+
 const press = (key: string, over: Partial<Parameters<typeof shortcutFor>[0]> = {}) =>
-  shortcutFor({ key, ctrlKey: false, metaKey: false, altKey: false, typing: false, ...over });
+  shortcutFor({
+    key,
+    code: QWERTY[key] ?? '',
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    typing: false,
+    ...over,
+  });
 
 describe('keyboard shortcuts', () => {
   it('binds a plain letter only when the caret is not in a field', () => {
@@ -71,6 +100,56 @@ describe('keyboard shortcuts', () => {
     );
 
     expect([...bound].sort()).toEqual([...documented].sort());
+  });
+});
+
+/**
+ * The layout the list is being translated for (task 143; voice standard §7.2).
+ *
+ * On ЙЦУКЕН the key engraved `B` reports «и», `V` reports «м» and `C` reports «с», and `/` is not on
+ * the keyboard at all — so a dispatcher reading the produced character bound nothing, while the
+ * in-app list went on printing `B`. These are the presses a Russian-speaking user actually makes.
+ */
+describe('a Cyrillic layout', () => {
+  const cyrillic = (key: string, code: string) =>
+    shortcutFor({ key, code, ctrlKey: false, metaKey: false, altKey: false, typing: false });
+
+  it('binds the letter keys by their position, not by the letter they produce', () => {
+    expect(cyrillic('и', 'KeyB')).toBe('toggle-sidebar');
+    expect(cyrillic('с', 'KeyC')).toBe('focus-composer');
+    expect(cyrillic('м', 'KeyV')).toBe('open-viewer');
+  });
+
+  /** The key printed `/` in the list types a full stop here; the list is still telling the truth. */
+  it('binds the command menu to the key the list names', () => {
+    expect(cyrillic('.', 'Slash')).toBe('slash');
+  });
+
+  it('still ignores a letter typed into a field', () => {
+    expect(
+      shortcutFor({
+        key: 'и',
+        code: 'KeyB',
+        ctrlKey: false,
+        metaKey: false,
+        altKey: false,
+        typing: true,
+      }),
+    ).toBeNull();
+  });
+
+  /**
+   * `?` is Shift+7 here and Shift+/ on QWERTY: one character, two positions, so this one shortcut
+   * is read from the character — and reading it first is what keeps Shift+/ off the command menu.
+   */
+  it('opens this list from the character, wherever the character lives', () => {
+    expect(cyrillic('?', 'Digit7')).toBe('shortcuts');
+    expect(press('?')).toBe('shortcuts');
+  });
+
+  it('still counts the viewer digits, which both layouts share', () => {
+    expect(cyrillic('1', 'Digit1')).toBe('view-outline');
+    expect(cyrillic('4', 'Digit4')).toBe('view-diff');
   });
 });
 
