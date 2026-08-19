@@ -105,7 +105,61 @@ describe('deriveTasks against the real A0 document (task 150)', () => {
   });
 });
 
+describe('deriveTasks against the M14а live document — the bold-bullet shape', () => {
+  /*
+   * The second golden pair. The M14а gate walk caught a live model writing phases as headings and
+   * every task as `* **Задача N.M: …**` — a shape the first cut did not read, so a 17-KB plan
+   * mapped to zero tasks. The document (fixed byte-for-byte from the walk's own export) and its
+   * expected JSON now pin that shape the same way the A0 pair pins the heading shape.
+   */
+  const LIVE_TASKS = () => read('fixtures/spec-bundle/golden/m14a-live.tasks.md');
+
+  it('reads all sixteen bold-bullet tasks, names intact', () => {
+    const derived = deriveTasks(LIVE_TASKS(), 'm14a-live-bundle', 'm14a-live-project');
+
+    expect(validTasks(derived), ajv.errorsText(validTasks.errors)).toBe(true);
+    expect(derived.tasks).toHaveLength(16);
+    expect(derived.tasks[0]?.taskId).toBe('1.1');
+    expect(derived.tasks.at(-1)?.taskId).toBe('6.3');
+
+    // Underscores inside names survive: they are identifiers, not emphasis.
+    expect(derived.tasks.map((task) => task.title)).toContain(
+      'Инициализация базы данных и схемы (clean_slate)',
+    );
+  });
+
+  it('matches the committed golden byte for byte', () => {
+    const derived = `${JSON.stringify(
+      deriveTasks(LIVE_TASKS(), 'm14a-live-bundle', 'm14a-live-project'),
+      null,
+      2,
+    )}\n`;
+
+    expect(derived).toBe(read('fixtures/spec-bundle/golden/m14a-live.tasks.json'));
+  });
+});
+
 describe('parseTaskEntries on the shapes the plans write', () => {
+  it('reads bold-bullet tasks in either language, and a plain mention is never an entry', () => {
+    const tasks = parseTaskEntries(
+      [
+        '#### Фаза 1: Подготовка',
+        '* **Задача 1.1: Настроить окружение**',
+        '  * *Описание:* подробности про задача 9 в прозе — не запись.',
+        '- **Task 1.2 — Wire the parts**',
+        '  * Зависимости: 1.1',
+        '',
+        '#### Фаза 2: Сборка',
+        '* **Задача 2.1: Собрать**',
+      ].join('\n'),
+    );
+
+    expect(tasks.map((task) => task.taskId)).toEqual(['1.1', '1.2', '2.1']);
+    expect(tasks[0]?.title).toBe('Настроить окружение');
+    expect(tasks[0]?.description).toContain('не запись');
+    expect(tasks[1]?.dependsOn).toEqual(['1.1']);
+  });
+
   it('reads checkbox plans — the reference product’s own convention', () => {
     const tasks = parseTaskEntries(
       [

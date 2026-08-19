@@ -110,7 +110,14 @@ function titleAfterIdentifier(lineText: string, display: string): string {
   return stripEmphasis(lineText.replace(marker, '').trim());
 }
 
-const stripEmphasis = (value: string): string => value.replaceAll(/[*_`]/g, '').trim();
+/**
+ * Markdown dress off a title: emphasis asterisks, inline-code backticks, and *wrapping*
+ * underscores. Underscores inside a word stay — `clean_slate` and `TODO_WORK_DIR` are names, not
+ * emphasis, and CommonMark agrees (intra-word `_` does not open emphasis). Found by the M14а gate:
+ * the first cut stripped every underscore and handed the loop `cleanslate`.
+ */
+const stripEmphasis = (value: string): string =>
+  value.replaceAll(/[*`]/g, '').trim().replace(/^_+/, '').replace(/_+$/, '').trim();
 
 interface ParsedEntry {
   id: string | null;
@@ -269,6 +276,15 @@ const TASK_HEADING = /^ {0,3}(#{1,6})\s+(?:task|задача)\s+([A-Za-z0-9.-]+)
 /** `- [ ] 148\. Title` / `- [x] 7. Title` — the checkbox shape the reference plans write. */
 const TASK_CHECKBOX = /^\s*[-*+]\s+\[[ xX]\]\s+(\d+(?:\.\d+)*)\\?[.)]\s+(.+)$/;
 
+/**
+ * `* **Задача 1.1: Название**` / `- **Task 2 — Title**` — the bold-bullet shape the M14а gate
+ * caught in live output: the model wrote phases as headings and every task as an emphasised list
+ * item under them, and a parser that knew only headings and checkboxes handed the loop an empty
+ * task list from a 33-KB document. The emphasis marks are required — a plain sentence that merely
+ * *mentions* «задача 3» must not open an entry — and the task word with its token does the rest.
+ */
+const TASK_BULLET = /^\s*[-*+]\s+[*_]{1,3}\s*(?:task|задача)\s+([A-Za-z0-9.-]+)\s*[:.—–-]\s*(.+)$/i;
+
 /** A line that states an entry's dependencies, in either language of the product. */
 const DEPENDS_LINE = /(dependencies|зависимости)\s*:/i;
 
@@ -373,6 +389,18 @@ export function parseTaskEntries(tasksMarkdown: string): MachineTaskRow[] {
         open = {
           taskId: checkbox[1] ?? '',
           title: stripEmphasis(checkbox[2] ?? ''),
+          level: null,
+          body: [],
+        };
+        continue;
+      }
+
+      const bullet = TASK_BULLET.exec(line.text);
+      if (bullet !== null) {
+        close();
+        open = {
+          taskId: bullet[1] ?? '',
+          title: stripEmphasis(bullet[2] ?? ''),
           level: null,
           body: [],
         };
