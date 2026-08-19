@@ -1704,7 +1704,7 @@ Goal: the customer's second hands-on pass plus his video demo (`video demo/Deskt
   - Acceptance Criteria: three e2e repros (Raw clipping, superseded-board distinction, single-primary-action per panel state); a screenshot set of the reworked panel states.
   - _Dependencies: 140_ · _Requirements: рекламации 2026-08-18; D-112_ · _Touches: `src/modules/web/**`_ · _Complexity: Large_ · _Parallel-safe: no_
 
-- [ ] 143\. Native Russian chrome (рукописная локализация)
+- [x] 143\. Native Russian chrome (рукописная локализация)
   - Full RU locale for every UI string (chrome, empty states, tooltips, shortcut list, error notices) — hand-written by the model at ensemble quality, not machine-translated; locale switch persisted in the UI-state module (default: ru for this deployment); У-1 content language stays independent of chrome locale.
   - String extraction becomes a lint-enforced registry (no literal UI strings in components), so a new surface cannot ship untranslated silently.
   - Acceptance Criteria: walking the full journey with locale=ru shows zero English chrome (e2e asserts a curated list of surfaces); gate-copy/ReasonCode explanations localized; auto-translate no longer has anything to mangle; both locales pass the existing e2e suite.
@@ -1724,7 +1724,7 @@ Goal: the customer's second hands-on pass plus his video demo (`video demo/Deskt
   - Acceptance Criteria: a live autonomous run from a one-sentence seed reaches Session completed without any click, on the gate chain, within budgets; feed shows every auto-decision with rationale; Stop mid-run converts to manual cleanly (e2e); a hostile-seed corpus produces refusals/honest stops, never runaway loops; the bundle passes the structural checks and linters as usual.
   - _Dependencies: 144_ · _Requirements: А-7 (Программа А); North Star этап 2_ · _Touches: `src/modules/agents/autonomous/**` (new), `src/modules/web/**` (mode surface)_ · _Complexity: Large_ · _Parallel-safe: no_
 
-- [ ] 147\. Viewer presentation per the customer's video (Architect addendum, 2026-08-18)
+- [x] 147\. Viewer presentation per the customer's video (Architect addendum, 2026-08-18)
   - The document preview becomes a **centred overlay modal** as the video shows: file name + `Revision N` on the left; one line on the right — `Outline · [Preview|Raw|Diff] · Copy · Download · ✕`; identical width across all tabs; scrolling inside the window; `Outline` is a dropdown panel anchored to its button, not a permanent column. Esc and ✕ close; the docked-pane variant retires.
   - **Raw wraps long lines** (амендмент к AC задачи 142 по видео): a line wider than the well continues on the next visual line WITHOUT a number (the gutter numbers logical lines only); horizontal scrolling exists nowhere in the viewer. Display-only: bytes, Copy and Download remain exact (побайтовость задачи 122 не тронута).
   - Acceptance Criteria: overlay matches the video's composition point-for-point (side-by-side frames in the report); all four views share one width; Raw shows a >200-char line fully wrapped with correct logical-line numbering; page never scrolls sideways (re-run of the 142 probe stays green); liveness holds with the overlay open over a live stream (Stop reachable — re-run of the M12п check).

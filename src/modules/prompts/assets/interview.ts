@@ -44,14 +44,61 @@ const TECHNICAL_RULES = [
   'trade-off stated in the description rather than implied.',
 ].join(' ');
 
+/**
+ * The concrete register (task 144; директива заказчика 2026-08-18; видео §5–6).
+ *
+ * The other two registers choose a vocabulary. This one chooses a *subject*: what to build, how it
+ * should be built, and how the person will use it once it runs — and nothing else. The prohibitions
+ * are the load-bearing half, because the customer's complaint («что должен чувствовать муравей») was
+ * not that the words were too hard; it was a question with no answer that changes anything, asked
+ * through an invented character. That shape of question is one both existing registers permit, so it
+ * has to be banned by name.
+ *
+ * Selected by style, not by audience (see `audienceRules`): it replaces the profile's register
+ * rather than composing with it.
+ */
+const CONCRETE_RULES = [
+  'They want the build pinned down, not explored.',
+  'Ask only three kinds of thing: what to build, how they want it built, and how they will use it',
+  'once it runs. Address them as "you" in every question and in every option, and sound the same in',
+  'round three as in round one: vary what you ask about, never how you ask it. Every option is',
+  'something you say to them, never something they say back — no label and no description in the',
+  'first person. Never ask what someone else would feel, want or notice, never invent a persona, a',
+  'story or a scene to ask through, never ask for an adjective, never put a decision into a',
+  'metaphor. Ask about use as observable behaviour — what they run first, how often they come back,',
+  'what they do the day it breaks — never about mood, motivation or personality. Every question',
+  'settles one thing they could decide today and a builder could act on tomorrow, and no two',
+  'questions in a round settle the same thing; drop any question whose answers would all leave the',
+  'built thing identical. Never ask for a number they would have to go and measure, and never',
+  'assume a decision they have not yet taken. Every option is something that can be chosen and then',
+  'done — a named technology, a mechanism, a limit, an order of work — never a category, a theme or',
+  'an adjective, and never "a balance of both". Do not build a question out of interchangeable',
+  'products: where the options would differ only in the name on the bill, that is a setting, not a',
+  'question. Name technologies where they commit the build to something different — a different',
+  'data model, a different place it runs, a different failure — and give every such question one',
+  'option that declines: "No preference — recommend the best fit".',
+].join(' ');
+
 const AUDIENCE_RULES: Record<string, string> = {
   'non-technical': PLAIN_RULES,
   technical: TECHNICAL_RULES,
 };
 
-/** The register for a stored profile, defaulting to plain for anything unrecognised. */
-export function audienceRules(audience: string): string {
-  return AUDIENCE_RULES[audience] ?? PLAIN_RULES;
+/**
+ * The register for a stored profile and style, defaulting to plain for anything unrecognised.
+ *
+ * The style **displaces** the profile rather than adding to it (task 144): «they are not technical»
+ * plus «name the actual technology» is a round that hedges every option into a category, which is
+ * precisely the defect the concrete style exists to remove. Naming a technology to a non-technical
+ * reader costs nothing here for one reason — in this register a named technology always arrives with
+ * its own note, so the option explains itself.
+ *
+ * Both arguments are plain strings, and both fall back the same way: `prompts` may import only
+ * `specs` (constitution A1), so the unions live in `projects` and an unrecognised value means the
+ * behaviour that existed before it was written.
+ */
+export function audienceRules(audience: string, style?: string): string {
+  return style === 'concrete' ? CONCRETE_RULES : (AUDIENCE_RULES[audience] ?? PLAIN_RULES);
 }
 
 export const REPLY_ASSESSMENT_PROMPT_ID = 'interview.reply-assessment.skeleton.v1';
@@ -72,6 +119,13 @@ export interface InterviewQuestionsPromptInput {
    * may not import, and the caller is allowed to know it.
    */
   audience: string;
+  /**
+   * What the interview asks about (task 144) — `concrete`, or absent for the profile's own register.
+   *
+   * A plain string for the same reason `audience` is, and optional rather than defaulted: a caller
+   * that has no style in hand means the register that existed before the style did.
+   */
+  style?: string | undefined;
   /**
    * Which round this is for the current stage, 1-based.
    *
@@ -95,6 +149,16 @@ export interface InterviewQuestionsPromptInput {
   questionsPerRound: { readonly max: number };
   optionsPerQuestion: { readonly min: number; readonly max: number };
   /**
+   * What a note on an option may be, and which logos exist to name (task 144), from the same schema
+   * and for the same reason as the bounds above.
+   *
+   * `logoSlugs` matters most: the list the model reads and the list the renderer can actually draw
+   * have to be one list, or a slug with no vendored SVG becomes a suggestion. Interpolated rather
+   * than written into the template, so a newly vendored logo becomes offerable without a prompt edit.
+   */
+  optionNote: { readonly max: number };
+  logoSlugs: readonly string[];
+  /**
    * The session's content language (У-1; task 108) — an ISO 639-1 code, or `null`/absent when
    * detection could not tell. Forwarded to the single assembly point, never acted on here.
    */
@@ -106,7 +170,7 @@ export function interviewQuestionsPrompt(input: InterviewQuestionsPromptInput): 
     'interview.questions.v3',
     {
       stage: input.stage,
-      audienceRules: audienceRules(input.audience),
+      audienceRules: audienceRules(input.audience, input.style),
       roundNumber: String(input.roundNumber),
       /*
        * The stage picks the topics on this side of the boundary (round 2, Д-3). What crosses is what
@@ -126,6 +190,8 @@ export function interviewQuestionsPrompt(input: InterviewQuestionsPromptInput): 
       minOptions: String(input.optionsPerQuestion.min),
       maxOptions: String(input.optionsPerQuestion.max),
       maxQuestions: String(input.questionsPerRound.max),
+      maxNoteChars: String(input.optionNote.max),
+      logoSlugs: input.logoSlugs.join(', '),
       replyBlock:
         input.freeTextReply === undefined
           ? ''

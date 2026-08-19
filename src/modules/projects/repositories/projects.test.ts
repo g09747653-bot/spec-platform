@@ -52,6 +52,7 @@ describe('owner-scoped repositories (task 13)', () => {
         name: 'Recipe app',
         prompt: 'a recipe app for cooks who hate scrolling',
         audience: 'non-technical',
+        style: 'default',
         contentLanguage: 'en',
       });
 
@@ -71,10 +72,33 @@ describe('owner-scoped repositories (task 13)', () => {
         name: 'Verbatim',
         prompt,
         audience: 'non-technical',
+        style: 'default',
         contentLanguage: 'en',
       });
 
       expect((await projectRepository.findById(alice, projectId))?.initialPrompt).toBe(prompt);
+    });
+
+    /*
+     * Task 144 — the two halves of «how the interview speaks» come back out of the row.
+     *
+     * They are read together because they are read together in production: the Edit chat inherits
+     * both from the bundle's own conversation, and the register used to be a literal there, so a
+     * project interviewed in engineering terms changed voice the moment its owner edited it.
+     */
+    it('records the audience profile and the interview style, and reads both back', async () => {
+      const { projectId } = await projectRepository.createFromPrompt(alice, {
+        name: 'Concrete chat',
+        prompt: 'an internal tool that drafts replies to customer email',
+        audience: 'technical',
+        style: 'concrete',
+        contentLanguage: 'en',
+      });
+
+      const detail = await projectRepository.findById(alice, projectId);
+
+      expect(detail?.audienceProfile).toBe('technical');
+      expect(detail?.interviewStyle).toBe('concrete');
     });
 
     it('leaves nothing behind when the statement cannot complete', async () => {
@@ -85,6 +109,7 @@ describe('owner-scoped repositories (task 13)', () => {
           name: 'No owner',
           prompt: 'x',
           audience: 'non-technical',
+          style: 'default',
           contentLanguage: 'en',
         }),
       ).rejects.toThrow();
@@ -102,18 +127,21 @@ describe('owner-scoped repositories (task 13)', () => {
         name: 'Alice one',
         prompt: 'a',
         audience: 'non-technical',
+        style: 'default',
         contentLanguage: 'en',
       });
       await projectRepository.createFromPrompt(alice, {
         name: 'Alice two',
         prompt: 'b',
         audience: 'non-technical',
+        style: 'default',
         contentLanguage: 'en',
       });
       await projectRepository.createFromPrompt(bob, {
         name: 'Bob one',
         prompt: 'c',
         audience: 'non-technical',
+        style: 'default',
         contentLanguage: 'en',
       });
 
@@ -129,6 +157,7 @@ describe('owner-scoped repositories (task 13)', () => {
         name: 'Shape',
         prompt: 'a',
         audience: 'non-technical',
+        style: 'default',
         contentLanguage: 'en',
       });
 
@@ -144,12 +173,14 @@ describe('owner-scoped repositories (task 13)', () => {
         name: 'Older',
         prompt: 'a',
         audience: 'non-technical',
+        style: 'default',
         contentLanguage: 'en',
       });
       await projectRepository.createFromPrompt(alice, {
         name: 'Newer',
         prompt: 'b',
         audience: 'non-technical',
+        style: 'default',
         contentLanguage: 'en',
       });
 
@@ -166,6 +197,7 @@ describe('owner-scoped repositories (task 13)', () => {
         name: 'Bob only',
         prompt: 'c',
         audience: 'non-technical',
+        style: 'default',
         contentLanguage: 'en',
       });
 
@@ -179,6 +211,7 @@ describe('owner-scoped repositories (task 13)', () => {
         name: 'Private',
         prompt: 'secret idea',
         audience: 'non-technical',
+        style: 'default',
         contentLanguage: 'en',
       });
 
@@ -203,6 +236,7 @@ describe('owner-scoped repositories (task 13)', () => {
         name: 'Private',
         prompt: 'x',
         audience: 'non-technical',
+        style: 'default',
         contentLanguage: 'en',
       });
       const before = await database.db
@@ -227,6 +261,7 @@ describe('owner-scoped repositories (task 13)', () => {
         name: 'Session',
         prompt: 'grounding input',
         audience: 'non-technical',
+        style: 'default',
         contentLanguage: 'en',
       });
 
@@ -243,6 +278,7 @@ describe('owner-scoped repositories (task 13)', () => {
         name: 'Session',
         prompt: 'x',
         audience: 'non-technical',
+        style: 'default',
         contentLanguage: 'en',
       });
 

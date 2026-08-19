@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { chunkDocument, createTestDoubleAdapter, STUB_DOCUMENT } from './test-double';
+import {
+  chunkDocument,
+  createStubProviderStream,
+  createTestDoubleAdapter,
+  STUB_DOCUMENT,
+} from './test-double';
 import { AllProvidersFailedError } from './types';
 
 /**
@@ -167,6 +172,55 @@ describe('deterministic stub adapter (task 18)', () => {
 
     it('refuses a chunk size below one instead of looping forever', () => {
       expect(() => chunkDocument('a b', 0)).toThrow(/at least 1/);
+    });
+  });
+
+  /**
+   * Task 144 — the stub answers the style it was asked in, and reads it out of the prompt.
+   *
+   * The stub is a provider: it sees the assembled text and nothing else, which is why the stage and
+   * the round number are already read back out of it. The style is read the same way, off a sentence
+   * that appears in the concrete register and in neither of the other two — a sentinel invented for
+   * the fixture could drift away from the register while both halves still passed. The other half of
+   * that claim, that the sentence really is in the concrete prompt, is asserted where the register is
+   * assembled (`prompts/assets/interview-topics.test.ts`); `adapters` may not import `prompts` (A1).
+   */
+  describe('the interview style, read out of the prompt (task 144)', () => {
+    const roundPrompt = (register: string) =>
+      [
+        'You are interviewing someone about a product they want built.',
+        register,
+        '"questions": [{"id", "text", "type": "single"|"multiple"',
+        'Set "stage" to "interview" in your JSON.',
+        'This is question round 1 for this part of the interview.',
+      ].join('\n');
+
+    const answer = async (register: string) => {
+      const stream = createStubProviderStream();
+      const text = await stream({
+        messages: [{ role: 'system', content: roundPrompt(register) }],
+        onDelta: () => undefined,
+      });
+
+      return JSON.parse(text) as { questions: { id: string }[] };
+    };
+
+    it('answers a concrete round with the concrete curriculum', async () => {
+      const document = await answer('vary what you ask about, never how you ask it.');
+
+      expect(document.questions.map((question) => question.id)).toEqual([
+        'q-provider',
+        'q-key-handling',
+      ]);
+    });
+
+    it('answers every other register with the curriculum it always had', async () => {
+      const document = await answer('They are not technical.');
+
+      expect(document.questions.map((question) => question.id)).toEqual([
+        'q-audience',
+        'q-problem',
+      ]);
     });
   });
 });

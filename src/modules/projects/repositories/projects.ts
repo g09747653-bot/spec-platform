@@ -61,6 +61,15 @@ export interface ProjectDetail extends ProjectSummary {
   modelId: string | null;
   /** How many times the session has reached `complete` (FR-020) — the feed's sealing count. */
   completionCount: number;
+  /**
+   * How the primary chat's interview speaks (У-5; task 106) and what it asks about (task 144).
+   *
+   * Read here because an Edit chat inherits both from the bundle's own conversation: a project
+   * interviewed in plain words, in the concrete style, cannot switch register the moment its owner
+   * edits it — that would read as two different interviewers on one project.
+   */
+  audienceProfile: string;
+  interviewStyle: string;
   /** The language every generated word answers in (У-1; task 108); `null` when undetermined. */
   contentLanguage: string | null;
   version: number;
@@ -84,7 +93,8 @@ const PRIMARY_SESSION = sql`
   JOIN LATERAL (
     SELECT ${sessions}.id, ${sessions}.initial_prompt, ${sessions}.summary,
            ${sessions}.quality_enabled, ${sessions}.methodology_id, ${sessions}.model_id,
-           ${sessions}.completion_count, ${sessions}.content_language
+           ${sessions}.completion_count, ${sessions}.content_language,
+           ${sessions}.audience_profile, ${sessions}.interview_style
     FROM ${sessions}
     WHERE ${sessions}.project_id = ${projects}.id
     ORDER BY ${sessions}.created_at ASC, ${sessions}.id ASC
@@ -110,6 +120,8 @@ const ProjectDetailRow = ProjectSummaryRow.extend({
   quality_enabled: z.boolean(),
   model_id: z.string().nullable(),
   completion_count: z.number().int(),
+  audience_profile: z.string(),
+  interview_style: z.string(),
   content_language: z.string().nullable(),
   version: z.number().int(),
 });
@@ -183,6 +195,8 @@ export function createProjectRepository(db: SchemaDatabase) {
         name: string;
         prompt: string;
         audience: string;
+        /** Which questions the interview asks (task 144). A plain string, like `audience`. */
+        style: string;
         contentLanguage: string | null;
         /**
          * The session's methodology, and the position its graph starts at (task 117).
@@ -213,8 +227,8 @@ export function createProjectRepository(db: SchemaDatabase) {
           VALUES (${scope.userId}, ${input.name})
           RETURNING id
         ), new_session AS (
-          INSERT INTO ${sessions} (project_id, title, initial_prompt, audience_profile, content_language, methodology_id)
-          SELECT id, ${input.name}, ${input.prompt}, ${input.audience}, ${input.contentLanguage}, ${methodologyId} FROM new_project
+          INSERT INTO ${sessions} (project_id, title, initial_prompt, audience_profile, interview_style, content_language, methodology_id)
+          SELECT id, ${input.name}, ${input.prompt}, ${input.audience}, ${input.style}, ${input.contentLanguage}, ${methodologyId} FROM new_project
           RETURNING id, project_id
         ), new_state AS (
           INSERT INTO ${workflowState} (session_id, stage, substage)
@@ -249,6 +263,8 @@ export function createProjectRepository(db: SchemaDatabase) {
             primary_session.methodology_id,
             primary_session.model_id,
             primary_session.completion_count,
+            primary_session.audience_profile,
+            primary_session.interview_style,
             primary_session.content_language,
             ${workflowState}.stage,
             ${workflowState}.substage,
@@ -280,6 +296,8 @@ export function createProjectRepository(db: SchemaDatabase) {
         methodologyId: row.methodology_id,
         modelId: row.model_id,
         completionCount: row.completion_count,
+        audienceProfile: row.audience_profile,
+        interviewStyle: row.interview_style,
         contentLanguage: row.content_language,
         stage: row.stage,
         substage: row.substage,

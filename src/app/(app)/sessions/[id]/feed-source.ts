@@ -58,6 +58,18 @@ function toQuestions(payload: unknown): FeedQuestion[] {
       ...(option.recommended === undefined ? {} : { recommended: option.recommended }),
       // Task 134, row `1.1-6`: the same optional-by-construction treatment.
       ...(option.tags === undefined ? {} : { tags: option.tags }),
+      /*
+       * The справка (task 144; видео §5), carried across one field at a time.
+       *
+       * Three separate spreads rather than one, because the schema drops these three separately: an
+       * option naming a technology this build has no mark for keeps its note and its link and loses
+       * only the slug, and a projection that carried them as a block would put that half back or
+       * throw it away. The absent key is also what the round holds in its jsonb, so what is read
+       * here is what was written there.
+       */
+      ...(option.note === undefined ? {} : { note: option.note }),
+      ...(option.href === undefined ? {} : { href: option.href }),
+      ...(option.logo === undefined ? {} : { logo: option.logo }),
     })),
     allowOther: question.allowOther,
     /*

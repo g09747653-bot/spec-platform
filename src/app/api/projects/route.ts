@@ -46,7 +46,7 @@ export async function POST(request: Request): Promise<Response> {
     });
   }
 
-  const { prompt, audience, methodology } = parsed.data;
+  const { prompt, audience, style, methodology } = parsed.data;
 
   /*
    * Auto (task 117): one cheap classification over the existing chain, and every failure — a bad
@@ -67,6 +67,9 @@ export async function POST(request: Request): Promise<Response> {
     name: deriveProjectName(prompt),
     prompt,
     audience,
+    /* Task 144: the second axis of the same choice — how the questions are worded, and what they ask
+     * about. Stored beside the profile and read back per round, never re-decided. */
+    style,
     methodologyId,
     entryStage: entry.stage,
     entrySubstage: entry.substage,

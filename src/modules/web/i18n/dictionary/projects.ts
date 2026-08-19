@@ -51,9 +51,13 @@ export const projectsPhrases = definePhrases({
    * The two registers, by profile id (У-5).
    *
    * Kept as four separate flat entries rather than one table keyed by profile, because the component
-   * still owns the `Record<AudienceProfile, …>` and the exhaustiveness that comes with it — task 144
-   * adds a third profile, and the compiler should point at the map and at this file, not silently
-   * render a blank.
+   * still owns the `Record<AudienceProfile, …>` and the exhaustiveness that comes with it: a profile
+   * added without copy should be a compile error pointing at the map and at this file, not a blank
+   * label nobody notices.
+   *
+   * Task 144 turned out **not** to add a third profile — it added a second axis beside this one, and
+   * its four entries are below. The note that predicted otherwise is corrected rather than deleted,
+   * because the shape it was defending is the reason the entries are still flat.
    */
   'projects.new-project.audience-plain': { en: 'In plain language', ru: 'Простыми словами' },
   'projects.new-project.audience-plain-hint': {
@@ -81,6 +85,63 @@ export const projectsPhrases = definePhrases({
   'projects.new-project.audience-technical-hint': {
     en: 'Questions that name the engineering choices directly, with the trade-offs stated.',
     ru: 'Вопросы прямо называют инженерный выбор и его цену.',
+  },
+
+  /**
+   * The second axis of the same choice (task 144): not *how* the questions are worded but *what*
+   * they are about.
+   *
+   * The legend has to make that difference audible one line under «Как формулировать вопросы?», or
+   * the reader meets two fieldsets that look like one question asked twice. «О чём спрашивать?» is
+   * the shortest sentence that does it — the same length as the one above it, and the only word
+   * that changes carries the whole distinction.
+   */
+  'projects.new-project.style-legend': {
+    en: 'What should the questions be about?',
+    ru: 'О чём спрашивать?',
+  },
+
+  /**
+   * The default style, named by what it does rather than by being the default.
+   *
+   * «Обычный» and «По умолчанию» were the two obvious labels and both are refusals to say anything:
+   * a reader choosing between two options learns nothing from being told that one of them is the
+   * one they would have got anyway. This is a real register — it opens on the idea and lets the
+   * engineering follow — so the label says that instead.
+   *
+   * The hint may not spend «решение», for the reason spelled out over the technical hint above: the
+   * product says «ждёт вашего решения» all session, and one noun cannot also mean the engineering
+   * being chosen. «Технический выбор» is the same word that hint settled on.
+   */
+  'projects.new-project.style-default': {
+    en: 'The idea and its goals',
+    ru: 'Об идее и её целях',
+  },
+  'projects.new-project.style-default-hint': {
+    en: 'Goals, users and boundaries first; the technical choices follow from them.',
+    ru: 'Сначала цели, люди и границы; технический выбор следует из них.',
+  },
+  /**
+   * «Что строить и как этим пользоваться» — the customer's own sentence, in the customer's order.
+   *
+   * The directive of 2026-08-18 asks for questions about *what to build, how to build it and how it
+   * will be used*, against an interview that had been asking what an ant ought to feel. Three verbs
+   * would not fit a radio label, and «как строить» is what the options themselves answer, so the
+   * label keeps the two ends and lets the hint carry the rest.
+   */
+  'projects.new-project.style-concrete': {
+    en: 'What to build, and how you will use it',
+    ru: 'Что строить и как этим пользоваться',
+  },
+  /**
+   * «Справка» is the word the whole feature is named by, and it is not «подсказка» (§6: a подсказка
+   * in an interface is a tooltip). The sentence promises the thing the video shows — an option that
+   * names a technology and explains itself — and hedges with «может», because the note belongs to
+   * the option and half the options in a round will not carry one.
+   */
+  'projects.new-project.style-concrete-hint': {
+    en: 'Questions name the actual technology, and an answer can carry a note about it.',
+    ru: 'Вопросы прямо называют технологию, а к ответу может прилагаться справка.',
   },
 
   /**

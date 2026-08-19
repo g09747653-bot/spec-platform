@@ -115,6 +115,29 @@ export const feedConversationPhrases = definePhrases({
   /** The asterisk's meaning, for a reader who cannot see it. Announced, so clarity beats brevity. */
   'feed.round.required': { en: 'required', ru: 'обязательный вопрос' },
 
+  /**
+   * The ⓘ and the ↗ on an option that carries a справка (task 144; видео §5).
+   *
+   * All three name the option they belong to, because all three are repeated down a question — five
+   * controls announced as «Показать справку» differ only by the order they are read in, which is not
+   * a name. The visible mark is the icon; these are what a screen reader is given instead of it.
+   *
+   * Infinitives, per §1.2 rule 1: a control names the action, and the disclosure names it in both
+   * directions — «Показать» while the note is folded, «Скрыть» while it is open — so the announced
+   * word and `aria-expanded` say one thing. «Подсказка» is spent on tooltips (§6), which is why the
+   * note is a «справка» here and everywhere the design writes about it.
+   */
+  'feed.round.note-show': { en: 'Show the note on {name}', ru: 'Показать справку: {name}' },
+  'feed.round.note-hide': { en: 'Hide the note on {name}', ru: 'Скрыть справку: {name}' },
+  /**
+   * The link leaves for the vendor's own site, and says whose.
+   *
+   * «Открыть» would be the door's verb, and this is not a door in the product — it is an address
+   * outside it. The English keeps the vendor's name attributive («the Neon site») where the Russian
+   * puts it after a colon, because a Latin product name does not decline (§3).
+   */
+  'feed.round.site': { en: 'Go to the {name} site', ru: 'Перейти на сайт: {name}' },
+
   'feed.round.other-label': { en: 'Other — your own answer', ru: 'Другое\u00A0— свой ответ' },
   'feed.round.other-placeholder': {
     en: 'Type an answer not listed above',

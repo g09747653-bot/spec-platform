@@ -17,6 +17,8 @@ export interface OwnedSession {
   qualityEnabled: boolean;
   /** Who the interview is addressing (У-5; task 106) — `non-technical` or `technical`. */
   audienceProfile: string;
+  /** What the interview asks about (task 144) — `default` or `concrete`; a plain string, as above. */
+  interviewStyle: string;
   /** The language every generated word answers in (У-1; task 108); `null` when undetermined. */
   contentLanguage: string | null;
   /** The methodology whose graph this session walks (task 117). A plain string, for the same reason. */
@@ -109,6 +111,7 @@ const SessionDetailRow = z.object({
   summary: z.string().nullable(),
   quality_enabled: z.boolean(),
   audience_profile: z.string(),
+  interview_style: z.string(),
   content_language: z.string().nullable(),
   methodology_id: z.string(),
   model_id: z.string().nullable(),
@@ -155,6 +158,7 @@ export function createSessionRepository(db: SchemaDatabase) {
           summary: sessions.summary,
           qualityEnabled: sessions.qualityEnabled,
           audienceProfile: sessions.audienceProfile,
+          interviewStyle: sessions.interviewStyle,
           contentLanguage: sessions.contentLanguage,
           methodologyId: sessions.methodologyId,
           modelId: sessions.modelId,
@@ -194,6 +198,7 @@ export function createSessionRepository(db: SchemaDatabase) {
             ${sessions}.summary,
             ${sessions}.quality_enabled,
             ${sessions}.audience_profile,
+            ${sessions}.interview_style,
             ${sessions}.content_language,
             ${sessions}.methodology_id,
             ${sessions}.model_id,
@@ -230,6 +235,7 @@ export function createSessionRepository(db: SchemaDatabase) {
         summary: row.summary,
         qualityEnabled: row.quality_enabled,
         audienceProfile: row.audience_profile,
+        interviewStyle: row.interview_style,
         contentLanguage: row.content_language,
         methodologyId: row.methodology_id,
         modelId: row.model_id,
@@ -339,6 +345,8 @@ export function createSessionRepository(db: SchemaDatabase) {
         entryStage: string;
         entrySubstage: string | null;
         audience: string;
+        /** What the interview asks about (task 144) — inherited, like the audience above. */
+        style: string;
         contentLanguage: string | null;
       },
     ): Promise<{ sessionId: string } | null> {
@@ -353,8 +361,9 @@ export function createSessionRepository(db: SchemaDatabase) {
               AND ${projects}.owner_id = ${scope.userId}::uuid
           ), new_session AS (
             INSERT INTO ${sessions}
-              (project_id, title, initial_prompt, audience_profile, content_language, methodology_id)
-            SELECT id, ${input.title}, ${input.prompt}, ${input.audience},
+              (project_id, title, initial_prompt, audience_profile, interview_style,
+               content_language, methodology_id)
+            SELECT id, ${input.title}, ${input.prompt}, ${input.audience}, ${input.style},
                    ${input.contentLanguage}, ${input.methodologyId}
             FROM owned
             RETURNING id

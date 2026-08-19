@@ -205,11 +205,11 @@ export async function duplicateProject(
       ), new_session AS (
         INSERT INTO ${sessions} (
           id, project_id, title, archived, initial_prompt, summary, quality_enabled,
-          audience_profile, content_language, methodology_id, created_at
+          audience_profile, interview_style, content_language, methodology_id, created_at
         )
         SELECT s.new_id, new_project.id, s.title, s.archived, s.initial_prompt, s.summary,
-               s.quality_enabled, s.audience_profile, s.content_language, s.methodology_id,
-               s.created_at
+               s.quality_enabled, s.audience_profile, s.interview_style, s.content_language,
+               s.methodology_id, s.created_at
         FROM new_project, src_session s
         RETURNING id
       ), new_state AS (

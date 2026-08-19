@@ -1,0 +1,2 @@
+ALTER TABLE "sessions" ADD COLUMN "interview_style" text DEFAULT 'default' NOT NULL;--> statement-breakpoint
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_interview_style_valid" CHECK ("sessions"."interview_style" IN ('default', 'concrete'));

@@ -13,6 +13,11 @@
  * - round 3 is the narrower follow-up: one question, one need;
  * - beyond round 3 there is nothing left to ask and the document declares no questions.
  *
+ * Since task 144 there is a second curriculum beside that one, for the concrete style, read out of
+ * the prompt like the stage and the round number. It answers the `interview` stage only, and the
+ * rounds above are untouched — their option ids are named by nine spec files and by the end-to-end
+ * journey, and a fixture that renumbered them would fail suites that have nothing to do with it.
+ *
  * The JSON deliberately matches `QuestionSetSchema` — the stub stands in for a well-behaved
  * model; the repair and rejection paths are exercised in unit tests with corrupted documents.
  */
@@ -22,6 +27,9 @@ interface StubOption {
   description?: string;
   recommended?: boolean;
   tags?: string[];
+  note?: string;
+  href?: string;
+  logo?: string;
 }
 
 interface StubQuestion {
@@ -61,6 +69,31 @@ const recommend = (id: string, label: string, description: string): StubOption =
 const tagged = (id: string, label: string, description: string, tags: string[]): StubOption => ({
   ...option(id, label, description),
   tags,
+});
+
+/**
+ * An option carrying its reference note — logo, link, ⓘ and chips (task 144; видео §5).
+ *
+ * The concrete curriculum below is the only place this appears, and inside it exactly one question
+ * mixes annotated options with bare ones, because the asymmetry is the thing that has to be provable:
+ * the note belongs to the *option*, so a walk has to be able to show one option wearing all four
+ * markers beside another wearing none, in one question, at one moment.
+ *
+ * The notes are deliberately long. A stub that writes only short lines passes a layout that breaks on
+ * a real one — that lesson cost a gate run — so the shortest of them clears 160 characters, which is
+ * about where a two-sentence note stops fitting on one line.
+ */
+const spravka = (
+  id: string,
+  label: string,
+  description: string,
+  reference: { note: string; href: string; logo?: string; tags: string[] },
+): StubOption => ({
+  ...option(id, label, description),
+  note: reference.note,
+  href: reference.href,
+  ...(reference.logo === undefined ? {} : { logo: reference.logo }),
+  tags: reference.tags,
 });
 
 function roundOne(stage: string): StubQuestion[] {
@@ -164,6 +197,220 @@ function roundThree(stage: string): StubQuestion[] {
 }
 
 /**
+ * The concrete curriculum (task 144), drawn from the two worked rounds of the design.
+ *
+ * It exists beside the default one rather than replacing anything: nine spec files and
+ * `e2e/fixtures/journey.ts` name the options of the rounds above by id, and a fixture that renumbered
+ * them would fail suites that have nothing to do with this task. Only the `interview` stage has its
+ * own concrete rounds; every later stage keeps the curriculum it already had, so a walk in this style
+ * can use the same stage helpers it always used.
+ *
+ * Round 1 is where the asymmetry has to be visible, because the shortest legal path out of the
+ * interview answers exactly one round: `q-provider` shows three options wearing note, link, logo and
+ * chips beside two wearing none, and `q-key-handling` is a technical question with no technology in
+ * any of its options — a key read from an environment variable is a behaviour, not a product.
+ */
+const CONCRETE_ROUND_ONE: StubQuestion[] = [
+  {
+    id: 'q-provider',
+    text: 'Which provider should the drafting run through when you first switch it on?',
+    type: 'single',
+    options: [
+      spravka(
+        'anthropic',
+        'Anthropic Claude',
+        'One vendor, called directly: one key to hold, one SDK to keep current.',
+        {
+          note: 'Anthropic makes the Claude family of models and sells access to them directly through its own API. Choosing it means a single vendor, a single key, and a model line-up you follow rather than choose from.',
+          href: 'https://www.anthropic.com',
+          logo: 'anthropic',
+          tags: ['llm provider', 'direct api', 'one key'],
+        },
+      ),
+      spravka(
+        'openai',
+        'OpenAI',
+        'The same shape of integration, against the vendor most of the surrounding tooling was written for.',
+        {
+          note: 'OpenAI makes the GPT family and sells access through its own API. Choosing it means the widest set of libraries and examples to borrow from, and the same single-vendor dependency any direct integration carries.',
+          href: 'https://openai.com',
+          logo: 'openai',
+          tags: ['llm provider', 'direct api', 'broad tooling'],
+        },
+      ),
+      {
+        ...spravka(
+          'openrouter',
+          'OpenRouter',
+          'One key reaches many vendors: you can change model later without touching the app.',
+          {
+            note: 'OpenRouter is a paid gateway that puts many vendors behind one key and one API shape. Choosing it means changing model is a config edit, and that someone else sits between you and whoever serves the request.',
+            href: 'https://openrouter.ai',
+            logo: 'openrouter',
+            tags: ['gateway', 'many vendors', 'one key'],
+          },
+        ),
+        recommended: true,
+      },
+      option(
+        'byo-key',
+        'Bring your own key',
+        'Each person pastes the key for the account they already have; nothing is billed centrally.',
+      ),
+      option(
+        'no-preference',
+        'No preference — recommend the best fit',
+        'The default is chosen for you and written down with the reason; it stays changeable later.',
+      ),
+    ],
+    allowOther: true,
+    informationNeeds: ['model-provider'],
+  },
+  {
+    id: 'q-key-handling',
+    text: 'How should it get hold of that key on the machine you run it on?',
+    type: 'single',
+    options: [
+      option(
+        'env-var',
+        'From an environment variable set by whoever deploys it',
+        'Nothing to type after the first setup, and anything else running as that user can read it.',
+      ),
+      option(
+        'os-keychain',
+        "From the operating system's keychain, unlocked at login",
+        'The key never sits in a file you could copy by accident; a machine nobody logs into cannot unlock it.',
+      ),
+      option(
+        'first-run-prompt',
+        'Typed once on first run and kept in a file only that user can read',
+        'One prompt and then never again, at the cost of a key in plain text on disk.',
+      ),
+      option(
+        'every-start',
+        'Asked for every time it starts',
+        'Nothing is stored anywhere, and it cannot start on its own after a reboot.',
+      ),
+    ],
+    allowOther: true,
+    informationNeeds: ['credential-storage'],
+  },
+];
+
+/**
+ * Round 2 — the same asymmetry, plus the case that degrades field by field.
+ *
+ * `self-run-postgres` names a technology with no vendored logo, so it keeps its note and its link and
+ * loses only the slug. That is «dropped, not rejected» made visible: the half of the reference that is
+ * useful does not leave with the half that is decorative.
+ */
+const CONCRETE_ROUND_TWO: StubQuestion[] = [
+  {
+    id: 'q-store',
+    text: "Where should your team's work and its history live?",
+    type: 'single',
+    options: [
+      spravka(
+        'sqlite',
+        'A SQLite file on the machine that runs it',
+        'Nothing else to install or pay for; a backup is a file copy, and only that machine can read it.',
+        {
+          note: 'SQLite is a SQL database that lives in a single file on disk, with no server to install or keep running. Choosing it means backups are a file copy, and everything reading the data sits on the machine holding that file.',
+          href: 'https://sqlite.org',
+          logo: 'sqlite',
+          tags: ['embedded', 'single file', 'sql'],
+        },
+      ),
+      spravka(
+        'neon',
+        'Neon, a hosted Postgres',
+        "Ordinary SQL several machines can reach at once, on someone else's hardware and someone else's bill.",
+        {
+          note: 'Neon runs PostgreSQL as a managed service, with storage separated from compute so an idle database costs little. Choosing it means ordinary SQL, and a third party holding what your team writes.',
+          href: 'https://neon.com',
+          logo: 'neon',
+          tags: ['managed postgres', 'sql', 'hosted'],
+        },
+      ),
+      spravka(
+        'self-run-postgres',
+        'PostgreSQL on a server you already run',
+        'The data never leaves your own hardware, and the upgrades and backups are yours to do.',
+        {
+          note: 'PostgreSQL is the open-source SQL database most of this list runs or imitates. Choosing it on your own server means nobody else holds the data, and that upgrades, backups and uptime become your work.',
+          href: 'https://www.postgresql.org',
+          tags: ['self-hosted', 'sql', 'your backups'],
+        },
+      ),
+      option(
+        'no-preference-store',
+        'No preference — recommend the best fit',
+        'The default is chosen for you and written down with the reason; it stays changeable later.',
+      ),
+    ],
+    allowOther: true,
+    informationNeeds: ['persistence-layer'],
+  },
+  {
+    id: 'q-first-run',
+    text: 'When you first point it at a mailbox that already holds ten thousand messages, what should happen?',
+    type: 'single',
+    options: [
+      option(
+        'new-only',
+        'Nothing to the backlog — work only on what arrives after it starts',
+        'The first run costs nothing and finishes at once; the ten thousand stay untouched for good.',
+      ),
+      option(
+        'backfill-all',
+        'Work through everything still unanswered, oldest first, in the background',
+        "The backlog clears on its own, and the first day's bill is the largest one you will see.",
+      ),
+      option(
+        'recent-window',
+        'Cover the last thirty days and leave the rest alone',
+        'What anyone still cares about gets covered, and something older will be missed.',
+      ),
+      option(
+        'ask-once',
+        'Ask once, then remember the answer for every mailbox after it',
+        'You decide with the mailbox in front of you; there is one more question in the way of starting.',
+      ),
+    ],
+    allowOther: true,
+    informationNeeds: ['first-run-backfill'],
+  },
+];
+
+/** Round 3 — narrower, and bare end to end: a round carrying no notes at all is a correct round. */
+const CONCRETE_ROUND_THREE: StubQuestion[] = [
+  {
+    id: 'q-first-slice',
+    text: 'Which piece do you want working end to end first?',
+    type: 'single',
+    options: [
+      option(
+        'one-mailbox',
+        'The whole path, for one mailbox and one person',
+        'It proves itself on day one; nobody else can use it until the second piece lands.',
+      ),
+      option(
+        'the-screen',
+        'The screen, against material you paste in by hand',
+        'Your team can react to the shape of the work before any model is wired in.',
+      ),
+      option(
+        'provider-plumbing',
+        'The provider plumbing — keys, retries, fallbacks — before any screen',
+        'The part most likely to be rebuilt is settled first, and there is nothing to look at for a while.',
+      ),
+    ],
+    allowOther: true,
+    informationNeeds: ['build-order'],
+  },
+];
+
+/**
  * Recognising the interview prompts, so the stub *provider* can answer them (round 2, Д-3).
  *
  * These matter because of what they replace. The interview endpoints used to construct a test double
@@ -211,10 +458,36 @@ export function roundNumberFromInterviewPrompt(prompt: string): number {
   return stated === undefined ? 1 : Number(stated);
 }
 
+/**
+ * Which style the round was asked in, read back out of the prompt (task 144).
+ *
+ * Off the register's own words, for the reason the stage and the round number are read the same way:
+ * the stub is a provider and sees only the prompt. `vary what you ask about` appears in the concrete
+ * register and in neither of the other two, so it names the style without a marker invented for the
+ * fixture's benefit — a sentinel would let the two drift, and the point of reading the text is that
+ * they cannot.
+ */
+export function styleFromInterviewPrompt(prompt: string): string {
+  return prompt.includes('vary what you ask about') ? 'concrete' : 'default';
+}
+
 /** The stub model's answer to "draft round N for this stage" — JSON matching the question-set shape. */
-export function stubInterviewRoundDocument(stage: string, roundNumber: number): string {
-  const questions =
-    roundNumber <= 1
+export function stubInterviewRoundDocument(
+  stage: string,
+  roundNumber: number,
+  style = 'default',
+): string {
+  const concrete = style === 'concrete' && stage === 'interview';
+
+  const questions = concrete
+    ? roundNumber <= 1
+      ? CONCRETE_ROUND_ONE
+      : roundNumber === 2
+        ? CONCRETE_ROUND_TWO
+        : roundNumber === 3
+          ? CONCRETE_ROUND_THREE
+          : []
+    : roundNumber <= 1
       ? roundOne(stage)
       : roundNumber === 2
         ? roundTwo(stage)

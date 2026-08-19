@@ -11,6 +11,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import { AUDIENCE_PROFILES } from '@/modules/projects/audience';
+import { INTERVIEW_STYLES } from '@/modules/projects/interview-style';
 
 import { users } from './users';
 
@@ -98,6 +99,17 @@ export const sessions = pgTable(
      */
     audienceProfile: text('audience_profile').notNull().default('non-technical'),
     /**
+     * Which questions the interview asks (task 144), chosen beside the profile rather than instead
+     * of it.
+     *
+     * Defaulted to `default`, which is the name of the register the profile already picked: every
+     * row written before this column existed was interviewed that way, so the backfill is not a
+     * guess. It carries a CHECK for the same reason `audience_profile` does — the set of styles is a
+     * property of the *contract*, not of the deployment's configuration, and a value outside it
+     * would silently reach the prompt layer as an unrecognised string.
+     */
+    interviewStyle: text('interview_style').notNull().default('default'),
+    /**
      * The language the user's own words are in (У-1; task 108), as an ISO 639-1 code.
      *
      * Nullable, and null is a real value: a two-word prompt in a language with no script of its own
@@ -135,6 +147,10 @@ export const sessions = pgTable(
     check(
       'sessions_audience_profile_valid',
       sql`${table.audienceProfile} IN (${list(AUDIENCE_PROFILES)})`,
+    ),
+    check(
+      'sessions_interview_style_valid',
+      sql`${table.interviewStyle} IN (${list(INTERVIEW_STYLES)})`,
     ),
     /* A chat with a blank name is a row the list cannot print and the search cannot match. */
     check('sessions_title_not_blank', sql`${table.title} ~ '[^[:space:]]'`),

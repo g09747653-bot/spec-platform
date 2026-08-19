@@ -42,6 +42,8 @@ const VARIABLES: { [Id in PromptId]: PromptVariables[Id] } = {
     minOptions: '2',
     maxOptions: '8',
     maxQuestions: '5',
+    maxNoteChars: '240',
+    logoSlugs: 'anthropic, openai',
   },
   'review.board.v2': { specType: 'constitution', specContent: '# Constitution', verification: '' },
   'revision.note.v1': {

@@ -9,6 +9,7 @@ import {
   stubInterviewRoundDocument,
   stubReplyAssessmentDocument,
   stubSessionSummaryDocument,
+  styleFromInterviewPrompt,
 } from './stub-interview';
 import { looksLikeEditPrompt, stubEditDocument } from './stub-edit';
 import { looksLikeRefinementPrompt, stubRefinementDocument } from './stub-refinement';
@@ -209,6 +210,7 @@ export function createStubProviderStream(): (input: {
               ? stubInterviewRoundDocument(
                   stageFromInterviewPrompt(prompt),
                   roundNumberFromInterviewPrompt(prompt),
+                  styleFromInterviewPrompt(prompt),
                 )
               : looksLikeSummaryPrompt(prompt)
                 ? stubSessionSummaryDocument(prompt)

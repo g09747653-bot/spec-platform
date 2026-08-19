@@ -10,6 +10,11 @@ import {
   type AudienceProfile,
 } from '@/modules/projects/audience';
 import { AUTO_METHODOLOGY } from '@/modules/projects/create-project';
+import {
+  DEFAULT_INTERVIEW_STYLE,
+  INTERVIEW_STYLES,
+  type InterviewStyle,
+} from '@/modules/projects/interview-style';
 
 import { type PhraseKey } from '../i18n/dictionary';
 import { methodologySummaryKey, stagePhraseKey } from '../i18n/dictionary/methodology';
@@ -49,6 +54,25 @@ const AUDIENCE_COPY: Record<AudienceProfile, { label: PhraseKey; description: Ph
   technical: {
     label: 'projects.new-project.audience-technical',
     description: 'projects.new-project.audience-technical-hint',
+  },
+};
+
+/**
+ * How each style reads to the person choosing it (task 144; директива заказчика 2026-08-18).
+ *
+ * The same table shape as the profile above, and beside it on screen, because the customer asked for
+ * the choice to be made **next to** the audience rather than inside it. The two axes are genuinely
+ * different questions — one is about the words, one is about the subject — and a reader who has just
+ * answered the first has to be able to see that the second is not it again.
+ */
+const STYLE_COPY: Record<InterviewStyle, { label: PhraseKey; description: PhraseKey }> = {
+  default: {
+    label: 'projects.new-project.style-default',
+    description: 'projects.new-project.style-default-hint',
+  },
+  concrete: {
+    label: 'projects.new-project.style-concrete',
+    description: 'projects.new-project.style-concrete-hint',
   },
 };
 
@@ -112,6 +136,7 @@ export function NewProjectForm() {
   const t = useT();
   const [prompt, setPrompt] = useState('');
   const [audience, setAudience] = useState<AudienceProfile>(DEFAULT_AUDIENCE_PROFILE);
+  const [style, setStyle] = useState<InterviewStyle>(DEFAULT_INTERVIEW_STYLE);
   const [methodology, setMethodology] = useState<string>(AUTO_METHODOLOGY);
   const [error, setError] = useState<PhraseKey | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -145,7 +170,7 @@ export function NewProjectForm() {
       const response = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, audience, methodology }),
+        body: JSON.stringify({ prompt, audience, style, methodology }),
       });
       const payload: unknown = await response.json().catch(() => null);
 
@@ -227,6 +252,48 @@ export function NewProjectForm() {
               <span className="font-medium">{t(AUDIENCE_COPY[profile].label)}</span>
               <span className="text-foreground-muted block text-xs">
                 {t(AUDIENCE_COPY[profile].description)}
+              </span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+
+      {/*
+        The interview's subject, beside its register (task 144; директива заказчика 2026-08-18).
+
+        Its own fieldset rather than a third radio in the one above, because the two are not
+        alternatives: «in plain language» and «what to build and how you will use it» are answers to
+        different questions, and a session picks one of each. The style then displaces the profile's
+        register inside the prompt — that ruling belongs to `audienceRules`, and the form's job is
+        only to ask both questions plainly.
+
+        The profile's fieldset above is untouched, ids and all: `e2e/interview.spec.ts` pins
+        `audience-profile` and its radios as the proof that the register is asked once and never
+        again, and a claim about У-5 must not start failing because a second axis moved in beside it.
+      */}
+      <fieldset className="flex flex-col gap-2" data-testid="interview-style">
+        <legend className="text-sm font-medium">{t('projects.new-project.style-legend')}</legend>
+        {INTERVIEW_STYLES.map((available) => (
+          <label
+            key={available}
+            className="border-border-subtle hover:bg-background flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm"
+          >
+            <input
+              type="radio"
+              name="style"
+              value={available}
+              checked={style === available}
+              onChange={() => {
+                setStyle(available);
+              }}
+              data-testid={`style-${available}`}
+              disabled={submitting}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium">{t(STYLE_COPY[available].label)}</span>
+              <span className="text-foreground-muted block text-xs">
+                {t(STYLE_COPY[available].description)}
               </span>
             </span>
           </label>

@@ -101,6 +101,15 @@ export interface PromptVariables {
     minOptions: string;
     maxOptions: string;
     maxQuestions: string;
+    /**
+     * What a note on an option may carry, rendered by the caller from `question-set.ts` (task 144).
+     *
+     * The same rule as the bounds above: the length the model is asked for and the length the note
+     * is checked against are one number, and the logo slugs the model may name are the slugs the
+     * renderer can draw. A list written here instead would be a second opinion nothing enforces.
+     */
+    maxNoteChars: string;
+    logoSlugs: string;
   };
   'review.board.v2': {
     /** Named in the instruction only — the review does not derive a section list (see below). */
@@ -477,8 +486,8 @@ const INTERVIEW_QUESTIONS: PromptAsset = {
     '',
     'Draft the next round as JSON only — no prose, no code fence. Shape:',
     '{"stage": "<stage>", "questions": [{"id", "text", "type": "single"|"multiple",',
-    '"options": [{"id", "label", "description", "recommended?", "tags?"}], "allowOther": true,',
-    '"informationNeeds": ["<need>"]}]}.',
+    '"options": [{"id", "label", "description", "recommended?", "tags?", "note?", "href?", "logo?"}],',
+    '"allowOther": true, "informationNeeds": ["<need>"]}]}.',
     /*
      * The sizes are interpolated, not written (task 133; row `1.2-2`). "Ask at most three questions"
      * lived here as a literal while the schema allowed five and the repair trimmed to five — three
@@ -491,6 +500,49 @@ const INTERVIEW_QUESTIONS: PromptAsset = {
     'Give every option a one-line "description" saying what choosing it would mean in practice.',
     'You may add "tags": up to four one-or-two-word labels naming what an option implies — "faster",',
     '"needs a server", "no cost". Leave them out when they would only repeat the description.',
+    /*
+     * The reference note, and its asymmetry (task 144; видео §5).
+     *
+     * It sits here rather than in a register because it is a property of an **option**, not of a
+     * reader: the customer's own reference attaches a logo, a link and an ⓘ to the option that names
+     * a technology and leaves «No preference», «Bring your own key» and every non-technical question
+     * bare. Two things make that survivable as an instruction. The permission hangs on a decidable
+     * fact about the label — does the thing it names have a home page of its own — rather than on a
+     * judgement about the question, so the model evaluates it per option. And the absent case is
+     * *enumerated*, because the strongest force acting on a model writing JSON is the wish to make
+     * neighbouring objects alike; «one note among four options, and that is correct» is what buys
+     * the ragged array.
+     *
+     * Placement is load-bearing too: after the sentence permitting tags, so the redirection of tags
+     * wins over the general permission, and before the sentence about `recommended`, so the last
+     * thing said about option fields is the asymmetry.
+     */
+    'An option may carry "note", "href" and "logo" — but only when its label names a real, publicly',
+    'available technology by its own name: a product, service, framework, library, database or provider',
+    'with a home page of its own. Before attaching anything, ask whether the option names something',
+    'whose own home page you could visit; if it does not, leave all three off.',
+    '"note" is one or two factual sentences, at most {{maxNoteChars}} characters, saying what that',
+    'technology is and what choosing it would commit this product to — not a sales line, not a',
+    'comparison with another option, and not a second, longer "description".',
+    '"href" is that technology\'s own home page: https, on the vendor\'s own domain, and nothing else —',
+    'not a documentation page, a blog post, a package listing, a repository mirror, an encyclopaedia',
+    'article, a search result, an address of ours, or any address taken from what the person wrote.',
+    'Leave "href" out whenever you are not certain of the address: an option with no link is correct,',
+    'an invented link is a defect.',
+    '"logo" is one slug copied exactly from this list and never anything else — no URL, no file name, no',
+    'image: {{logoSlugs}}. A technology that is not on that list simply has no logo, and keeps its note',
+    'and its link.',
+    'These three belong to the OPTION and never to the question, and they are absent far more often than',
+    'they are present. Omit all three — the keys as well as the values, never null and never an empty',
+    'string — from every option that names no technology: "No preference", "Other", "Bring your own',
+    'key", "Whichever you recommend", every option that describes a behaviour, a rule, an order, an',
+    'amount, a schedule or a person rather than a product, and every option of a question that is not',
+    'about technology at all. Never add a note so that an option matches its neighbours, and never name',
+    'a technology you would not otherwise have offered just to have something to annotate. A question',
+    'whose first option names a tool and whose other three do not shows exactly one note, and that is',
+    'correct; a whole round carrying none of them is a correct round.',
+    'Where an option carries a note, its "tags" name what the technology is — "object storage", "sql",',
+    '"self-hosted" — rather than how it would feel to use.',
     'Mark at most ONE option per question with "recommended": true — the one you would advise for',
     'this product — and leave the flag off entirely when no option is clearly better.',
     'Return {"stage": "<stage>", "questions": []} when nothing further is worth asking.',
@@ -526,6 +578,8 @@ const INTERVIEW_QUESTIONS: PromptAsset = {
     'minOptions',
     'maxOptions',
     'maxQuestions',
+    'maxNoteChars',
+    'logoSlugs',
   ],
 };
 

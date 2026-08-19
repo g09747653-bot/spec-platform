@@ -502,6 +502,19 @@ export async function POST(
         stage,
         // У-5: how the questions are worded, from the session's stored profile (task 106).
         audience: session.audienceProfile,
+        // Task 144: what they ask about, from the same row — chosen once, at chat creation.
+        style: session.interviewStyle,
+        /*
+         * У-1, and it was missing here (task 144 recon).
+         *
+         * Every other model call on this path carries the session's language — the summariser, the
+         * bridge, the reply assessor — and this one did not, so a Russian session that answered in
+         * chat rather than on the card got its follow-up round drafted with the mirror instruction
+         * instead of its own language. The defect is invisible in the suite because the stub answers
+         * the same JSON in any language; it is exactly the reference product's weakness У-1 exists to
+         * beat, reached by the one branch nobody walked.
+         */
+        contentLanguage: session.contentLanguage,
         roundNumber: nextRoundNumber,
         initialPrompt: session.initialPrompt,
         summary: session.summary,
