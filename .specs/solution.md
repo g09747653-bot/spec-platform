@@ -713,6 +713,10 @@ Nothing may import `quality`; it is reachable only through the capability regist
 
 > **А-6 (2026-08-15).** `PROJECTS ||--o{ SESSIONS`: проект держит много сессий-чатов (Generate и Edit), UNIQUE с `sessions.project_id` снят. Требование задач 118/120: Edit-сессия живёт на том же проекте и пишет ревизии в те же `SPEC_FILES`, но несёт собственный граф на собственной строке `WORKFLOW_STATE`. Следствия: страница проекта становится списком чатов (задача 120), поверхность сессии адресуется id сессии, ссылка на проект с единственной сессией ведёт в неё; экспорт остаётся проектным (ревизии `SPEC_FILES` не зависят от числа сессий); дублирование проекта (задача 77) копирует все его сессии. Сессионные колонки задачи 120 (`archived`, отображаемое имя чата) добавляются той же миграцией.
 
+> **А-13 (2026-08-17).** `SESSIONS ||--o{ SESSION_MESSAGES`: реплики свободного чата (`origin='chat'`) и аналитические мостики интервьюера (`origin='bridge'`) — одна таблица `session_messages` (миграция 0016), потому что это один вид вещи: проза, написанная в некоторой позиции. `stage`/`substage` штампуются в момент письма и никогда не перештамповываются — `data-msg-stage` ленты отвечает «что сессия делала, когда это было написано», а не «где она сейчас». Единственные писатели — существующий эндпоинт сообщений и мостик из `/answers` (D-178). Append-only по построению, без immutability-триггера: ни одна строка не обновляется; защита `spec_revisions` существует потому, что approval мутирует ту строку, — здесь этой проблемы нет. *Примечание 2026-08-19: амендмент был утверждён при приёмке M11п в decisions.md, но в сам этот файл тогда внесён не был; расхождение найдено и закрыто при приёмке M13п (А-19).*
+
+> **А-19 (2026-08-19).** `SESSIONS ||--o{ AUTONOMOUS_RUNS`: автономный режим (задача 145, субъект Программы А) — строка прогона, а не флаг на сессии (D-228). Чат ведётся автономно ровно пока держит `running`-строку в `autonomous_runs` (миграция 0018); партиальный UNIQUE `autonomous_runs_one_live_per_session` не даёт сессии двух драйверов; CHECK'и записаны эквивалентностями, а не импликациями (`running` ⇔ `ended_at IS NULL`, `stopped` ⇔ `stop_reason IS NOT NULL`). Завершаемость записана в строку, а не обещана политикой (D-234): `steps` против потолка, `fingerprint` — дайджест всего, что ход мог изменить, `idle_steps` — счёт подряд идущих шагов, не изменивших ничего; `stop_reason` — закрытый список именованных концовок; `version` сериализует шаги и делает Stop авторитетным против шага в полёте (D-231). `session_messages.origin` получает третье значение `driver` — однострочная заметка драйвера о каждом авто-ответе и авто-решении (D-233). Ни одного нового ребра в таблице переходов и ни одного driver-only write: драйвер ходит теми же эндпоинтами, что и кнопки (D-232, тест тождества состояния БД).
+
 ```mermaid
 erDiagram
     USERS ||--o{ PROJECTS : owns
@@ -731,6 +735,8 @@ erDiagram
     SPEC_REVISIONS ||--o| REVIEW_FEEDBACK : reviewed_by
     SPEC_REVISIONS ||--o{ SPEC_REVISIONS : derived_from
     GENERATION_RUNS ||--o{ GENERATION_CHUNKS : streams
+    SESSIONS ||--o{ SESSION_MESSAGES : wrote
+    SESSIONS ||--o{ AUTONOMOUS_RUNS : driven_by
 
     USERS {
         uuid id PK
@@ -857,6 +863,28 @@ erDiagram
         jsonb omitted_files
         timestamptz created_at
     }
+    SESSION_MESSAGES {
+        uuid id PK
+        uuid session_id FK
+        text role
+        text origin
+        text stage
+        text substage
+        text body
+        timestamptz created_at
+    }
+    AUTONOMOUS_RUNS {
+        uuid id PK
+        uuid session_id FK
+        text status
+        text stop_reason
+        int steps
+        int idle_steps
+        text fingerprint
+        int version
+        timestamptz started_at
+        timestamptz ended_at
+    }
 ```
 
 ### Entity Notes and Constraints
@@ -879,6 +907,8 @@ erDiagram
 - **`question_rounds.questions`** stores a `QuestionSetSchema`-validated payload; `(session_id, stage, round_number)` is unique, and `round_number` is what `roundBudgetGate` counts.
 - **`generation_runs.first_token_at`** is stamped by `StreamRecorder` on the first delta of the *successful* attempt; `completed_at` is stamped when the run reaches `complete`. `first_token_at - created_at` is the latency series behind SC-1, and `completed_at - created_at` gives total generation duration. Both are null for runs that failed before producing output, which is exactly the population excluded from the p95.
 - **`workflow_state.version`** provides optimistic concurrency for transitions.
+- **`session_messages`** is append-only by construction — nothing in the product updates a row, so no immutability trigger is needed. `role` is `'user' | 'assistant'`; `origin` is `'chat' | 'bridge' | 'driver'`; `stage`/`substage` are stamped at write time and never restamped (А-13, А-19; D-178/D-233).
+- **`autonomous_runs`** carries a partial unique index on `(session_id) WHERE status = 'running'` — a session cannot hold two drivers because the database will not hold two. Status CHECKs are equivalences (`running` ⇔ `ended_at IS NULL`, `stopped` ⇔ `stop_reason IS NOT NULL`); `stop_reason` is a closed list of named endings; `version` serialises steps and is what makes Stop authoritative against a step in flight (А-19; D-228/D-231/D-234).
 - **`generation_chunks`** are pruned once a run reaches `complete` and its revision is persisted; the durable log exists for resume, not for history.
 - Deleting a project cascades through every table above and issues Blob deletions for each attachment (DR-6).
 - Every table with user-owned data resolves to `projects.owner_id` in at most two joins, so owner scoping is always expressible in a single query predicate.
@@ -911,6 +941,9 @@ All endpoints are Next.js route handlers under `/api`. Every handler resolves th
 | `POST` | `/api/specs/:specFileId/proposed-changes` | Create a refinement proposal | 201 |
 | `POST` | `/api/proposed-changes/:id/decision` | Accept or reject the diff | 200 |
 | `POST` | `/api/reviews/:id/decision` | Accept / ignore / request changes with selected items | 200 |
+| `POST` | `/api/sessions/:id/autonomous` | Hand the session to the autonomous driver: creates the single live row in `autonomous_runs`; refused on a sealed session (`GATE_REJECTED`/`SESSION_SEALED`); a second start answers with the run that already exists (амендмент А-19; no new transition edges — the driver walks the same endpoints the buttons call, D-232) | 201 / 200 / 409 |
+| `DELETE` | `/api/sessions/:id/autonomous` | Take the session back. Unconditional and immediate: writes the ending, the step guard refuses to dispatch for a non-`running` run, the session stands manually at exactly that position. Idempotent — only the press that actually ended the run writes the feed note (амендмент А-19) | 200 |
+| `POST` | `/api/sessions/:id/autonomous/step` | One driver move; the browser ticks, the server decides. The policy (pure function over persisted facts) chooses the move; the model only fills the move already chosen, and its output is intersected with identifiers that were on screen (P1 preserved — амендмент А-19) | 200 / 409 |
 | `GET` | `/api/specs/:specFileId/content?mode=` | Raw markdown for clipboard | 200 |
 | `GET` | `/api/projects/:id/export?mode=` | ZIP download + omission manifest header | 200 |
 
