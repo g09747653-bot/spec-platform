@@ -27,17 +27,30 @@ export function executorStubEnabled(): boolean {
 /* eslint-enable no-restricted-properties */
 
 /**
- * How long the scripted executor pretends to work, in seconds.
+ * How long the scripted executor pretends to work, in seconds — **and not the same for every task**.
  *
- * Three by default, which keeps the rehearsal quick. The gate rehearsal needs it **long**: «красный
- * CI замораживает работающих исполнителей» can only be rehearsed while there are executors still
- * running, and a three-second executor is finished before the first acceptance has a verdict. Set by
- * the walk, never by a deployment — the same rule as the two flags above.
+ * Three by default, which keeps an ordinary rehearsal quick. Two things the gate rehearsal taught,
+ * both of them about being representative rather than convenient:
+ *
+ * - it has to be **long** enough that executors are still running when the first acceptance returns
+ *   a verdict, because «красный CI замораживает работающих исполнителей» cannot be rehearsed against
+ *   a container that has already exited;
+ * - it has to be **uneven**, because a wave of identical stubs starts together, finishes together
+ *   and reaches acceptance together — so there is never a moment with one task red and others still
+ *   working, which is precisely the moment the freeze exists for. Real executors differ by minutes;
+ *   a uniform stub was the unrealistic part, not the timing of the walk.
+ *
+ * The spread is derived from the task id, so it is deterministic: the same plan rehearses the same
+ * way twice.
  */
-export function executorStubSeconds(): number {
+export function executorStubSeconds(taskId = ''): number {
   /* eslint-disable-next-line no-restricted-properties -- see the note on this module. */
   const raw = Number(process.env.LOOP_EXECUTOR_STUB_SLEEP ?? '3');
-  return Number.isFinite(raw) && raw >= 0 ? raw : 3;
+  const base = Number.isFinite(raw) && raw >= 0 ? raw : 3;
+
+  const spread = [...taskId].reduce((sum, character) => sum + character.charCodeAt(0), 0) % 4;
+
+  return Math.round(base * (0.4 + 0.3 * spread));
 }
 
 /**
@@ -61,7 +74,7 @@ export function executorStubCommand(taskId: string, projectId: string): string[]
     '-c',
     [
       'echo "стаб-исполнитель начал"',
-      `sleep ${String(executorStubSeconds())}`,
+      `sleep ${String(executorStubSeconds(taskId))}`,
       "printf '%s\\n' '// отметка стабового исполнителя гейта M15а' >> /workspace/README.md",
       `mkdir -p /workspace/handoff/reports`,
       `cat > "/workspace/handoff/reports/report_${taskId}.json" <<'JSON'`,

@@ -576,12 +576,20 @@ async function main(): Promise<void> {
 
     const frozenMarker = join(projectDirectory, 'handoff', 'FROZEN.md');
     let frozenAt = 0;
-    /* What the daemon was running the last time anyone looked before the freeze. */
-    let executorsBeforeFreeze: string[] = [];
+    /*
+     * What the daemon was running **just** before the freeze, with the time it was seen.
+     *
+     * The freshness matters and the rehearsal proved it: an older non-empty set belongs to a wave
+     * that has since finished, and asserting «these should be paused» over containers that exited a
+     * minute ago produces a confident verdict about nothing.
+     */
+    let executorsBeforeFreeze: { at: number; names: string[] } = { at: 0, names: [] };
 
     await waitFor(async () => {
       await sample();
-      if (liveExecutors.length > 0) executorsBeforeFreeze = liveExecutors;
+      if (liveExecutors.length > 0) {
+        executorsBeforeFreeze = { at: Date.now(), names: liveExecutors };
+      }
       if (!existsSync(frozenMarker)) return false;
       frozenAt = Date.now();
       return true;
@@ -612,12 +620,20 @@ async function main(): Promise<void> {
        */
       const paused: string[] = [];
       const missed: string[] = [];
-      let pausedWithinSecond = executorsBeforeFreeze.length > 0;
+      const gone: string[] = [];
 
-      if (executorsBeforeFreeze.length === 0) {
+      /** A set older than this describes a wave that has already finished, not the frozen one. */
+      const FRESH_MS = 5_000;
+      const fresh =
+        executorsBeforeFreeze.names.length > 0 && frozenAt - executorsBeforeFreeze.at <= FRESH_MS;
+
+      let pausedWithinSecond = fresh;
+
+      if (!fresh) {
         finding(
-          'Инсценированный красный пришёлся на момент, когда ни один исполнитель не работал — ' +
-            'доказательство паузы было бы пустым.',
+          'Инсценированный красный пришёлся на момент, когда ни один исполнитель не работал ' +
+            `(последний живой набор видели ${String(Math.round((frozenAt - executorsBeforeFreeze.at) / 1000))} с назад) ` +
+            '— доказательство паузы было бы пустым.',
         );
         verdict = 'RED';
       }
@@ -625,12 +641,13 @@ async function main(): Promise<void> {
       await waitFor(() => {
         paused.length = 0;
         missed.length = 0;
+        gone.length = 0;
 
-        for (const name of executorsBeforeFreeze) {
+        for (const name of executorsBeforeFreeze.names) {
           const state = containerPaused(name);
-          /* `null` — the container is gone: it finished before the pause could reach it. */
           if (state === true) paused.push(name);
           else if (state === false) missed.push(name);
+          else gone.push(name);
         }
 
         return missed.length === 0 && paused.length > 0;
@@ -642,15 +659,16 @@ async function main(): Promise<void> {
       if (took > 1_000) pausedWithinSecond = false;
 
       measure(
-        `Заморозка: работало исполнителей ${String(executorsBeforeFreeze.length)}, ` +
+        `Заморозка: работало исполнителей ${String(executorsBeforeFreeze.names.length)}, ` +
           `на паузе ${String(paused.length)} (${paused.join(', ') || '—'}), ` +
-          `не встали ${String(missed.length)}, через ${String(took)} мс после отметки на диске.`,
+          `не встали ${String(missed.length)}, успели выйти ${String(gone.length)}, ` +
+          `через ${String(took)} мс после отметки на диске.`,
       );
 
       if (!pausedWithinSecond) {
         finding(
-          `Контейнеры не встали на паузу за 1 с (заняло ${String(took)} мс, ` +
-            `не на паузе: ${missed.join(', ') || '—'}).`,
+          `Контейнеры не встали на паузу за 1 с (заняло ${String(took)} мс; ` +
+            `не на паузе: ${missed.join(', ') || '—'}; вышли сами: ${gone.join(', ') || '—'}).`,
         );
         verdict = 'RED';
       }
