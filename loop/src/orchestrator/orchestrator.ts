@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { runCycle, type CycleResult } from '../cycle/run-cycle.ts';
 import type { DockerEngine } from '../docker/engine.ts';
+import type { ExecutorCredential } from '../executor/credential.ts';
 import { eventBus } from '../events/bus.ts';
 import {
   HANDOFF,
@@ -39,7 +40,8 @@ export interface OrchestratorDeps {
   database: DatabaseSync;
   engine: DockerEngine;
   logger: Logger;
-  anthropicApiKey: string;
+  /** The one credential handed to every executor container this project runs. */
+  credential: ExecutorCredential;
   /**
    * Present only for a rehearsal: what the executor container runs instead of Claude Code.
    *

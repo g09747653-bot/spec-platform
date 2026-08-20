@@ -43,13 +43,32 @@ function watchConsole(page: Page): string[] {
  * The console noise this application cannot prevent, and why each line is here.
  *
  * Kept deliberately short: an allow-list that grows is a console check that stops working.
+ *
+ * **One event, three vocabularies.** Every entry below is the same thing — Playwright aborting an
+ * in-flight request because the test navigated or reloaded — said by three engines in three ways.
+ * The list was written against Chromium's wording, so the check passed there and failed everywhere
+ * else: `bug-hunt-M12.spec.ts:210` reloads five times, and on Firefox one of those reloads yields
+ * «Error in input stream», on WebKit «Load failed». Both were counted as defects of the product,
+ * which is why this case has been red on non-Chromium engines intermittently since the engine matrix
+ * landed (А-15) — including on `main`. A check whose verdict depends on which browser's dictionary
+ * an aborted fetch was translated into is not checking the application.
  */
 const EXPECTED = [
-  // Playwright aborts in-flight requests when a test navigates or reloads.
+  // Playwright aborts in-flight requests when a test navigates or reloads — Chromium's wording.
   /Failed to load resource/i,
   /net::ERR_ABORTED/i,
   /The user aborted a request/i,
   /Failed to fetch/i,
+  // The same abort, as Firefox words it.
+  /Error in input stream/i,
+  // The same abort, as WebKit words it. Anchored: only the bare message, never a longer sentence
+  // that happens to contain it.
+  /^pageerror: Load failed$/i,
+  /^console\.error: Load failed$/i,
+  /cancelled due to load failure/i,
+  // Next's own dev overlay fetching a stack frame for an error it is about to display. Not the
+  // application's code, and present only because the E2E run uses a dev server.
+  /__nextjs_original-stack-frames/i,
 ];
 
 function unexpected(problems: readonly string[]): string[] {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { LoopConfigurationError, parseEnv, requireEnv } from './env.ts';
+import { executorCredential, LoopConfigurationError, parseEnv, requireEnv } from './env.ts';
 
 /**
  * The loop's configuration floor (task 152 AC-3).
@@ -12,6 +12,13 @@ import { LoopConfigurationError, parseEnv, requireEnv } from './env.ts';
 
 const FLOOR = {
   ANTHROPIC_API_KEY: 'sk-ant-not-a-real-key',
+  PORT: '3100',
+  WORKSPACE_ROOT_PATH: 'C:\\Users\\Owner\\workspace',
+};
+
+/** The same floor on the customer's subscription: the token instead of the key, never both. */
+const SUBSCRIPTION_FLOOR = {
+  CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-oat01-not-a-real-token',
   PORT: '3100',
   WORKSPACE_ROOT_PATH: 'C:\\Users\\Owner\\workspace',
 };
@@ -42,6 +49,9 @@ describe('the loop environment (task 152)', () => {
 
   it('treats a blank value as missing — an empty line in a .env is not a configured value', () => {
     expect(() => parseEnv({ ...FLOOR, ANTHROPIC_API_KEY: '   ' })).toThrow(LoopConfigurationError);
+    expect(() => parseEnv({ ...SUBSCRIPTION_FLOOR, CLAUDE_CODE_OAUTH_TOKEN: '' })).toThrow(
+      LoopConfigurationError,
+    );
   });
 
   it('reports every missing variable at once, so a fresh .env takes one pass', () => {
@@ -111,5 +121,50 @@ describe('the loop environment (task 152)', () => {
 
     expect(env.PORT).toBe(3100);
     expect(written).toEqual([]);
+  });
+});
+
+describe('exactly one executor credential (амендмент А-23)', () => {
+  it('accepts the subscription token as the whole credential', () => {
+    const env = parseEnv({ ...SUBSCRIPTION_FLOOR });
+
+    expect(executorCredential(env)).toEqual({
+      kind: 'CLAUDE_CODE_OAUTH_TOKEN',
+      value: 'sk-ant-oat01-not-a-real-token',
+    });
+  });
+
+  it('accepts the API key as the whole credential', () => {
+    expect(executorCredential(parseEnv({ ...FLOOR }))).toEqual({
+      kind: 'ANTHROPIC_API_KEY',
+      value: 'sk-ant-not-a-real-key',
+    });
+  });
+
+  it('refuses both at once, and says why rather than picking one', () => {
+    try {
+      parseEnv({ ...FLOOR, CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-oat01-not-a-real-token' });
+      expect.unreachable('two credentials must be refused');
+    } catch (error) {
+      const issues = (error as LoopConfigurationError).issues.join('\n');
+
+      // Both names, because the operator has to know which one to delete.
+      expect(issues).toContain('ANTHROPIC_API_KEY');
+      expect(issues).toContain('CLAUDE_CODE_OAUTH_TOKEN');
+      // And the reason: the CLI prefers the key, so «both» silently means «not the subscription».
+      expect(issues).toContain('subscription');
+    }
+  });
+
+  it('refuses neither, naming both spellings so the fix is not a guess', () => {
+    try {
+      parseEnv({ PORT: '3100', WORKSPACE_ROOT_PATH: 'C:\\workspace' });
+      expect.unreachable('a configuration with no credential must be refused');
+    } catch (error) {
+      const issues = (error as LoopConfigurationError).issues.join('\n');
+
+      expect(issues).toContain('ANTHROPIC_API_KEY');
+      expect(issues).toContain('CLAUDE_CODE_OAUTH_TOKEN');
+    }
   });
 });

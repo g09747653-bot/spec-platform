@@ -1,15 +1,12 @@
+import type { ExecutorCredentialKind } from './credential.ts';
+
 /**
- * The command that runs Claude Code inside an executor container (task 155).
+ * The command that runs Claude Code inside an executor container (task 155; амендмент А-23).
  *
  * The A0 bundle guessed at this — it names `claude --yes` and `CI=true` as examples — and neither
  * exists. The flags below are the documented ones (Claude Code CLI reference and «Run Claude Code
- * programmatically», read at implementation time), and each is here for a stated reason:
+ * programmatically»), and each is here for a stated reason:
  *
- * - **`--bare`** is the mode the documentation recommends for scripted and SDK calls. It skips
- *   discovery of hooks, plugins, MCP servers, auto memory and `CLAUDE.md` — which is exactly right
- *   for an executor: the same result on every machine, and nothing in the *task's own workspace*
- *   gets to configure the agent that is about to edit it. A repository containing a hostile
- *   `.claude/settings.json` is a case this mode removes rather than mitigates.
  * - **`-p`** is print mode: run once, print, exit. Exit code 0 on success, non-zero on failure, so
  *   the wrapper can branch on the container's exit status instead of parsing prose.
  * - **`--permission-mode acceptEdits` with an explicit `--allowedTools`** rather than
@@ -22,15 +19,44 @@
  *   timeout. Two bounds, because they fail differently: turns catch a model going in circles
  *   cheaply, the clock catches a process that has stopped making progress at all.
  *
- * **Authentication needs no interactive step.** In bare mode Claude Code never reads OAuth
- * credentials or the system keychain — it reads `ANTHROPIC_API_KEY` from the environment, which is
- * the one variable the wrapper passes in. The operational stop the milestone's brief allowed for
- * (a login the customer would have to perform inside a container) is therefore not needed.
+ * **The isolation flags depend on the credential, and that is not a preference.**
+ *
+ * `--bare` is the strongest isolation the CLI offers — it skips hooks, plugins, MCP discovery, auto
+ * memory and `CLAUDE.md`, so nothing in the *task's own workspace* configures the agent about to
+ * edit it (D-255). It also, by its own documented design, authenticates **strictly** through
+ * `ANTHROPIC_API_KEY`: «OAuth and keychain are never read». Handed a subscription token, a bare run
+ * does not degrade — it stops, printing «Not logged in · Please run /login» (measured, twice: on
+ * the host and inside this image).
+ *
+ * So the subscription path rebuilds that isolation explicitly, and the two flags were measured one
+ * at a time against a workspace carrying a hostile `CLAUDE.md`, a hooks-bearing
+ * `.claude/settings.json` and an `.mcp.json` that writes a marker file when spawned:
+ *
+ * | run | CLAUDE.md read | hooks fired | MCP server spawned |
+ * |---|---|---|---|
+ * | no isolation flags | yes | yes | yes |
+ * | `--strict-mcp-config` alone | **yes** | **yes** | no |
+ * | `--setting-sources ''` alone | no | no | no |
+ * | both (this command) | no | no | no |
+ *
+ * `--setting-sources ''` is therefore what closes the channel: with no setting source loaded, there
+ * is no project settings file to carry hooks and no project memory to carry instructions.
+ * `--strict-mcp-config` is kept beside it because the two forbid by different mechanisms — one
+ * declines to *load a source*, the other declines to *trust MCP configuration from anywhere but the
+ * flag* — and an executor is exactly the place to spend a redundant flag on a channel that would
+ * otherwise be an unattended agent talking to a server the edited repository chose.
+ *
+ * What the subscription path does **not** get back is bare mode's smaller tool registry: a non-bare
+ * run registers the full set and relies on `--allowedTools` to gate it. That is a named difference,
+ * not a silent one — the container remains the sandbox, and the permission layer is what stands
+ * between the run and any tool outside the list.
  */
 
 export interface ClaudeCommandOptions {
   /** Where the assignment sits inside the container — under the mounted workspace. */
   taskFile: string;
+  /** Which credential the container was handed — it decides the isolation flags. */
+  credentialKind: ExecutorCredentialKind;
   /** Bounds the agentic loop from inside the CLI. */
   maxTurns?: number;
   /** A model alias or full name. Absent means the CLI's own default. */
@@ -66,10 +92,21 @@ export function executorPrompt(taskFile: string): string {
   ].join('\n');
 }
 
+/**
+ * What replaces `--bare` when the credential is a subscription token.
+ *
+ * An empty `--setting-sources` means «load none of user, project, local» — the CLI's own vocabulary
+ * for the sources, spelled as the absence of all three rather than as a list of what to skip.
+ */
+export const SUBSCRIPTION_ISOLATION = ['--setting-sources', '', '--strict-mcp-config'] as const;
+
 export function claudeCommand(options: ClaudeCommandOptions): string[] {
+  const isolation =
+    options.credentialKind === 'ANTHROPIC_API_KEY' ? ['--bare'] : [...SUBSCRIPTION_ISOLATION];
+
   return [
     'claude',
-    '--bare',
+    ...isolation,
     '-p',
     executorPrompt(options.taskFile),
     '--output-format',

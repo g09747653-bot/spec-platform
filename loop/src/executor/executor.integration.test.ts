@@ -49,7 +49,10 @@ const REQUEST = {
   taskId: 'itest_1',
   projectId: 'proj_itest',
   taskFile: '/workspace/handoff/tasks/task_itest_1.json',
-  anthropicApiKey: 'not-a-real-key-and-never-used-here',
+  credential: {
+    kind: 'ANTHROPIC_API_KEY',
+    value: 'not-a-real-key-and-never-used-here',
+  } as const,
 };
 
 beforeAll(async () => {

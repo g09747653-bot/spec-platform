@@ -128,6 +128,41 @@ test('an error line is marked as one, and the level survives the stream', async 
   await expect(page.getByTestId('feed-line').last()).toContainText('CONTROLLER');
 });
 
+test('the feed follows its tail once there are more lines than fit', async ({ page, request }) => {
+  /*
+   * The live gate walk found this and photographed it: three minutes into an autonomous run, with
+   * several hundred lines in the DOM, the panel was still showing the first second of the intake.
+   * The sentinel that `scrollIntoView` was called on sat outside the scrolling list, so the page
+   * moved and the list never did — and the one window an unattended run has onto itself was frozen
+   * on the oldest thing it ever saw.
+   */
+  await page.goto('/');
+  await expect(page.getByTestId('feed-state')).toHaveAttribute('data-live', 'yes');
+
+  const before = await countFeedLines(page);
+
+  for (let index = 0; index < 60; index += 1) {
+    await request.post('/api/harness', {
+      data: { action: 'log', projectId: PROJECT, message: `строка ленты №${String(index)}` },
+    });
+  }
+
+  await expect(page.getByTestId('feed-line')).toHaveCount(before + 60);
+
+  const scroll = await page.getByTestId('feed').evaluate((list) => ({
+    top: list.scrollTop,
+    height: list.scrollHeight,
+    visible: list.clientHeight,
+  }));
+
+  // The list really does overflow — otherwise the case would pass without asserting anything.
+  expect(scroll.height).toBeGreaterThan(scroll.visible);
+  // And it is parked at the bottom, within a line's height of it.
+  expect(scroll.height - (scroll.top + scroll.visible)).toBeLessThanOrEqual(40);
+
+  await expect(page.getByTestId('feed-line').last()).toBeInViewport();
+});
+
 test('a reload keeps the tail rather than starting from nothing', async ({ page, request }) => {
   await request.post('/api/harness', {
     data: { action: 'log', projectId: PROJECT, message: 'строка до перезагрузки' },

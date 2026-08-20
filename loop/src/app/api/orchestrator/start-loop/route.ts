@@ -3,7 +3,7 @@ import { isAbsolute, join } from 'node:path';
 
 import { z } from 'zod';
 
-import { getEnv } from '../../../../config/env.ts';
+import { executorCredential, getEnv } from '../../../../config/env.ts';
 import { executorStubCommand, executorStubEnabled } from '../../../../config/harness.ts';
 import { getDatabase } from '../../../../db/client.ts';
 import { createDockerEngine } from '../../../../docker/engine.ts';
@@ -73,9 +73,16 @@ export async function POST(request: Request): Promise<Response> {
     }),
   );
 
+  /*
+   * The chain that writes handoff prose and the credential that runs executors are different
+   * things, and on a subscription-only machine they are deliberately not the same vendor: the
+   * Anthropic *SDK* provider needs a metered key, and there is none. A chain left with no reachable
+   * provider is not a failure — the intake then writes assignments deterministically from the
+   * bundle's own text and says so, which is the degradation D-229 designed for.
+   */
   const chain = createChain({
     order: env.LOOP_PROVIDER_ORDER,
-    anthropicApiKey: env.ANTHROPIC_API_KEY,
+    ...(env.ANTHROPIC_API_KEY === undefined ? {} : { anthropicApiKey: env.ANTHROPIC_API_KEY }),
     anthropicModel: env.LOOP_ANTHROPIC_MODEL,
     openaiApiKey: env.OPENAI_API_KEY,
     openaiModel: env.LOOP_OPENAI_MODEL,
@@ -116,7 +123,7 @@ export async function POST(request: Request): Promise<Response> {
       database,
       engine,
       logger,
-      anthropicApiKey: env.ANTHROPIC_API_KEY,
+      credential: executorCredential(env),
       ...(env.LOOP_ANTHROPIC_MODEL === undefined ? {} : { model: env.LOOP_ANTHROPIC_MODEL }),
       ...(executorStubEnabled() ? { executorCommand: executorStubCommand } : {}),
     },

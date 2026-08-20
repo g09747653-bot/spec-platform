@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 
 import type { DockerEngine } from '../docker/engine.ts';
+import type { ExecutorCredential } from '../executor/credential.ts';
 import { runExecutor, type ExecutorRun } from '../executor/run.ts';
 import { acceptTask, type AcceptanceVerdict } from '../gate/accept.ts';
 import { blockedPath } from '../gate/blocked.ts';
@@ -49,7 +50,8 @@ export interface CycleDeps {
   database: DatabaseSync;
   engine: DockerEngine;
   logger: Logger;
-  anthropicApiKey: string;
+  /** The one credential handed to the executor container — API key or subscription token. */
+  credential: ExecutorCredential;
   /** The executor's own command. Absent means the real Claude Code; present is the stub path. */
   executorCommand?: readonly string[];
   executorTimeoutMs?: number;
@@ -120,7 +122,7 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
       projectId,
       workspacePath: projectDirectory,
       taskFile: `/workspace/${HANDOFF.tasks.replaceAll('\\', '/')}/${taskFileName(taskId)}`,
-      anthropicApiKey: deps.anthropicApiKey,
+      credential: deps.credential,
       ...(deps.executorCommand === undefined ? {} : { command: deps.executorCommand }),
       ...(deps.model === undefined ? {} : { model: deps.model }),
     },
