@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { LLM_PROVIDERS } from '../llm/types.ts';
+
 /**
  * The loop's configuration, parsed once and never read raw (task 152).
  *
@@ -60,6 +62,34 @@ export const envSchema = z.object({
   DOCKER_ENGINE_SOCKET: optional(z.string().min(1)),
   /** The locally running Spec Platform, for the façade of M17а. */
   SPEC_PLATFORM_API_BASE: optional(url('SPEC_PLATFORM_API_BASE')),
+
+  /*
+   * The provider chain, in attempt order (task 156; D-229's mirror).
+   *
+   * Configuration, never code: the loop asks a model for the *texts* of handoff assignments, and
+   * which vendor answers is this line. A provider named here without its credential is skipped, so
+   * the order can list more than a given machine has.
+   */
+  LOOP_PROVIDER_ORDER: z.preprocess(
+    (value) =>
+      typeof value === 'string' && value.trim() !== ''
+        ? value
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter((entry) => entry !== '')
+        : undefined,
+    z.array(z.enum(LLM_PROVIDERS)).min(1).default(['anthropic']),
+  ),
+  LOOP_ANTHROPIC_MODEL: optional(z.string().min(1)),
+  OPENAI_API_KEY: optional(z.string().min(1)),
+  LOOP_OPENAI_MODEL: optional(z.string().min(1)),
+  GOOGLE_GENERATIVE_AI_API_KEY: optional(z.string().min(1)),
+  LOOP_GOOGLE_MODEL: optional(z.string().min(1)),
+  LOOP_LLM_TIMEOUT_MS: z.preprocess(
+    blankToUndefined,
+    z.coerce.number().int().positive().default(120_000),
+  ),
+
   LOCAL_LLM_API_BASE: optional(url('LOCAL_LLM_API_BASE')),
   LOCAL_LLM_MODEL: optional(z.string().min(1)),
   WHISPER_API_BASE: optional(url('WHISPER_API_BASE')),
