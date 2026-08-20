@@ -1,0 +1,140 @@
+import { existsSync } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
+
+import { z } from 'zod';
+
+import { getEnv } from '../../../../config/env.ts';
+import { getDatabase } from '../../../../db/client.ts';
+import { createDockerEngine } from '../../../../docker/engine.ts';
+import { resolveEndpoint } from '../../../../docker/transport.ts';
+import { intakeBundle, IntakeRefused } from '../../../../intake/intake.ts';
+import { createChain } from '../../../../llm/chain.ts';
+import { createLogger } from '../../../../observability/log.ts';
+import { driveProject } from '../../../../orchestrator/orchestrator.ts';
+
+/**
+ * `POST /api/orchestrator/start-loop` — the one way in (task 158; бандл A0 §API).
+ *
+ * Takes a project directory holding a `bundle/`, runs the intake, and then **returns**. The
+ * pipeline itself runs on in this process, reporting into the log feed; a request that waited for
+ * it would be a request that times out on the first real project.
+ *
+ * The path is resolved **under `WORKSPACE_ROOT_PATH` and nowhere else**. The loop binds to the
+ * loopback address and has one operator, but a local API that mounts an arbitrary host directory
+ * into a container is a local API that can mount `C:\` — so the workspace root is the boundary and
+ * it is enforced here rather than assumed.
+ */
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
+const StartLoop = z.object({
+  /** A directory name under the workspace root, or an absolute path inside it. */
+  projectDirectory: z.string().min(1),
+  projectTitle: z.string().min(1).optional(),
+});
+
+export async function POST(request: Request): Promise<Response> {
+  const parsed = StartLoop.safeParse(await request.json());
+  if (!parsed.success) {
+    return Response.json({ error: z.prettifyError(parsed.error) }, { status: 400 });
+  }
+
+  const env = getEnv();
+  const root = env.WORKSPACE_ROOT_PATH;
+  const requested = parsed.data.projectDirectory;
+  const directory = isAbsolute(requested) ? requested : join(root, requested);
+
+  if (!withinRoot(root, directory)) {
+    return Response.json(
+      { error: `рабочая директория должна лежать внутри WORKSPACE_ROOT_PATH (${root})` },
+      { status: 400 },
+    );
+  }
+
+  if (!existsSync(join(directory, 'bundle'))) {
+    return Response.json({ error: `в ${directory} нет каталога bundle/` }, { status: 400 });
+  }
+
+  const database = getDatabase();
+  const logger = createLogger(database);
+  const engine = createDockerEngine(
+    resolveEndpoint(process.platform, {
+      DOCKER_ENGINE_PIPE: env.DOCKER_ENGINE_PIPE,
+      DOCKER_ENGINE_SOCKET: env.DOCKER_ENGINE_SOCKET,
+    }),
+  );
+
+  const chain = createChain({
+    order: env.LOOP_PROVIDER_ORDER,
+    anthropicApiKey: env.ANTHROPIC_API_KEY,
+    anthropicModel: env.LOOP_ANTHROPIC_MODEL,
+    openaiApiKey: env.OPENAI_API_KEY,
+    openaiModel: env.LOOP_OPENAI_MODEL,
+    googleApiKey: env.GOOGLE_GENERATIVE_AI_API_KEY,
+    googleModel: env.LOOP_GOOGLE_MODEL,
+    localApiBase: env.LOCAL_LLM_API_BASE,
+    localModel: env.LOCAL_LLM_MODEL,
+    timeoutMs: env.LOOP_LLM_TIMEOUT_MS,
+  });
+
+  let intake;
+  try {
+    intake = await intakeBundle(
+      {
+        projectDirectory: directory,
+        ...(parsed.data.projectTitle === undefined
+          ? {}
+          : { projectTitle: parsed.data.projectTitle }),
+      },
+      { database, logger, chain: chain.providers.length === 0 ? null : chain },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return Response.json(
+      { error: message },
+      { status: error instanceof IntakeRefused ? 422 : 400 },
+    );
+  }
+
+  /*
+   * The pipeline runs on after the answer. Errors reach the feed rather than a caller who has
+   * already been told the plan was accepted — which is what an autonomous loop means.
+   */
+  void driveProject(intake.projectId, directory, {
+    database,
+    engine,
+    logger,
+    anthropicApiKey: env.ANTHROPIC_API_KEY,
+    ...(env.LOOP_ANTHROPIC_MODEL === undefined ? {} : { model: env.LOOP_ANTHROPIC_MODEL }),
+  }).catch((error: unknown) => {
+    logger.write({
+      projectId: intake.projectId,
+      agentRole: 'ORCHESTRATOR',
+      logLevel: 'ERROR',
+      message: `Конвейер остановлен ошибкой: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  });
+
+  return Response.json({
+    status: 'IN_PROGRESS',
+    projectId: intake.projectId,
+    bundleId: intake.bundleId,
+    strategy: intake.strategy,
+    milestones: intake.milestones,
+    tasks: intake.tasks.length,
+    writtenByModel: intake.writtenByModel,
+    degradations: intake.degradations,
+  });
+}
+
+/** `directory` is `root` itself or below it — compared on normalised, separator-agnostic paths. */
+function withinRoot(root: string, directory: string): boolean {
+  const normalise = (value: string) =>
+    value.replaceAll('\\', '/').replace(/\/+$/, '').toLowerCase();
+  const normalisedRoot = normalise(root);
+  const normalisedDirectory = normalise(directory);
+
+  return (
+    normalisedDirectory === normalisedRoot || normalisedDirectory.startsWith(`${normalisedRoot}/`)
+  );
+}
