@@ -78,6 +78,11 @@ const PROJECT_DIRECTORY_NAME = 'toy';
 /** The parallelism this milestone is about. Fewer than this at any moment and the gate is red. */
 const REQUIRED_PARALLEL = 3;
 
+/** How many genuine red verdicts the walk will rescue before it stops calling that a resume. */
+const MAX_GENUINE_RETRIES = 3;
+
+const NEWLINE = String.fromCharCode(10);
+
 const VIEWPORT = { width: 1440, height: 900 };
 
 const steps: { at: string; what: string }[] = [];
@@ -699,9 +704,18 @@ async function main(): Promise<void> {
        */
       note('Ждём, пока замороженный конвейер затихнет…');
       await waitFor(async () => {
-        await sample();
-        return executorContainers().length === 0 && countIn(await sample(), 'IN_PROGRESS') === 0;
-      }, 900_000).catch(() => {
+        const board = await sample();
+        /*
+         * «Затих» is **not** «no containers»: the frozen ones are paused, and a paused container
+         * never exits — that is the point of pausing it. What settles is everything else: the
+         * acceptances that were in flight when the freeze landed finish, and their tasks leave
+         * `IN_PROGRESS`. Waiting for an empty `docker ps` waits for ever, which is how this walk
+         * spent fourteen minutes staring at two containers it had itself asked to be frozen.
+         */
+        const unpaused = executorContainers().filter((name) => containerPaused(name) === false);
+
+        return unpaused.length === 0 && countIn(board, 'IN_PROGRESS') === 0;
+      }, 600_000).catch(() => {
         note('Конвейер не затих полностью — жмём «Возобновить» по тому, что есть.');
       });
 
@@ -779,16 +793,48 @@ async function main(): Promise<void> {
     note(`Возобновление после рестарта: ${String(resumed.status)}`);
 
     // --- to the end -------------------------------------------------------------------------------
+    /*
+     * **A genuine red is retried too, because that is what the operator does.**
+     *
+     * The staged one above is the milestone's own test. After it, nineteen live model iterations run
+     * against a real acceptance suite, and some of them will legitimately come back red — a test the
+     * executor wrote and broke, a file two tasks disagreed about. Freezing on that is the product
+     * working; what a person does next is read the feed and press «Возобновить». A walk that instead
+     * sat waiting for a frozen pipeline to finish would be measuring the loop's ability to run
+     * without a human, which is not what «красный CI» claims. Bounded, and every one of them counted:
+     * a plan that needs a fourth rescue is a finding about the plan, not a resume worth making.
+     */
     note('Ожидание конца плана…');
     const deadline = started + BUDGET_MS;
+    let genuineFreezes = 0;
+
     await waitFor(async () => {
       const board = await sample();
       const tasks = tasksOf(board);
       const done = tasks.filter((task) => task.status === 'COMPLETED').length;
 
       if (Date.now() > deadline) return true;
-      return tasks.length > 0 && done === tasks.length;
+      if (tasks.length > 0 && done === tasks.length) return true;
+
+      if (existsSync(frozenMarker) && genuineFreezes < MAX_GENUINE_RETRIES) {
+        genuineFreezes += 1;
+        const record = readFileSync(frozenMarker, 'utf8').split(NEWLINE).slice(0, 6).join(' ');
+        note(`Настоящий красный вердикт (${String(genuineFreezes)}): ${record.slice(0, 240)}`);
+
+        await page.reload();
+        await page.getByTestId('retry-pipeline').click();
+        await new Promise((settle) => setTimeout(settle, 5_000));
+      }
+
+      return false;
     }, BUDGET_MS).catch(() => undefined);
+
+    if (genuineFreezes > 0) {
+      measure(
+        `Настоящих красных вердиктов за прогон: ${String(genuineFreezes)} — каждый снят кнопкой ` +
+          '«Возобновить», как это сделал бы оператор.',
+      );
+    }
 
     const final = await sample();
     await shot(page, '07-финал');
