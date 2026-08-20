@@ -296,6 +296,54 @@ describe('the M14а gate bundle, intaken for real (task 156 AC-1)', () => {
   });
 });
 
+describe('the researcher’s report reaches the architect (task 161)', () => {
+  /**
+   * The AC's own words: «отчёт исследователя фикстурно присутствует в промпте заданий».
+   *
+   * Asserted at the seam the prompt is built from — the chain records what it was asked — because
+   * that is the only place the claim is about the *prompt* rather than about what a model did with
+   * it.
+   */
+  it('puts the workspace survey into every assignment prompt, and onto the disk', async () => {
+    writeFileSync(
+      join(directory, 'project', 'package.json'),
+      JSON.stringify({ name: 'уже-существующий', scripts: { test: 'node --test' } }),
+      'utf8',
+    );
+
+    const asked: string[] = [];
+    const recording: Chain = {
+      providers: [{ id: 'google', model: 'gemini', generate: () => Promise.resolve('') }],
+      generate: (request) => {
+        asked.push(request.prompt);
+        return Promise.resolve({
+          text: JSON.stringify({ description: 'Сделай', filesToEdit: [] }),
+          provider: 'google',
+        });
+      },
+    };
+
+    await intakeBundle(
+      { projectDirectory: join(directory, 'project'), projectTitle: 'С исследователем' },
+      { database, logger: createLogger(database), chain: recording },
+    );
+
+    /* The first call is the researcher's brief; the assignments follow, each carrying the report. */
+    const assignmentPrompts = asked.filter((prompt) => prompt.includes('Запись задачи из бандла'));
+    expect(assignmentPrompts.length).toBeGreaterThan(0);
+
+    for (const prompt of assignmentPrompts) {
+      expect(prompt).toContain('Отчёт исследователя о рабочей директории');
+      expect(prompt).toContain('package.json');
+      expect(prompt).toContain('уже-существующий');
+    }
+
+    expect(readFileSync(join(directory, 'project', 'handoff', 'RESEARCH.md'), 'utf8')).toContain(
+      'package.json',
+    );
+  });
+});
+
 describe('who writes the assignment texts (task 156)', () => {
   it('uses the model when the chain answers', async () => {
     const result = await run(

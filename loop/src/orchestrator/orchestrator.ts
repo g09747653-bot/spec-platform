@@ -15,7 +15,9 @@ import {
   MilestonesFile,
   taskFileName,
 } from '../intake/handoff.ts';
+import type { Chain } from '../llm/chain.ts';
 import type { Logger } from '../observability/log.ts';
+import { research } from '../intake/researcher.ts';
 
 import { freezePipeline, isFrozen, markProject } from './freeze.ts';
 import {
@@ -72,6 +74,14 @@ export interface OrchestratorDeps {
   model?: string | undefined;
   /** `MAX_EXECUTORS` — the ceiling on containers at once (task 159). */
   maxExecutors?: number;
+  /**
+   * The researcher's chain (task 161).
+   *
+   * Used when a task comes back from the controller: the workspace has moved since the intake
+   * surveyed it, and the executor about to pick the assignment up again should read what is there
+   * now rather than what was there before its own first attempt.
+   */
+  researchChain?: Chain | null;
   /** Injected so the throttling case is a table of cases rather than a test that sleeps. */
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -455,6 +465,15 @@ export async function driveProject(
    * therefore not waiting on it at all.
    */
   const done: Settled[] = [];
+  /**
+   * How many times the controller has handed each task back (task 161).
+   *
+   * A returned task goes to `PENDING` and the scheduler picks it up again, which is the right
+   * behaviour and also an unbounded loop if the executor never fixes the style. The bound is here
+   * rather than on disk because it is a fact about *this run*: after a restart the executor is a new
+   * one and deserves its own tries.
+   */
+  const returns = new Map<string, number>();
   let throttle: ThrottleState = IDLE_THROTTLE;
   let started = 0;
   let blocked = false;
@@ -490,6 +509,38 @@ export async function driveProject(
         refreshMilestoneStatus(database, settled.milestoneId);
 
         if (settled.result.outcome === 'FAILED') await freeze(settled);
+
+        if (settled.result.outcome === 'RETURNED') {
+          const taken = (returns.get(settled.taskId) ?? 0) + 1;
+          returns.set(settled.taskId, taken);
+
+          if (taken > MAX_CONTROLLER_RETURNS) {
+            /*
+             * The style never came right. At this point it *is* a verdict about the work — the
+             * executor has had its tries and the pipeline is going in circles — so it becomes the
+             * red one, with the reason naming how many attempts it took to decide that.
+             */
+            say(
+              `Задача ${settled.taskId} возвращалась контролёром ${String(taken - 1)} раз(а) ` +
+                'и снова красная по стилю. Это уже вердикт: конвейер замораживается.',
+              'ERROR',
+            );
+            await freeze(settled);
+          } else {
+            say(
+              `Задача ${settled.taskId} возвращена исполнителю (попытка ${String(taken)} из ` +
+                `${String(MAX_CONTROLLER_RETURNS)}). Тесты приёмки не запускались.`,
+              'WARN',
+            );
+
+            /* The workspace has moved since the intake read it; the next attempt reads it fresh. */
+            const surveyed = await research(projectDirectory, deps.researchChain ?? null);
+            say(
+              `Исследователь пересобрал контекст: записей ${String(surveyed.survey.tree.length)}, ` +
+                `манифестов ${String(surveyed.survey.manifests.length)}.`,
+            );
+          }
+        }
 
         if (settled.result.outcome === 'BLOCKED') {
           /*
@@ -629,3 +680,14 @@ export async function driveProject(
 
 /** How often a frozen or throttled pipeline looks up to see whether the world has changed. */
 export const FREEZE_POLL_MS = 1_000;
+
+/**
+ * How many times one task may be handed back over style before it is a verdict (task 161).
+ *
+ * Two, and the number is an argument about who is failing. Once is an executor that forgot to run
+ * the formatter — ordinary, and cheap to fix. Twice is an executor that cannot satisfy the
+ * project's own tooling, and a third attempt would be the loop hoping rather than deciding. The
+ * ceiling belongs to the run, not to the task: a restart hands the assignment to a new executor,
+ * which starts even.
+ */
+export const MAX_CONTROLLER_RETURNS = 2;

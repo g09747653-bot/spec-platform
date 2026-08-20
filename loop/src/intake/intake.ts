@@ -4,6 +4,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import type { Chain } from '../llm/chain.ts';
 import type { Logger } from '../observability/log.ts';
+import { research, researchForPrompt } from './researcher.ts';
 
 import { buildAssignment } from './assignments.ts';
 import {
@@ -56,6 +57,13 @@ export interface IntakeDeps {
   logger: Logger;
   /** Absent means «no provider configured»; the assignments are then written deterministically. */
   chain: Chain | null;
+  /**
+   * The researcher's chain, when it is configured differently from the architect's (task 161).
+   *
+   * Absent means «the same one», which is the default the amendment asks for: every role runs on the
+   * executor's own vendor unless the operator says otherwise.
+   */
+  researchChain?: Chain | null;
 }
 
 export interface IntakeResult {
@@ -139,6 +147,23 @@ export async function intakeBundle(
   if (!slice.ok) throw new IntakeRefused(describeSlice(slice));
 
   const techStack = request.techStack ?? guessTechStack(request.projectDirectory);
+
+  /*
+   * The researcher, once per intake and before the first assignment is written (task 161). Its
+   * report goes into every assignment's prompt and onto the disk the executors mount, so the
+   * architect and the executors read the same account of the workspace.
+   */
+  const surveyed = await research(
+    request.projectDirectory,
+    deps.researchChain === undefined ? chain : deps.researchChain,
+  );
+  say(
+    `Исследователь: записей в дереве ${String(surveyed.survey.tree.length)}, ` +
+      `манифестов ${String(surveyed.survey.manifests.length)}` +
+      (surveyed.writtenBy === null
+        ? '. Справку писал не провайдер — только снимок диска.'
+        : `. Справку написал провайдер ${surveyed.writtenBy}.`),
+  );
   const milestoneOf = new Map<string, (typeof slice.milestones)[number]>();
   for (const milestone of slice.milestones) {
     for (const taskId of milestone.taskIds) milestoneOf.set(taskId, milestone);
@@ -178,7 +203,11 @@ export async function intakeBundle(
     const built = await buildAssignment(
       task,
       milestone,
-      { architecture: bundle.architecture, techStack },
+      {
+        architecture: bundle.architecture,
+        techStack,
+        research: researchForPrompt(surveyed.report),
+      },
       chain,
     );
 

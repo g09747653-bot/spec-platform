@@ -70,6 +70,14 @@ export interface AssignmentContext {
   /** The bundle's architecture document, trimmed — what the executor is building inside. */
   architecture: string;
   techStack: TechStack;
+  /**
+   * The researcher's report on the workspace as it actually stands (task 161).
+   *
+   * Empty on a greenfield intake, and that is the honest value — there is nothing there yet. From
+   * the second intake onwards it is what stops the architect proposing a layout the project has
+   * already contradicted: the bundle describes what was planned, this describes what exists.
+   */
+  research?: string;
 }
 
 function prompt(task: BundleTask, context: AssignmentContext): string {
@@ -79,6 +87,9 @@ function prompt(task: BundleTask, context: AssignmentContext): string {
     '',
     `Стек проекта: ${context.techStack}.`,
     '',
+    ...(context.research === undefined || context.research.trim() === ''
+      ? []
+      : ['Отчёт исследователя о рабочей директории:', context.research, '']),
     'Запись задачи из бандла:',
     JSON.stringify(
       { taskId: task.taskId, title: task.title, description: task.description },

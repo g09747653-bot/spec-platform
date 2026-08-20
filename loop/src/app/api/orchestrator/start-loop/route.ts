@@ -3,13 +3,18 @@ import { isAbsolute, join, resolve } from 'node:path';
 
 import { z } from 'zod';
 
-import { executorCredential, getEnv } from '../../../../config/env.ts';
+import {
+  executorCredential,
+  getEnv,
+  providerCredentials,
+  roleConfiguration,
+} from '../../../../config/env.ts';
 import { executorStubCommand, executorStubEnabled } from '../../../../config/harness.ts';
 import { getDatabase } from '../../../../db/client.ts';
 import { createDockerEngine } from '../../../../docker/engine.ts';
 import { resolveEndpoint } from '../../../../docker/transport.ts';
 import { intakeBundle, IntakeRefused } from '../../../../intake/intake.ts';
-import { createChain } from '../../../../llm/chain.ts';
+import { createRoleChain } from '../../../../llm/roles.ts';
 import { createLogger } from '../../../../observability/log.ts';
 import { driveProject } from '../../../../orchestrator/orchestrator.ts';
 import { withinWorkspace } from '../workspace.ts';
@@ -85,24 +90,19 @@ export async function POST(request: Request): Promise<Response> {
   );
 
   /*
-   * The chain that writes handoff prose and the credential that runs executors are different
-   * things, and on a subscription-only machine they are deliberately not the same vendor: the
-   * Anthropic *SDK* provider needs a metered key, and there is none. A chain left with no reachable
-   * provider is not a failure — the intake then writes assignments deterministically from the
-   * bundle's own text and says so, which is the degradation D-229 designed for.
+   * A chain per role (task 161; А-24 §1). They differ only in attempt order: every one leads with
+   * the executor's own vendor unless the operator named another for that role.
+   *
+   * The chain that writes handoff prose and the credential that runs executors are different things,
+   * and on a subscription-only machine they are deliberately not the same vendor: the Anthropic
+   * *SDK* provider needs a metered key, and there is none. A chain left with no reachable provider
+   * is not a failure — the intake then writes assignments deterministically from the bundle's own
+   * text and says so, which is the degradation D-229 designed for.
    */
-  const chain = createChain({
-    order: env.LOOP_PROVIDER_ORDER,
-    ...(env.ANTHROPIC_API_KEY === undefined ? {} : { anthropicApiKey: env.ANTHROPIC_API_KEY }),
-    anthropicModel: env.LOOP_ANTHROPIC_MODEL,
-    openaiApiKey: env.OPENAI_API_KEY,
-    openaiModel: env.LOOP_OPENAI_MODEL,
-    googleApiKey: env.GOOGLE_GENERATIVE_AI_API_KEY,
-    googleModel: env.LOOP_GOOGLE_MODEL,
-    localApiBase: env.LOCAL_LLM_API_BASE,
-    localModel: env.LOCAL_LLM_MODEL,
-    timeoutMs: env.LOOP_LLM_TIMEOUT_MS,
-  });
+  const roles = roleConfiguration(env);
+  const credentials = providerCredentials(env);
+  const architect = createRoleChain(roles, 'architect', credentials);
+  const researcher = createRoleChain(roles, 'researcher', credentials);
 
   let intake;
   try {
@@ -114,7 +114,12 @@ export async function POST(request: Request): Promise<Response> {
           : { projectTitle: parsed.data.projectTitle }),
         ...(parsed.data.regenerate === undefined ? {} : { regenerate: true }),
       },
-      { database, logger, chain: chain.providers.length === 0 ? null : chain },
+      {
+        database,
+        logger,
+        chain: architect.providers.length === 0 ? null : architect,
+        researchChain: researcher.providers.length === 0 ? null : researcher,
+      },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -137,6 +142,7 @@ export async function POST(request: Request): Promise<Response> {
       logger,
       credential: executorCredential(env),
       maxExecutors: env.LOOP_MAX_EXECUTORS,
+      researchChain: researcher.providers.length === 0 ? null : researcher,
       ...(env.LOOP_ANTHROPIC_MODEL === undefined ? {} : { model: env.LOOP_ANTHROPIC_MODEL }),
       ...(executorStubEnabled() ? { executorCommand: executorStubCommand } : {}),
     },

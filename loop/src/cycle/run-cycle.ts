@@ -31,7 +31,15 @@ import type { Logger } from '../observability/log.ts';
  * it has its own test.
  */
 
-export type CycleOutcome = 'COMPLETED' | 'FAILED' | 'BLOCKED';
+/**
+ * `RETURNED` is the controller's verdict and nothing else (task 161).
+ *
+ * It sits apart from `FAILED` because it means something different: the code was **not judged**. A
+ * red suite is a statement about the product and freezes the pipeline (task 160); a red formatter is
+ * a draft that is not ready to be judged, and the honest response is to hand it back to the executor
+ * with the findings, exactly as a reviewer hands back a pull request over style.
+ */
+export type CycleOutcome = 'COMPLETED' | 'FAILED' | 'BLOCKED' | 'RETURNED';
 
 export interface CycleResult {
   taskId: string;
@@ -231,6 +239,36 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
   });
 
   // 5. The verdict.
+  if (acceptance.returnedByController) {
+    /*
+     * Back to `PENDING`, which is the executor's queue: the scheduler will pick it up again, with
+     * the findings already in the feed the next executor's operator is reading. The status is not
+     * `FAILED`, because nothing failed — the tests never ran.
+     */
+    setStatus(database, projectDirectory, projectId, taskId, 'PENDING');
+    say(acceptance.reason, 'WARN');
+    for (const finding of acceptance.controller?.findings ?? []) {
+      logger.write({
+        projectId,
+        taskId,
+        agentRole: 'CONTROLLER',
+        logLevel: 'WARN',
+        message: `${finding.label}: ${finding.output.split('\n').slice(0, 12).join('\n')}`,
+      });
+    }
+
+    return {
+      taskId,
+      outcome: 'RETURNED',
+      reported,
+      executor,
+      acceptance,
+      reason: acceptance.reason,
+      decisionId: recorded,
+      techStackRewritten: rewritten,
+    };
+  }
+
   const outcome: CycleOutcome = acceptance.accepted ? 'COMPLETED' : 'FAILED';
   setStatus(database, projectDirectory, projectId, taskId, outcome);
   say(acceptance.reason, acceptance.accepted ? 'INFO' : 'ERROR');

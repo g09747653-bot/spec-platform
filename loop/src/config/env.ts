@@ -5,7 +5,13 @@ import {
   type ExecutorCredential,
   type ExecutorCredentialKind,
 } from '../executor/credential.ts';
-import { LLM_PROVIDERS } from '../llm/types.ts';
+import {
+  parseRoleOrder,
+  type LoopRole,
+  type RoleConfiguration,
+  type RoleCredentials,
+} from '../llm/roles.ts';
+import { LLM_PROVIDERS, type LlmProviderId } from '../llm/types.ts';
 import { DEFAULT_MAX_EXECUTORS } from '../orchestrator/schedule.ts';
 
 /**
@@ -100,6 +106,16 @@ const envObject = z.object({
         : undefined,
     z.array(z.enum(LLM_PROVIDERS)).min(1).default(['anthropic']),
   ),
+  /**
+   * The provider order for one role, overriding `LOOP_PROVIDER_ORDER` (task 161; А-24 §1).
+   *
+   * Absent — the ordinary case — means «the same vendor the executor runs», which `llm/roles.ts`
+   * puts at the head of the configured chain. Present, it is taken whole: an operator who writes
+   * `google` for the researcher means the researcher runs on Google.
+   */
+  LOOP_ROLE_PROVIDER_ARCHITECT: optional(z.string().min(1)),
+  LOOP_ROLE_PROVIDER_CONTROLLER: optional(z.string().min(1)),
+  LOOP_ROLE_PROVIDER_RESEARCHER: optional(z.string().min(1)),
   LOOP_ANTHROPIC_MODEL: optional(z.string().min(1)),
   OPENAI_API_KEY: optional(z.string().min(1)),
   LOOP_OPENAI_MODEL: optional(z.string().min(1)),
@@ -154,6 +170,41 @@ export function credentialIssue(source: Record<string, string | undefined>): str
   if (present.length === 1) return null;
 
   return present.length === 0 ? CREDENTIAL_REQUIRED : CREDENTIAL_AMBIGUOUS;
+}
+
+/**
+ * The per-role provider orders this configuration declares (task 161).
+ *
+ * Assembled here rather than read at each call site, so «which vendor does the researcher use?» has
+ * one answer in one place — the same discipline the rest of this module exists for.
+ */
+export function roleConfiguration(env: LoopEnv): RoleConfiguration {
+  const perRole: Partial<Record<LoopRole, LlmProviderId[]>> = {};
+
+  const architect = parseRoleOrder(env.LOOP_ROLE_PROVIDER_ARCHITECT);
+  const controller = parseRoleOrder(env.LOOP_ROLE_PROVIDER_CONTROLLER);
+  const researcher = parseRoleOrder(env.LOOP_ROLE_PROVIDER_RESEARCHER);
+
+  if (architect !== undefined) perRole.architect = architect;
+  if (controller !== undefined) perRole.controller = controller;
+  if (researcher !== undefined) perRole.researcher = researcher;
+
+  return { order: env.LOOP_PROVIDER_ORDER, perRole };
+}
+
+/** Every credential the chains need, read once — the shape `createRoleChain` takes. */
+export function providerCredentials(env: LoopEnv): RoleCredentials {
+  return {
+    ...(env.ANTHROPIC_API_KEY === undefined ? {} : { anthropicApiKey: env.ANTHROPIC_API_KEY }),
+    anthropicModel: env.LOOP_ANTHROPIC_MODEL,
+    openaiApiKey: env.OPENAI_API_KEY,
+    openaiModel: env.LOOP_OPENAI_MODEL,
+    googleApiKey: env.GOOGLE_GENERATIVE_AI_API_KEY,
+    googleModel: env.LOOP_GOOGLE_MODEL,
+    localApiBase: env.LOCAL_LLM_API_BASE,
+    localModel: env.LOCAL_LLM_MODEL,
+    timeoutMs: env.LOOP_LLM_TIMEOUT_MS,
+  };
 }
 
 /**
