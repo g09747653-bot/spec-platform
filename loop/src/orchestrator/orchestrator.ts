@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { runCycle, type CycleResult } from '../cycle/run-cycle.ts';
 import type { DockerEngine } from '../docker/engine.ts';
+import { eventBus } from '../events/bus.ts';
 import {
   HANDOFF,
   HandoffTask,
@@ -39,8 +40,13 @@ export interface OrchestratorDeps {
   engine: DockerEngine;
   logger: Logger;
   anthropicApiKey: string;
-  /** Present only for a rehearsal: the stub executor. Absent means the real Claude Code. */
-  executorCommand?: readonly string[];
+  /**
+   * Present only for a rehearsal: what the executor container runs instead of Claude Code.
+   *
+   * A factory rather than a fixed argv, because the scripted executor has to write a report for
+   * *this* task — and the orchestrator, not the caller, is what knows which task is next.
+   */
+  executorCommand?: (taskId: string, projectId: string) => readonly string[];
   executorTimeoutMs?: number;
   acceptanceTimeoutMs?: number;
   model?: string | undefined;
@@ -259,6 +265,19 @@ export function refreshMilestoneStatus(database: DatabaseSync, milestoneId: stri
   database
     .prepare('UPDATE milestones SET status = ? WHERE milestone_id = ?')
     .run(status, milestoneId);
+
+  const owner = database
+    .prepare('SELECT project_id FROM milestones WHERE milestone_id = ?')
+    .get(milestoneId);
+
+  if (owner !== undefined) {
+    eventBus().publish({
+      type: 'milestone-status',
+      projectId: z.object({ project_id: z.string() }).parse(owner).project_id,
+      milestoneId,
+      status,
+    });
+  }
 }
 
 /**
@@ -272,7 +291,7 @@ export async function driveProject(
   projectId: string,
   projectDirectory: string,
   deps: OrchestratorDeps,
-  maxCycles = 100,
+  maxCycles: number | undefined = 100,
 ): Promise<CycleResult[]> {
   const results: CycleResult[] = [];
 
@@ -280,7 +299,17 @@ export async function driveProject(
     const next = nextRunnableTask(deps.database, projectId);
     if (next === null) break;
 
-    const result = await runCycle({ projectId, taskId: next.taskId, projectDirectory }, deps);
+    const { executorCommand, ...rest } = deps;
+
+    const result = await runCycle(
+      { projectId, taskId: next.taskId, projectDirectory },
+      {
+        ...rest,
+        ...(executorCommand === undefined
+          ? {}
+          : { executorCommand: executorCommand(next.taskId, projectId) }),
+      },
+    );
     results.push(result);
     refreshMilestoneStatus(deps.database, next.milestoneId);
 

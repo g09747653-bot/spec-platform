@@ -79,7 +79,18 @@ export function GET(request: Request): Response {
       const delivered = new Set<number>();
 
       function deliver(event: LoopEvent): void {
-        if (event.type !== 'log') return;
+        /*
+         * A status change is the other half of what an operator watches. The feed alone would leave
+         * the plan frozen at whatever the server rendered on page load — and the gate walk found
+         * exactly that, waiting forever on a status that had already moved. The event carries no
+         * payload the page needs beyond «something moved»: the tree is server-rendered, so the page
+         * asks the server for it again rather than rebuilding it from a diff.
+         */
+        if (event.type !== 'log') {
+          if (event.projectId === projectId) send('status', event);
+          return;
+        }
+
         if (event.log.projectId !== projectId) return;
         if (delivered.has(event.log.logId)) return;
 

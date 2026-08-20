@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
 import type { LogEvent } from '../events/bus.ts';
@@ -29,6 +30,7 @@ export function LiveFeed({ projectId, initial }: { projectId: string; initial: L
   const [live, setLive] = useState(false);
   const seen = useRef(new Set(initial.map((line) => line.logId)));
   const bottom = useRef<HTMLDivElement | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const lastSeen = initial.at(-1)?.logId ?? 0;
@@ -50,10 +52,20 @@ export function LiveFeed({ projectId, initial }: { projectId: string; initial: L
       setLines((current) => [...current, parsed]);
     });
 
+    /*
+     * A status moved somewhere in the plan. The tree beside this feed is server-rendered — that is
+     * what makes the first byte carry the state of the run — so the way to update it is to ask the
+     * server for it again. `router.refresh()` re-renders the server component in place: no
+     * navigation, no reload, and this feed keeps its own state and its own connection.
+     */
+    source.addEventListener('status', () => {
+      router.refresh();
+    });
+
     return () => {
       source.close();
     };
-  }, [projectId, initial]);
+  }, [projectId, initial, router]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: 'end' });

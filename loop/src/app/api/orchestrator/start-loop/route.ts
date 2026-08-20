@@ -4,6 +4,7 @@ import { isAbsolute, join } from 'node:path';
 import { z } from 'zod';
 
 import { getEnv } from '../../../../config/env.ts';
+import { executorStubCommand, executorStubEnabled } from '../../../../config/harness.ts';
 import { getDatabase } from '../../../../db/client.ts';
 import { createDockerEngine } from '../../../../docker/engine.ts';
 import { resolveEndpoint } from '../../../../docker/transport.ts';
@@ -31,6 +32,14 @@ const StartLoop = z.object({
   /** A directory name under the workspace root, or an absolute path inside it. */
   projectDirectory: z.string().min(1),
   projectTitle: z.string().min(1).optional(),
+  /**
+   * How many cycles this call may run before returning the pipeline to rest.
+   *
+   * The M15а gate asks for **one** cycle end to end, and an operator watching a first run of a new
+   * plan wants the same: let one task through, look at what came out, then continue. Absent means
+   * «until nothing is runnable», which is the ordinary autonomous case.
+   */
+  maxCycles: z.number().int().positive().max(1000).optional(),
 });
 
 export async function POST(request: Request): Promise<Response> {
@@ -100,13 +109,19 @@ export async function POST(request: Request): Promise<Response> {
    * The pipeline runs on after the answer. Errors reach the feed rather than a caller who has
    * already been told the plan was accepted — which is what an autonomous loop means.
    */
-  void driveProject(intake.projectId, directory, {
-    database,
-    engine,
-    logger,
-    anthropicApiKey: env.ANTHROPIC_API_KEY,
-    ...(env.LOOP_ANTHROPIC_MODEL === undefined ? {} : { model: env.LOOP_ANTHROPIC_MODEL }),
-  }).catch((error: unknown) => {
+  void driveProject(
+    intake.projectId,
+    directory,
+    {
+      database,
+      engine,
+      logger,
+      anthropicApiKey: env.ANTHROPIC_API_KEY,
+      ...(env.LOOP_ANTHROPIC_MODEL === undefined ? {} : { model: env.LOOP_ANTHROPIC_MODEL }),
+      ...(executorStubEnabled() ? { executorCommand: executorStubCommand } : {}),
+    },
+    parsed.data.maxCycles,
+  ).catch((error: unknown) => {
     logger.write({
       projectId: intake.projectId,
       agentRole: 'ORCHESTRATOR',

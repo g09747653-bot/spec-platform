@@ -67,6 +67,14 @@ export async function POST(request: Request): Promise<Response> {
   const body = parsed.data;
 
   if (body.action === 'seed') {
+    /*
+     * Seeding is a **fresh start**, and that is a correction the browser suite found: the harness
+     * database outlives a run, so a second run inherited the first one's feed and «the line the
+     * orchestrator just emitted» matched three elements. A case whose verdict depends on how many
+     * times it has been run is not a case.
+     */
+    database.prepare('DELETE FROM projects WHERE project_id = ?').run(body.projectId);
+
     database
       .prepare(
         `INSERT INTO projects (project_id, title, status) VALUES (?, ?, 'ACTIVE')

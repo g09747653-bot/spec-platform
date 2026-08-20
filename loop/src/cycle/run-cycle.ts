@@ -6,6 +6,7 @@ import type { DockerEngine } from '../docker/engine.ts';
 import { runExecutor, type ExecutorRun } from '../executor/run.ts';
 import { acceptTask, type AcceptanceVerdict } from '../gate/accept.ts';
 import { blockedPath } from '../gate/blocked.ts';
+import { eventBus } from '../events/bus.ts';
 import { readReport, recordDecision, type ExecutorReport } from '../gate/report.ts';
 import { detectAndRewrite } from '../gate/tech-stack.ts';
 import { HANDOFF, HandoffTask, taskFileName } from '../intake/handoff.ts';
@@ -63,10 +64,18 @@ export interface CycleRequest {
   projectDirectory: string;
 }
 
-/** The status the task carries, written to disk first and to the index after. */
+/**
+ * The status the task carries — to disk first, to the index after, then onto the bus.
+ *
+ * The third step is what makes the board live. Without it the dashboard's tree is whatever the
+ * server rendered when the page loaded: the feed moves and the plan sits frozen, which is a
+ * dashboard that tells an operator less the longer they watch it. The gate walk found this by
+ * waiting forever on a status that had already changed.
+ */
 function setStatus(
   database: DatabaseSync,
   projectDirectory: string,
+  projectId: string,
   taskId: string,
   status: HandoffTask['status'],
 ): void {
@@ -82,6 +91,7 @@ function setStatus(
   }
 
   database.prepare('UPDATE tasks SET status = ? WHERE task_id = ?').run(status, taskId);
+  eventBus().publish({ type: 'task-status', projectId, taskId, status });
 }
 
 export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<CycleResult> {
@@ -100,7 +110,7 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
       : `Стек задания уже соответствует проекту (${commands.techStack}).`,
   );
 
-  setStatus(database, projectDirectory, taskId, 'IN_PROGRESS');
+  setStatus(database, projectDirectory, projectId, taskId, 'IN_PROGRESS');
   say('Задача передана исполнителю.');
 
   // 2. The executor.
@@ -155,7 +165,7 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
     existsSync(blockedPath(projectDirectory, taskId)) || reported?.status === 'BLOCKED';
 
   if (blocked) {
-    setStatus(database, projectDirectory, taskId, 'BLOCKED');
+    setStatus(database, projectDirectory, projectId, taskId, 'BLOCKED');
     const reason =
       reported?.blockReason ??
       'Исполнитель сообщил о непреодолимом препятствии. Ожидание действий человека.';
@@ -174,7 +184,7 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
   }
 
   if (executor.outcome === 'TIMEOUT') {
-    setStatus(database, projectDirectory, taskId, 'FAILED');
+    setStatus(database, projectDirectory, projectId, taskId, 'FAILED');
     const reason = 'Исполнитель не уложился в отведённое время итерации.';
     say(reason, 'ERROR');
 
@@ -213,7 +223,7 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
 
   // 5. The verdict.
   const outcome: CycleOutcome = acceptance.accepted ? 'COMPLETED' : 'FAILED';
-  setStatus(database, projectDirectory, taskId, outcome);
+  setStatus(database, projectDirectory, projectId, taskId, outcome);
   say(acceptance.reason, acceptance.accepted ? 'INFO' : 'ERROR');
 
   if (!acceptance.accepted && reported?.status === 'SUCCESS') {
