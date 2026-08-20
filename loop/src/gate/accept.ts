@@ -164,6 +164,7 @@ export async function acceptTask(
       image,
       `${name}-style`,
       deps,
+      task.filesToEdit,
     );
 
     deps.onLine?.({ stream: 'stdout', text: controller.reason });

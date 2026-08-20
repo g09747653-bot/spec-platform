@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+
 import type { DockerEngine } from '../docker/engine.ts';
 import type { TechStack } from '../intake/handoff.ts';
 
@@ -22,6 +25,20 @@ import { runInCleanCopy, type CleanRunDeps } from './clean-run.ts';
  * them**, for the reason `tech-stack.ts` learned the hard way: a guessed command that a project has
  * no script for exits non-zero, and a gate that refuses a task over a linter the plan never promised
  * is a gate reporting on itself.
+ *
+ * **A task is judged on its own files, and the live gate is why.** The first version ran
+ * `prettier --check .` over the whole copy. With several executors in one workspace that is a check
+ * on *everybody's* work: task 12 was returned because task 7's file was unformatted, task 7 because
+ * task 2's was, and the pipeline went round in circles until the third return froze it — three
+ * freezes in ninety seconds, all with the same reason. It also judged files nobody was ever asked
+ * to write: the copy carries `bundle/` and `handoff/`, so the bundle's own markdown was being
+ * style-checked against the project's formatter.
+ *
+ * So the file-based tools are given the task's `filesToEdit`, filtered to what actually exists in
+ * the copy — an assignment that names a path it never created is not a style finding — and a task
+ * with no files of its own is not style-checked at all. The two whole-project tools stay
+ * whole-project: `go vet` and `cargo clippy` are compilers, a broken build is everybody's problem,
+ * and there is no per-file version of that question worth asking.
  */
 
 export interface ControllerCheck {
@@ -31,6 +48,13 @@ export interface ControllerCheck {
   probe: string;
   /** The check itself, run from the workspace root in the clean copy. */
   command: string;
+  /**
+   * Whether the tool takes the paths it should judge.
+   *
+   * `true` — the task's own files are appended, and a task with none is skipped. `false` — the tool
+   * answers about the project as a whole and there is no sensible way to narrow it.
+   */
+  scoped: boolean;
 }
 
 /**
@@ -49,28 +73,36 @@ export const CONTROLLER_CHECKS: Record<TechStack, ControllerCheck[]> = {
     {
       label: 'eslint',
       probe: 'npx --no-install eslint --version',
-      command: 'npx --no-install eslint .',
+      command: 'npx --no-install eslint',
+      scoped: true,
     },
     {
       label: 'prettier',
       probe: 'npx --no-install prettier --version',
-      command: 'npx --no-install prettier --check .',
+      command: 'npx --no-install prettier --check',
+      scoped: true,
     },
   ],
   python: [
-    { label: 'flake8', probe: 'flake8 --version', command: 'flake8 .' },
-    { label: 'black', probe: 'black --version', command: 'black --check .' },
+    { label: 'flake8', probe: 'flake8 --version', command: 'flake8', scoped: true },
+    { label: 'black', probe: 'black --version', command: 'black --check', scoped: true },
   ],
   go: [
-    { label: 'gofmt', probe: 'command -v gofmt', command: 'test -z "$(gofmt -l .)"' },
-    { label: 'go vet', probe: 'command -v go', command: 'go vet ./...' },
+    { label: 'gofmt', probe: 'command -v gofmt', command: 'test -z "$(gofmt -l', scoped: true },
+    { label: 'go vet', probe: 'command -v go', command: 'go vet ./...', scoped: false },
   ],
   rust: [
-    { label: 'cargo fmt', probe: 'cargo fmt --version', command: 'cargo fmt --check' },
+    {
+      label: 'cargo fmt',
+      probe: 'cargo fmt --version',
+      command: 'cargo fmt --check',
+      scoped: false,
+    },
     {
       label: 'cargo clippy',
       probe: 'cargo clippy --version',
       command: 'cargo clippy -- -D warnings',
+      scoped: false,
     },
   ],
   /* Nothing is known about the toolchain, so nothing is claimed about its style. */
@@ -84,9 +116,14 @@ export const CONTROLLER_CHECKS: Record<TechStack, ControllerCheck[]> = {
  * useful in the same shell that would have run it — a probe in one container and a check in another
  * is two claims about two environments.
  */
-export function checkCommand(check: ControllerCheck): string {
+export function checkCommand(check: ControllerCheck, files: readonly string[] = []): string {
+  /* `gofmt -l` is the one whose scoping needs its bracket closed; the rest simply take paths. */
+  const tail = check.label === 'gofmt' ? ')"' : '';
+  const paths = check.scoped ? ` ${files.map((file) => `'${file}'`).join(' ')}` : '';
+  const command = check.scoped ? `${check.command}${paths}${tail}` : check.command;
+
   return `{ ${check.probe}; } >/dev/null 2>&1 || exit 127
-${check.command}`;
+${command}`;
 }
 
 export interface ControllerFinding {
@@ -103,6 +140,8 @@ export interface ControllerVerdict {
   /** Checks whose tool is not installed in this project: reported, never held against it. */
   skipped: string[];
   findings: ControllerFinding[];
+  /** The task's own files, as the checks actually saw them in the copy. */
+  judged: string[];
   reason: string;
 }
 
@@ -118,8 +157,17 @@ export async function runController(
   image: string,
   containerPrefix: string,
   deps: CleanRunDeps & { engine: DockerEngine },
+  /** The task's own `filesToEdit`. Scoped checks judge these and nothing else. */
+  filesToEdit: readonly string[] = [],
 ): Promise<ControllerVerdict> {
   const checks = CONTROLLER_CHECKS[techStack];
+
+  /*
+   * Only what is really there. A bundle's `filesToEdit` carries whatever the plan said, including
+   * paths a task never created and — measured on the gate's own bundle — occasional prose that
+   * ended up in the array; a formatter asked about those answers about itself.
+   */
+  const judged = filesToEdit.filter((file) => existsSync(join(copyPath, file)));
 
   if (checks.length === 0) {
     return {
@@ -127,6 +175,7 @@ export async function runController(
       ran: [],
       skipped: [],
       findings: [],
+      judged,
       reason: `Контролёр: для стека ${techStack} проверок стиля не объявлено.`,
     };
   }
@@ -136,12 +185,17 @@ export async function runController(
   const findings: ControllerFinding[] = [];
 
   for (const check of checks) {
+    if (check.scoped && judged.length === 0) {
+      skipped.push(check.label);
+      continue;
+    }
+
     const run = await runInCleanCopy(
       deps.engine,
       image,
       copyPath,
       `${containerPrefix}-${check.label.replace(/[^a-z0-9]+/gi, '-')}`,
-      checkCommand(check),
+      checkCommand(check, judged),
       deps,
     );
 
@@ -167,10 +221,11 @@ export async function runController(
       ran,
       skipped,
       findings,
+      judged,
       reason:
         ran.length === 0
-          ? 'Контролёр: инструментов стиля в проекте нет — проверять нечем.'
-          : `Контролёр: ${ran.join(', ')} — чисто.`,
+          ? 'Контролёр: проверять нечем — ни инструментов стиля, ни собственных файлов у задачи.'
+          : `Контролёр: ${ran.join(', ')} по файлам задачи (${String(judged.length)}) — чисто.`,
     };
   }
 
@@ -179,8 +234,11 @@ export async function runController(
     ran,
     skipped,
     findings,
-    reason: `Контролёр вернул задачу исполнителю до тестов: ${findings
-      .map((finding) => finding.label)
-      .join(', ')} — красные. Приёмочные тесты не запускались.`,
+    judged,
+    reason:
+      `Контролёр вернул задачу исполнителю до тестов: ${findings
+        .map((finding) => finding.label)
+        .join(', ')} — красные на её собственных файлах (${judged.join(', ')}). ` +
+      'Приёмочные тесты не запускались.',
   };
 }

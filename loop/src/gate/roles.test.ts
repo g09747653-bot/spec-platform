@@ -94,13 +94,40 @@ describe('which account a role runs on (А-24 §1)', () => {
 describe('the controller, before a single test runs (task 161)', () => {
   const engine = () => createFakeEngine({ onStart: () => ({ exitCode: 0 }) });
 
+  let copy: string;
+  /** The task's own files — the only ones a scoped check may judge. */
+  const MINE = ['lib/mine.js'];
+
+  beforeEach(() => {
+    copy = mkdtempSync(join(tmpdir(), 'loop-controller-'));
+    mkdirSync(join(copy, 'lib'), { recursive: true });
+    writeFileSync(join(copy, 'lib', 'mine.js'), 'export const mine = 1;\n', 'utf8');
+    writeFileSync(join(copy, 'lib', 'theirs.js'), 'export const theirs   =2\n', 'utf8');
+  });
+
+  afterEach(() => {
+    try {
+      rmSync(copy, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    } catch {
+      // Cleanup is not an assertion.
+    }
+  });
+
   it('runs the stack’s own tools and reports them by name', async () => {
-    const verdict = await runController('nodejs', '/copy', 'node:24', 'gate-1-style', {
-      engine: engine(),
-    });
+    const verdict = await runController(
+      'nodejs',
+      copy,
+      'node:24',
+      'gate-1-style',
+      {
+        engine: engine(),
+      },
+      MINE,
+    );
 
     expect(verdict.clean).toBe(true);
     expect(verdict.ran).toEqual(['eslint', 'prettier']);
+    expect(verdict.judged).toEqual(MINE);
     expect(verdict.reason).toContain('чисто');
   });
 
@@ -108,18 +135,77 @@ describe('the controller, before a single test runs (task 161)', () => {
     const red = createFakeEngine({
       onStart: ({ name }) =>
         name.endsWith('-prettier')
-          ? { exitCode: 1, stdout: ['[warn] src/index.js'] }
+          ? { exitCode: 1, stdout: ['[warn] lib/mine.js'] }
           : { exitCode: 0 },
     });
 
-    const verdict = await runController('nodejs', '/copy', 'node:24', 'gate-1-style', {
-      engine: red,
-    });
+    const verdict = await runController(
+      'nodejs',
+      copy,
+      'node:24',
+      'gate-1-style',
+      {
+        engine: red,
+      },
+      MINE,
+    );
 
     expect(verdict.clean).toBe(false);
     expect(verdict.findings.map((finding) => finding.label)).toEqual(['prettier']);
     expect(verdict.reason).toContain('до тестов');
-    expect(verdict.findings[0]?.output).toContain('src/index.js');
+    expect(verdict.reason, 'and says whose files it judged').toContain('lib/mine.js');
+    expect(verdict.findings[0]?.output).toContain('lib/mine.js');
+  });
+
+  /**
+   * The live gate's own finding: a project-wide style check in a parallel pipeline returns every
+   * task for somebody else's file, for ever. What a task can be held to is what it was asked to
+   * write.
+   */
+  it('judges the task’s own files and nobody else’s', async () => {
+    const asked: string[] = [];
+    const recording = createFakeEngine({
+      onStart: ({ spec }) => {
+        asked.push((spec.cmd ?? []).join(' '));
+        return { exitCode: 0 };
+      },
+    });
+
+    const verdict = await runController(
+      'nodejs',
+      copy,
+      'node:24',
+      'gate-1-style',
+      {
+        engine: recording,
+      },
+      [...MINE, 'lib/never-written.js'],
+    );
+
+    expect(verdict.judged, 'a path the task never created is not a style finding').toEqual(MINE);
+
+    for (const command of asked) {
+      expect(command).toContain("'lib/mine.js'");
+      expect(command, 'never the whole directory').not.toContain('--check .');
+      expect(command).not.toContain('theirs.js');
+    }
+  });
+
+  it('skips a scoped check for a task with no files of its own', async () => {
+    const verdict = await runController(
+      'nodejs',
+      copy,
+      'node:24',
+      'gate-1-style',
+      {
+        engine: engine(),
+      },
+      [],
+    );
+
+    expect(verdict.clean).toBe(true);
+    expect(verdict.ran).toEqual([]);
+    expect(verdict.skipped).toEqual(['eslint', 'prettier']);
   });
 
   /**
@@ -132,9 +218,16 @@ describe('the controller, before a single test runs (task 161)', () => {
   it('skips a tool the project has not installed rather than blaming it', async () => {
     const bare = createFakeEngine({ onStart: () => ({ exitCode: 127 }) });
 
-    const verdict = await runController('nodejs', '/copy', 'node:24', 'gate-1-style', {
-      engine: bare,
-    });
+    const verdict = await runController(
+      'nodejs',
+      copy,
+      'node:24',
+      'gate-1-style',
+      {
+        engine: bare,
+      },
+      MINE,
+    );
 
     expect(verdict.clean).toBe(true);
     expect(verdict.ran).toEqual([]);
@@ -143,9 +236,16 @@ describe('the controller, before a single test runs (task 161)', () => {
   });
 
   it('claims nothing about a stack whose toolchain it does not know', async () => {
-    const verdict = await runController('generic', '/copy', 'debian', 'gate-1-style', {
-      engine: engine(),
-    });
+    const verdict = await runController(
+      'generic',
+      copy,
+      'debian',
+      'gate-1-style',
+      {
+        engine: engine(),
+      },
+      MINE,
+    );
 
     expect(verdict.clean).toBe(true);
     expect(verdict.ran).toEqual([]);
@@ -154,9 +254,10 @@ describe('the controller, before a single test runs (task 161)', () => {
   it('puts the probe in front of every check, in one shell', () => {
     for (const checks of Object.values(CONTROLLER_CHECKS)) {
       for (const check of checks) {
-        const line = checkCommand(check);
+        const line = checkCommand(check, MINE);
         expect(line).toContain('|| exit 127');
         expect(line.indexOf(check.probe)).toBeLessThan(line.lastIndexOf(check.command));
+        if (check.scoped) expect(line).toContain("'lib/mine.js'");
       }
     }
   });
