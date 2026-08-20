@@ -41,7 +41,12 @@ jobs:
   verify:
     name: Lint, boundaries, types, unit
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 15 → 25 when the delivery loop's suites joined this job (task 155). They talk to the runner's
+    # Docker daemon and build the executor image — node, apt, and a global npm install — which is a
+    # few minutes on a cold layer cache and seconds on a warm one. A bound that cuts off a build
+    # which is visibly working reports «the box is too small» instead of anything about the product,
+    # which is the failure D-201/D-202 were about.
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v5
@@ -72,6 +77,17 @@ jobs:
 
       - name: Unit tests
         run: pnpm test:unit
+
+      # The delivery loop is a second package in the same workspace (А-20), and it reports through
+      # this job rather than through a new one on purpose: `main` requires this check by name, the
+      # executor account cannot edit the required-checks list (D-202), and a red loop must block a
+      # merge exactly as a red platform does. Same trick as the local single-user profile — grow
+      # what a required check requires, never its name.
+      - name: Typecheck (loop)
+        run: pnpm loop:typecheck
+
+      - name: Unit tests (loop)
+        run: pnpm loop:test
 
       - name: Upload coverage
         if: always()
@@ -255,6 +271,15 @@ jobs:
 
       - name: End-to-end tests (local single-user profile)
         run: pnpm test:e2e --project=chromium
+
+      # The delivery loop's dashboard (task 153). It rides in this job because the browsers are
+      # already installed here and because the required check's name cannot change (D-202) — a red
+      # loop feed must block a merge exactly as a red platform journey does. Its own Playwright
+      # configuration builds and starts the loop's server; the two applications never share one.
+      - name: End-to-end tests (loop dashboard)
+        env:
+          LOCAL_SINGLE_USER: ''
+        run: pnpm loop:e2e
 
       - name: Upload Playwright report
         if: failure()

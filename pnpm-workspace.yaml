@@ -1,0 +1,11 @@
+# The repository holds two applications (амендмент А-20).
+#
+# The root package is Spec Platform — Next.js on PostgreSQL, unchanged. `loop/` is the autonomous
+# delivery loop: its own Next.js surface, its own SQLite, its own lifecycle. They are separate
+# deployables that meet at exactly one place — the machine bundle contract, whose schemas live in
+# `fixtures/spec-bundle/` and are validated from both sides against the same files.
+#
+# A workspace rather than a second repository because the contract is the reason: two repositories
+# would make the shared fixtures a copy, and a copy of a contract is how the two halves drift.
+packages:
+  - loop

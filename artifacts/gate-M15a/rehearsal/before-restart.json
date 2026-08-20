@@ -1,0 +1,158 @@
+{
+  "board": {
+    "milestones": [
+      {
+        "milestoneId": "Веха 1",
+        "status": "PENDING",
+        "tasks": [
+          {
+            "taskId": "1",
+            "status": "IN_PROGRESS"
+          }
+        ]
+      },
+      {
+        "milestoneId": "Веха 2",
+        "status": "PENDING",
+        "tasks": [
+          {
+            "taskId": "2",
+            "status": "PENDING"
+          },
+          {
+            "taskId": "7",
+            "status": "PENDING"
+          },
+          {
+            "taskId": "12",
+            "status": "PENDING"
+          }
+        ]
+      },
+      {
+        "milestoneId": "Веха 3",
+        "status": "PENDING",
+        "tasks": [
+          {
+            "taskId": "3",
+            "status": "PENDING"
+          },
+          {
+            "taskId": "4",
+            "status": "PENDING"
+          },
+          {
+            "taskId": "8",
+            "status": "PENDING"
+          },
+          {
+            "taskId": "9",
+            "status": "PENDING"
+          },
+          {
+            "taskId": "13",
+            "status": "PENDING"
+          }
+        ]
+      },
+      {
+        "milestoneId": "Веха 4",
+        "status": "PENDING",
+        "tasks": [
+          {
+            "taskId": "5",
+            "status": "PENDING"
+          },
+          {
+            "taskId": "10",
+            "status": "PENDING"
+          }
+        ]
+      },
+      {
+        "milestoneId": "Веха 5",
+        "status": "PENDING",
+        "tasks": [
+          {
+            "taskId": "6",
+            "status": "PENDING"
+          },
+          {
+            "taskId": "11",
+            "status": "PENDING"
+          }
+        ]
+      },
+      {
+        "milestoneId": "Веха 6",
+        "status": "PENDING",
+        "tasks": [
+          {
+            "taskId": "14",
+            "status": "PENDING"
+          },
+          {
+            "taskId": "16",
+            "status": "PENDING"
+          },
+          {
+            "taskId": "17",
+            "status": "PENDING"
+          }
+        ]
+      },
+      {
+        "milestoneId": "Веха 7",
+        "status": "PENDING",
+        "tasks": [
+          {
+            "taskId": "15",
+            "status": "PENDING"
+          }
+        ]
+      },
+      {
+        "milestoneId": "Веха 8",
+        "status": "PENDING",
+        "tasks": [
+          {
+            "taskId": "18",
+            "status": "PENDING"
+          }
+        ]
+      },
+      {
+        "milestoneId": "Веха 9",
+        "status": "PENDING",
+        "tasks": [
+          {
+            "taskId": "19",
+            "status": "PENDING"
+          }
+        ]
+      }
+    ]
+  },
+  "tree": {
+    "handoff/tasks/milestones.json": "72fe10ff7ed4228a8cec4c3adf7e8b699fde72db0fc1336b1cb844ca472a21de",
+    "handoff/tasks/task_1.json": "88dab19fbdc4765b28ef6d7668bbde22c71af599d22f5b39af4747ba1c046ae6",
+    "handoff/tasks/task_10.json": "5def29f3cc5a203da65aad0f7d3aef42a5e02b7e699292efe420f8fab8abdd91",
+    "handoff/tasks/task_11.json": "3a59227fff18a9061c14cdc2e61a690748b97e2fbfcdcca40beab28c6651c957",
+    "handoff/tasks/task_12.json": "7e570032f51a02a39ee71cbc147e0e22d28b8a33c7c7a1effa52832d9d16a536",
+    "handoff/tasks/task_13.json": "798b3d441102af5095fdf0a7aa84282700b2d56bcef8f3f64497f4a563b18495",
+    "handoff/tasks/task_14.json": "8e813109afef7b98099a62894272a82f9c26de50aa442b9038ac53a6a42dc132",
+    "handoff/tasks/task_15.json": "395b8552803b44aceb94790040c1ab3daaee84c6400a67362341ced19d7015eb",
+    "handoff/tasks/task_16.json": "cfe789c43f806ff51a0aad52f04f8b853f38635257ea42e8429e6089e91e4198",
+    "handoff/tasks/task_17.json": "c718bf6ec047d4fa2748f24a8ede1672b127df37d276bc9b8017ec4b90480fa9",
+    "handoff/tasks/task_18.json": "c952ee9e1d8631d0e7b2faffd2d3d794b1129258cce2452a5c3032a44b9a6de8",
+    "handoff/tasks/task_19.json": "efac64c9900af172500a45e3a419e0d335947777bfda13a3c5698c199689b254",
+    "handoff/tasks/task_2.json": "d315185180077118eea974f3797bd80cc65a363bbd275d369a8fa012b287ad47",
+    "handoff/tasks/task_3.json": "7aa154af2c75059b9b928d786bccc557fc37c66730cca3f3ead4693371d1f852",
+    "handoff/tasks/task_4.json": "a14cc75c97f5953886587c3221acdebe24e65d58e95de62c163734b3f20128c9",
+    "handoff/tasks/task_5.json": "a49b58ddff0c642d039e0b1ff2528cf0f5b866675d0466ec7e0b4fbef0f1bada",
+    "handoff/tasks/task_6.json": "8c21a2179e3b28580aae8416837e27dd9eac041d45ba9f90c7a27e4f8b44cfb8",
+    "handoff/tasks/task_7.json": "b993bb2b6d39f30ab25b51f39680c733143ff2af20c5fef54883d63e671a09e9",
+    "handoff/tasks/task_8.json": "a5d01e1bd60b3565b3e2f36d8f06c8cb41108c9e12601df94e6e062547be7435",
+    "handoff/tasks/task_9.json": "384a0839650cb2f53f4ff74f52c52396b1a41ac2fb0616896aa27d65746de422"
+  }
+}

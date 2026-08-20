@@ -33,6 +33,13 @@ export default tseslint.config(
       'migrations/**',
       // Deliberate violations, linted only by `pnpm test:boundaries`.
       'src/modules/**/__fixtures__/**',
+      // The delivery loop's build output, database and test artifacts (А-20). Its *source* is
+      // linted by this same configuration — only what a tool generated is skipped.
+      'loop/.next/**',
+      'loop/.data/**',
+      'loop/next-env.d.ts',
+      'loop/playwright-report/**',
+      'loop/test-results/**',
     ],
   },
 
@@ -120,6 +127,27 @@ export default tseslint.config(
           name: 'EventSource',
           message:
             'EventSource is not used in this codebase (D-8). Consume both streams with response.body.getReader() through useResumableStream.',
+        },
+      ],
+    },
+  },
+
+  // The same one-reader discipline in the delivery loop (task 152; А-20). Its configuration lives in
+  // `loop/src/config/env.ts`, which grants itself the inline exemption exactly as the platform's does,
+  // and so do the loop's CLI entry points — they *are* the process.
+  //
+  // `EventSource` is deliberately NOT banned here: the loop's dashboard consumes a plain one-way SSE
+  // feed with no POST body and no resume policy, which is the case D-8's reasoning does not cover.
+  {
+    files: ['loop/src/**/*.{ts,tsx}', 'loop/e2e/**/*.ts'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'process',
+          property: 'env',
+          message:
+            'Read configuration through `getEnv()` in loop/src/config/env.ts — it is Zod-validated and parsed once at boot.',
         },
       ],
     },

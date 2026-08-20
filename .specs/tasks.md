@@ -1767,15 +1767,55 @@ Goal: the customer's second hands-on pass plus his video demo (`video demo/Deskt
 
 ### Milestones 15а–17а — сам контур (скелет; задачи получат полные тела с AC при детализации своего milestone)
 
-**Milestone 15а — Orchestrator core & single-cycle handoff (бандл A0: M1+M2).** Новый пакет `loop/` (pnpm workspace) со своей SQLite (WAL, busy_timeout 5000), монолит: оркестратор живёт в процессе сервера пакета. Docker Desktop становится системным требованием с этого milestone.
+### Milestone 15а — Orchestrator core & single-cycle handoff (бандл A0: M1+M2; детализировано Архитектором 2026-08-19 при приёмке M14а, амендмент А-21)
 
-- [ ] 152\. `loop/` bootstrap: SQLite схема+миграции (projects/milestones/tasks/reports/agent_logs/agent_decisions), `.env`-валидация (fail-fast на трёх обязательных), тест конкурентной записи в WAL
-- [ ] 153\. Локальный дашборд + SSE-лента логов (`/api/observability/stream-logs`, шина событий в том же процессе)
-- [ ] 154\. Docker Engine адаптер: named pipe на Windows / unix socket на CI (платформенный шов), трансляция путей Windows→Docker с golden-тестами, жизненный цикл контейнеров
-- [ ] 155\. Headless-обёртка исполнителя: Claude Code в контейнере, неинтерактивный запуск (фактические флаги CLI уточнить по документации на момент реализации — в бандле они названы «например»), монтирование workspace с трансляцией путей
-- [ ] 156\. Приём бандла + генерация handoff: AJV по общим фикстурам задачи 150, `milestones.json` + `task_*.json` (обязательный `filesToEdit`), архитектор-агент режет вехи
-- [ ] 157\. Одиночный цикл с гейтом: двухфазная верификация (отчёт исполнителя информационный — оркестратор перегоняет тесты в чистом контейнере), techStack-автодетект с перезаписью на диск, Artifact Walks по `expectedArtifacts`, BLOCKED_<taskId>-протокол (chokidar, шаблон из бандла), rationale через отчёт → `agent_decisions`
-- [ ] 158\. M15а gate: игрушечный nodejs-проект проходит бандл → веха → задача → исполнитель → чистый контейнер → COMPLETED живьём; убийство оркестратора посреди цикла и рестарт восстанавливают состояние с диска
+> Новый пакет `loop/` (pnpm workspace) со своей SQLite; монолит — оркестратор живёт в процессе сервера пакета. **Docker Desktop — системное требование с этого milestone**: первый шаг сессии — preflight `docker version` через named pipe; если Docker недоступен — честная остановка с рапортом, не BLOCKED. Правила пакета: интерфейс дашборда — по-русски сразу (реестр строк платформы на `loop/` не распространяется — своя поверхность, RU-only v1, названное решение); границы модулей и lint — те же инструменты репозитория.
+
+- [x] 152\. `loop/` package bootstrap: SQLite core + config
+  - pnpm-workspace package `loop/`; SQLite (WAL) opened with `PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;` on EVERY connection; migrations for `projects`/`milestones`/`tasks`/`reports`/`agent_logs`/`agent_decisions` per the A0 solution schema; `.env` validation fail-fast on the three mandatory vars (`ANTHROPIC_API_KEY`, `PORT`, `WORKSPACE_ROOT_PATH` — остальные валидируются при фактическом присутствии), process exits with a readable stderr explanation when one is missing.
+  - Acceptance Criteria: DB file created on first boot; concurrent-write test (10 parallel writers into `agent_logs`) passes with zero `database is locked`; missing mandatory var = immediate exit with named var in stderr.
+  - _Dependencies: —_ · _Requirements: бандл A0 (Task 1.1, 1.2)_ · _Touches: `loop/**` (new)_ · _Complexity: Medium_ · _Parallel-safe: no_
+
+- [x] 153\. Local dashboard + SSE log feed
+  - Next.js app of the `loop/` package on `127.0.0.1:<PORT>`, no auth surface at all (локальный контур); дашборд: проект, вехи/задачи со статусами, лента логов. `GET /api/observability/stream-logs` — SSE, fed by the in-process event bus (никакого поллинга БД); reload не теряет хвост (последние N строк из `agent_logs` доклеиваются до подписки).
+  - Acceptance Criteria: строка лога, выпущенная оркестратором, появляется в открытой странице без перезапроса (e2e); дашборд по-русски; холодный старт до интерактивной страницы ≤ 3 с на машине CI.
+  - _Dependencies: 152_ · _Requirements: бандл A0 (Task 1.3, 1.4)_ · _Touches: `loop/**`_ · _Complexity: Medium_ · _Parallel-safe: no_
+
+- [x] 154\. Docker Engine adapter: named pipe / socket seam + path translation
+  - Адаптер жизненного цикла контейнеров (create/start/stop/pause/unpause/remove, logs attach) поверх Docker Engine API; платформенный шов: `npipe://./pipe/docker_engine` на win32, unix socket на Linux/CI — один интерфейс, две транспортные реализации, выбор по `process.platform` с override в `.env`. Трансляция путей Windows→Docker (`C:\…` → `/c/…`, нижний регистр диска, прямые слэши) — чистая функция с golden-тестами (диски, вложенность, пробелы, кириллица в пути).
+  - Acceptance Criteria: интеграционный тест на CI (unix socket): контейнер создаётся, запускается, пишет в смонтированный том, гасится и удаляется; golden-тесты трансляции зелёные; named-pipe ветка покрыта юнитом на выбор транспорта (живой пайп — на гейте, машина заказчика).
+  - _Dependencies: 152_ · _Requirements: бандл A0 (Task 2.1, 2.2); Security Constraints_ · _Touches: `loop/**`_ · _Complexity: Medium_ · _Parallel-safe: yes (после 152)_
+
+- [x] 155\. Headless executor wrapper (Claude Code in a container)
+  - Образ исполнителя (node + Claude Code CLI) и обёртка запуска: контейнер получает смонтированный workspace (через трансляцию 154), задание `task_<taskId>.json`, точечные переменные окружения (НЕ весь `.env`); неинтерактивный запуск — фактические флаги/переменные CLI уточнить по документации Claude Code на момент реализации (в бандле «claude --yes»/«CI=true» названы «например»); stdout/stderr стримятся в `agent_logs` и SSE-ленту; жёсткий таймаут итерации 5 минут → задача `FAILED`.
+  - Именованное ограничение, если аутентификация Claude Code в контейнере потребует интерактивного входа: остановка с описанием того, что нужно от заказчика (однократный вход/токен), — это операционный шаг, не дефект.
+  - Acceptance Criteria: контейнерный тест: обёртка исполняет скриптовое задание (правка файла в томе) без единого интерактивного ожидания; таймаут-тест: зависший процесс убит по 5 минутам и задача помечена `FAILED`; `.env` целиком в контейнере отсутствует (проверено изнутри).
+  - _Dependencies: 154_ · _Requirements: бандл A0 (Task 2.3); User Roles §Технический протокол_ · _Touches: `loop/**`, образ исполнителя_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [x] 156\. Bundle intake + handoff generation (вехи режет код)
+  - Приём `bundle/` (constitution.md, architecture.md, requirements.json, tasks.json): AJV по общим фикстурам `fixtures/spec-bundle/` — тем же, против которых тестируется экспорт задачи 150 (контракт встречается в одной точке). Нарезка вех — **детерминированная**: топологическая раскладка по `dependsOn` (код, не модель; зеркало D-229 — «ход выбирает код»); при пустых `dependsOn` фолбэк — фазовый порядок источника (задачи фазы N зависят от фазы N−1, консервативно). Модель наполняет ТЕКСТЫ handoff-заданий (title/description/filesToEdit-предложение) через провайдерный шов платформенного образца — цепочка из `.env`, НЕ захардкоженный anthropic; `milestones.json` + `task_*.json` пишутся строго по схемам, `filesToEdit` обязателен.
+  - Acceptance Criteria: интейк бандла M14а-гейта (реальная фикстура) даёт валидные вехи в правильном фазовом порядке; цикл в `dependsOn` — именованная ошибка интейка, не зависание; AJV-отказ печатает путь ошибки.
+  - _Dependencies: 152_ · _Requirements: бандл A0 (Task 2.4); задача 150_ · _Touches: `loop/**`, `fixtures/spec-bundle/`_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [x] 157\. Single-cycle acceptance gate (двухфазная верификация)
+  - Полный одиночный цикл: PENDING-задача → контейнер исполнителя → `report_<taskId>.json` → приёмка оркестратором в СВЕЖЕМ чистом контейнере (копия кодовой базы, независимый прогон тестов; отчёт исполнителя — информационный, гейт решает только перепрогон); techStack-автодетект по маркерным файлам с немедленной перезаписью `task_*.json` на диске (диск — источник правды); Artifact Walks по `expectedArtifacts` (validationCmd/Args из корня workspace, successRegex по stdout+stderr); `generic` без явных команд = именованный отказ гейта; BLOCKED-протокол: `BLOCKED_<taskId>.md` по шаблону бандла, chokidar-вотчер, удаление файла → задача `PENDING` в течение 1 с; rationale из отчёта → `agent_decisions` (MD5 hex lowercase при отсутствии `decisionId`).
+  - Acceptance Criteria: сквозной тест цикла на стабовом исполнителе (без живой модели, NFR-012-дисциплина платформы); тест «исполнитель прислал SUCCESS, чистый контейнер красный» → задача НЕ `COMPLETED`, конвейер стоит; тест вотчера блокировок (создание/удаление, 1 с); тест автодетекта с перезаписью.
+  - _Dependencies: 155, 156_ · _Requirements: бандл A0 (Task 2.5, 2.6, 2.7)_ · _Touches: `loop/**`_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [ ] 158\. M15а gate — live single-cycle walk (self-run, А-2.1)
+  - Живая прогулка: настоящий игрушечный nodejs-проект (бандл из машинного экспорта платформы — путь задачи 150) проходит интейк → вехи → задание → живой исполнитель Claude Code в контейнере → отчёт → чистый контейнер → `COMPLETED`; посреди цикла оркестратор убивается (SIGKILL) и рестартует — состояние восстановлено с диска (Шаг 0 бандла — в объёме M16а, здесь достаточно возобновления одиночного цикла); скрины дашборда, SSE-лента в артефактах. Красные условия: интерактивное зависание исполнителя, `database is locked`, потеря состояния на рестарте.
+  - Acceptance Criteria: walk GREEN, артефакты `artifacts/gate-M15a/` (RESULT, скрины, `handoff/`-дерево, логи); проверка Архитектора, затем приёмка заказчика.
+  - _Dependencies: 152–157, 168_ · _Requirements: А-2.1_ · _Touches: `loop/e2e/**`, `artifacts/gate-M15a/**`_ · _Complexity: Large_ · _Parallel-safe: no_
+
+- [x] 168\. Generation-run sweep at boot (закрывает Backlog B-1; сторона платформы)
+  - Осиротевший `generation_runs.status='running'` (продюсер умер вместе с процессом) чинится при загрузке: sweep в instrumentation помечает прогоны старше порога терминальным статусом с именованной причиной; сессия снова генерируема. Требование контура: автономный прогон не должен спотыкаться о прошлый обрыв питания (окно рестарта гейта M14а выбиралось в обход этого дефекта — теперь обходить не нужно).
+  - Acceptance Criteria: тест: строка `running` старше порога при загрузке → терминальный статус, следующий `generate` не отвергается; живой прогон не затрагивается (порог заведомо больше серверного бюджета цепочки).
+  - _Dependencies: —_ · _Requirements: Backlog B-1; Р-3_ · _Touches: `src/**` (instrumentation, generation store)_ · _Complexity: Small_ · _Parallel-safe: yes_
+
+- [x] 169\. Canonical task form + explicit dependencies in the tasks-generation instruction (сторона платформы; вердикт по §7.2 рапорта M14а)
+  - Инструкция генерации tasks-документа получает названную каноническую форму записи задач (чекбокс-список с идентификаторами) и ЯВНУЮ нотацию зависимостей задачи (гейт M14а показал: фазовый документ без зависимостей даёт `dependsOn: []`, и планировщик контура ослепнет). Маппинг задачи 150 сохраняет все три распознаваемые формы как ТЕРПИМОСТЬ (уже сохранённые бандлы обязаны экспортироваться), выводит `dependsOn` из явной нотации, фазовый порядок — консервативный фолбэк (совпадает с фолбэком интейка 156).
+  - Acceptance Criteria: свежесгенерированный tasks-документ (фикстура) даёт непустые `dependsOn` в экспорте; оба прежних golden-а зелёные без изменений; структурная валидация документов не ужесточена (форма — инструкция, не отказ).
+  - _Dependencies: —_ · _Requirements: рапорт M14а §7.2; задача 150_ · _Touches: `src/modules/prompts/**` (tasks instruction), `src/modules/specs/export/**`_ · _Complexity: Small_ · _Parallel-safe: yes_
 
 **Milestone 16а — Параллельность и «Красный CI» (бандл A0: M3).**
 

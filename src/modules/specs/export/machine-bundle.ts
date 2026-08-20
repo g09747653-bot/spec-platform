@@ -1,6 +1,7 @@
 import { strToU8, zipSync } from 'fflate';
 
 import { definedIdentifier, readLines } from '../lint/identifiers';
+import { DEPENDS_LINE, TASK_BULLET, TASK_CHECKBOX, TASK_HEADING } from '../model/task-notation';
 import type { ExportableFile } from '../repositories/spec-files';
 import { requirementSectionBodies } from '../validate-structure';
 
@@ -270,23 +271,13 @@ export interface MachineTasks {
   tasks: MachineTaskRow[];
 }
 
-/** `#### Task 1.1: Title` / `#### Задача 2: Название` — the heading shape the A0 bundle writes. */
-const TASK_HEADING = /^ {0,3}(#{1,6})\s+(?:task|задача)\s+([A-Za-z0-9.-]+)\s*[:.—–-]\s*(.+)$/i;
-
-/** `- [ ] 148\. Title` / `- [x] 7. Title` — the checkbox shape the reference plans write. */
-const TASK_CHECKBOX = /^\s*[-*+]\s+\[[ xX]\]\s+(\d+(?:\.\d+)*)\\?[.)]\s+(.+)$/;
-
-/**
- * `* **Задача 1.1: Название**` / `- **Task 2 — Title**` — the bold-bullet shape the M14а gate
- * caught in live output: the model wrote phases as headings and every task as an emphasised list
- * item under them, and a parser that knew only headings and checkboxes handed the loop an empty
- * task list from a 33-KB document. The emphasis marks are required — a plain sentence that merely
- * *mentions* «задача 3» must not open an entry — and the task word with its token does the rest.
+/*
+ * The three recognised entry shapes and the dependency clause live in `model/task-notation.ts` —
+ * one notation, read here and rendered into the tasks-generation instruction (task 169). All three
+ * stay recognised as **tolerance**: a bundle sealed before the instruction named a canonical form
+ * must keep exporting, and forgetting one of them is how the loop received zero tasks from a
+ * non-empty document at the M14а gate.
  */
-const TASK_BULLET = /^\s*[-*+]\s+[*_]{1,3}\s*(?:task|задача)\s+([A-Za-z0-9.-]+)\s*[:.—–-]\s*(.+)$/i;
-
-/** A line that states an entry's dependencies, in either language of the product. */
-const DEPENDS_LINE = /(dependencies|зависимости)\s*:/i;
 
 /** A task token: `148`, `1.1`, `2.4` — not the digits inside `А-2.1` or `FR-003`. */
 const TOKEN = String.raw`\d+(?:\.\d+)*`;

@@ -6,6 +6,13 @@ test-results/
 pnpm-lock.yaml
 next-env.d.ts
 
+# The delivery loop's build output, database and test artifacts (А-20). Its source is formatted by
+# this same Prettier; only what a tool generated is skipped.
+loop/.next/
+loop/.data/
+loop/playwright-report/
+loop/test-results/
+
 # Next.js rewrites and reformats this file on every dev/build run; it owns the
 # formatting, so Prettier must not fight it.
 tsconfig.json

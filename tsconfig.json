@@ -47,6 +47,7 @@
     "node_modules",
     "src/modules/**/__fixtures__/**",
     ".next",
-    "coverage"
+    "coverage",
+    "loop"
   ]
 }

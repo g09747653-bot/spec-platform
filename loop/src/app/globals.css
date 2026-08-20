@@ -1,0 +1,216 @@
+/*
+ * The dashboard's whole stylesheet (task 153).
+ *
+ * Hand-written CSS rather than a framework: the loop's surface is one page for one operator, and a
+ * build-time CSS toolchain here would be weight added to a cold start the task bounds at three
+ * seconds. The platform's design tokens deliberately do not reach this package — its surface is its
+ * own (А-21).
+ */
+
+:root {
+  color-scheme: dark;
+
+  --bg: #0d1117;
+  --panel: #161b22;
+  --panel-edge: #263041;
+  --text: #e6edf3;
+  --muted: #9aa7b4;
+  --accent: #58a6ff;
+
+  --pending: #8b949e;
+  --running: #d29922;
+  --done: #3fb950;
+  --failed: #f85149;
+  --blocked: #db6d28;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    15px/1.55 ui-sans-serif,
+    'Segoe UI',
+    system-ui,
+    sans-serif;
+}
+
+.shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px 20px 64px;
+}
+
+header.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  border-bottom: 1px solid var(--panel-edge);
+  padding-bottom: 16px;
+  margin-bottom: 24px;
+}
+
+header.masthead h1 {
+  font-size: 20px;
+  margin: 0;
+}
+
+header.masthead .sub {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+section.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+section.panel > h2 {
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+ul.tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+ul.tree > li + li {
+  margin-top: 14px;
+  border-top: 1px solid var(--panel-edge);
+  padding-top: 14px;
+}
+
+ul.tasks {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0 0 0 14px;
+  border-left: 2px solid var(--panel-edge);
+}
+
+ul.tasks > li {
+  padding: 4px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.row-title {
+  font-weight: 600;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.badge {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  border-radius: 999px;
+  padding: 2px 9px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+
+.badge[data-status='PENDING'] {
+  color: var(--pending);
+}
+.badge[data-status='IN_PROGRESS'] {
+  color: var(--running);
+}
+.badge[data-status='COMPLETED'] {
+  color: var(--done);
+}
+.badge[data-status='FAILED'] {
+  color: var(--failed);
+}
+.badge[data-status='BLOCKED'] {
+  color: var(--blocked);
+}
+.badge[data-status='PAUSED'] {
+  color: var(--pending);
+}
+.badge[data-status='ACTIVE'] {
+  color: var(--accent);
+}
+
+ol.feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 62vh;
+  overflow-y: auto;
+  font:
+    12.5px/1.5 ui-monospace,
+    'Cascadia Mono',
+    Consolas,
+    monospace;
+}
+
+ol.feed > li {
+  padding: 3px 0;
+  border-bottom: 1px solid rgb(38 48 65 / 55%);
+  display: grid;
+  grid-template-columns: 72px 92px minmax(0, 1fr);
+  gap: 10px;
+}
+
+ol.feed .when,
+ol.feed .who {
+  color: var(--muted);
+}
+
+ol.feed .what {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+ol.feed > li[data-level='ERROR'] .what {
+  color: var(--failed);
+}
+ol.feed > li[data-level='WARN'] .what {
+  color: var(--running);
+}
+
+.feed-state {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+
+.feed-state[data-live='no'] {
+  color: var(--running);
+}
+
+.empty {
+  color: var(--muted);
+  margin: 0;
+}
