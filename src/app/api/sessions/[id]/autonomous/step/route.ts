@@ -7,7 +7,7 @@ import { createDefaultAdapter } from '@/modules/adapters/llm/default-adapter';
 import { createDriverAgent } from '@/modules/agents/autonomous/driver-agent';
 import { resolveAnswers, resolveSelectedItems } from '@/modules/agents/autonomous/driver-draft';
 import { nextMove, type AutonomousMove } from '@/modules/agents/autonomous/policy';
-import type { AutonomousStopReason } from '@/modules/projects/autonomy';
+import type { AutonomousStepOutcome, AutonomousStopReason } from '@/modules/projects/autonomy';
 import { currentOwnerScope } from '@/modules/projects/auth/scope';
 import { createAutonomousRunRepository } from '@/modules/projects/repositories/autonomous-runs';
 import { createSessionMessageRepository } from '@/modules/projects/repositories/session-messages';
@@ -134,66 +134,88 @@ export async function POST(
 
   if (claimed === null) return errorResponse('CONFLICT');
 
+  /*
+   * **The claim is a promise to move; this is where the promise is kept** (task 170).
+   *
+   * Every exit below sets it and the `finally` writes it, so «how did that step end?» is answered in
+   * one place rather than at six returns. The value that matters most is the one nobody writes: a
+   * process killed between the claim above and the settle below leaves `step_outcome` null, and that
+   * is exactly how the next boot tells a restart from a loop — see `situation.ts`.
+   */
+  let settlement: AutonomousStepOutcome = 'refused';
   const origin = new URL(request.url).origin;
 
-  let outcome: DispatchOutcome;
-  let note: string | null;
-
-  /*
-   * The second guard, as a closure so `perform` cannot be called without one. It re-reads the run
-   * rather than trusting the claim: between the claim and this line lies the model call, which is
-   * where a person presses Stop.
-   */
-  const stillRunning = async (): Promise<boolean> => {
-    const live = await runs.findLive(session.id);
-    return live !== null && live.id === run.id;
-  };
-
   try {
-    const performed = await perform(db, session, context, move, origin, t, stillRunning);
-    outcome = performed.outcome;
-    note = performed.note;
-  } catch (error) {
     /*
-     * An exhausted provider chain is a normal event in the life of a session (FR-018, Д-6), and for
-     * an autonomous run it is a named ending rather than a 500: the person comes back to a session
-     * that says the model could not answer, standing exactly where it stopped.
+     * The second guard, as a closure so `perform` cannot be called without one. It re-reads the run
+     * rather than trusting the claim: between the claim and this line lies the model call, which is
+     * where a person presses Stop.
      */
-    if (!(error instanceof AllProvidersFailedError)) throw error;
+    const stillRunning = async (): Promise<boolean> => {
+      const live = await runs.findLive(session.id);
+      return live !== null && live.id === run.id;
+    };
 
-    await stopRun(db, session, run.id, 'provider-failed', t);
-    return jsonResponse(report(move.kind, false, true, 'provider-failed', claimed.steps));
+    let outcome: DispatchOutcome;
+    let note: string | null;
+
+    try {
+      const performed = await perform(db, session, context, move, origin, t, stillRunning);
+      outcome = performed.outcome;
+      note = performed.note;
+    } catch (error) {
+      /*
+       * An exhausted provider chain is a normal event in the life of a session (FR-018, Д-6), and
+       * for an autonomous run it is a named ending rather than a 500: the person comes back to a
+       * session that says the model could not answer, standing exactly where it stopped.
+       */
+      if (!(error instanceof AllProvidersFailedError)) throw error;
+
+      await stopRun(db, session, run.id, 'provider-failed', t);
+      return jsonResponse(report(move.kind, false, true, 'provider-failed', claimed.steps));
+    }
+
+    /*
+     * The move was prepared and abandoned: the run was stopped while it was being prepared. Nothing
+     * was sent, so there is nothing to say about it — and in particular no note, because a note
+     * about an act that did not happen is worse than silence. The ending is already in the feed,
+     * written by whoever stopped the run.
+     */
+    if (outcome.code === RUN_STOPPED.code) {
+      const stopped = await runs.findById(run.id);
+      return jsonResponse(
+        report(move.kind, false, true, stopped?.stopReason ?? null, claimed.steps),
+      );
+    }
+
+    if (note !== null) await appendDriverNote(db, session.id, note);
+
+    if (outcome.ok) {
+      settlement = 'landed';
+      return jsonResponse(report(move.kind, true, false, null, claimed.steps));
+    }
+
+    /*
+     * An ask that produced no round is neither a landing nor a loop, and it is settled as itself so
+     * the loop detector leaves it alone and its own budget bounds it (task 170).
+     */
+    if (outcome.code === 'NO_ROUND_TO_ASK') settlement = 'fruitless-ask';
+
+    /*
+     * A lost race is worth another tick; a refusal is an ending. The distinction is the endpoint's
+     * own code, never the status, because 409 covers both (`dispatch.ts` reads it).
+     */
+    if (outcome.retryable) {
+      return jsonResponse(report(move.kind, false, false, null, claimed.steps));
+    }
+
+    const reason = endingFor(outcome);
+    await stopRun(db, session, run.id, reason, t);
+
+    return jsonResponse(report(move.kind, false, true, reason, claimed.steps));
+  } finally {
+    await runs.settleStep(run.id, settlement);
   }
-
-  /*
-   * The move was prepared and abandoned: the run was stopped while it was being prepared. Nothing
-   * was sent, so there is nothing to say about it — and in particular no note, because a note about
-   * an act that did not happen is worse than silence. The ending is already in the feed, written by
-   * whoever stopped the run.
-   */
-  if (outcome.code === RUN_STOPPED.code) {
-    const stopped = await runs.findById(run.id);
-    return jsonResponse(report(move.kind, false, true, stopped?.stopReason ?? null, claimed.steps));
-  }
-
-  if (note !== null) await appendDriverNote(db, session.id, note);
-
-  if (outcome.ok) {
-    return jsonResponse(report(move.kind, true, false, null, claimed.steps));
-  }
-
-  /*
-   * A lost race is worth another tick; a refusal is an ending. The distinction is the endpoint's own
-   * code, never the status, because 409 covers both (`dispatch.ts` reads it).
-   */
-  if (outcome.retryable) {
-    return jsonResponse(report(move.kind, false, false, null, claimed.steps));
-  }
-
-  const reason = endingFor(outcome);
-  await stopRun(db, session, run.id, reason, t);
-
-  return jsonResponse(report(move.kind, false, true, reason, claimed.steps));
 }
 
 function report(

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   countSeedWords,
+  MAX_FRUITLESS_ASKS,
   MAX_IDLE_STEPS,
   MIN_SEED_WORDS,
   nextMove,
@@ -31,6 +32,7 @@ const at = (over: Partial<AutonomousSituation> = {}): AutonomousSituation => ({
   steps: 0,
   stepBudget: 200,
   idleSteps: 0,
+  fruitlessAsks: 0,
   ...over,
 });
 
@@ -68,6 +70,25 @@ describe('the endings, which are checked before anything else', () => {
     expect(nextMove(at({ idleSteps: MAX_IDLE_STEPS - 1 }))).not.toEqual({
       kind: 'stop',
       reason: 'stalled',
+    });
+  });
+
+  /**
+   * Asked three times, drafted nothing three times (task 170).
+   *
+   * The ending is `needs-unanswered` and not `stalled`, and the difference is the whole point: the
+   * driver was not walking in circles, it was asking honestly and being given nothing — which is the
+   * fallback panel's state, where a person supplies what the model could not extract.
+   */
+  it('an interviewer that keeps drafting nothing ends the run, naming what is missing', () => {
+    const asking = { asking: true, canAskMore: true, target: null };
+
+    expect(nextMove(at({ ...asking, fruitlessAsks: MAX_FRUITLESS_ASKS }))).toEqual({
+      kind: 'stop',
+      reason: 'needs-unanswered',
+    });
+    expect(nextMove(at({ ...asking, fruitlessAsks: MAX_FRUITLESS_ASKS - 1 }))).toEqual({
+      kind: 'ask-round',
     });
   });
 });

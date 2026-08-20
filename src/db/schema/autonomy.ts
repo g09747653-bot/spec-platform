@@ -10,7 +10,11 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-import { AUTONOMOUS_RUN_STATUSES, AUTONOMOUS_STOP_REASONS } from '@/modules/projects/autonomy';
+import {
+  AUTONOMOUS_RUN_STATUSES,
+  AUTONOMOUS_STEP_OUTCOMES,
+  AUTONOMOUS_STOP_REASONS,
+} from '@/modules/projects/autonomy';
 
 import { sessions } from './projects';
 
@@ -59,6 +63,38 @@ export const autonomousRuns = pgTable(
     idleSteps: integer('idle_steps').notNull().default(0),
     /** A digest of the session state the last step observed; null before the first step. */
     fingerprint: text('fingerprint'),
+    /**
+     * How the last claimed step ended — and **null means it never ended** (task 170).
+     *
+     * Written as `NULL` by the claim and settled by the step on its way out, so a process killed
+     * mid-move leaves the one shape nothing else can produce: a step that was counted and whose
+     * outcome nobody ever wrote. That is what tells «my last move landed and the session did not
+     * budge» — a loop — from «my last move never happened» — a restart. Without the distinction a
+     * stack restart *spends* an idle slot, and the M15а walk measured the price: both runs restarted
+     * mid-journey ended as `stalled`.
+     *
+     * Three settled values rather than a boolean, because the loop detector treats them differently
+     * and a boolean would have made that difference live in the reader's head:
+     *
+     * - `landed` — the move went through. Idleness after this one is a real loop.
+     * - `refused` — an endpoint said no in a way worth another tick (a lost version race). Bounded
+     *   by idleness, as it has always been.
+     * - `fruitless-ask` — the interviewer produced no round. Bounded by `fruitless_asks` below and
+     *   deliberately *not* by idleness.
+     */
+    stepOutcome: text('step_outcome'),
+    /**
+     * Consecutive `ask-round` moves that came back with no round (task 170).
+     *
+     * Its own counter, because it is its own event. An interviewer that answers «nothing worth
+     * asking» has not moved the session — but neither has it walked in a circle: the model is asked
+     * again and may answer differently, which is precisely what a person does by pressing the button
+     * a second time. Counting it as idleness capped the driver at two tries and ended the run with
+     * «I was going round in circles», which is not what happened; counting it here bounds the
+     * retrying honestly and ends with the reason that is true — the door needs an answered round and
+     * the interviewer is not producing one.
+     */
+    fruitlessAsks: integer('fruitless_asks').notNull().default(0),
     /** Optimistic concurrency, exactly as `workflow_state.version` (D-15). */
     version: integer('version').notNull().default(0),
     startedAt: timestamp('started_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
@@ -90,8 +126,13 @@ export const autonomousRuns = pgTable(
       sql`(${table.status} = 'stopped') = (${table.stopReason} IS NOT NULL)`,
     ),
     check(
+      'autonomous_runs_step_outcome_valid',
+      sql`${table.stepOutcome} IS NULL OR ${table.stepOutcome} IN (${list(AUTONOMOUS_STEP_OUTCOMES)})`,
+    ),
+    check(
       'autonomous_runs_counts_non_negative',
-      sql`${table.steps} >= 0 AND ${table.idleSteps} >= 0 AND ${table.version} >= 0`,
+      sql`${table.steps} >= 0 AND ${table.idleSteps} >= 0 AND ${table.fruitlessAsks} >= 0
+          AND ${table.version} >= 0`,
     ),
   ],
 );

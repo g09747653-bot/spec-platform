@@ -40,6 +40,15 @@ const StartLoop = z.object({
    * «until nothing is runnable», which is the ordinary autonomous case.
    */
   maxCycles: z.number().int().positive().max(1000).optional(),
+  /**
+   * Rewrite every assignment from scratch (task 172).
+   *
+   * **The confirmation is the value itself.** A boolean would be one keystroke away from a resume
+   * that silently replaced the brief every executor is working from, and a `confirm: true` beside it
+   * would be two fields nobody reads. Typing the phrase is the act of confirming; nothing else is
+   * accepted, and the intake still refuses while any task is in progress or frozen.
+   */
+  regenerate: z.literal('rewrite-all-assignments').optional(),
 });
 
 export async function POST(request: Request): Promise<Response> {
@@ -101,6 +110,7 @@ export async function POST(request: Request): Promise<Response> {
         ...(parsed.data.projectTitle === undefined
           ? {}
           : { projectTitle: parsed.data.projectTitle }),
+        ...(parsed.data.regenerate === undefined ? {} : { regenerate: true }),
       },
       { database, logger, chain: chain.providers.length === 0 ? null : chain },
     );
@@ -145,6 +155,8 @@ export async function POST(request: Request): Promise<Response> {
     milestones: intake.milestones,
     tasks: intake.tasks.length,
     writtenByModel: intake.writtenByModel,
+    keptFromDisk: intake.keptFromDisk,
+    regenerated: intake.regenerated,
     degradations: intake.degradations,
   });
 }

@@ -15,6 +15,32 @@ import type { LlmProvider, LlmProviderId, LlmRequest } from './types.ts';
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 
+/**
+ * The model each vendor answers with when the configuration names none (task 172).
+ *
+ * **Defaults are load-bearing and they rot.** `gemini-2.5-flash` stood here until the M15а gate
+ * measured it on a clean machine: 404, «no longer available to new users», with the vendor naming
+ * `gemini-3.6-flash` as its successor. The walk survived by overriding the model in `.env` — which
+ * means the mine stayed armed for the next machine that had no override, and «works here» is exactly
+ * the property a default must not have.
+ *
+ * The replacement is `gemini-3.5-flash` rather than the successor the 404 named, and the platform's
+ * own `adapters/llm/providers.ts` is why: probing the same account, `3.6-flash` is the newest that
+ * answers and also the one that *sometimes* does not — «currently experiencing high demand» on one
+ * probe, and past the per-provider timeout on a live generation — while `3.5-flash` completed every
+ * attempt. Two packages on one machine now name one model, which is one fact to re-measure instead
+ * of two to keep in step.
+ *
+ * They are together, and named, so that checking them is one act rather than four greps. Every one
+ * is overridden by its `LOOP_*_MODEL` variable; nothing downstream may hard-code a model id.
+ */
+export const DEFAULT_MODELS = {
+  anthropic: 'claude-sonnet-4-5',
+  openai: 'gpt-4.1-mini',
+  google: 'gemini-3.5-flash',
+  ollama: 'qwen3:8b',
+} as const;
+
 export interface ProviderCredentials {
   anthropicApiKey?: string | undefined;
   anthropicModel?: string | undefined;
@@ -197,7 +223,7 @@ export function buildProviders(
       built.push(
         anthropic(
           credentials.anthropicApiKey,
-          credentials.anthropicModel ?? 'claude-sonnet-4-5',
+          credentials.anthropicModel ?? DEFAULT_MODELS.anthropic,
           timeoutMs,
         ),
       );
@@ -209,7 +235,7 @@ export function buildProviders(
           'openai',
           'https://api.openai.com/v1',
           credentials.openaiApiKey,
-          credentials.openaiModel ?? 'gpt-4.1-mini',
+          credentials.openaiModel ?? DEFAULT_MODELS.openai,
           timeoutMs,
         ),
       );
@@ -217,7 +243,11 @@ export function buildProviders(
 
     if (id === 'google' && credentials.googleApiKey !== undefined) {
       built.push(
-        google(credentials.googleApiKey, credentials.googleModel ?? 'gemini-2.5-flash', timeoutMs),
+        google(
+          credentials.googleApiKey,
+          credentials.googleModel ?? DEFAULT_MODELS.google,
+          timeoutMs,
+        ),
       );
     }
 
@@ -227,7 +257,7 @@ export function buildProviders(
           'ollama',
           credentials.localApiBase,
           undefined,
-          credentials.localModel ?? 'qwen3:8b',
+          credentials.localModel ?? DEFAULT_MODELS.ollama,
           timeoutMs,
         ),
       );

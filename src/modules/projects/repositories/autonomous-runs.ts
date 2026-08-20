@@ -6,8 +6,10 @@ import { autonomousRuns } from '@/db/schema';
 import { queryRows } from '@/db/sql';
 import {
   AUTONOMOUS_RUN_STATUSES,
+  AUTONOMOUS_STEP_OUTCOMES,
   AUTONOMOUS_STOP_REASONS,
   type AutonomousRunStatus,
+  type AutonomousStepOutcome,
   type AutonomousStopReason,
 } from '../autonomy';
 
@@ -31,6 +33,10 @@ export interface AutonomousRun {
   steps: number;
   idleSteps: number;
   fingerprint: string | null;
+  /** How the last claimed step ended; `null` when it never ended (task 170). */
+  stepOutcome: AutonomousStepOutcome | null;
+  /** Consecutive asks that produced no round (task 170). */
+  fruitlessAsks: number;
   version: number;
   startedAt: Date;
   endedAt: Date | null;
@@ -44,6 +50,8 @@ const RunRow = z.object({
   steps: z.coerce.number().int(),
   idle_steps: z.coerce.number().int(),
   fingerprint: z.string().nullable(),
+  step_outcome: z.enum(AUTONOMOUS_STEP_OUTCOMES).nullable(),
+  fruitless_asks: z.coerce.number().int(),
   version: z.coerce.number().int(),
   started_at: z.coerce.date(),
   ended_at: z.coerce.date().nullable(),
@@ -57,12 +65,14 @@ const toRun = (row: z.infer<typeof RunRow>): AutonomousRun => ({
   steps: row.steps,
   idleSteps: row.idle_steps,
   fingerprint: row.fingerprint,
+  stepOutcome: row.step_outcome,
+  fruitlessAsks: row.fruitless_asks,
   version: row.version,
   startedAt: row.started_at,
   endedAt: row.ended_at,
 });
 
-const COLUMNS = sql`id, session_id, status, stop_reason, steps, idle_steps, fingerprint, version, started_at, ended_at`;
+const COLUMNS = sql`id, session_id, status, stop_reason, steps, idle_steps, fingerprint, step_outcome, fruitless_asks, version, started_at, ended_at`;
 
 export function createAutonomousRunRepository(db: SchemaDatabase) {
   return {
@@ -135,6 +145,11 @@ export function createAutonomousRunRepository(db: SchemaDatabase) {
      * The counters move together because they are one observation: a step happened, and the session
      * either looks different afterwards or it does not. Splitting them into two writes would let a
      * crash between them leave a run that has taken a step it will never count as idle.
+     *
+     * `step_outcome` is cleared to `NULL` here and written by `settleStep` on the way out, so the
+     * claim is a **promise to move** rather than a record of having moved (task 170). A process that
+     * dies between the two leaves the promise unkept, and the next boot can see that it was — which
+     * is the whole of the difference between a restart and a loop.
      */
     async recordStep(input: {
       runId: string;
@@ -149,6 +164,7 @@ export function createAutonomousRunRepository(db: SchemaDatabase) {
           SET steps = steps + 1,
               idle_steps = ${input.idleSteps},
               fingerprint = ${input.fingerprint},
+              step_outcome = NULL,
               version = version + 1
           WHERE id = ${input.runId}::uuid
             AND status = 'running'
@@ -160,6 +176,27 @@ export function createAutonomousRunRepository(db: SchemaDatabase) {
 
       const row = rows[0];
       return row === undefined ? null : toRun(row);
+    },
+
+    /**
+     * Closes the claim the step opened: this is how the move ended (task 170).
+     *
+     * **Unversioned, and on purpose.** The row it writes is the one this step already claimed, and
+     * the only thing that can have moved the version in between is a Stop — whose ending is
+     * authoritative and which this write does not touch. Guarding it would mean a step losing that
+     * race leaves its own claim unsettled, and the next run would read the restart's shape from a
+     * process that is very much alive.
+     *
+     * `fruitless-ask` is counted consecutively and cleared by every other outcome, so the ceiling
+     * reads «this many tries in a row», not «this many in the run».
+     */
+    async settleStep(runId: string, outcome: AutonomousStepOutcome): Promise<void> {
+      await db.execute(sql`
+        UPDATE ${autonomousRuns}
+        SET step_outcome = ${outcome},
+            fruitless_asks = ${outcome === 'fruitless-ask' ? sql`fruitless_asks + 1` : sql`0`}
+        WHERE id = ${runId}::uuid
+      `);
     },
 
     /**

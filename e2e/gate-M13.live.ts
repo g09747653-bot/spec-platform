@@ -6,6 +6,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import pg from 'pg';
 
+import { unexpectedConsole } from './fixtures/console-noise.ts';
+
 /**
  * **The M13п gate, walked by the executor** (task 146; А-2.1).
  *
@@ -107,18 +109,6 @@ function measure(line: string): void {
   console.log(`[${stamp()}] · ${line}`);
   measurements.push(`- ${line}`);
 }
-
-/**
- * Console noise a browser makes that is not the product's fault. Kept deliberately short — an
- * allow-list that grows is a console check that has stopped working.
- */
-const EXPECTED_CONSOLE = [
-  /Failed to load resource/i,
-  /net::ERR_ABORTED/i,
-  /The user aborted a request/i,
-  /Failed to fetch/i,
-  /NS_BINDING_ABORTED/i,
-];
 
 /* ------------------------------------------------------------------ sign-in and data */
 
@@ -541,9 +531,13 @@ try {
 
 const list = (lines: readonly string[]) => (lines.length === 0 ? '_None._' : lines.join('\n'));
 
-const unexpectedConsole = consoleErrors.filter(
-  (line) => !EXPECTED_CONSOLE.some((pattern) => pattern.test(line)),
-);
+/*
+ * The one dictionary of browser noise, read from `e2e/fixtures/console-noise.ts` (task 173).
+ *
+ * It was copied into this file and three other walks; D-276 fixed the copy that runs in CI and left
+ * the rest stale, which is a fix waiting to be undone by whoever reads the wrong one next.
+ */
+const unexpected = unexpectedConsole(consoleErrors);
 
 function readLog(path: string): string {
   try {
@@ -570,7 +564,7 @@ const red =
   problems.length > 0 ||
   truncations.length > 0 ||
   structuralRejections.length > 0 ||
-  unexpectedConsole.length > 0;
+  unexpected.length > 0;
 
 mkdirSync(OUT, { recursive: true });
 
@@ -582,7 +576,7 @@ Walked ${new Date(startedAt).toISOString()} against \`${BASE_URL}\`, live provid
 
 **Verdict: ${red ? 'RED' : 'GREEN'}** — ${String(problems.length)} problem(s), ${String(step)} state(s) captured, ${String(
     consoleErrors.length,
-  )} console record(s) of which ${String(unexpectedConsole.length)} unexpected.
+  )} console record(s) of which ${String(unexpected.length)} unexpected.
 
 ## Problems
 
@@ -630,7 +624,7 @@ ${list(packingRecords)}
 
 ## Console
 
-${list(unexpectedConsole)}
+${list(unexpected)}
 
 ## Transcript
 

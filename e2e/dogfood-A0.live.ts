@@ -7,6 +7,8 @@ import { chromium, type Browser, type BrowserContext, type Page } from '@playwri
 import { unzipSync } from 'fflate';
 import pg from 'pg';
 
+import { unexpectedConsole } from './fixtures/console-noise.ts';
+
 /**
  * **Программа А, шаг 0 — dogfooding** (START_HERE 2026-08-19): the product autonomously writes the
  * specification bundle of its own next stage, and this walk only watches it happen.
@@ -115,18 +117,6 @@ function measure(line: string): void {
   console.log(`[${stamp()}] · ${line}`);
   measurements.push(`- ${line}`);
 }
-
-/**
- * Console noise a browser makes that is not the product's fault. Kept deliberately short — an
- * allow-list that grows is a console check that has stopped working.
- */
-const EXPECTED_CONSOLE = [
-  /Failed to load resource/i,
-  /net::ERR_ABORTED/i,
-  /The user aborted a request/i,
-  /Failed to fetch/i,
-  /NS_BINDING_ABORTED/i,
-];
 
 /* ------------------------------------------------------------------ sign-in and data */
 
@@ -555,9 +545,13 @@ try {
 
 const list = (lines: readonly string[]) => (lines.length === 0 ? '_None._' : lines.join('\n'));
 
-const unexpectedConsole = consoleErrors.filter(
-  (line) => !EXPECTED_CONSOLE.some((pattern) => pattern.test(line)),
-);
+/*
+ * The one dictionary of browser noise, read from `e2e/fixtures/console-noise.ts` (task 173).
+ *
+ * It was copied into this file and three other walks; D-276 fixed the copy that runs in CI and left
+ * the rest stale, which is a fix waiting to be undone by whoever reads the wrong one next.
+ */
+const unexpected = unexpectedConsole(consoleErrors);
 
 function readLog(path: string): string {
   try {
@@ -588,7 +582,7 @@ const red =
   problems.length > 0 ||
   truncations.length > 0 ||
   structuralRejections.length > 0 ||
-  unexpectedConsole.length > 0;
+  unexpected.length > 0;
 
 mkdirSync(OUT, { recursive: true });
 
@@ -601,7 +595,7 @@ database. Сессия: MySpec greenfield · профиль «техническ
 режим; seed Программы А дословно из START_HERE (${String(SEED.trim().split(/\s+/u).length)} слов), русский интерфейс.
 
 **Verdict (здоровье прогулки): ${red ? 'RED' : 'GREEN'}** — ${String(problems.length)} problem(s), ${String(step)} state(s)
-captured, ${String(consoleErrors.length)} console record(s) of which ${String(unexpectedConsole.length)} unexpected.
+captured, ${String(consoleErrors.length)} console record(s) of which ${String(unexpected.length)} unexpected.
 
 Clicks after the session was created: **0** by construction — the count is asserted in code; the
 export below is a cookie-authenticated \`GET\` of the same endpoint the download button calls.
@@ -652,7 +646,7 @@ ${list(packingRecords)}
 
 ## Console
 
-${list(unexpectedConsole)}
+${list(unexpected)}
 
 ## Transcript
 

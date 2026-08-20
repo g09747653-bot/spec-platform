@@ -134,37 +134,62 @@ export function writeHandoff(
 
   const taskPaths = tasks.map((task) => {
     const path = join(projectDirectory, HANDOFF.tasks, taskFileName(task.taskId));
-    const existing = statusOnDisk(path);
 
-    /*
-     * **A re-intake refreshes an assignment; it never undoes progress.**
-     *
-     * Every assignment is built with `status: 'PENDING'` — that is what a *new* one is. Writing that
-     * over an existing file would reset a `COMPLETED` task to pending on the disk that is the source
-     * of truth, and the next boot's recovery would read it back and redo work that was already
-     * accepted. Intake is deliberately idempotent (it runs again on every resume), and this is the
-     * one field for which "idempotent" means keeping what is there rather than writing what is new.
-     */
-    writeFileSync(
-      path,
-      serialize(HandoffTask.parse(existing === null ? task : { ...task, status: existing })),
-      'utf8',
-    );
+    writeFileSync(path, serialize(mergeWithDisk(readTaskFile(path), task)), 'utf8');
     return path;
   });
 
   return { projectDirectory, milestonesPath, taskPaths };
 }
 
-/** The status an assignment already carries on disk, or null when it is new or unreadable. */
-function statusOnDisk(path: string): HandoffTask['status'] | null {
+/** The assignment already on disk, or null when it is new or unreadable. */
+export function readTaskFile(path: string): HandoffTask | null {
   if (!existsSync(path)) return null;
 
   try {
-    return HandoffTask.parse(JSON.parse(readFileSync(path, 'utf8'))).status;
+    return HandoffTask.parse(JSON.parse(readFileSync(path, 'utf8')));
   } catch {
     return null;
   }
+}
+
+/**
+ * **A re-intake refreshes the plan; it never rewrites the work** (task 172; расширение D-261).
+ *
+ * Intake is deliberately idempotent — it runs again on every resume — and the question is what
+ * «idempotent» means for a file an executor may already be working from. The answer splits the
+ * assignment along the line `assignments.ts` already draws between what is *decided* and what is
+ * *written*:
+ *
+ * - **Written** — `title`, `description`, `filesToEdit`, the two test commands, and the `techStack`
+ *   the gate may have corrected on disk. Kept exactly as they stand. A resume that re-asked the
+ *   model would replace the brief an executor is holding with whatever the model says this minute —
+ *   or, once a free tier is spent, with the deterministic fallback, which is a *worse* assignment
+ *   than the one already there. D-261 closed this for `status`; the prose is the same defect wearing
+ *   a longer word.
+ * - **Decided** — `milestoneId`, `dependsOn`, `expectedArtifacts`, and `status`. Refreshed from the
+ *   new plan, because the slicing is code and the bundle may legitimately have re-sliced; `status`
+ *   is the one exception in the other direction and always comes off the disk (D-261).
+ *
+ * A field the disk does not carry is *filled in* rather than left empty — an assignment that gained
+ * a unit-test command since the last intake gets it.
+ *
+ * Rewriting the prose on purpose is still possible and is a different act: it wipes the whole tree
+ * and starts over (`regenerate` on the intake), which refuses while a task is in progress.
+ */
+export function mergeWithDisk(existing: HandoffTask | null, fresh: HandoffTask): HandoffTask {
+  if (existing === null) return HandoffTask.parse(fresh);
+
+  return HandoffTask.parse({
+    ...fresh,
+    title: existing.title,
+    description: existing.description,
+    filesToEdit: existing.filesToEdit,
+    techStack: existing.techStack,
+    status: existing.status,
+    ...(existing.unitTestCmd === undefined ? {} : { unitTestCmd: existing.unitTestCmd }),
+    ...(existing.e2eTestCmd === undefined ? {} : { e2eTestCmd: existing.e2eTestCmd }),
+  });
 }
 
 /**

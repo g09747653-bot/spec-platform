@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -168,6 +169,130 @@ describe('the M14а gate bundle, intaken for real (task 156 AC-1)', () => {
         ),
       ).status,
     ).toBe('PENDING');
+  });
+
+  /**
+   * The same rule, applied to the prose (task 172; расширение D-261).
+   *
+   * A resume re-runs the intake, and until now that re-asked the model for every assignment and
+   * wrote whatever came back over the file an executor might already be holding. Two costs, and the
+   * second is the serious one: a free tier spent on nineteen calls that changed nothing, and a brief
+   * *downgraded* — once the quota is gone the answer is the deterministic fallback, which is thinner
+   * than the text it replaced.
+   */
+  it('keeps the prose of an assignment that already exists, and asks no model for it', async () => {
+    const first = await run(
+      stubChain(
+        JSON.stringify({
+          description: 'Первая формулировка, по ней исполнитель и работает.',
+          filesToEdit: ['src/first.ts'],
+          unitTestCmd: 'npm test',
+        }),
+      ),
+    );
+
+    const second = await run(
+      stubChain(
+        JSON.stringify({
+          description: 'Вторая формулировка — модель передумала.',
+          filesToEdit: ['src/second.ts'],
+        }),
+      ),
+    );
+
+    expect(second.keptFromDisk, 'every assignment was already on disk').toBe(16);
+    expect(second.writtenByModel, 'no model call was made at all').toBe(0);
+
+    const path = join(
+      directory,
+      'project',
+      'handoff',
+      'tasks',
+      `task_${first.tasks[0]?.taskId ?? ''}.json`,
+    );
+    const onDisk = HandoffTask.parse(JSON.parse(readFileSync(path, 'utf8')));
+
+    expect(onDisk.description).toBe('Первая формулировка, по ней исполнитель и работает.');
+    expect(onDisk.filesToEdit).toEqual(['src/first.ts']);
+    expect(onDisk.unitTestCmd).toBe('npm test');
+  });
+
+  it('leaves the bytes of the tree untouched on a second intake', async () => {
+    await run(stubChain(JSON.stringify({ description: 'Раз', filesToEdit: ['a.ts'] })));
+
+    const tasksDirectory = join(directory, 'project', 'handoff', 'tasks');
+    const before = readdirSync(tasksDirectory)
+      .sort()
+      .map((name) => [name, readFileSync(join(tasksDirectory, name), 'utf8')] as const);
+
+    await run(stubChain(JSON.stringify({ description: 'Два', filesToEdit: ['b.ts'] })));
+
+    const after = readdirSync(tasksDirectory)
+      .sort()
+      .map((name) => [name, readFileSync(join(tasksDirectory, name), 'utf8')] as const);
+
+    expect(after).toEqual(before);
+  });
+
+  /**
+   * Rewriting on purpose is a different act, and it says its own name to ask for it.
+   */
+  it('regenerates the whole tree when the operator asks in so many words', async () => {
+    const first = await run(
+      stubChain(JSON.stringify({ description: 'Раз', filesToEdit: ['a.ts'] })),
+    );
+
+    const regenerated = await intakeBundle(
+      {
+        projectDirectory: join(directory, 'project'),
+        projectTitle: 'Гейтовый бандл',
+        regenerate: true,
+      },
+      {
+        database,
+        logger: createLogger(database),
+        chain: stubChain(JSON.stringify({ description: 'Два', filesToEdit: ['b.ts'] })),
+      },
+    );
+
+    expect(regenerated.regenerated).toBe(true);
+    expect(regenerated.keptFromDisk).toBe(0);
+    expect(regenerated.writtenByModel).toBe(16);
+
+    const path = join(
+      directory,
+      'project',
+      'handoff',
+      'tasks',
+      `task_${first.tasks[0]?.taskId ?? ''}.json`,
+    );
+    expect(HandoffTask.parse(JSON.parse(readFileSync(path, 'utf8'))).description).toBe('Два');
+  });
+
+  it('refuses to regenerate while a task is in somebody’s hands', async () => {
+    const first = await run(
+      stubChain(JSON.stringify({ description: 'Раз', filesToEdit: ['a.ts'] })),
+    );
+
+    const held = first.tasks[2]?.taskId ?? '';
+    const path = join(directory, 'project', 'handoff', 'tasks', `task_${held}.json`);
+    const task = HandoffTask.parse(JSON.parse(readFileSync(path, 'utf8')));
+    writeFileSync(
+      path,
+      `${JSON.stringify(HandoffTask.parse({ ...task, status: 'IN_PROGRESS' }), null, 2)}\n`,
+      'utf8',
+    );
+
+    await expect(
+      intakeBundle(
+        { projectDirectory: join(directory, 'project'), regenerate: true },
+        { database, logger: createLogger(database), chain: null },
+      ),
+    ).rejects.toBeInstanceOf(IntakeRefused);
+
+    // Nothing was thrown away: the refusal is total, not partial.
+    expect(HandoffTask.parse(JSON.parse(readFileSync(path, 'utf8'))).description).toBe('Раз');
+    expect(readdirSync(join(directory, 'project', 'handoff', 'tasks'))).toHaveLength(17);
   });
 });
 

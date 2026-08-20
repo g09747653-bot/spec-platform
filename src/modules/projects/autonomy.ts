@@ -61,6 +61,24 @@ export const AUTONOMOUS_STOP_REASONS = [
 
 export type AutonomousStopReason = (typeof AUTONOMOUS_STOP_REASONS)[number];
 
+/**
+ * How one claimed step ended (task 170).
+ *
+ * A step claims its turn *before* it moves, so the claim on its own says nothing about what
+ * happened next. This is what says it, and the absence of a value is a value too: a row still
+ * carrying `null` is a step whose process died before it could write one.
+ *
+ * - `landed` — the move went through and the session is somewhere new.
+ * - `refused` — an endpoint said no in a way worth another tick (a lost version race, never a gate).
+ * - `fruitless-ask` — the driver asked for a round and the interviewer produced none. Neither a
+ *   landing nor a loop: the model may answer differently next time, exactly as it may for a person
+ *   pressing the button again, so this ending is bounded by its own budget rather than by the loop
+ *   detector (see `MAX_FRUITLESS_ASKS`).
+ */
+export const AUTONOMOUS_STEP_OUTCOMES = ['landed', 'refused', 'fruitless-ask'] as const;
+
+export type AutonomousStepOutcome = (typeof AUTONOMOUS_STEP_OUTCOMES)[number];
+
 export function isAutonomousStopReason(value: string): value is AutonomousStopReason {
   return (AUTONOMOUS_STOP_REASONS as readonly string[]).includes(value);
 }

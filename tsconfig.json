@@ -19,6 +19,14 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
+    /*
+     * A relative import may carry its `.ts` extension — the same permission `loop/tsconfig.json`
+     * grants, for the same reason (task 173). The hand-run walks under `e2e/` are executed by bare
+     * `node`, which strips types but does no extension resolution, so the one module they now share
+     * has to be named with its extension. Everything the bundler compiles keeps the extensionless
+     * house style; this option permits, it does not require.
+     */
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "incremental": true,
     "types": [

@@ -141,6 +141,13 @@
       "when": 1787152778036,
       "tag": "0019_machine_export_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1787239233926,
+      "tag": "0020_driver_step_settlement",
+      "breakpoints": true
     }
   ]
 }
