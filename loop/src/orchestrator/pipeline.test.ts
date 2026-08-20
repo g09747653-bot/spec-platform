@@ -418,8 +418,35 @@ describe('красный CI: the whole orchestration stops (task 160)', () => {
     expect(lifted.requeued, 'the red task is re-checked from the top').toContain('1');
     expect(engine.pausedNames()).toEqual([]);
 
+    /*
+     * **Every** red task is re-queued, not only the one the marker names (task 160, найдено
+     * репетицией гейта 163). One planted failing test froze the pipeline and two tasks came back
+     * red from it — the second's acceptance had already copied the workspace — and re-queueing one
+     * of them left the other permanently FAILED with its milestone unable to complete.
+     */
+    database.prepare("UPDATE tasks SET status = 'FAILED' WHERE task_id = '3'").run();
+    const second = await liftFreezeAgain();
+    expect(second.requeued, 'a red task nobody named is still a red task').toContain('3');
+
     for (const stop of release.values()) stop();
     await driving;
+
+    /** Freezes and lifts again, so the second lift has a marker to read. */
+    async function liftFreezeAgain() {
+      await freezePipeline(database, engine, {
+        projectId: PROJECT,
+        projectDirectory,
+        taskId: '1',
+        reason: 'вторая заморозка репетиции',
+        inFlight: [],
+      });
+
+      return liftFreeze(database, engine, {
+        projectId: PROJECT,
+        projectDirectory,
+        stillAwaited: [],
+      });
+    }
   }, 30_000);
 
   it('a frozen pipeline stays frozen across a restart, and only retry lifts it', async () => {
@@ -471,6 +498,7 @@ describe('красный CI: the whole orchestration stops (task 160)', () => {
 
     expect(lifted.resumed).toEqual([]);
     expect(lifted.requeued.sort()).toEqual(['1', '2']);
+    expect(statusOnDisk('1'), 'the red task goes round again').toBe('PENDING');
     expect(isFrozen(projectDirectory)).toBe(false);
     expect(statusOnDisk('2')).toBe('PENDING');
     expect(readBoard(database, PROJECT)?.status).toBe('ACTIVE');

@@ -238,17 +238,38 @@ export async function liftFreeze(
     });
   }
 
-  const recheck = input.recheck ?? record?.taskId;
-  if (recheck !== undefined && !resumed.includes(recheck)) {
-    setTaskStatusOnDisk(input.projectDirectory, recheck, 'PENDING');
-    database.prepare('UPDATE tasks SET status = ? WHERE task_id = ?').run('PENDING', recheck);
+  /*
+   * **Every red task goes round again, not only the one named on the marker** (task 160).
+   *
+   * The rehearsal of gate 163 is why this is a set rather than a single id. One planted failing test
+   * froze the pipeline, and *two* tasks came back red from it — the second's acceptance had already
+   * copied the workspace when the first froze everything. Re-queueing only the marker's task left the
+   * other permanently `FAILED`, its milestone permanently incomplete, and the whole plan quietly
+   * unable to continue: the pipeline ran out of runnable work and stopped with fifteen tasks pending
+   * for ever.
+   *
+   * «Красная задача перепроверяется заново» therefore reads as it must once a freeze can catch more
+   * than one red: retry is the operator saying «I have read this — try again», and what they are
+   * looking at is every red the freeze produced.
+   */
+  const red = new Set<string>([
+    ...(input.recheck === undefined ? [] : [input.recheck]),
+    ...(record?.taskId === undefined ? [] : [record.taskId]),
+    ...tasksInStatus(database, input.projectId, 'FAILED').map((task) => task.taskId),
+  ]);
+
+  for (const taskId of red) {
+    if (resumed.includes(taskId)) continue;
+
+    setTaskStatusOnDisk(input.projectDirectory, taskId, 'PENDING');
+    database.prepare('UPDATE tasks SET status = ? WHERE task_id = ?').run('PENDING', taskId);
     eventBus().publish({
       type: 'task-status',
       projectId: input.projectId,
-      taskId: recheck,
+      taskId,
       status: 'PENDING',
     });
-    if (!requeued.includes(recheck)) requeued.push(recheck);
+    if (!requeued.includes(taskId)) requeued.push(taskId);
   }
 
   markProject(database, input.projectId, 'ACTIVE');

@@ -663,14 +663,30 @@ export async function driveProject(
     }
 
     /*
-     * Nothing runnable and nothing running. If the plan is finished, the project row says so —
-     * otherwise it is left alone, because «not finished» has many shapes (a block, a spent
-     * `maxCycles`, a milestone whose dependency failed) and the feed has already named which.
+     * Nothing runnable and nothing running — and the pipeline says which of the two endings this is.
+     *
+     * A quiet return was the shape the gate rehearsal found hardest to read: two tasks red, their
+     * milestone unable to complete, fifteen tasks pending, and a log that simply stopped. «Not
+     * finished» has several shapes and the operator needs the one that happened, in a line, at the
+     * bottom of the feed they are already looking at.
      */
     const plan = readPlan(database, projectId);
-    if (plan.tasks.length > 0 && plan.tasks.every((task) => task.status === 'COMPLETED')) {
+    const count = (status: string) => plan.tasks.filter((task) => task.status === status).length;
+
+    if (plan.tasks.length > 0 && count('COMPLETED') === plan.tasks.length) {
       markProject(database, projectId, 'COMPLETED');
       say(`Проект завершён: принято задач ${String(plan.tasks.length)}.`);
+    } else {
+      say(
+        `Конвейер остановился: принято ${String(count('COMPLETED'))} из ` +
+          `${String(plan.tasks.length)}; красных ${String(count('FAILED'))}, ` +
+          `заблокированных ${String(count('BLOCKED'))}, приостановленных ${String(count('PAUSED'))}, ` +
+          `ожидают ${String(count('PENDING'))}. ` +
+          (count('FAILED') > 0
+            ? 'Красные задачи держат свои вехи — «Возобновить» отправит их на повторный прогон.'
+            : 'Запускать больше нечего.'),
+        count('FAILED') > 0 ? 'WARN' : 'INFO',
+      );
     }
 
     return results;

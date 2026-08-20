@@ -319,7 +319,10 @@ const countIn = (board: BoardSnapshot, status: string) =>
 
 interface ParallelSample {
   at: number;
+  /** Tasks the board shows as in progress — a cycle, which may be an executor or an acceptance. */
   inProgress: number;
+  /** Executor containers the daemon has running. This is the milestone's own number. */
+  executors: number;
   paused: number;
   completed: number;
   taskIds: string[];
@@ -337,11 +340,18 @@ function containerPaused(name: string): boolean | null {
   return inspected.stdout.trim() === 'true';
 }
 
-/** Executor containers the daemon currently has, by name. */
+/**
+ * Executor containers the daemon currently has, by name.
+ *
+ * **The parallelism claim is measured here and not on the board**, and the rehearsal is why: a task
+ * is `IN_PROGRESS` from the moment its cycle starts until its verdict, which includes the acceptance
+ * run — so three `IN_PROGRESS` tasks can be three *acceptances* with not a single executor alive.
+ * «Три одновременных исполнителя» is a statement about containers, so it is asked of the daemon.
+ */
 function executorContainers(): string[] {
   const listed = spawnSync(
     'docker',
-    ['ps', '-a', '--filter', 'name=delivery-executor-', '--format', '{{.Names}}'],
+    ['ps', '--filter', 'name=delivery-executor-', '--format', '{{.Names}}'],
     { encoding: 'utf8' },
   );
 
@@ -453,6 +463,7 @@ async function main(): Promise<void> {
   let projectId = '';
   let browser: Browser | null = null;
   let peakParallel = 0;
+  let peakInProgress = 0;
 
   buildLoop();
   const projectDirectory = prepareWorkspace();
@@ -479,18 +490,23 @@ async function main(): Promise<void> {
      * the artifact is a graph a person can read rather than forty thousand rows of the same number.
      */
     let sampledAt = 0;
+    let liveExecutors: string[] = [];
 
     const sample = async (): Promise<BoardSnapshot> => {
       const board = await readBoardSnapshot(page);
       const running = tasksOf(board).filter((task) => task.status === 'IN_PROGRESS');
 
-      peakParallel = Math.max(peakParallel, running.length);
-
+      /* `docker ps` is a process launch, so it is asked once a second rather than on every poll. */
       if (Date.now() - sampledAt >= 1_000) {
         sampledAt = Date.now();
+        liveExecutors = executorContainers();
+        peakParallel = Math.max(peakParallel, liveExecutors.length);
+        peakInProgress = Math.max(peakInProgress, running.length);
+
         samples.push({
           at: Math.round((Date.now() - started) / 1000),
           inProgress: running.length,
+          executors: liveExecutors.length,
           paused: countIn(board, 'PAUSED'),
           completed: countIn(board, 'COMPLETED'),
           taskIds: running.map((task) => task.taskId),
@@ -547,7 +563,10 @@ async function main(): Promise<void> {
     });
 
     if (peakParallel >= REQUIRED_PARALLEL) {
-      measure(`Фактическая параллель достигла ${String(peakParallel)} исполнителей одновременно.`);
+      measure(
+        `Фактическая параллель достигла ${String(peakParallel)} живых контейнеров-исполнителей ` +
+          `одновременно (задач в работе одновременно: ${String(peakInProgress)}).`,
+      );
       await shot(page, '03-параллель');
     }
 
@@ -557,9 +576,12 @@ async function main(): Promise<void> {
 
     const frozenMarker = join(projectDirectory, 'handoff', 'FROZEN.md');
     let frozenAt = 0;
+    /* What the daemon was running the last time anyone looked before the freeze. */
+    let executorsBeforeFreeze: string[] = [];
 
     await waitFor(async () => {
       await sample();
+      if (liveExecutors.length > 0) executorsBeforeFreeze = liveExecutors;
       if (!existsSync(frozenMarker)) return false;
       frozenAt = Date.now();
       return true;
@@ -568,22 +590,50 @@ async function main(): Promise<void> {
       verdict = 'RED';
     });
 
+    /*
+     * The planted test comes out **immediately**, before anything else is asserted: while it is
+     * there every acceptance that copies the workspace is red, and the gate is staging one red
+     * verdict, not a permanent one.
+     */
+    rmSync(join(projectDirectory, RED_TEST_PATH), { force: true });
+    note('Подложенный тест убран — красный был инсценирован ровно на одну приёмку.');
+
     if (frozenAt > 0) {
       /*
        * «Все контейнеры paused ≤1 с» — asked of the daemon, not of the loop's own board: the claim
        * is about what `docker pause` did, and the only witness that cannot be mistaken about it is
        * docker.
        */
+      /*
+       * The claim is about the containers that were **running when the freeze landed**, so the set
+       * is the one sampled just before it rather than whatever `docker ps` happens to show now: a
+       * container that finished on its own between the marker and this line was never frozen, and
+       * asserting over an empty list would pass vacuously.
+       */
       const paused: string[] = [];
-      let pausedWithinSecond = true;
+      const missed: string[] = [];
+      let pausedWithinSecond = executorsBeforeFreeze.length > 0;
+
+      if (executorsBeforeFreeze.length === 0) {
+        finding(
+          'Инсценированный красный пришёлся на момент, когда ни один исполнитель не работал — ' +
+            'доказательство паузы было бы пустым.',
+        );
+        verdict = 'RED';
+      }
 
       await waitFor(() => {
-        const running = executorContainers();
-        const states = running.map((name) => ({ name, paused: containerPaused(name) }));
         paused.length = 0;
-        paused.push(...states.filter((state) => state.paused === true).map((state) => state.name));
+        missed.length = 0;
 
-        return states.length > 0 && states.every((state) => state.paused !== false);
+        for (const name of executorsBeforeFreeze) {
+          const state = containerPaused(name);
+          /* `null` — the container is gone: it finished before the pause could reach it. */
+          if (state === true) paused.push(name);
+          else if (state === false) missed.push(name);
+        }
+
+        return missed.length === 0 && paused.length > 0;
       }, 5_000).catch(() => {
         pausedWithinSecond = false;
       });
@@ -592,12 +642,16 @@ async function main(): Promise<void> {
       if (took > 1_000) pausedWithinSecond = false;
 
       measure(
-        `Заморозка: контейнеров на паузе ${String(paused.length)} (${paused.join(', ') || '—'}), ` +
-          `через ${String(took)} мс после отметки на диске.`,
+        `Заморозка: работало исполнителей ${String(executorsBeforeFreeze.length)}, ` +
+          `на паузе ${String(paused.length)} (${paused.join(', ') || '—'}), ` +
+          `не встали ${String(missed.length)}, через ${String(took)} мс после отметки на диске.`,
       );
 
       if (!pausedWithinSecond) {
-        finding(`Контейнеры не встали на паузу за 1 с (заняло ${String(took)} мс).`);
+        finding(
+          `Контейнеры не встали на паузу за 1 с (заняло ${String(took)} мс, ` +
+            `не на паузе: ${missed.join(', ') || '—'}).`,
+        );
         verdict = 'RED';
       }
 
@@ -619,9 +673,29 @@ async function main(): Promise<void> {
       }
 
       // --- retry ---------------------------------------------------------------------------------
-      note('Убираем подложенный тест и жмём «Возобновить».');
-      rmSync(join(projectDirectory, RED_TEST_PATH), { force: true });
+      /*
+       * A person pressing «Возобновить» is looking at a board that has stopped moving. So does the
+       * walk: the acceptances that were already in flight when the freeze landed had copied the
+       * workspace *with* the planted test, and their verdicts arrive after it. Retrying before they
+       * do would resume a pipeline that is about to freeze again over a test that no longer exists.
+       */
+      note('Ждём, пока замороженный конвейер затихнет…');
+      await waitFor(async () => {
+        await sample();
+        return executorContainers().length === 0 && countIn(await sample(), 'IN_PROGRESS') === 0;
+      }, 900_000).catch(() => {
+        note('Конвейер не затих полностью — жмём «Возобновить» по тому, что есть.');
+      });
 
+      const frozenBoardNow = await sample();
+      measure(
+        `Перед возобновлением: красных ${String(countIn(frozenBoardNow, 'FAILED'))}, ` +
+          `приостановленных ${String(countIn(frozenBoardNow, 'PAUSED'))}, ` +
+          `принято ${String(countIn(frozenBoardNow, 'COMPLETED'))}.`,
+      );
+
+      note('Жмём «Возобновить».');
+      await page.reload();
       await page.getByTestId('retry-pipeline').click();
       await waitFor(async () => {
         await sample();
@@ -729,6 +803,7 @@ async function main(): Promise<void> {
         {
           maxExecutors: MAX_EXECUTORS,
           peakParallel,
+          peakInProgress,
           requiredParallel: REQUIRED_PARALLEL,
           samples,
           iterationSeconds: durations,
