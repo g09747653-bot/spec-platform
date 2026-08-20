@@ -156,6 +156,20 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
     },
   );
 
+  /*
+   * How long the iteration took, said out loud (task 163).
+   *
+   * The five-minute ceiling (`ITERATION_TIMEOUT_MS`) is a number nobody has data about yet: the M15а
+   * gate saw one live task finish in three minutes and a pre-flight in thirty-two seconds, which is
+   * two points. The Architect's verdict was «мерить, а не двигать» — so every iteration writes its
+   * own duration into the feed, and a gate can collect the distribution instead of arguing about the
+   * ceiling from two samples.
+   */
+  say(
+    `Итерация исполнителя: ${(executor.durationMs / 1000).toFixed(1)} с, исход ${executor.outcome}.`,
+    executor.outcome === 'TIMEOUT' ? 'WARN' : 'INFO',
+  );
+
   // 3. What it claims — recorded, shown, and deciding nothing.
   const read = readReport(projectDirectory, taskId);
   const reported = read.ok ? read.report : null;
