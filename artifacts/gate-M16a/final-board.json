@@ -12,101 +12,101 @@
     },
     {
       "title": "Веха 2",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "tasks": [
         {
-          "taskId": "12",
-          "status": "PENDING"
-        },
-        {
           "taskId": "2",
-          "status": "PENDING"
+          "status": "COMPLETED"
         },
         {
           "taskId": "7",
-          "status": "PENDING"
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "12",
+          "status": "COMPLETED"
         }
       ]
     },
     {
       "title": "Веха 3",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "tasks": [
         {
-          "taskId": "13",
-          "status": "PENDING"
-        },
-        {
           "taskId": "3",
-          "status": "PENDING"
+          "status": "COMPLETED"
         },
         {
           "taskId": "4",
-          "status": "PENDING"
+          "status": "COMPLETED"
         },
         {
           "taskId": "8",
-          "status": "PENDING"
+          "status": "COMPLETED"
         },
         {
           "taskId": "9",
-          "status": "PENDING"
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "13",
+          "status": "COMPLETED"
         }
       ]
     },
     {
       "title": "Веха 4",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "tasks": [
         {
-          "taskId": "10",
-          "status": "PENDING"
+          "taskId": "5",
+          "status": "COMPLETED"
         },
         {
-          "taskId": "5",
-          "status": "PENDING"
+          "taskId": "10",
+          "status": "COMPLETED"
         }
       ]
     },
     {
       "title": "Веха 5",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "tasks": [
         {
-          "taskId": "11",
-          "status": "PENDING"
+          "taskId": "6",
+          "status": "COMPLETED"
         },
         {
-          "taskId": "6",
-          "status": "PENDING"
+          "taskId": "11",
+          "status": "COMPLETED"
         }
       ]
     },
     {
       "title": "Веха 6",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "tasks": [
         {
           "taskId": "14",
-          "status": "PENDING"
+          "status": "COMPLETED"
         },
         {
           "taskId": "16",
-          "status": "PENDING"
+          "status": "COMPLETED"
         },
         {
           "taskId": "17",
-          "status": "PENDING"
+          "status": "COMPLETED"
         }
       ]
     },
     {
       "title": "Веха 7",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "tasks": [
         {
           "taskId": "15",
-          "status": "PENDING"
+          "status": "COMPLETED"
         }
       ]
     },
@@ -116,7 +116,7 @@
       "tasks": [
         {
           "taskId": "18",
-          "status": "PENDING"
+          "status": "FAILED"
         }
       ]
     },

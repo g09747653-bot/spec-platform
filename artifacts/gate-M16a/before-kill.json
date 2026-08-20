@@ -12,7 +12,7 @@
     },
     {
       "title": "Веха 2",
-      "status": "IN_PROGRESS",
+      "status": "PENDING",
       "tasks": [
         {
           "taskId": "2",
@@ -20,7 +20,7 @@
         },
         {
           "taskId": "7",
-          "status": "PENDING"
+          "status": "IN_PROGRESS"
         },
         {
           "taskId": "12",

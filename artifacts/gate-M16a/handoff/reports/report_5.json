@@ -1,0 +1,15 @@
+{
+  "reportId": "report_5",
+  "taskId": "5",
+  "projectId": "tekstovyy-kvest",
+  "executorId": "claude-agent",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 98,
+    "passed": 98,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "Проверка связности графа сцен выполняется отдельным шагом после успешной JSON Schema валидации",
+  "rationale": "Добавлена функция findGraphErrors в lib/validator.js, которая выполняется после validateAgainstSchema. Она проверяет: (1) что initialSceneId присутствует среди ключей scenes; (2) что каждый option.nextSceneId ссылается на существующий ключ scenes (иначе — ошибка с путем вида /scenes/<id>/options[<i>]/nextSceneId); (3) обходом в ширину (BFS) от initialSceneId по всем nextSceneId (без учета requiredState/setState, как и требовалось в задаче) находит недостижимые сцены и сообщает о них одним агрегированным сообщением со списком id. Запуск графовых проверок только после прохождения схемы выбран потому, что обход графа предполагает корректную форму scenes/options (массивы, строковые id), гарантированную уже пройденной JSON Schema; это также сохраняет существующий стиль модуля с ранними return и не меняет сигнатуру validateScenario. Добавлены юнит-тесты в test/validator.test.js на все три сценария (недостижимый initialSceneId, битый nextSceneId, недостижимая сцена, связный граф с циклом, и отдельно — что requiredState не влияет на связность)."
+}

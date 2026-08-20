@@ -1,6 +1,7 @@
 /* eslint-disable no-restricted-properties -- a hand-run walk, not application code: it takes its
    configuration from the environment because that is how a person points it at this machine. */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { DatabaseSync } from 'node:sqlite';
 import {
   cpSync,
   existsSync,
@@ -381,10 +382,21 @@ function startVramAudit(): void {
   vramStopFile = join(OUT, 'vram.stop');
   rmSync(vramStopFile, { force: true });
 
-  spawn(
+  /*
+   * `-ExecutionPolicy Bypass` for this one process, and `stdio` piped rather than ignored.
+   *
+   * Both are corrections from the first live run, where the audit produced nothing at all: Windows
+   * refuses to run an unsigned `.ps1` under the default policy, and `stdio: 'ignore'` swallowed the
+   * refusal — so the walk reported no peak and no reason. Bypassing per process changes nothing
+   * about the machine; hiding a subprocess's stderr is what made a broken measurement look like a
+   * measurement of nothing.
+   */
+  const monitor = spawn(
     'powershell',
     [
       '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
       '-File',
       join(LOOP_ROOT, 'scripts', 'vram_monitor.ps1'),
       '-Out',
@@ -392,8 +404,15 @@ function startVramAudit(): void {
       '-StopFile',
       vramStopFile,
     ],
-    { detached: false, stdio: 'ignore' },
+    { detached: false, stdio: ['ignore', 'pipe', 'pipe'] },
   );
+
+  monitor.stderr.on('data', (chunk: Buffer) => {
+    finding(`Аудит VRAM ругается: ${chunk.toString('utf8').trim().slice(0, 200)}`);
+  });
+  monitor.on('error', (error) => {
+    finding(`Аудит VRAM не запустился: ${error.message}`);
+  });
 
   note('Аудит VRAM запущен параллельно прогону (шаг 500 мс, порог 12288 МБ).');
 }
@@ -407,19 +426,54 @@ function stopVramAudit(): void {
 
 /* ------------------------------------------------------------------ measurements out of the feed */
 
+/**
+ * The loop's own log, read from its database once the server has stopped.
+ *
+ * **Not the page's feed**, and the first live run is why: the dashboard holds a tail of two hundred
+ * lines and starts a new one after every restart, so the «distribution of iteration durations» it
+ * produced was four samples out of twenty-six. The measurement the Architect asked for is about the
+ * whole run, and the whole run is in `agent_logs`.
+ */
+function loopLog(): string[] {
+  const path = join(WORKSPACE, '.loop', 'loop.db');
+  if (!existsSync(path)) return [];
+
+  const database = new DatabaseSync(path, { readOnly: true });
+
+  try {
+    return database
+      .prepare('SELECT message FROM agent_logs ORDER BY log_id')
+      .all()
+      .map((row) => String((row as { message: unknown }).message));
+  } catch {
+    return [];
+  } finally {
+    database.close();
+  }
+}
+
 /** Every iteration duration the cycle announced, in seconds. */
-function iterationSeconds(text: string): number[] {
-  return [...text.matchAll(/Итерация исполнителя: ([\d.]+) с/g)]
-    .map((match) => Number(match[1]))
+function iterationSeconds(lines: readonly string[]): number[] {
+  return lines
+    .map((line) => Number(/Итерация исполнителя: ([\d.]+) с/.exec(line)?.[1]))
     .filter((value) => Number.isFinite(value));
 }
 
 /** Every line about the tariff — the pause, the resume, and the per-iteration status. */
-function tariffLines(text: string): string[] {
-  return text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => /лимит тарифа|Лимит тарифа|Окно тарифа/i.test(line));
+function tariffLines(lines: readonly string[]): string[] {
+  return lines.filter((line) => /лимит тарифа|окно тарифа/i.test(line));
+}
+
+/**
+ * Whether the window actually closed at some point.
+ *
+ * **`allowed` is not a throttle**, and the first live run had the walk claiming one because the
+ * per-iteration usage line ends with «лимит тарифа: allowed (five_hour)» and the matcher was
+ * case-insensitive. A gate that reports a pause which never happened is worse than a gate that
+ * reports nothing: the number it produces looks like evidence.
+ */
+function throttleEvents(lines: readonly string[]): string[] {
+  return tariffLines(lines).filter((line) => !/:\s*allowed\b/i.test(line));
 }
 
 function describeDistribution(values: readonly number[]): string {
@@ -857,40 +911,8 @@ async function main(): Promise<void> {
     writeFileSync(join(OUT, 'server.log'), serverLog.join(''), 'utf8');
     cpSync(join(projectDirectory, 'handoff'), join(OUT, 'handoff'), { recursive: true });
 
+    /* The server is still up here; the database is read after it stops, at the end of the walk. */
     const wholeLog = `${serverLog.join('')}\n${feed.join('\n')}`;
-    const durations = iterationSeconds(wholeLog);
-    const tariff = tariffLines(wholeLog);
-
-    writeFileSync(
-      join(OUT, 'measurements.json'),
-      `${JSON.stringify(
-        {
-          maxExecutors: MAX_EXECUTORS,
-          peakParallel,
-          peakInProgress,
-          requiredParallel: REQUIRED_PARALLEL,
-          samples,
-          iterationSeconds: durations,
-          iterationCeilingSeconds: 300,
-          overCeiling: durations.filter((value) => value >= 300).length,
-          tariff,
-        },
-        null,
-        2,
-      )}\n`,
-      'utf8',
-    );
-
-    measure(`Длительности итераций: ${describeDistribution(durations)}.`);
-    measure(
-      `Потолок итерации 300 с: превышений ${String(durations.filter((value) => value >= 300).length)} ` +
-        `из ${String(durations.length)}.`,
-    );
-    measure(
-      tariff.length === 0
-        ? 'Событий лимита тарифа за прогон не было.'
-        : `Строк о лимите тарифа: ${String(tariff.length)}.`,
-    );
 
     // --- red conditions ----------------------------------------------------------------------------
     if (/database is locked/i.test(wholeLog)) {
@@ -901,26 +923,6 @@ async function main(): Promise<void> {
     if (/не уложился в/i.test(wholeLog)) {
       finding('Исполнитель упёрся в стенные часы — возможное интерактивное зависание.');
       verdict = 'RED';
-    }
-
-    /*
-     * The cascade. A tariff window closing is a *working state*: the pipeline pauses and goes on. If
-     * tasks went red while it was closed, the loop turned a budget into a failure — which is the one
-     * thing А-24 §2 forbids by name.
-     */
-    const throttled = tariff.some((line) => /Лимит тарифа/i.test(line));
-    const failedOnLimit = feed
-      .map(String)
-      .filter((line) => /не принята|FAILED/i.test(line) && /лимит|limit|429|quota/i.test(line));
-
-    if (throttled && failedOnLimit.length > 0) {
-      finding(
-        `Каскадный отказ на троттлинге: ${String(failedOnLimit.length)} задач(и) покраснели вокруг ` +
-          'закрытого окна тарифа.',
-      );
-      verdict = 'RED';
-    } else if (throttled) {
-      measure('Троттлинг случился и НЕ дал каскада: ни одна задача не покраснела из-за лимита.');
     }
 
     const unexpected = unexpectedConsole(consoleErrors);
@@ -963,7 +965,74 @@ async function main(): Promise<void> {
   /* The VRAM summary is written by the script on its way out; give it a moment, then read it. */
   await new Promise((settle) => setTimeout(settle, 2_000));
   const vram = readVram();
-  if (vram !== null) measure(vram);
+  if (vram === null) {
+    finding('Аудит VRAM не оставил итога — пик за прогон неизвестен.');
+    verdict = 'RED';
+  } else {
+    measure(vram);
+  }
+
+  /*
+   * The measurements, from the loop's own log — read here because the server is down and the file is
+   * ours to open. Everything above this line is about what happened; this is what it cost.
+   */
+  const logged = loopLog();
+  const durations = iterationSeconds(logged);
+  const tariff = tariffLines(logged);
+  const throttles = throttleEvents(logged);
+  const overCeiling = durations.filter((value) => value >= 300).length;
+
+  writeFileSync(
+    join(OUT, 'measurements.json'),
+    `${JSON.stringify(
+      {
+        maxExecutors: MAX_EXECUTORS,
+        peakParallel,
+        peakInProgress,
+        requiredParallel: REQUIRED_PARALLEL,
+        samples,
+        iterationSeconds: durations,
+        iterationCeilingSeconds: 300,
+        overCeiling,
+        tariff,
+        throttles,
+      },
+      null,
+      2,
+    )}\n`,
+    'utf8',
+  );
+
+  measure(`Длительности итераций: ${describeDistribution(durations)}.`);
+  measure(
+    `Потолок итерации 300 с: превышений ${String(overCeiling)} из ${String(durations.length)}.`,
+  );
+  measure(
+    throttles.length === 0
+      ? `Окно тарифа за прогон не закрывалось ни разу (строк о лимите ${String(tariff.length)}, все «allowed»).`
+      : `Событий закрытого окна тарифа: ${String(throttles.length)}.`,
+  );
+
+  /*
+   * The cascade. A tariff window closing is a *working state*: the pipeline pauses and goes on. If
+   * tasks went red while it was closed, the loop turned a budget into a failure — which is the one
+   * thing А-24 §2 forbids by name.
+   */
+  if (throttles.length > 0) {
+    const failedOnLimit = logged.filter(
+      (line) => /не принята|FAILED/i.test(line) && /лимит|limit|429|quota/i.test(line),
+    );
+
+    if (failedOnLimit.length > 0) {
+      finding(
+        `Каскадный отказ на троттлинге: ${String(failedOnLimit.length)} задач(и) покраснели вокруг ` +
+          'закрытого окна тарифа.',
+      );
+      verdict = 'RED';
+    } else {
+      measure('Троттлинг случился и НЕ дал каскада: ни одна задача не покраснела из-за лимита.');
+    }
+  }
 
   const minutes = ((Date.now() - started) / 60_000).toFixed(1);
   writeResult(verdict, minutes, projectId, peakParallel);
