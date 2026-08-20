@@ -1,0 +1,16 @@
+{
+  "taskId": "8",
+  "milestoneId": "ms_03",
+  "title": "Добавление логики фильтрации опций и совершения переходов",
+  "description": "Внедрить в класс `GameState` (`lib/state-machine.js`) методы:\n  - `getAvailableOptions(scene)`: сопоставление условий `requiredState` со значениями в `variables`. Если переменная отсутствует в состоянии `variables`, неявно считать её значением `false`.\n  - `transition(option)`: увеличение `stepsCount` на 1, наложение флагов из `setState` и перевод текущей сцены на `nextSceneId`.\n  - `loadState(saveData)`: восстановление состояния из валидного объекта сохранения.\n  Обеспечить, чтобы логика обработки `requiredState` и `setState` работала строго с простыми плоскими объектами `Record<string, boolean>` (прямое сопоставление ключей и булевых значений `true`/`false` без обработки массивов, вложенных объектов или сложных логических формул).\n  _Зависимости: 7_",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "lib/state-machine.js"
+  ],
+  "dependsOn": [
+    "7"
+  ],
+  "unitTestCmd": "npm test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

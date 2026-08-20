@@ -48,7 +48,9 @@ export function executorStubSeconds(taskId = ''): number {
   const raw = Number(process.env.LOOP_EXECUTOR_STUB_SLEEP ?? '3');
   const base = Number.isFinite(raw) && raw >= 0 ? raw : 3;
 
-  const spread = [...taskId].reduce((sum, character) => sum + character.charCodeAt(0), 0) % 4;
+  let codes = 0;
+  for (let index = 0; index < taskId.length; index += 1) codes += taskId.charCodeAt(index);
+  const spread = codes % 4;
 
   return Math.round(base * (0.4 + 0.3 * spread));
 }

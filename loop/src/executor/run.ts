@@ -80,6 +80,15 @@ export interface ExecutorDeps {
   timeoutMs?: number;
   /** Injected so tests can measure without waiting. Defaults to the wall clock. */
   now?: () => number;
+  /**
+   * Milliseconds the pipeline has spent frozen, read whenever the deadline is checked (task 160).
+   *
+   * **The iteration ceiling measures work, not calendar time.** A container paused by a red verdict
+   * is holding its work on purpose; killing it for the minutes it spent paused would throw away
+   * exactly what pausing was for — and the gate rehearsal watched it happen twice, each timeout then
+   * freezing the pipeline again over a failure the first freeze had caused.
+   */
+  frozenMs?: () => number;
 }
 
 /** Five minutes, from the A0 bundle. A run past it is not slow, it is stuck. */
@@ -183,13 +192,16 @@ export async function runExecutor(
       }
     });
 
-    const timedOut = await waitWithDeadline(engine, id, timeoutMs);
+    const timedOut = await waitWithDeadline(engine, id, timeoutMs, {
+      now,
+      frozenMs: deps.frozenMs ?? (() => 0),
+    });
 
     if (timedOut) {
       onLine({
         stream: 'stderr',
         level: 'ERROR',
-        text: `исполнитель не уложился в ${String(Math.round(timeoutMs / 1000))} с — контейнер остановлен`,
+        text: `исполнитель не уложился в ${String(Math.round(timeoutMs / 1000))} с работы — контейнер остановлен`,
       });
 
       // `t: 0` is a kill, not a request: a process that has stopped making progress will not honour
@@ -255,20 +267,35 @@ async function drain(
   }
 }
 
-/** True when the deadline arrived first. */
+/** How often the deadline is re-checked. Small against five minutes, cheap against a paused clock. */
+const DEADLINE_TICK_MS = 500;
+
+/**
+ * True when the deadline arrived first — where «the deadline» counts **working** time.
+ *
+ * A ticking check rather than one `setTimeout`, because the budget is no longer a fixed span: time
+ * the pipeline spends frozen is subtracted as it accrues, so a container paused by a red verdict
+ * keeps the ceiling it had when it was paused.
+ */
 async function waitWithDeadline(
   engine: DockerEngine,
   id: string,
   timeoutMs: number,
+  clock: { now: () => number; frozenMs: () => number },
 ): Promise<boolean> {
   const abort = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  const startedAt = clock.now();
+  const frozenAtStart = clock.frozenMs();
+  let timer: ReturnType<typeof setInterval> | undefined;
 
   const deadline = new Promise<'timeout'>((settle) => {
-    timer = setTimeout(() => {
+    timer = setInterval(() => {
+      const frozen = Math.max(clock.frozenMs() - frozenAtStart, 0);
+      if (clock.now() - startedAt - frozen < timeoutMs) return;
+
       abort.abort();
       settle('timeout');
-    }, timeoutMs);
+    }, DEADLINE_TICK_MS);
     /* An orchestrator that is otherwise idle must not be held awake by this timer. */
     timer.unref();
   });
@@ -281,6 +308,6 @@ async function waitWithDeadline(
   try {
     return (await Promise.race([finished, deadline])) === 'timeout';
   } finally {
-    if (timer !== undefined) clearTimeout(timer);
+    if (timer !== undefined) clearInterval(timer);
   }
 }

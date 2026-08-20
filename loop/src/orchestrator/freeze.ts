@@ -31,6 +31,57 @@ import type { HandoffTaskStatus } from '../intake/handoff.ts';
  * likely to try.
  */
 
+/**
+ * How long each project has spent frozen — the one number an iteration's ceiling must not count.
+ *
+ * The gate rehearsal found why this exists. A red verdict paused two containers; the operator read
+ * the feed, the walk waited for the pipeline to go quiet, and about three minutes later the freeze
+ * was lifted — by which time both containers had passed `ITERATION_TIMEOUT_MS` and were killed as
+ * «not finished in five minutes». They had been *paused* for three of those five, and the whole
+ * point of pausing rather than killing is that the work is preserved. Worse, the timeout made them
+ * `FAILED`, which froze the pipeline a second time over a failure the first freeze had caused.
+ *
+ * So the ceiling measures **work**, not calendar time. On `globalThis` for the reason the event bus
+ * is: Next reloads modules in development, and a second copy of this map would be a second, empty
+ * answer for a pipeline that is very much frozen.
+ */
+const FROZEN_CLOCK = Symbol.for('spec-platform.loop.frozen-clock');
+
+interface FrozenClock {
+  [FROZEN_CLOCK]?: Map<string, { since: number | null; total: number }>;
+}
+
+function frozenClock(): Map<string, { since: number | null; total: number }> {
+  const holder = globalThis as unknown as FrozenClock;
+  holder[FROZEN_CLOCK] ??= new Map<string, { since: number | null; total: number }>();
+  return holder[FROZEN_CLOCK];
+}
+
+/** Milliseconds this project has spent frozen, including a freeze that is still in force. */
+export function frozenMsFor(projectId: string, now = Date.now()): number {
+  const entry = frozenClock().get(projectId);
+  if (entry === undefined) return 0;
+
+  return entry.total + (entry.since === null ? 0 : Math.max(now - entry.since, 0));
+}
+
+/** Starts the frozen clock; a freeze already in force does not restart it. */
+function markFrozen(projectId: string, now = Date.now()): void {
+  const entry = frozenClock().get(projectId) ?? { since: null, total: 0 };
+  entry.since ??= now;
+  frozenClock().set(projectId, entry);
+}
+
+/** Stops it, keeping the total. */
+function markThawed(projectId: string, now = Date.now()): void {
+  const entry = frozenClock().get(projectId);
+  if (entry?.since == null) return;
+
+  entry.total += Math.max(now - entry.since, 0);
+  entry.since = null;
+  frozenClock().set(projectId, entry);
+}
+
 /** `handoff/FROZEN.md` — beside the plan it freezes. */
 export const FROZEN_FILE = join('handoff', 'FROZEN.md');
 
@@ -154,6 +205,7 @@ export async function freezePipeline(
   };
 
   writeFileSync(frozenPath(request.projectDirectory), renderFrozenFile(record), 'utf8');
+  markFrozen(request.projectId);
 
   for (const task of request.inFlight) {
     setTaskStatusOnDisk(request.projectDirectory, task.taskId, 'PAUSED');
@@ -274,6 +326,7 @@ export async function liftFreeze(
 
   markProject(database, input.projectId, 'ACTIVE');
   rmSync(frozenPath(input.projectDirectory), { force: true });
+  markThawed(input.projectId);
 
   return { resumed, requeued };
 }

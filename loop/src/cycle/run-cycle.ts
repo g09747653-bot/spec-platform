@@ -10,6 +10,7 @@ import { blockedPath } from '../gate/blocked.ts';
 import { eventBus } from '../events/bus.ts';
 import { readReport, recordDecision, type ExecutorReport } from '../gate/report.ts';
 import { detectAndRewrite } from '../gate/tech-stack.ts';
+import { frozenMsFor } from '../orchestrator/freeze.ts';
 import { HANDOFF, HandoffTask, taskFileName } from '../intake/handoff.ts';
 import type { Logger } from '../observability/log.ts';
 
@@ -144,6 +145,8 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
       engine,
       ...(deps.executorTimeoutMs === undefined ? {} : { timeoutMs: deps.executorTimeoutMs }),
       ...(deps.onRateLimit === undefined ? {} : { onRateLimit: deps.onRateLimit }),
+      /* The ceiling measures work: time the pipeline spends frozen is not this task's (task 160). */
+      frozenMs: () => frozenMsFor(projectId),
       onLine: (line) => {
         logger.write({
           projectId,
@@ -216,7 +219,8 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
 
   if (executor.outcome === 'TIMEOUT') {
     setStatus(database, projectDirectory, projectId, taskId, 'FAILED');
-    const reason = 'Исполнитель не уложился в отведённое время итерации.';
+    const reason =
+      'Исполнитель не уложился в отведённое время итерации (время заморозки не в счёт).';
     say(reason, 'ERROR');
 
     return {

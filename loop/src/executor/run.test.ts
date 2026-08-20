@@ -243,6 +243,37 @@ describe('how an iteration ends (task 155)', () => {
     expect(said.join('\n')).toContain('не уложился');
   });
 
+  /**
+   * The ceiling measures **work**, not calendar time (task 160; найдено репетицией гейта 163).
+   *
+   * A red verdict pauses a container on purpose, to keep the work it is holding. Counting those
+   * minutes against its five throws that work away — and the rehearsal watched it happen twice, each
+   * timeout then freezing the pipeline again over a failure the first freeze had caused.
+   */
+  it('does not spend the iteration ceiling on time the pipeline was frozen', async () => {
+    const { engine } = fakeEngine({ hangs: true });
+
+    /* Frozen from the moment it starts: the deadline never advances, so nothing times out. */
+    const frozenFrom = Date.now();
+    const run = await Promise.race([
+      runExecutor(REQUEST, {
+        engine,
+        timeoutMs: 40,
+        frozenMs: () => Date.now() - frozenFrom,
+        onLine: () => undefined,
+      }),
+      new Promise<'still-running'>((settle) => {
+        setTimeout(() => {
+          settle('still-running');
+        }, 400);
+      }),
+    ]);
+
+    expect(run, 'a paused container keeps the ceiling it had when it was paused').toBe(
+      'still-running',
+    );
+  });
+
   it('removes the container whatever the outcome, so a rerun is not blocked by its own name', async () => {
     for (const behaviour of [{ exitCode: 0 }, { exitCode: 1 }, { hangs: true }]) {
       const { engine, recorded } = fakeEngine(behaviour);
