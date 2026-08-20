@@ -19,6 +19,9 @@ import type { Chain } from '../llm/chain.ts';
 import type { Logger } from '../observability/log.ts';
 import { research } from '../intake/researcher.ts';
 
+import { detectTechStack } from '../gate/tech-stack.ts';
+import type { TechStack } from '../intake/handoff.ts';
+
 import { freezePipeline, isFrozen, markProject } from './freeze.ts';
 import {
   DEFAULT_MAX_EXECUTORS,
@@ -94,13 +97,29 @@ export interface RecoveredProject {
   tasks: number;
   /** Tasks the dead process had in flight, returned to `PENDING` by this boot. */
   resumed: string[];
+  /** Assignments whose `techStack` was missing and was detected from the workspace (task 162). */
+  repaired: string[];
+  /** True when a freeze marker is on disk — the boot leaves it exactly where it is (task 160). */
+  frozen: boolean;
 }
 
-/** Reads a project's whole handoff tree back off disk. Missing or unreadable files are skipped. */
+/**
+ * Reads a project's whole handoff tree back off disk (tasks 158, 162).
+ *
+ * **A missing `techStack` is repaired rather than dropped** (task 162). The field is required by the
+ * contract, so an assignment that lost it — hand-edited, half-written by a killed process, produced
+ * by an older intake — fails to parse, and the strict reading of «skip what you cannot read» costs
+ * the whole task. That is the wrong trade for this one field, because the answer is *knowable*: the
+ * project is on disk and `detectTechStack` reads it, which is the same algorithm the cycle applies
+ * to every task before it runs (task 157). Everything else that cannot be parsed is still skipped —
+ * the operator sees the task missing from the board, which is louder than a silent default.
+ */
 export function readHandoffTree(projectDirectory: string): {
   milestones: MilestonesFile['milestones'];
   projectId: string;
   tasks: HandoffTask[];
+  /** Assignments whose stack was missing and was detected from the workspace on the way in. */
+  repaired: string[];
 } | null {
   const milestonesPath = join(projectDirectory, HANDOFF.milestones);
   if (!existsSync(milestonesPath)) return null;
@@ -113,22 +132,47 @@ export function readHandoffTree(projectDirectory: string): {
   }
 
   const tasksDirectory = join(projectDirectory, HANDOFF.tasks);
+  if (!existsSync(tasksDirectory)) {
+    return { milestones: file.milestones, projectId: file.projectId, tasks: [], repaired: [] };
+  }
+
   const tasks: HandoffTask[] = [];
+  const repaired: string[] = [];
+  /* Detected at most once per tree: it reads the same directory whatever the task. */
+  let detected: TechStack | null = null;
 
   for (const name of readdirSync(tasksDirectory)) {
     if (!name.startsWith('task_') || !name.endsWith('.json')) continue;
 
+    let raw: unknown;
     try {
-      tasks.push(HandoffTask.parse(JSON.parse(readFileSync(join(tasksDirectory, name), 'utf8'))));
+      raw = JSON.parse(readFileSync(join(tasksDirectory, name), 'utf8'));
     } catch {
-      /*
-       * One unreadable assignment must not cost the whole plan. It is skipped and stays skipped —
-       * the operator sees the task missing from the board, which is louder than a silent default.
-       */
+      continue;
+    }
+
+    const parsed = HandoffTask.safeParse(raw);
+    if (parsed.success) {
+      tasks.push(parsed.data);
+      continue;
+    }
+
+    detected ??= detectTechStack(projectDirectory).techStack;
+    const mended = HandoffTask.safeParse({ ...(raw as object), techStack: detected });
+
+    if (mended.success) {
+      tasks.push(mended.data);
+      repaired.push(mended.data.taskId);
+      /* Written back, because the disk is the source of truth and the next reader must agree. */
+      writeFileSync(
+        join(tasksDirectory, name),
+        `${JSON.stringify(mended.data, null, 2)}\n`,
+        'utf8',
+      );
     }
   }
 
-  return { milestones: file.milestones, projectId: file.projectId, tasks };
+  return { milestones: file.milestones, projectId: file.projectId, tasks, repaired };
 }
 
 /**
@@ -166,7 +210,13 @@ export function recoverFromDisk(
      * Anything the dead process had in flight. `IN_PROGRESS` after a boot is a claim about a
      * process that no longer exists — the task is simply pending again, and its container, if one
      * outlived the orchestrator, is reaped by name the next time it is started.
+     *
+     * **`PAUSED` and `BLOCKED` are left exactly as they are** (tasks 160, 162), and that is the
+     * whole of «замороженное переживает рестарт». Both are decisions somebody made — a red verdict
+     * and a person's block — and a boot that tidied them into `PENDING` would be the loop resuming
+     * itself past the one state that exists to stop it.
      */
+    const frozen = isFrozen(projectDirectory);
     const resumed = tree.tasks
       .filter((task) => task.status === 'IN_PROGRESS')
       .map((task) => task.taskId);
@@ -176,24 +226,35 @@ export function recoverFromDisk(
       setStatusOnDisk(projectDirectory, taskId, 'PENDING');
     }
 
+    /* The project row follows the marker, so a dashboard opened after a restart shows the stop. */
+    if (frozen) markProject(database, tree.projectId, 'PAUSED');
+
     recovered.push({
       projectId: tree.projectId,
       projectDirectory,
       milestones: tree.milestones.length,
       tasks: tree.tasks.length,
       resumed,
+      repaired: tree.repaired,
+      frozen,
     });
 
     logger?.write({
       projectId: tree.projectId,
       agentRole: 'ORCHESTRATOR',
-      logLevel: resumed.length === 0 ? 'INFO' : 'WARN',
+      logLevel: resumed.length === 0 && !frozen ? 'INFO' : 'WARN',
       message:
         `Состояние восстановлено с диска: вех ${String(tree.milestones.length)}, ` +
         `задач ${String(tree.tasks.length)}` +
         (resumed.length === 0
           ? '. Незавершённых итераций не было.'
-          : `. Возобновлены после обрыва: ${resumed.join(', ')}.`),
+          : `. Возобновлены после обрыва: ${resumed.join(', ')}.`) +
+        (tree.repaired.length === 0
+          ? ''
+          : ` Стек определён по проекту для заданий: ${tree.repaired.join(', ')}.`) +
+        (frozen
+          ? ' Конвейер заморожен (handoff/FROZEN.md) — сам не возобновится, только «Возобновить».'
+          : ''),
     });
   }
 
