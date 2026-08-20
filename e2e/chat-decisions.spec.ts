@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { createSignedInUser, reachDrafting, signIn } from './fixtures';
+import { createSignedInUser, reachDrafting, reloadSettled, signIn } from './fixtures';
 
 /**
  * Deciding by typing (task 62; FR-009 AC-6/AC-7; SC-14).
@@ -89,7 +89,7 @@ test.describe('deciding from chat', () => {
     await say(page, 'lgtm');
     await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
 
-    await page.reload();
+    await reloadSettled(page);
     await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
     await expect(page.getByTestId('approve-spec')).toHaveCount(0);
   });
@@ -142,7 +142,7 @@ test.describe('deciding from chat', () => {
     });
 
     // …and it survives a reload as what it is: a turn of this visit, not a persisted decision.
-    await page.reload();
+    await reloadSettled(page);
     await expect(page.getByTestId('review-board')).toBeVisible();
     expect(await page.getByTestId('stage-substage').textContent()).toBe(before.substage);
   });
@@ -174,7 +174,7 @@ test.describe('deciding from chat', () => {
 
     // The gate the decision opens is open — which is the whole point of it being the same write.
     await expect(page.getByTestId('proceed')).toBeEnabled();
-    await page.reload();
+    await reloadSettled(page);
     await expect(page.getByTestId('review-decision')).toHaveAttribute('data-decision', 'accept');
   });
 

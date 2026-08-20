@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { createSignedInUser, signIn } from './fixtures/auth';
 import { unexpectedConsole } from './fixtures/console-noise';
+import { reloadSettled } from './fixtures/reload';
 import {
   collectFor,
   completeInterview,
@@ -128,13 +129,13 @@ test.describe('M12п bug hunt', () => {
 
     // Reload in the collapsed state, and again in the expanded one.
     await page.getByTestId('sidebar-toggle').click();
-    await page.reload();
+    await reloadSettled(page);
     await expect(page.getByTestId('session')).toBeVisible();
     await expect(page.getByTestId('session-sidebar')).toHaveAttribute('data-collapsed', 'true');
     await stillAlive(page, 'reloaded collapsed');
 
     await page.getByTestId('sidebar-toggle').click();
-    await page.reload();
+    await reloadSettled(page);
     await expect(page.getByTestId('sidebar-panel')).toBeVisible();
     await stillAlive(page, 'reloaded expanded');
 
@@ -246,12 +247,12 @@ test.describe('M12п bug hunt', () => {
     });
 
     // Reload at this state and at every state a stage passes through.
-    await page.reload();
+    await reloadSettled(page);
     await expect(page.getByTestId('session')).toBeVisible();
     await stillAlive(page, 'reloaded after chat');
 
     await collectFor(page, 'requirements');
-    await page.reload();
+    await reloadSettled(page);
     await stillAlive(page, 'reloaded at generate');
 
     /*
@@ -267,7 +268,7 @@ test.describe('M12п bug hunt', () => {
 
     await page.getByTestId('generate-spec').click();
     await expect(page.getByTestId('spec-card')).toBeVisible({ timeout: 40_000 });
-    await page.reload();
+    await reloadSettled(page);
     await expect(page.getByTestId('spec-card')).toBeVisible();
     await stillAlive(page, 'reloaded at pending approval');
 
@@ -275,7 +276,7 @@ test.describe('M12п bug hunt', () => {
     await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
     await page.getByTestId('proceed').click();
     await expect(page.getByTestId('review-board')).toBeVisible({ timeout: 40_000 });
-    await page.reload();
+    await reloadSettled(page);
     await expect(page.getByTestId('review-board')).toBeVisible();
     await stillAlive(page, 'reloaded at pending review');
 
@@ -341,7 +342,7 @@ test.describe('M12п bug hunt', () => {
     }
 
     // A reload closes the pane rather than restoring a stale one — and leaves the session usable.
-    await page.reload();
+    await reloadSettled(page);
     await expect(page.getByTestId('session')).toBeVisible();
     await expect(page.getByTestId('viewer-pane')).toHaveCount(0);
     await stillAlive(page, 'reloaded with the viewer having been open');
