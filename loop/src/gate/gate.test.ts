@@ -9,7 +9,7 @@ import { openMigratedDatabase } from '../db/migrate.ts';
 import { HANDOFF, HandoffTask, taskFileName } from '../intake/handoff.ts';
 
 import { blockedPath, raiseBlock, renderBlockedFile, watchBlocks } from './blocked.ts';
-import { decisionId, readReport, recordDecision } from './report.ts';
+import { decisionId, disagreesAboutOwner, readReport, recordDecision } from './report.ts';
 import {
   commandsRefusal,
   detectAndRewrite,
@@ -282,6 +282,9 @@ describe('the blocking protocol (task 157)', () => {
 });
 
 describe('the executor’s report (task 157)', () => {
+  /** Who the orchestrator says this report is about — the only identity that reaches the table. */
+  const OWNER = { projectId: 'p1', taskId: TASK.taskId };
+
   const report = {
     reportId: 'r1',
     taskId: TASK.taskId,
@@ -321,21 +324,21 @@ describe('the executor’s report (task 157)', () => {
   });
 
   it('derives a decision id as lower-case MD5 hex when the report names none', () => {
-    const derived = decisionId(report);
+    const derived = decisionId(report, OWNER);
 
     expect(derived).toMatch(/^[0-9a-f]{32}$/);
     // Reproducible: the same report read twice lands on the same row.
-    expect(decisionId(report)).toBe(derived);
-    expect(decisionId({ ...report, taskId: 'другая' })).not.toBe(derived);
+    expect(decisionId(report, OWNER)).toBe(derived);
+    expect(decisionId(report, { ...OWNER, taskId: 'другая' })).not.toBe(derived);
   });
 
   it('prefers the identifier the report states', () => {
-    expect(decisionId({ ...report, decisionId: 'd-42' })).toBe('d-42');
+    expect(decisionId({ ...report, decisionId: 'd-42' }, OWNER)).toBe('d-42');
   });
 
   it('records the rationale, and re-recording the same report changes nothing', () => {
-    const id = recordDecision(database, report);
-    recordDecision(database, report);
+    const id = recordDecision(database, report, OWNER);
+    recordDecision(database, report, OWNER);
 
     expect(id).not.toBeNull();
     expect(database.prepare('SELECT count(*) AS n FROM agent_decisions').get()?.n).toBe(1);
@@ -346,11 +349,38 @@ describe('the executor’s report (task 157)', () => {
   });
 
   it('records nothing when the executor offered no reasoning', () => {
-    expect(recordDecision(database, { ...report, rationale: undefined })).toBeNull();
+    expect(recordDecision(database, { ...report, rationale: undefined }, OWNER)).toBeNull();
     expect(
-      recordDecision(database, { ...report, decisionTitle: undefined, decisionId: undefined }),
+      recordDecision(
+        database,
+        { ...report, decisionTitle: undefined, decisionId: undefined },
+        OWNER,
+      ),
     ).toBeNull();
     expect(database.prepare('SELECT count(*) AS n FROM agent_decisions').get()?.n).toBe(0);
+  });
+
+  /**
+   * The live gate's own finding: a model filling in `projectId`/`taskId` writes whatever it likes,
+   * both columns are foreign keys, and the insert took the whole iteration down with
+   * `FOREIGN KEY constraint failed`. The report is information; the orchestrator is the authority
+   * about which task it started.
+   */
+  it('writes the owner’s identity, whatever identity the report claims for itself', () => {
+    const impostor = { ...report, taskId: 'выдуманная-задача', projectId: 'выдуманный-проект' };
+
+    expect(disagreesAboutOwner(impostor, OWNER)).toBe(true);
+    expect(disagreesAboutOwner(report, OWNER)).toBe(false);
+
+    const id = recordDecision(database, impostor, OWNER);
+    expect(id, 'no foreign key was violated, so the insert happened').not.toBeNull();
+
+    const row = database
+      .prepare('SELECT project_id, task_id FROM agent_decisions WHERE decision_id = ?')
+      .get(id ?? '');
+
+    expect(row?.task_id).toBe(OWNER.taskId);
+    expect(row?.project_id).toBe(OWNER.projectId);
   });
 });
 

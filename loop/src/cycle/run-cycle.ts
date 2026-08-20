@@ -8,7 +8,12 @@ import { runExecutor, type ExecutorRun } from '../executor/run.ts';
 import { acceptTask, type AcceptanceVerdict } from '../gate/accept.ts';
 import { blockedPath } from '../gate/blocked.ts';
 import { eventBus } from '../events/bus.ts';
-import { readReport, recordDecision, type ExecutorReport } from '../gate/report.ts';
+import {
+  disagreesAboutOwner,
+  readReport,
+  recordDecision,
+  type ExecutorReport,
+} from '../gate/report.ts';
 import { detectAndRewrite } from '../gate/tech-stack.ts';
 import { frozenMsFor } from '../orchestrator/freeze.ts';
 import { HANDOFF, HandoffTask, taskFileName } from '../intake/handoff.ts';
@@ -186,7 +191,19 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
           : ` (тестов ${String(read.report.testsRun.total)}, упало ${String(read.report.testsRun.failed)}).`) +
         ' Это информация для ленты — решает независимый перепрогон.',
     );
-    recorded = recordDecision(database, read.report);
+    if (disagreesAboutOwner(read.report, { projectId, taskId })) {
+      /*
+       * A report that names a different task or project. Said out loud and then ignored as identity:
+       * the orchestrator started this task and knows which it is (see `recordDecision`).
+       */
+      say(
+        `Отчёт называет себя задачей ${read.report.taskId} проекта ${read.report.projectId} — ` +
+          'запись идёт под теми, кого запускал оркестратор.',
+        'WARN',
+      );
+    }
+
+    recorded = recordDecision(database, read.report, { projectId, taskId });
     if (recorded !== null) say(`Обоснование исполнителя записано решением ${recorded}.`);
   } else if (read.reason === 'missing') {
     say('Исполнитель не оставил отчёта.', 'WARN');
