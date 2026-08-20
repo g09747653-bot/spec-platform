@@ -1,0 +1,15 @@
+{
+  "taskId": "6",
+  "milestoneId": "ms_05",
+  "title": "Реализация валидации бесвыходных (тупиковых) сцен сценария",
+  "description": "Внедрить в `lib/validator.js` логику проверки сцен без доступных переходов: каждая сцена в объекте `scenes` обязана либо содержать непустой массив `options` (или валидные переходы), либо иметь флаг `isEnding: true`. Иначе возвращать ошибку валидации.\n  _Зависимости: 5_",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "lib/validator.js"
+  ],
+  "dependsOn": [
+    "5"
+  ],
+  "expectedArtifacts": [],
+  "status": "PENDING"
+}

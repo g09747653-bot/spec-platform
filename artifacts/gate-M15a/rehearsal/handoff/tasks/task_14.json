@@ -1,0 +1,21 @@
+{
+  "taskId": "14",
+  "milestoneId": "ms_06",
+  "title": "Разработка главной точки входа bin/index.js и интеграция игрового цикла",
+  "description": "Создать исполняемый файл `bin/index.js` с шебангом `#!/usr/bin/env node` в начале. Реализовать логику запуска: чтение аргумента командной строки (путь к сценарию) или интерактивный выбор сценария. Интегрировать `Scenario Validator`, `GameState`, `Save/Load Manager` и `CLI View` в единый бесконечный игровой цикл с поддержкой автосохранений `after_each_choice` под зафиксированным в начале сессии именем сохранения (согласно `single_save`), экрана финала со статистикой `stepsCount` и меню завершения игры.\n  _Зависимости: 3, 6, 8, 11, 13_",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "bin/index.js",
+    "#!/usr/bin/env node",
+    "Save/Load Manager"
+  ],
+  "dependsOn": [
+    "3",
+    "6",
+    "8",
+    "11",
+    "13"
+  ],
+  "expectedArtifacts": [],
+  "status": "PENDING"
+}

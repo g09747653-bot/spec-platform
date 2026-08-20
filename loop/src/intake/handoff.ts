@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+﻿import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 
@@ -134,11 +134,37 @@ export function writeHandoff(
 
   const taskPaths = tasks.map((task) => {
     const path = join(projectDirectory, HANDOFF.tasks, taskFileName(task.taskId));
-    writeFileSync(path, serialize(HandoffTask.parse(task)), 'utf8');
+    const existing = statusOnDisk(path);
+
+    /*
+     * **A re-intake refreshes an assignment; it never undoes progress.**
+     *
+     * Every assignment is built with `status: 'PENDING'` — that is what a *new* one is. Writing that
+     * over an existing file would reset a `COMPLETED` task to pending on the disk that is the source
+     * of truth, and the next boot's recovery would read it back and redo work that was already
+     * accepted. Intake is deliberately idempotent (it runs again on every resume), and this is the
+     * one field for which "idempotent" means keeping what is there rather than writing what is new.
+     */
+    writeFileSync(
+      path,
+      serialize(HandoffTask.parse(existing === null ? task : { ...task, status: existing })),
+      'utf8',
+    );
     return path;
   });
 
   return { projectDirectory, milestonesPath, taskPaths };
+}
+
+/** The status an assignment already carries on disk, or null when it is new or unreadable. */
+function statusOnDisk(path: string): HandoffTask['status'] | null {
+  if (!existsSync(path)) return null;
+
+  try {
+    return HandoffTask.parse(JSON.parse(readFileSync(path, 'utf8'))).status;
+  } catch {
+    return null;
+  }
 }
 
 /**

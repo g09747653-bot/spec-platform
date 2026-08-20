@@ -136,6 +136,39 @@ describe('the M14а gate bundle, intaken for real (task 156 AC-1)', () => {
     expect(second.tasks.map((task) => task.taskId)).toEqual(first.tasks.map((task) => task.taskId));
     expect(readBoard(database, second.projectId)?.milestones).toHaveLength(second.milestones);
   });
+
+  it('never undoes progress: a re-intake keeps the status an assignment already has', async () => {
+    /*
+     * The intake runs again on every resume, and every assignment is *built* as PENDING. Writing
+     * that over a finished task would reset it on the disk that is the source of truth, and the
+     * next boot's recovery would read it back and redo accepted work.
+     */
+    const first = await run();
+    const done = first.tasks[0]?.taskId ?? '';
+    const path = join(directory, 'project', 'handoff', 'tasks', `task_${done}.json`);
+
+    writeFileSync(
+      path,
+      `${JSON.stringify(HandoffTask.parse({ ...HandoffTask.parse(JSON.parse(readFileSync(path, 'utf8'))), status: 'COMPLETED' }), null, 2)}\n`,
+      'utf8',
+    );
+
+    await run();
+
+    expect(HandoffTask.parse(JSON.parse(readFileSync(path, 'utf8'))).status).toBe('COMPLETED');
+    // And a task nobody has finished is still pending, so the rule is not «never write status».
+    const untouched = first.tasks[1]?.taskId ?? '';
+    expect(
+      HandoffTask.parse(
+        JSON.parse(
+          readFileSync(
+            join(directory, 'project', 'handoff', 'tasks', `task_${untouched}.json`),
+            'utf8',
+          ),
+        ),
+      ).status,
+    ).toBe('PENDING');
+  });
 });
 
 describe('who writes the assignment texts (task 156)', () => {

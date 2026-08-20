@@ -330,8 +330,18 @@ async function readProgress(page: Page): Promise<RunProgress> {
   });
 }
 
-/** Stages at whose `collect` position the mid-walk restart may fire (mid-journey, no stream). */
-const RESTART_STAGES = new Set(['requirements', 'solution', 'tasks']);
+/**
+ * Stages at whose `collect` position the mid-walk restart may fire (mid-journey, no stream).
+ *
+ * `GATE_RESTART=0` empties the set. The restart is this walk's own claim (task 149 AC) and stays on
+ * by default; the switch exists because the walk is also the only way to *produce* a bundle, and
+ * M15а needed one without the restart in the way — which is what isolated the finding that the
+ * driver stalls at `requirements/collect` right after the stack comes back.
+ */
+const RESTART_STAGES =
+  process.env.GATE_RESTART === '0'
+    ? new Set<string>()
+    : new Set(['requirements', 'solution', 'tasks']);
 
 interface RestartEvidence {
   dumpPath: string;
