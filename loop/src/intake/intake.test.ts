@@ -200,6 +200,44 @@ describe('who writes the assignment texts (task 156)', () => {
     expect(result.tasks[0]?.description).toBe('Через ограду');
   });
 
+  it('reads `null` as «no such command» rather than as a malformed answer', async () => {
+    /*
+     * The live gate walk's finding: asked for an assignment with no end-to-end suite, the model
+     * answered `"e2eTestCmd": null` — the honest answer — and the whole object was rejected, taking
+     * a perfectly good description down with a key the model had correctly left empty.
+     */
+    const result = await run(
+      stubChain(
+        JSON.stringify({
+          description: 'Сделай раз, потом два.',
+          filesToEdit: ['src/index.ts'],
+          unitTestCmd: 'npm test',
+          e2eTestCmd: null,
+        }),
+      ),
+    );
+
+    expect(result.writtenByModel).toBe(16);
+    expect(result.degradations).toEqual([]);
+    expect(result.tasks[0]?.description).toBe('Сделай раз, потом два.');
+    expect(result.tasks[0]?.e2eTestCmd).toBeUndefined();
+  });
+
+  it('reads an empty string the same way — a command nobody can run is not a command', async () => {
+    const result = await run(
+      stubChain(
+        JSON.stringify({
+          description: 'Сделай раз, потом два.',
+          filesToEdit: [],
+          unitTestCmd: '   ',
+        }),
+      ),
+    );
+
+    expect(result.writtenByModel).toBe(16);
+    expect(result.tasks[0]?.unitTestCmd).toBeUndefined();
+  });
+
   it('writes the assignment anyway when every provider fails, and names the degradation', async () => {
     const result = await run(failingChain());
 

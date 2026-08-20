@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -25,6 +25,24 @@ export type ExpectedArtifact = HandoffTask['expectedArtifacts'][number];
  * acceptance run write into the executor's work — an install, a build directory, a lockfile touch —
  * and the next task would then start from a workspace the gate had altered. It also means a hung
  * acceptance container cannot corrupt anything: it is holding a copy.
+ *
+ * **The copy is made by a container, not by `fs.cpSync`, and that is a measured decision.** The
+ * executor installs dependencies inside its Linux container, and npm writes `node_modules/.bin/*`
+ * as POSIX symlinks straight through the bind mount. Copying those from Windows means asking
+ * Windows to *create* symlinks, which is privileged — and `fs.cpSync` does not report that as an
+ * error: it terminates the process with `STATUS_STACK_BUFFER_OVERRUN` (0xC0000409), taking the whole
+ * orchestrator with it, with nothing in the log. The live gate walk found exactly this: the executor
+ * finished, the acceptance started, and the loop's server vanished mid-sentence.
+ *
+ * Measured, in this order: `cpSync` — process killed, no exception, no `exit` event; async
+ * `fs.promises.cp` — a catchable `EPERM` on the first symlink; a `filter` that skips symlinks —
+ * clean, but it drops `.bin`, and a project whose test script is a locally installed binary would
+ * then fail acceptance for a reason that has nothing to do with its code.
+ *
+ * So the copy is made where those symlinks were made: `cp -a` inside a container, both sides
+ * bind-mounted, source read-only. No host-side recursive copy of a `node_modules` tree, no Windows
+ * symlink privilege in the picture, and the copy is faithful enough that the tests run against what
+ * the executor actually produced.
  */
 
 /** The image the acceptance run uses per stack. `generic` needs the assignment's own commands. */
@@ -175,10 +193,21 @@ export async function acceptTask(
   try {
     /*
      * The copy. `handoff/` comes with it — an artifact walk may legitimately look at a report — but
-     * nothing goes back: this directory is deleted at the end and the executor's workspace is never
-     * written to by the gate.
+     * nothing goes back: the source is mounted read-only, this directory is deleted at the end, and
+     * the executor's workspace is never written to by the gate.
      */
-    cpSync(workspacePath, copyPath, { recursive: true });
+    const copied = await copyWorkspace(image, workspacePath, copyPath, `${name}-copy`, deps);
+
+    if (!copied.ok) {
+      return {
+        accepted: false,
+        reason: `Копия кодовой базы для приёмки не сделана: ${copied.reason}`,
+        unitExitCode: null,
+        e2eExitCode: null,
+        artifacts: [],
+        output: copied.output,
+      };
+    }
 
     for (const [label, command] of [
       ['unit', commands.unitTestCmd],
@@ -236,7 +265,87 @@ export async function acceptTask(
   }
 }
 
-/** Every `expectedArtifacts` entry, validated from the workspace root of the clean copy. */
+/**
+ * Copies the workspace into `copyPath` from inside a container.
+ *
+ * `cp -a /src/. /dst/` — the trailing `/.` is what makes it copy *contents* rather than the
+ * directory itself, and `-a` is what preserves the symlinks that made the host-side copy fatal.
+ * The source is mounted read-only so a copy step can never be the thing that altered the work it
+ * was copying.
+ */
+async function copyWorkspace(
+  image: string,
+  workspacePath: string,
+  copyPath: string,
+  name: string,
+  deps: AcceptanceDeps,
+): Promise<{ ok: boolean; reason: string; output: string }> {
+  const stale = await deps.engine.findByName(name);
+  if (stale !== null) await deps.engine.removeContainer(stale, { force: true });
+
+  const id = await deps.engine.createContainer({
+    name,
+    image,
+    cmd: ['sh', '-lc', 'cp -a /src/. /dst/'],
+    binds: [bindMount(workspacePath, '/src', 'ro'), bindMount(copyPath, '/dst')],
+    workingDir: '/dst',
+    env: {},
+    /* A copy has nothing to fetch; the network is simply not part of what it needs. */
+    networkDisabled: true,
+  });
+
+  const collected: string[] = [];
+
+  try {
+    await deps.engine.startContainer(id);
+
+    const draining = (async () => {
+      try {
+        for await (const line of readLogFrames(
+          await deps.engine.attachLogs(id, { follow: true }),
+        )) {
+          collected.push(line.text);
+        }
+      } catch {
+        // The tail of a copy's log is not the verdict.
+      }
+    })();
+
+    const exitCode = await deps.engine.waitContainer(id).catch(() => null);
+    await draining;
+
+    return exitCode === 0
+      ? { ok: true, reason: '', output: collected.join('\n') }
+      : {
+          ok: false,
+          reason: `контейнер копирования вернул ${String(exitCode)}`,
+          output: collected.join('\n'),
+        };
+  } finally {
+    await deps.engine.removeContainer(id, { force: true }).catch(() => undefined);
+  }
+}
+
+/**
+ * What an absent artifact says, printed by the container that looked for it.
+ *
+ * A sentinel rather than an exit code alone: a validation command is free to exit with any number
+ * it likes, and reading one of those as «the file was missing» would report the wrong failure.
+ */
+const ABSENT = '__LOOP_ARTIFACT_ABSENT__';
+
+/**
+ * Every `expectedArtifacts` entry, validated from the workspace root of the clean copy.
+ *
+ * **Presence is decided inside the container, not on the host.** It used to be an `existsSync` here,
+ * and that reads the workspace through the host's eyes while everything being judged happens through
+ * the container's. On Windows the two disagree in a way that matters: a relative symlink written by a
+ * container — `node_modules/.bin/*`, on every Node project that ever installed a dependency — is
+ * visible to `lstat` and `readlink` but cannot be *followed*, so `existsSync` answers `false` and
+ * `statSync` throws `EACCES` for a file the container opens without trouble. The gate would then
+ * refuse a task for an artifact that is present, which is a verdict about the host's filesystem
+ * rather than about the work.
+ */
 async function walkArtifacts(
   task: HandoffTask,
   image: string,
@@ -247,19 +356,6 @@ async function walkArtifacts(
   const results: ArtifactWalkResult[] = [];
 
   for (const [index, artifact] of task.expectedArtifacts.entries()) {
-    const present = existsSync(join(copyPath, artifact.path));
-
-    if (!present) {
-      results.push({
-        path: artifact.path,
-        present: false,
-        exitCode: null,
-        matched: false,
-        output: 'файла нет в рабочей директории',
-      });
-      continue;
-    }
-
     const run = await runInClean(
       deps.engine,
       image,
@@ -269,20 +365,31 @@ async function walkArtifacts(
       deps,
     );
 
+    const present = !run.output.includes(ABSENT);
+
     results.push({
       path: artifact.path,
-      present: true,
-      exitCode: run.exitCode,
-      matched: new RegExp(artifact.successRegex, 'u').test(run.output),
-      output: run.output,
+      present,
+      exitCode: present ? run.exitCode : null,
+      matched: present && new RegExp(artifact.successRegex, 'u').test(run.output),
+      output: present ? run.output : 'файла нет в рабочей директории',
     });
   }
 
   return results;
 }
 
-/** The validation command with its arguments, quoted so a path with a space survives the shell. */
+/**
+ * The presence test and the validation command, in one shell line.
+ *
+ * `-e` or `-L`, because a symlink whose target is missing is still an artifact that exists — and
+ * saying «no such file» about a broken link would describe the wrong defect to whoever reads it.
+ * Everything is quoted so a path with a space survives the shell.
+ */
 function shellFor(artifact: ExpectedArtifact): string {
   const quote = (value: string) => `'${value.replaceAll("'", String.raw`'\''`)}'`;
-  return [artifact.validationCmd, ...artifact.validationArgs].map(quote).join(' ');
+  const path = quote(artifact.path);
+  const command = [artifact.validationCmd, ...artifact.validationArgs].map(quote).join(' ');
+
+  return `if [ ! -e ${path} ] && [ ! -L ${path} ]; then printf '%s\\n' '${ABSENT}'; exit 66; fi; ${command}`;
 }

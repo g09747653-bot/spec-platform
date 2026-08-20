@@ -1,3 +1,7 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { defineConfig, devices } from '@playwright/test';
 
 /**
@@ -14,6 +18,28 @@ import { defineConfig, devices } from '@playwright/test';
  * would be three times the CI minutes for a claim nobody makes about this package.
  */
 const PORT = 3199;
+
+/**
+ * The placeholder credential — supplied **only** when the machine has none of its own.
+ *
+ * The browser suite needs no model at all, but the loop refuses to boot without exactly one
+ * credential, so CI (which has no `.env`) needs a placeholder. A developer machine does have one,
+ * and handing it a second is precisely the ambiguous configuration the loop now refuses — the whole
+ * point of «exactly one» being that a run cannot silently spend the wrong budget. So the harness
+ * asks first and stays quiet when the answer is yes.
+ */
+function placeholderCredential(): Record<string, string> {
+  const CREDENTIALS = ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'];
+
+  const inEnvironment = CREDENTIALS.some((name) => (process.env[name] ?? '') !== '');
+
+  const dotenv = join(dirname(fileURLToPath(import.meta.url)), '.env');
+  const inFile =
+    existsSync(dotenv) &&
+    CREDENTIALS.some((name) => new RegExp(`^${name}=.+$`, 'm').test(readFileSync(dotenv, 'utf8')));
+
+  return inEnvironment || inFile ? {} : { ANTHROPIC_API_KEY: 'e2e-not-a-real-key' };
+}
 
 export default defineConfig({
   testDir: './e2e',
@@ -44,7 +70,7 @@ export default defineConfig({
     stderr: 'pipe',
     env: {
       PORT: String(PORT),
-      ANTHROPIC_API_KEY: 'e2e-not-a-real-key',
+      ...placeholderCredential(),
       WORKSPACE_ROOT_PATH: '.data/e2e-workspace',
       LOOP_DB_PATH: '.data/e2e.db',
       /* Mounts the harness route — the only thing in this process a browser test can poke. */

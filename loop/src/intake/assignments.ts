@@ -21,12 +21,27 @@ import type { BundleTask } from './validate.ts';
  * and an honest empty list when the description names none.
  */
 
+/**
+ * What the model is asked to add.
+ *
+ * **`null` means absent, and is accepted as such.** The live gate walk found this: asked for an
+ * assignment with no end-to-end suite, Gemini answered `"e2eTestCmd": null` — which is the honest
+ * answer to the question — and a schema that took only `undefined` rejected the whole object. The
+ * cost was not the missing field: it was that the *description* went with it, and three assignments
+ * out of nineteen fell back to the bundle's own prose for the sake of a key the model had correctly
+ * left empty. A `null` in a place a model was told it may omit is not a malformed answer.
+ */
 const Enrichment = z.object({
   description: z.string().min(1),
   filesToEdit: z.array(z.string()),
-  unitTestCmd: z.string().optional(),
-  e2eTestCmd: z.string().optional(),
+  unitTestCmd: z.string().nullish().transform(nullToUndefined),
+  e2eTestCmd: z.string().nullish().transform(nullToUndefined),
 });
+
+/** An empty string is as absent as `null`: a command nobody can run is not a command. */
+function nullToUndefined(value: string | null | undefined): string | undefined {
+  return value === null || value === undefined || value.trim() === '' ? undefined : value;
+}
 
 type Enrichment = z.infer<typeof Enrichment>;
 
@@ -121,6 +136,8 @@ export async function buildAssignment(
   const fallback: Enrichment = {
     description: task.description.trim() === '' ? task.title : task.description,
     filesToEdit: pathsMentionedIn(`${task.title}\n${task.description}`),
+    unitTestCmd: undefined,
+    e2eTestCmd: undefined,
   };
 
   let enrichment = fallback;

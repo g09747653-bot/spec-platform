@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+import {
+  EXECUTOR_CREDENTIAL_KINDS,
+  type ExecutorCredential,
+  type ExecutorCredentialKind,
+} from '../executor/credential.ts';
 import { LLM_PROVIDERS } from '../llm/types.ts';
 
 /**
@@ -15,12 +20,19 @@ import { LLM_PROVIDERS } from '../llm/types.ts';
  *
  * The floor is the three without which the loop has nothing to do:
  *
- * - `ANTHROPIC_API_KEY` — the funded key the executor container is handed, pointwise (never the
- *   whole `.env`, see task 155);
+ * - **exactly one of `ANTHROPIC_API_KEY` | `CLAUDE_CODE_OAUTH_TOKEN`** — the credential the executor
+ *   container is handed, pointwise (never the whole `.env`, see task 155);
  * - `PORT` — the dashboard is the only way to watch an autonomous run, so a loop without one is a
  *   loop nobody can supervise;
  * - `WORKSPACE_ROOT_PATH` — where the projects the loop builds actually live. There is no default
  *   that could be right: guessing it would mean writing a stranger's code into a guessed directory.
+ *
+ * **Why exactly one, and not «whichever is there» (амендмент А-23).** The CLI's documented
+ * precedence puts `ANTHROPIC_API_KEY` above `CLAUDE_CODE_OAUTH_TOKEN`, so a machine carrying both
+ * runs every container on the metered key while its operator believes the subscription is paying —
+ * a configuration whose cost is invisible until the invoice. Refusing the ambiguous case at boot is
+ * cheaper than discovering it later, and it makes the loop's own logs able to name, truthfully,
+ * which budget a run spent.
  */
 
 /** Present-but-blank is absent. A variable set to `""` in a `.env` is not a configured value. */
@@ -44,11 +56,18 @@ const port = z.preprocess(
 const url = (name: string) =>
   z.url({ error: `${name} must be an absolute URL, for example http://127.0.0.1:11434/v1` });
 
-export const envSchema = z.object({
+export const CREDENTIAL_REQUIRED =
+  'exactly one of ANTHROPIC_API_KEY | CLAUDE_CODE_OAUTH_TOKEN is required — the executor container is handed that one credential and nothing else from the environment';
+
+export const CREDENTIAL_AMBIGUOUS =
+  'ANTHROPIC_API_KEY and CLAUDE_CODE_OAUTH_TOKEN are both set — leave exactly one: the CLI prefers the API key, so a run that was meant to spend the subscription would silently spend the key instead';
+
+const envObject = z.object({
   // --- the floor: absent means the loop cannot run at all ---
-  ANTHROPIC_API_KEY: required(
-    'ANTHROPIC_API_KEY is required — the executor container is handed this key and nothing else from the environment',
-  ),
+  /** The metered Console key. Read by `--bare`, which is the isolation the API-key path uses. */
+  ANTHROPIC_API_KEY: optional(z.string().min(1)),
+  /** The subscription token from `claude setup-token`. Never read in `--bare` mode. */
+  CLAUDE_CODE_OAUTH_TOKEN: optional(z.string().min(1)),
   PORT: port,
   WORKSPACE_ROOT_PATH: required(
     'WORKSPACE_ROOT_PATH is required — it is the directory the loop builds projects in, and there is no safe default',
@@ -97,7 +116,44 @@ export const envSchema = z.object({
   TELEGRAM_OWNER_CHAT_ID: optional(z.string().min(1)),
 });
 
+export const envSchema = envObject;
+
 export type LoopEnv = z.infer<typeof envSchema>;
+
+/**
+ * The floor's one rule that no single field can express: **exactly one credential**.
+ *
+ * Checked **beside** the schema rather than as an object-level refinement, and that is not a style
+ * choice: a refinement on the object runs only when every field already parsed, so an operator
+ * filling a fresh `.env` would be told about a malformed `PORT` first and about the missing
+ * credential only on the next attempt — the very «three restarts» this module exists to avoid. It
+ * reads the raw source for the same reason, so it has an answer even when the parse failed.
+ *
+ * The message names **both** spellings, because an operator who reads only «ANTHROPIC_API_KEY» in a
+ * failure reaches for the key the amendment moved away from.
+ */
+export function credentialIssue(source: Record<string, string | undefined>): string | null {
+  const present = EXECUTOR_CREDENTIAL_KINDS.filter(
+    (name) => blankToUndefined(source[name]) !== undefined,
+  );
+
+  if (present.length === 1) return null;
+
+  return present.length === 0 ? CREDENTIAL_REQUIRED : CREDENTIAL_AMBIGUOUS;
+}
+
+/**
+ * The credential, with its kind — what the executor wrapper and the command builder both need.
+ *
+ * Total by construction: `parseEnv` has already refused every environment that does not hold
+ * exactly one, so this cannot be reached with none.
+ */
+export function executorCredential(env: LoopEnv): ExecutorCredential {
+  const kind: ExecutorCredentialKind =
+    env.ANTHROPIC_API_KEY === undefined ? 'CLAUDE_CODE_OAUTH_TOKEN' : 'ANTHROPIC_API_KEY';
+
+  return { kind, value: env[kind] ?? '' };
+}
 
 /**
  * A configuration failure, rendered as the operator needs to read it: every issue at once, each
@@ -116,15 +172,21 @@ export class LoopConfigurationError extends Error {
 /** Parses an arbitrary source. Pure and injectable, so the failure path is testable. */
 export function parseEnv(source: Record<string, string | undefined>): LoopEnv {
   const result = envSchema.safeParse(source);
+  const credential = credentialIssue(source);
 
-  if (!result.success) {
-    throw new LoopConfigurationError(
-      result.error.issues.map((issue) => {
+  const issues = result.success
+    ? []
+    : result.error.issues.map((issue) => {
         const name = issue.path.join('.');
         return name === '' ? issue.message : `${name}: ${issue.message}`;
-      }),
-    );
+      });
+
+  if (credential !== null) {
+    issues.push(`${EXECUTOR_CREDENTIAL_KINDS.join(' | ')}: ${credential}`);
   }
+
+  if (issues.length > 0) throw new LoopConfigurationError(issues);
+  if (!result.success) throw new LoopConfigurationError(['configuration is invalid']);
 
   return result.data;
 }

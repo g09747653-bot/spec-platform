@@ -29,7 +29,7 @@ export function LiveFeed({ projectId, initial }: { projectId: string; initial: L
   const [lines, setLines] = useState<LogEvent[]>(initial);
   const [live, setLive] = useState(false);
   const seen = useRef(new Set(initial.map((line) => line.logId)));
-  const bottom = useRef<HTMLDivElement | null>(null);
+  const feed = useRef<HTMLOListElement | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -67,8 +67,20 @@ export function LiveFeed({ projectId, initial }: { projectId: string; initial: L
     };
   }, [projectId, initial, router]);
 
+  /*
+   * Follow the tail — by scrolling **the list**, which is the element that scrolls.
+   *
+   * The sentinel used to sit after the `<ol>`, outside it, and `scrollIntoView` therefore moved the
+   * page while the list — `max-height: 62vh; overflow-y: auto` — stayed exactly where it was. The
+   * live gate walk photographed the result: three minutes and several hundred lines into an
+   * autonomous run, the panel was still showing the first second of the intake. An operator watching
+   * an unattended run has one window onto it, and it was frozen on the oldest thing it ever saw.
+   */
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: 'end' });
+    const list = feed.current;
+    if (list === null) return;
+
+    list.scrollTop = list.scrollHeight;
   }, [lines]);
 
   return (
@@ -82,7 +94,7 @@ export function LiveFeed({ projectId, initial }: { projectId: string; initial: L
           {RU.feedEmpty}
         </p>
       ) : (
-        <ol className="feed" data-testid="feed">
+        <ol className="feed" data-testid="feed" ref={feed}>
           {lines.map((line) => (
             <li key={line.logId} data-level={line.logLevel} data-testid="feed-line">
               <span className="when">{clock(line.createdAt)}</span>
@@ -94,7 +106,6 @@ export function LiveFeed({ projectId, initial }: { projectId: string; initial: L
           ))}
         </ol>
       )}
-      <div ref={bottom} />
     </>
   );
 }

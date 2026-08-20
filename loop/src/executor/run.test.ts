@@ -7,7 +7,12 @@ import type { LogLevel } from '../events/bus.ts';
 
 import { claudeCommand, EXECUTOR_TOOLS } from './claude-command.ts';
 import { EXECUTOR_DOCKERFILE, EXECUTOR_IMAGE, CLAUDE_CODE_VERSION } from './image.ts';
-import { executorContainerName, executorEnvironment, runExecutor } from './run.ts';
+import {
+  executorContainerName,
+  executorEnvironment,
+  runExecutor,
+  type ExecutorRequest,
+} from './run.ts';
 
 /**
  * The executor wrapper's own rules (task 155).
@@ -98,8 +103,8 @@ const REQUEST = {
   projectId: 'proj_1',
   workspacePath: 'C:\\Users\\Owner\\workspace\\proj_1',
   taskFile: '/workspace/handoff/tasks/task_task_1.json',
-  anthropicApiKey: 'sk-ant-not-a-real-key',
-};
+  credential: { kind: 'ANTHROPIC_API_KEY', value: 'sk-ant-not-a-real-key' },
+} satisfies ExecutorRequest;
 
 describe('what the executor container is given (task 155)', () => {
   it('receives a named list of variables — never the loop’s environment', () => {
@@ -112,7 +117,18 @@ describe('what the executor container is given (task 155)', () => {
       'LOOP_TASK_FILE',
       'LOOP_TASK_ID',
     ]);
-    expect(environment.ANTHROPIC_API_KEY).toBe(REQUEST.anthropicApiKey);
+    expect(environment.ANTHROPIC_API_KEY).toBe(REQUEST.credential.value);
+  });
+
+  it('carries the subscription token under its own name, and no API key beside it', () => {
+    const environment = executorEnvironment({
+      ...REQUEST,
+      credential: { kind: 'CLAUDE_CODE_OAUTH_TOKEN', value: 'sk-ant-oat01-not-a-real-token' },
+    });
+
+    expect(environment.CLAUDE_CODE_OAUTH_TOKEN).toBe('sk-ant-oat01-not-a-real-token');
+    // The precedence trap: an API key beside it would win, and the plan would never be billed.
+    expect(environment.ANTHROPIC_API_KEY).toBeUndefined();
   });
 
   it('mounts the workspace with the host path translated', async () => {
@@ -123,6 +139,41 @@ describe('what the executor container is given (task 155)', () => {
     expect(recorded.created[0]?.binds).toEqual(['/c/Users/Owner/workspace/proj_1:/workspace:rw']);
     expect(recorded.created[0]?.workingDir).toBe('/workspace');
     expect(recorded.created[0]?.image).toBe(EXECUTOR_IMAGE);
+  });
+
+  it('builds the image when the machine has none, instead of failing on «no such image»', async () => {
+    const { engine } = fakeEngine({});
+    let built = 0;
+    const missing: DockerEngine = {
+      ...engine,
+      hasImage: () => Promise.resolve(false),
+      buildImage: () => {
+        built += 1;
+        return Promise.resolve();
+      },
+    };
+
+    await runExecutor(REQUEST, { engine: missing, onLine: () => undefined });
+
+    expect(built).toBe(1);
+  });
+
+  it('does not rebuild an image that is already there', async () => {
+    const { engine } = fakeEngine({});
+    let built = 0;
+
+    await runExecutor(REQUEST, {
+      engine: {
+        ...engine,
+        buildImage: () => {
+          built += 1;
+          return Promise.resolve();
+        },
+      },
+      onLine: () => undefined,
+    });
+
+    expect(built).toBe(0);
   });
 
   it('names the container the way the red-CI freeze will look for it', async () => {
@@ -139,7 +190,9 @@ describe('what the executor container is given (task 155)', () => {
 
     await runExecutor(REQUEST, { engine, onLine: () => undefined });
 
-    expect(recorded.created[0]?.cmd).toEqual(claudeCommand({ taskFile: REQUEST.taskFile }));
+    expect(recorded.created[0]?.cmd).toEqual(
+      claudeCommand({ taskFile: REQUEST.taskFile, credentialKind: 'ANTHROPIC_API_KEY' }),
+    );
   });
 
   it('runs a scripted assignment verbatim when one is supplied', async () => {
@@ -215,7 +268,10 @@ describe('how an iteration ends (task 155)', () => {
 });
 
 describe('the Claude Code command (task 155)', () => {
-  const command = claudeCommand({ taskFile: '/workspace/handoff/tasks/task_7.json' });
+  const command = claudeCommand({
+    taskFile: '/workspace/handoff/tasks/task_7.json',
+    credentialKind: 'ANTHROPIC_API_KEY',
+  });
 
   it('runs headless, in bare mode, and never waits for a person', () => {
     expect(command[0]).toBe('claude');
@@ -249,13 +305,54 @@ describe('the Claude Code command (task 155)', () => {
   });
 
   it('carries a model only when one was asked for', () => {
-    expect(claudeCommand({ taskFile: '/t.json' })).not.toContain('--model');
-    expect(claudeCommand({ taskFile: '/t.json', model: 'sonnet' })).toContain('sonnet');
+    const base = { taskFile: '/t.json', credentialKind: 'ANTHROPIC_API_KEY' } as const;
+
+    expect(claudeCommand(base)).not.toContain('--model');
+    expect(claudeCommand({ ...base, model: 'sonnet' })).toContain('sonnet');
   });
 
   it('does not use the flags the A0 bundle guessed at — they do not exist', () => {
     expect(command).not.toContain('--yes');
     expect(command.join(' ')).not.toContain('CI=true');
+  });
+});
+
+describe('isolation follows the credential, because bare mode cannot read a token (А-23)', () => {
+  const subscription = claudeCommand({
+    taskFile: '/workspace/handoff/tasks/task_7.json',
+    credentialKind: 'CLAUDE_CODE_OAUTH_TOKEN',
+  });
+
+  it('never asks for bare mode with a subscription token — measured: it refuses to log in', () => {
+    expect(subscription).not.toContain('--bare');
+  });
+
+  it('closes the settings channel instead: no source loaded means no hooks and no CLAUDE.md', () => {
+    const at = subscription.indexOf('--setting-sources');
+
+    expect(at).toBeGreaterThan(-1);
+    // The empty value is the point — «load none of user, project, local», in the CLI's own words.
+    expect(subscription[at + 1]).toBe('');
+  });
+
+  it('closes MCP by a second, independent mechanism', () => {
+    expect(subscription).toContain('--strict-mcp-config');
+  });
+
+  it('changes nothing else: the same prompt, tools, bounds and format on both paths', () => {
+    const apiKey = claudeCommand({
+      taskFile: '/workspace/handoff/tasks/task_7.json',
+      credentialKind: 'ANTHROPIC_API_KEY',
+    });
+
+    const withoutIsolation = (command: string[]) =>
+      command.filter(
+        (argument, index) =>
+          !['--bare', '--strict-mcp-config', '--setting-sources'].includes(argument) &&
+          command[index - 1] !== '--setting-sources',
+      );
+
+    expect(withoutIsolation(subscription)).toEqual(withoutIsolation(apiKey));
   });
 });
 

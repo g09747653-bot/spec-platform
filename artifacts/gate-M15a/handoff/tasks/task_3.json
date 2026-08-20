@@ -1,0 +1,15 @@
+{
+  "taskId": "3",
+  "milestoneId": "ms_03",
+  "title": "Написание встроенного демонстрационного сценария квеста",
+  "description": "Создать в папке `scenarios/` файл `demo.json` (\"Побег из запертой комнаты\"), содержащий логику поиска ключа на столе, проверку состояния запертой двери и успешный выход из комнаты. Сценарий должен полностью соответствовать схеме `schemas/scenario.schema.json` и использовать булевы флаги в `initialState` и `setState`.\n  _Зависимости: 2_",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "schemas/scenario.schema.json"
+  ],
+  "dependsOn": [
+    "2"
+  ],
+  "expectedArtifacts": [],
+  "status": "PENDING"
+}

@@ -4,7 +4,9 @@ import { bindMount } from '../docker/paths.ts';
 import type { LogLevel } from '../events/bus.ts';
 
 import { claudeCommand } from './claude-command.ts';
-import { EXECUTOR_IMAGE } from './image.ts';
+import type { ExecutorCredential } from './credential.ts';
+import { ensureExecutorImage, EXECUTOR_IMAGE } from './image.ts';
+import { describeUsage, foldStreamLine, type ExecutorUsage } from './stream-json.ts';
 
 /**
  * Running one executor iteration in a container (task 155).
@@ -26,6 +28,13 @@ export interface ExecutorRun {
   /** Wall clock of the container, for the feed and for the report. */
   durationMs: number;
   containerName: string;
+  /**
+   * What the iteration cost, as the CLI itself reported it (turns, tokens, rate-limit window).
+   *
+   * Empty for a scripted executor, which has no stream to read — and empty is the honest value:
+   * a rehearsal costs nothing on the plan.
+   */
+  usage: ExecutorUsage;
 }
 
 export interface ExecutorRequest {
@@ -44,8 +53,8 @@ export interface ExecutorRequest {
    * discipline, carried over).
    */
   command?: readonly string[];
-  /** The funded key, handed over one entry at a time. */
-  anthropicApiKey: string;
+  /** The one credential — API key or subscription token — handed over as a single entry. */
+  credential: ExecutorCredential;
   model?: string | undefined;
   maxTurns?: number;
 }
@@ -75,10 +84,14 @@ export function executorContainerName(taskId: string): string {
  * loop's environment would pass anything a future variable happened not to match, while a list
  * passes what is written in it and nothing else. `.env` is never mounted, never copied and never
  * forwarded — the container test reads the container's own environment back and asserts it.
+ *
+ * The credential enters under **its own name and only its own name**: a container handed a
+ * subscription token has no `ANTHROPIC_API_KEY` at all, so the CLI's precedence has nothing to
+ * prefer and the run cannot quietly spend the other budget (амендмент А-23).
  */
 export function executorEnvironment(request: ExecutorRequest): Record<string, string> {
   return {
-    ANTHROPIC_API_KEY: request.anthropicApiKey,
+    [request.credential.kind]: request.credential.value,
     /* What the assignment is, so a script or a hook inside can find it without being told twice. */
     LOOP_TASK_FILE: request.taskFile,
     LOOP_TASK_ID: request.taskId,
@@ -98,6 +111,19 @@ export async function runExecutor(
   const name = executorContainerName(request.taskId);
 
   /*
+   * The image, before anything else.
+   *
+   * It was previously ensured only by the container test, which made a first run on a clean machine
+   * depend on a test having run there before it — the loop would have failed on «no such image» at
+   * the moment it was least watched. `ensureExecutorImage` returns immediately when the image is
+   * there, so the ordinary iteration pays one `hasImage` round trip for the property that a fresh
+   * machine works.
+   */
+  await ensureExecutorImage(engine, (message) => {
+    onLine({ stream: 'stdout', level: 'INFO', text: message });
+  });
+
+  /*
    * A container left over from a previous attempt would make `create` fail on the name — and the
    * name is how the loop indexes the daemon, so adopting the old one instead is not an option.
    */
@@ -111,6 +137,7 @@ export async function runExecutor(
       request.command ??
       claudeCommand({
         taskFile: request.taskFile,
+        credentialKind: request.credential.kind,
         ...(request.model === undefined ? {} : { model: request.model }),
         ...(request.maxTurns === undefined ? {} : { maxTurns: request.maxTurns }),
       }),
@@ -120,6 +147,7 @@ export async function runExecutor(
   });
 
   const started = now();
+  let usage: ExecutorUsage = {};
 
   try {
     await engine.startContainer(id);
@@ -129,7 +157,9 @@ export async function runExecutor(
      * container exits is not a feed — it is a transcript, and the operator of an unattended run
      * needs to see a task going wrong while it is going wrong.
      */
-    const draining = drain(engine, id, onLine);
+    const draining = drain(engine, id, onLine, (line) => {
+      usage = foldStreamLine(usage, line);
+    });
 
     const timedOut = await waitWithDeadline(engine, id, timeoutMs);
 
@@ -150,6 +180,7 @@ export async function runExecutor(
         exitCode: null,
         durationMs: now() - started,
         containerName: name,
+        usage,
       };
     }
 
@@ -157,26 +188,37 @@ export async function runExecutor(
 
     const exitCode = (await engine.inspectContainer(id)).state.ExitCode;
 
+    /*
+     * What the plan paid for this iteration, said once, in the feed the operator is watching. It
+     * comes after the run rather than during it because the CLI reports turns and tokens in its
+     * closing event — a per-line estimate would be a guess about a number that is about to arrive.
+     */
+    const spent = describeUsage(usage);
+    if (spent !== null) onLine({ stream: 'stdout', level: 'INFO', text: spent });
+
     return {
       outcome: exitCode === 0 ? 'SUCCESS' : 'FAILED',
       exitCode,
       durationMs: now() - started,
       containerName: name,
+      usage,
     };
   } finally {
     await engine.removeContainer(id, { force: true }).catch(() => undefined);
   }
 }
 
-/** Streams the container's output into the feed until the stream ends. */
+/** Streams the container's output into the feed until the stream ends, accounting as it goes. */
 async function drain(
   engine: DockerEngine,
   id: string,
   onLine: ExecutorDeps['onLine'],
+  account: (line: string) => void,
 ): Promise<void> {
   try {
     for await (const line of readLogFrames(await engine.attachLogs(id, { follow: true }))) {
       if (line.text.trim() === '') continue;
+      if (line.stream === 'stdout') account(line.text);
       onLine({
         stream: line.stream,
         text: line.text,

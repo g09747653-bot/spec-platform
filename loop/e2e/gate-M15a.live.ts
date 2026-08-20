@@ -1,6 +1,6 @@
 /* eslint-disable no-restricted-properties -- a hand-run walk, not application code: it takes its
    configuration from the environment because that is how a person points it at this machine. */
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   cpSync,
@@ -137,8 +137,50 @@ const TOY_FILES: Record<string, string> = {
 
 let server: ChildProcess | null = null;
 
+/**
+ * Builds the loop before the walk starts.
+ *
+ * `next start` serves a **prebuilt** bundle, so a walk run after a source change silently exercises
+ * whatever was built last — and reports its verdict about code that is no longer in the repository.
+ * This cost a live run: the acceptance defect was fixed, the walk was started, and the fix was not
+ * in the bundle being served. A verdict about the wrong bytes is worse than no verdict, so the walk
+ * builds what it is about to judge and is one command again.
+ */
+function buildLoop(): void {
+  note('Сборка контура перед прогулкой (прогулка судит то, что собрала сама)…');
+
+  const built = spawnSync(
+    'node',
+    [join(LOOP_ROOT, 'node_modules', 'next', 'dist', 'bin', 'next'), 'build', '--webpack'],
+    { cwd: LOOP_ROOT, encoding: 'utf8', env: { ...process.env } },
+  );
+
+  if (built.status !== 0) {
+    throw new Error(
+      `сборка контура не прошла (код ${String(built.status)}): ${(built.stderr || built.stdout || '').slice(-800)}`,
+    );
+  }
+
+  note('Контур собран.');
+}
+
 async function startServer(label: string): Promise<void> {
   note(`Запуск сервера контура (${label})…`);
+
+  /*
+   * The credential is **not** supplied here on a live walk: `loop/.env` holds exactly one of
+   * `ANTHROPIC_API_KEY` | `CLAUDE_CODE_OAUTH_TOKEN`, and the server reads it. Supplying a
+   * placeholder beside it would be supplying a second credential, which the configuration now
+   * refuses by design (амендмент А-23) — and refuses for the right reason, since the CLI would have
+   * preferred the placeholder to the real one.
+   *
+   * A rehearsal still needs *something*, because the floor is a floor even when the executor is a
+   * shell script; it gets a placeholder only when the environment holds neither.
+   */
+  const hasCredential =
+    (process.env.ANTHROPIC_API_KEY ?? '') !== '' ||
+    (process.env.CLAUDE_CODE_OAUTH_TOKEN ?? '') !== '' ||
+    credentialFromEnvFile() !== null;
 
   server = spawn(
     'node',
@@ -150,7 +192,7 @@ async function startServer(label: string): Promise<void> {
         PORT: String(PORT),
         WORKSPACE_ROOT_PATH: WORKSPACE,
         LOOP_DB_PATH: join(WORKSPACE, '.loop', 'loop.db'),
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? 'gate-placeholder-not-a-real-key',
+        ...(STUB && !hasCredential ? { ANTHROPIC_API_KEY: 'gate-placeholder-not-a-real-key' } : {}),
         ...(STUB ? { LOOP_EXECUTOR_STUB: '1' } : {}),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -275,6 +317,60 @@ function sha256(path: string): string {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
 }
 
+/**
+ * How many lines of the executor's own output the feed is showing.
+ *
+ * Counted rather than waited for: the feed already holds the orchestrator's lines when the executor
+ * starts, so «a line is on screen» is not evidence of anything — the count growing is.
+ */
+async function executorLineCount(page: Page): Promise<number> {
+  return page.evaluate(
+    () =>
+      [...document.querySelectorAll('[data-testid="feed-line"]')].filter(
+        (node) => (node.querySelector('.who')?.textContent ?? '').trim() === 'EXECUTOR',
+      ).length,
+  );
+}
+
+/**
+ * The executor's credential, read from `loop/.env` — **only** to prove it is nowhere in the output.
+ *
+ * The walk writes artifacts that are committed to the repository, and the credential is now a
+ * subscription token belonging to a person rather than a project. «It should not leak» is a claim,
+ * and a claim in a gate has to be measured: the value is held in memory for the length of one scan
+ * and is never written, printed, or hashed into anything the walk emits.
+ */
+function credentialFromEnvFile(): { kind: string; value: string } | null {
+  const path = join(LOOP_ROOT, '.env');
+  if (!existsSync(path)) return null;
+
+  for (const kind of ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']) {
+    const found = new RegExp(`^${kind}=(.+)$`, 'm').exec(readFileSync(path, 'utf8'));
+    const value = found?.[1]?.trim() ?? '';
+    if (value !== '') return { kind, value };
+  }
+
+  return null;
+}
+
+/** Every file under a directory, recursively — the artifact tree as a reader would walk it. */
+function everyFile(directory: string): string[] {
+  const found: string[] = [];
+
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const full = join(directory, entry.name);
+    if (entry.isDirectory()) found.push(...everyFile(full));
+    else found.push(full);
+  }
+
+  return found;
+}
+
+/** Lines the wrapper wrote about what the iteration cost, in the plan's own units. */
+function priceLines(text: string): string[] {
+  return text.split('\n').filter((line) => line.includes('Цена итерации'));
+}
+
 function snapshotHandoff(projectDirectory: string): Record<string, string> {
   const tree: Record<string, string> = {};
   const tasksDirectory = join(projectDirectory, 'handoff', 'tasks');
@@ -289,6 +385,8 @@ function snapshotHandoff(projectDirectory: string): Record<string, string> {
 async function main(): Promise<void> {
   mkdirSync(OUT, { recursive: true });
   const started = Date.now();
+
+  buildLoop();
 
   const projectDirectory = prepareWorkspace();
 
@@ -365,6 +463,19 @@ async function main(): Promise<void> {
       finding('Ни одна задача не перешла в IN_PROGRESS до истечения ожидания.');
     });
 
+    /*
+     * `IN_PROGRESS` is set before the container has done anything, so killing on it alone would
+     * prove only that the orchestrator can die between two database writes. The claim under test is
+     * larger: the executor is **working** — a live model call in flight, a container writing into
+     * the workspace — and its supervisor dies anyway. So the walk waits until the executor's own
+     * output is arriving in the feed, and kills into that.
+     */
+    note('Ожидание живого вывода исполнителя, чтобы SIGKILL пришёлся на работающий контейнер…');
+    await waitFor(async () => (await executorLineCount(page)) >= 3, 300_000).catch(() => {
+      finding('Исполнитель не выдал ни строки в ленту до истечения ожидания.');
+    });
+    note(`Строк исполнителя в ленте на момент удара: ${String(await executorLineCount(page))}.`);
+
     await shot(page, '03-задача-в-работе');
     killServer(true);
     await new Promise((settle) => setTimeout(settle, 3_000));
@@ -437,8 +548,21 @@ async function main(): Promise<void> {
     cpSync(join(projectDirectory, 'handoff'), join(OUT, 'handoff'), { recursive: true });
     writeFileSync(join(OUT, 'server.log'), serverLog.join(''), 'utf8');
 
-    // --- red conditions -------------------------------------------------------------------------
+    // --- what the cycle cost, in the plan's own units ------------------------------------------
     const wholeLog = `${serverLog.join('')}\n${feed.join('\n')}`;
+    const prices = priceLines(wholeLog);
+    writeFileSync(
+      join(OUT, 'usage.txt'),
+      prices.length === 0 ? 'Строк о цене итерации в логах нет.\n' : `${prices.join('\n')}\n`,
+      'utf8',
+    );
+    if (prices.length === 0) {
+      note('Цена итерации не найдена в логах (стабовый исполнитель не имеет потока).');
+    } else {
+      for (const price of prices) note(price.trim());
+    }
+
+    // --- red conditions -------------------------------------------------------------------------
     if (/database is locked/i.test(wholeLog)) {
       finding('В логах встретилось «database is locked».');
       verdict = 'RED';
@@ -446,6 +570,27 @@ async function main(): Promise<void> {
     if (/не уложился в/i.test(wholeLog)) {
       finding('Исполнитель упёрся в стенные часы — возможное интерактивное зависание.');
       verdict = 'RED';
+    }
+
+    // The credential is the customer's own subscription: it may not appear in a committed artifact.
+    const credential = credentialFromEnvFile();
+    if (credential === null) {
+      note('Учётные данные исполнителя в loop/.env не найдены — проверка утечки пропущена.');
+    } else {
+      const leaked = everyFile(OUT).filter((path) =>
+        readFileSync(path, 'utf8').includes(credential.value),
+      );
+
+      if (leaked.length === 0) {
+        note(`Утечки нет: ${credential.kind} не встречается ни в одном артефакте прогулки.`);
+      } else {
+        finding(
+          `Учётные данные исполнителя попали в артефакты: ${leaked
+            .map((path) => path.slice(OUT.length + 1))
+            .join(', ')}.`,
+        );
+        verdict = 'RED';
+      }
     }
   } catch (error) {
     finding(`Прогулка остановлена: ${error instanceof Error ? error.message : String(error)}`);

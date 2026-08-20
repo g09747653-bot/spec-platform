@@ -192,7 +192,7 @@ const cycle = (command: string[]) =>
       database,
       engine,
       logger: createLogger(database),
-      anthropicApiKey: 'not-used-by-the-stub',
+      credential: { kind: 'ANTHROPIC_API_KEY', value: 'not-used-by-the-stub' },
       executorCommand: command,
       executorTimeoutMs: 120_000,
       acceptanceTimeoutMs: 180_000,
@@ -259,6 +259,65 @@ describe.skipIf(!DAEMON_LOOKS_PRESENT)('the single acceptance cycle (task 157)',
       .map((row) => String(row.message))
       .join('\n');
     expect(said).toContain('Решает контейнер');
+  }, 300_000);
+
+  it('survives a workspace holding symlinks — the shape npm install leaves behind', async () => {
+    if (!reachable) return;
+
+    seedProject(true);
+    /*
+     * Two assertions in one case, because the defect and the property are different things.
+     *
+     * On Windows the case is the regression itself (D-269): an executor that runs `npm install`
+     * leaves `node_modules/.bin/*` as POSIX symlinks, written straight through the bind mount, and
+     * copying those from the host asks Windows to *create* symlinks — which is privileged, and which
+     * `fs.cpSync` answered by terminating the process (0xC0000409), taking the orchestrator with it
+     * and logging nothing. Reaching a verdict at all is the assertion.
+     *
+     * On Linux — where CI runs, and where that crash cannot happen — the artifact walk is what
+     * carries the case: it asserts inside the clean container that the copy still holds a real
+     * symlink pointing where npm put it. That is the property the fix is actually for, and it holds
+     * on every platform.
+     */
+    seedTask({
+      expectedArtifacts: [
+        {
+          path: 'node_modules/.bin/acorn',
+          validationCmd: 'sh',
+          validationArgs: ['-c', 'readlink node_modules/.bin/acorn'],
+          successRegex: 'acorn/bin/acorn',
+        },
+      ],
+    });
+    const result = await cycle([
+      'sh',
+      '-c',
+      [
+        'mkdir -p /workspace/node_modules/.bin /workspace/node_modules/acorn/bin',
+        'printf "#!/usr/bin/env node\\n" > /workspace/node_modules/acorn/bin/acorn',
+        'ln -s ../acorn/bin/acorn /workspace/node_modules/.bin/acorn',
+        'printf "готово\\n" > /workspace/out.txt',
+        `cat > /workspace/${HANDOFF.reports.replaceAll('\\', '/')}/report_cycle_1.json <<'JSON'`,
+        JSON.stringify(
+          {
+            reportId: 'r-stub',
+            taskId: 'cycle_1',
+            projectId: 'p1',
+            executorId: 'executor_stub',
+            status: 'SUCCESS',
+            testsRun: { total: 1, passed: 1, failed: 0 },
+          },
+          null,
+          2,
+        ),
+        'JSON',
+      ].join('\n'),
+    ]);
+
+    // The point is that there is a verdict at all: before the fix, this process did not reach here.
+    expect(result.outcome, result.acceptance?.reason ?? result.reason).toBe('COMPLETED');
+    expect(result.acceptance?.accepted).toBe(true);
+    expect(statusOnDisk()).toBe('COMPLETED');
   }, 300_000);
 
   it('stops at a block without running the acceptance at all', async () => {
