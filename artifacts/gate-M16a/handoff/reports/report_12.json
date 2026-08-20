@@ -1,0 +1,15 @@
+{
+  "reportId": "report_12",
+  "taskId": "12",
+  "projectId": "b2a2b018-c565-449f-8f65-fb03acd826ee",
+  "executorId": "claude-agent",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 32,
+    "passed": 32,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "Обход внутреннего авто-детекта цвета в `yoctocolors` при импорте модуля",
+  "rationale": "`lib/cli-view.js` уже содержал реализацию (detectColorSupport, createView, styleWin/Lose/Error/Warning/Item, styleEnding, print*), но `npm test` падал на 4 тестах: createView({colorEnabled: true}) не добавлял ANSI-коды. Причина — `yoctocolors` вычисляет поддержку цвета (`tty.WriteStream.prototype.hasColors()`) один раз при импорте модуля и замораживает экспортируемые функции в виде no-op, если у процесса нет реального TTY (что верно для тестового раннера `node --test`). Это делает библиотеку глухой к явному переопределению colorEnabled, которое требуют тесты и архитектура (ручной проброс потока/env для тестируемости). Исправление: перед импортом `yoctocolors` временно подменяем `tty.WriteStream.prototype.hasColors` на функцию, всегда возвращающую true, импортируем модуль (получая рабочие ANSI-обёртки), затем сразу восстанавливаем оригинальный метод. Реальное решение красить или нет остаётся полностью за собственной логикой `detectColorSupport`/`style()` в cli-view.js, как и было задумано. Библиотека yoctocolors при этом продолжает использоваться как источник корректных (в т.ч. с поддержкой вложенности) ANSI-обёрток. Дополнительно: в существующем `test/cli-view.test.js` регэкспы для поиска ANSI-кодов содержали сырые control-байты ESC (0x1b), из-за чего `npm run lint` падал на правиле no-control-regex; переписал их в виде `\\x1b`-escape (функционально идентично) и добавил файловый `eslint-disable-next-line`-комментарий с пояснением, почему контрольный символ в регэкспе тут намеренный. После этого `npm test` и `npm run lint` проходят чисто, `npx prettier --check` тоже зелёный."
+}

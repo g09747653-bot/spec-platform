@@ -70,8 +70,15 @@ export interface AutonomousSituation {
   /** Steps this run has already taken, and the ceiling it may not pass. */
   steps: number;
   stepBudget: number;
-  /** Consecutive steps that left the session's fingerprint unchanged. */
+  /** Consecutive **landed** steps that left the session's fingerprint unchanged. */
   idleSteps: number;
+  /**
+   * Consecutive asks that came back with no round (task 170).
+   *
+   * Counted apart from `idleSteps` because it is a different event with a different ending. See
+   * `MAX_FRUITLESS_ASKS`.
+   */
+  fruitlessAsks: number;
 }
 
 export type AutonomousMove =
@@ -110,6 +117,24 @@ export const MIN_SEED_WORDS = 4;
 /** Two identical steps in a row is a loop; the third would only make the record longer. */
 export const MAX_IDLE_STEPS = 2;
 
+/**
+ * How many times in a row the driver asks for a round that the interviewer does not produce.
+ *
+ * Three, and the number is an argument. An empty question set is a *legitimate* answer — the model
+ * saying nothing further is worth asking (FR-005 AC-10) — but at a `collect` position whose gate
+ * still wants an answered round (FR-007 AC-2) it leaves the session with no way on, and the
+ * product's own answer to that is the one a person gives: press the button again, because the next
+ * draft may well carry questions. Two would make the driver stricter with itself than the interface
+ * is with a person; unbounded would be a loop wearing a retry's clothes. Three tries, then the
+ * honest ending — `needs-unanswered`, the same one a spent round budget reaches, and true for the
+ * same reason: the door needs an answer nobody is producing.
+ *
+ * Measured, not guessed at: the M15а walk stalled twice at `requirements/collect` after exactly two
+ * such asks, and the run was declared to have been going round in circles when it had been asking
+ * honestly and getting nothing back (задача 170).
+ */
+export const MAX_FRUITLESS_ASKS = 3;
+
 export function countSeedWords(seed: string): number {
   const trimmed = seed.trim();
   return trimmed === '' ? 0 : trimmed.split(/\s+/u).length;
@@ -121,6 +146,15 @@ export function nextMove(situation: AutonomousSituation): AutonomousMove {
   if (situation.seedWords < MIN_SEED_WORDS) return { kind: 'stop', reason: 'seed-too-thin' };
   if (situation.steps >= situation.stepBudget) return { kind: 'stop', reason: 'step-budget' };
   if (situation.idleSteps >= MAX_IDLE_STEPS) return { kind: 'stop', reason: 'stalled' };
+  /*
+   * Asked, and asked, and asked, and the interviewer produced no round. Named `needs-unanswered`
+   * rather than `stalled` because that is what is true: this is the fallback panel's state — the one
+   * where a person supplies what the model could not extract — reached from the interviewer's side
+   * instead of from the budget's.
+   */
+  if (situation.fruitlessAsks >= MAX_FRUITLESS_ASKS) {
+    return { kind: 'stop', reason: 'needs-unanswered' };
+  }
 
   /*
    * A run this driver started and stopped reading — a server restart mid-stream, or a step that

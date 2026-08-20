@@ -10,6 +10,8 @@ import Ajv from 'ajv';
 import { unzipSync } from 'fflate';
 import pg from 'pg';
 
+import { EXPECTED_RESTART_NOISE, unexpectedConsole } from './fixtures/console-noise.ts';
+
 /**
  * **Гейт M14а — живая прогулка локального профиля** (task 151; А-2.1; А-20).
  *
@@ -116,24 +118,6 @@ function measure(line: string): void {
   console.log(`[${stamp()}] · ${line}`);
   measurements.push(`- ${line}`);
 }
-
-/**
- * Console noise a browser makes that is not the product's fault. The restart window adds its own
- * honest noise — every in-flight fetch of a dead server fails — and those shapes are listed rather
- * than the check disarmed: anything else in the console is still red.
- */
-const EXPECTED_CONSOLE = [
-  /Failed to load resource/i,
-  /net::ERR_ABORTED/i,
-  /net::ERR_CONNECTION_REFUSED/i,
-  /net::ERR_CONNECTION_RESET/i,
-  /The user aborted a request/i,
-  /Failed to fetch/i,
-  /NS_BINDING_ABORTED/i,
-  /ERR_NETWORK_CHANGED/i,
-  // The dev server's HMR socket dying is the restart window's own honest noise.
-  /WebSocket is already in CLOSING or CLOSED state/i,
-];
 
 /* ------------------------------------------------------------------ the stack, by its own commands */
 
@@ -276,7 +260,7 @@ async function click(page: Page, testId: string): Promise<void> {
  * authentication. Landing on the projects page from `/` IS the assertion that the server made the
  * session (task 148 AC-1) — a login screen anywhere here is a red walk.
  */
-async function createSession(page: Page): Promise<string> {
+async function createSession(page: Page): Promise<{ url: string; sessionId: string }> {
   await page.goto(`${BASE_URL}/`);
   await page.waitForURL(/\/projects$/, { timeout: 60_000 });
   say('открыт `/` без cookie — сервер привёл в проекты владельца сам');
@@ -302,7 +286,31 @@ async function createSession(page: Page): Promise<string> {
 
   await page.getByTestId('session').waitFor({ state: 'visible', timeout: 120_000 });
 
-  return page.url();
+  const url = page.url();
+  const sessionId = url.split('/').pop() ?? '';
+
+  return { url, sessionId };
+}
+
+/**
+ * **Whose rows these are** (task 171).
+ *
+ * The local profile is persistent — that is the whole of task 149 — so by the second walk the
+ * database holds the first walk's owner, projects, runs and revisions, and every query that asked
+ * «what does the database say?» was answering about all of them at once. The M15а report caught it
+ * from the loud end: a walk read the *previous* walk's `autonomous_runs` row as its own and reported
+ * a run that had ended before it started. Отводить каталог в сторону перед прогулкой было бы
+ * правилом эксплуатации, которое ловит заказчика ровно один раз (А-22 §4) — so the walk is scoped
+ * instead, and stays runnable on a lived-in profile.
+ *
+ * Everything below reads by **this** session or **this** project. The two exceptions are deliberate
+ * and named where they stand: the owner check (a claim about the deployment, not about the walk) and
+ * the restart comparison (a claim about the whole directory surviving, which is stronger the more
+ * the directory holds).
+ */
+interface WalkScope {
+  sessionId: string;
+  projectId: string;
 }
 
 /* ------------------------------------------------------------------ watching, with one restart */
@@ -355,7 +363,11 @@ interface RestartEvidence {
  * nothing can move while the stack is down — and the end-of-walk comparison reads the same rows
  * back over the wire once the run has finished.
  */
-async function restartMidWalk(page: Page, sessionUrl: string): Promise<RestartEvidence> {
+async function restartMidWalk(
+  page: Page,
+  sessionUrl: string,
+  sessionId: string,
+): Promise<RestartEvidence> {
   const before = await readProgress(page);
   await snapshot(page, `restart-before-${before.stage}-${before.substage}`);
   restartLog.push(
@@ -376,10 +388,14 @@ async function restartMidWalk(page: Page, sessionUrl: string): Promise<RestartEv
 
   const after = await readProgress(page);
   const dump = JSON.parse(readFileSync(dumpPath, 'utf8')) as Record<string, string[]>;
-  const workflowRow = JSON.parse(dump.workflow_state?.[0] ?? '{}') as {
-    stage?: string;
-    substage?: string | null;
-  };
+  /* This session's row, not the first one in the file: a lived-in profile holds other sessions. */
+  const workflowRow =
+    (dump.workflow_state ?? [])
+      .map(
+        (row) =>
+          JSON.parse(row) as { session_id?: string; stage?: string; substage?: string | null },
+      )
+      .find((row) => row.session_id === sessionId) ?? {};
 
   if (after.stage !== (workflowRow.stage ?? '')) {
     problem(
@@ -401,6 +417,7 @@ async function restartMidWalk(page: Page, sessionUrl: string): Promise<RestartEv
 async function watchTheRun(
   page: Page,
   sessionUrl: string,
+  sessionId: string,
 ): Promise<{ finished: RunProgress; restart: RestartEvidence | null }> {
   const seen = new Set<string>();
   const deadline = Date.now() + RUN_BUDGET_MS;
@@ -429,7 +446,7 @@ async function watchTheRun(
       progress.substage === 'collect' &&
       progress.stopReason === ''
     ) {
-      restart = await restartMidWalk(page, sessionUrl);
+      restart = await restartMidWalk(page, sessionUrl, sessionId);
     }
 
     if (progress.stage === 'complete' || progress.stopReason !== '') {
@@ -711,12 +728,12 @@ async function run(browser: Browser): Promise<void> {
   }
   say('OAuth-поверхность отказывает: /signin 404, /api/auth/session 404');
 
-  const sessionUrl = await createSession(page);
+  const { url: sessionUrl, sessionId } = await createSession(page);
   const clicksAtStart = clicks;
   say(`clicks so far: ${String(clicksAtStart)} — this number must not move again`);
   await snapshot(page, 'auto-session-open');
 
-  const { finished, restart } = await watchTheRun(page, sessionUrl);
+  const { finished, restart } = await watchTheRun(page, sessionUrl, sessionId);
 
   if (clicks !== clicksAtStart) {
     problem(`the walk clicked ${String(clicks - clicksAtStart)} time(s) after the seed`);
@@ -756,8 +773,27 @@ async function run(browser: Browser): Promise<void> {
 
   /* -------------------------------------------------- what the database says about it */
 
+  /*
+   * The walk's own scope, resolved once and used by every query below (task 171). Read from the
+   * session the walk itself created — the URL it is standing on — so no query has to guess which of
+   * a lived-in profile's projects is the one under test.
+   */
+  const owned = await query<{ project_id: string }>(
+    'SELECT project_id::text FROM sessions WHERE id = $1::uuid',
+    [sessionId],
+  );
+  const scope: WalkScope = { sessionId, projectId: owned[0]?.project_id ?? '' };
+
+  if (scope.projectId === '') {
+    problem('сессия прогулки не нашлась в базе — дальнейшая бухгалтерия была бы про чужие строки');
+    return;
+  }
+
   const driverRows = await query<{ stage: string; at: string; body: string }>(
-    "SELECT stage, to_char(created_at, 'HH24:MI:SS') AS at, body FROM session_messages WHERE origin = 'driver' ORDER BY created_at ASC",
+    `SELECT stage, to_char(created_at, 'HH24:MI:SS') AS at, body
+       FROM session_messages WHERE origin = 'driver' AND session_id = $1::uuid
+      ORDER BY created_at ASC`,
+    [scope.sessionId],
   );
 
   for (const row of driverRows) {
@@ -774,7 +810,11 @@ async function run(browser: Browser): Promise<void> {
     started_at: string;
     ended_at: string | null;
   }>(
-    "SELECT status, stop_reason, steps, idle_steps, to_char(started_at, 'HH24:MI:SS') AS started_at, to_char(ended_at, 'HH24:MI:SS') AS ended_at FROM autonomous_runs ORDER BY started_at ASC",
+    `SELECT status, stop_reason, steps, idle_steps,
+            to_char(started_at, 'HH24:MI:SS') AS started_at,
+            to_char(ended_at, 'HH24:MI:SS') AS ended_at
+       FROM autonomous_runs WHERE session_id = $1::uuid ORDER BY started_at ASC`,
+    [scope.sessionId],
   );
 
   for (const row of runs) {
@@ -784,7 +824,9 @@ async function run(browser: Browser): Promise<void> {
   }
 
   const rounds = await query<{ stage: string; rounds: string }>(
-    'SELECT stage, count(*)::text AS rounds FROM question_rounds GROUP BY stage ORDER BY min(presented_at)',
+    `SELECT stage, count(*)::text AS rounds FROM question_rounds WHERE session_id = $1::uuid
+      GROUP BY stage ORDER BY min(presented_at)`,
+    [scope.sessionId],
   );
 
   for (const row of rounds) {
@@ -792,7 +834,10 @@ async function run(browser: Browser): Promise<void> {
   }
 
   const revisions = await query<{ spec_type: string; revision_number: number; approved: boolean }>(
-    'SELECT f.spec_type, r.revision_number, r.approved FROM spec_revisions r JOIN spec_files f ON f.id = r.spec_file_id ORDER BY f.spec_type, r.revision_number',
+    `SELECT f.spec_type, r.revision_number, r.approved
+       FROM spec_revisions r JOIN spec_files f ON f.id = r.spec_file_id
+      WHERE f.project_id = $1::uuid ORDER BY f.spec_type, r.revision_number`,
+    [scope.projectId],
   );
 
   for (const row of revisions) {
@@ -820,7 +865,9 @@ async function run(browser: Browser): Promise<void> {
        FROM review_feedback b
        JOIN spec_revisions r ON r.id = b.spec_revision_id
        JOIN spec_files f ON f.id = r.spec_file_id
+      WHERE f.project_id = $1::uuid
       ORDER BY b.created_at ASC`,
+    [scope.projectId],
   );
 
   for (const board of boards) {
@@ -833,7 +880,14 @@ async function run(browser: Browser): Promise<void> {
 
   measure(`досок ревью: ${String(boards.length)}`);
 
-  /* The owner: exactly one, the fixed address, and every project theirs. */
+  /*
+   * The owner: exactly one, the fixed address, and every project theirs.
+   *
+   * **Deliberately unscoped** (task 171). This is the local-mode claim itself — the deployment owns
+   * its owner — and narrowing it to the walk's own project would be checking that a session belongs
+   * to the user who created it, which is not what the milestone asserts. A second owner appearing in
+   * the profile is red however many walks have run.
+   */
   const owners = await query<{ email: string | null; projects: string }>(
     `SELECT u.email, count(p.id)::text AS projects
        FROM users u LEFT JOIN projects p ON p.owner_id = u.id
@@ -852,7 +906,10 @@ async function run(browser: Browser): Promise<void> {
     await comparePersistence(restart.dumpPath);
   }
 
-  const projects = await query<{ id: string; name: string }>('SELECT id, name FROM projects');
+  const projects = await query<{ id: string; name: string }>(
+    'SELECT id, name FROM projects WHERE id = $1::uuid',
+    [scope.projectId],
+  );
   const project = projects[0];
 
   if (project === undefined) {
@@ -860,7 +917,7 @@ async function run(browser: Browser): Promise<void> {
     return;
   }
 
-  measure(`проект: «${project.name}», сессия ${sessionUrl.split('/').pop() ?? '—'}`);
+  measure(`проект: «${project.name}» (${project.id}), сессия ${scope.sessionId}`);
 
   await fixTheExports(context, project.id);
   await context.close();
@@ -885,9 +942,15 @@ try {
 
 const list = (lines: readonly string[]) => (lines.length === 0 ? '_None._' : lines.join('\n'));
 
-const unexpectedConsole = consoleErrors.filter(
-  (line) => !EXPECTED_CONSOLE.some((pattern) => pattern.test(line)),
-);
+/*
+ * The one dictionary of browser noise, read from `e2e/fixtures/console-noise.ts` (task 173).
+ *
+ * It was copied into this file and three other walks; D-276 fixed the copy that runs in CI and left
+ * the rest stale, which is a fix waiting to be undone by whoever reads the wrong one next. The restart
+ * window adds its own honest noise — every in-flight fetch of a dead server fails — and that list is
+ * a second, named argument rather than a wider default.
+ */
+const unexpected = unexpectedConsole(consoleErrors, EXPECTED_RESTART_NOISE);
 
 function readLog(path: string): string {
   try {
@@ -914,7 +977,7 @@ const red =
   problems.length > 0 ||
   truncations.length > 0 ||
   structuralRejections.length > 0 ||
-  unexpectedConsole.length > 0;
+  unexpected.length > 0;
 
 mkdirSync(OUT, { recursive: true });
 
@@ -939,7 +1002,7 @@ Walked ${new Date(startedAt).toISOString()} against \`${BASE_URL}\` — **лок
   )} слов): «${SEED}»
 
 **Verdict (здоровье прогулки): ${red ? 'RED' : 'GREEN'}** — ${String(problems.length)} problem(s), ${String(step)} state(s)
-captured, ${String(consoleErrors.length)} console record(s) of which ${String(unexpectedConsole.length)} unexpected.
+captured, ${String(consoleErrors.length)} console record(s) of which ${String(unexpected.length)} unexpected.
 
 Clicks after the session was created: **0** by construction — the count is asserted in code; both
 exports below are cookie-less \`GET\`s of the same endpoints the buttons call.
@@ -992,7 +1055,7 @@ ${list(packingRecords)}
 
 ## Console
 
-${list(unexpectedConsole)}
+${list(unexpected)}
 
 ## Transcript
 

@@ -100,6 +100,28 @@ export function jsonRequest(url: string, body?: unknown): Request {
   });
 }
 
+/**
+ * The one refusal this file synthesises rather than reads (task 170).
+ *
+ * `POST /rounds` answers **200** with `{ kind: 'collect-complete' }` when the interviewer had
+ * nothing worth asking, and with `{ kind: 'not-collecting' }` at a position that collects nothing.
+ * Both are true answers and neither is a move: no round exists afterwards, and the `collect → generate`
+ * gate still wants one (FR-007 AC-2). Reading only the status therefore reported a landing for a
+ * step that had changed nothing — which is how the M15а walk's driver came to be told it was going
+ * round in circles while it was asking honestly and getting nothing back.
+ *
+ * `NO_ROUND_TO_ASK` is the code the step handler has always mapped to `needs-unanswered`; it simply
+ * had no producer until now. Retryable, because the next draft may well carry questions — the same
+ * reason a person presses the button a second time — and bounded by `MAX_FRUITLESS_ASKS` rather than
+ * by the loop detector.
+ */
+const NO_ROUND_DRAFTED: DispatchOutcome = {
+  ok: false,
+  code: 'NO_ROUND_TO_ASK',
+  reason: null,
+  retryable: true,
+};
+
 export async function dispatchAskRound(
   origin: string,
   sessionId: string,
@@ -108,7 +130,13 @@ export async function dispatchAskRound(
     params: Promise.resolve({ id: sessionId }),
   });
 
-  return response.ok ? LANDED : refusalOf(response);
+  if (!response.ok) return refusalOf(response);
+
+  const payload: unknown = await response.json().catch(() => null);
+  const kind =
+    typeof payload === 'object' && payload !== null && 'kind' in payload ? payload.kind : null;
+
+  return kind === 'round' ? LANDED : NO_ROUND_DRAFTED;
 }
 
 export async function dispatchAnswers(

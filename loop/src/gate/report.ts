@@ -81,21 +81,38 @@ export function readReport(projectDirectory: string, taskId: string): ReportRead
 }
 
 /**
+ * Who this report is actually about — the orchestrator's own answer, not the report's.
+ *
+ * The loop knows which task it started and in which project; the report is a file a model wrote
+ * inside a container. See `recordDecision`.
+ */
+export interface ReportOwner {
+  projectId: string;
+  taskId: string;
+}
+
+/**
  * The identifier a decision is stored under.
  *
  * A report may name one; when it does not, it is derived — MD5 of `taskId` and the decision's
  * title, hex, lower case, exactly as the A0 solution specifies. Derived rather than random because
  * the same decision re-read from the same report has to land on the same row: `INSERT OR REPLACE`
- * is only idempotent if the key is.
+ * is only idempotent if the key is. The `taskId` in that hash is the **owner's**, for the same
+ * reason the columns are.
  */
-export function decisionId(report: ExecutorReport): string | null {
+export function decisionId(report: ExecutorReport, owner: ReportOwner): string | null {
   if (report.decisionId !== undefined && report.decisionId.trim() !== '') return report.decisionId;
   if (report.decisionTitle === undefined || report.decisionTitle.trim() === '') return null;
 
   return createHash('md5')
-    .update(`${report.taskId}${report.decisionTitle}`, 'utf8')
+    .update(`${owner.taskId}${report.decisionTitle}`, 'utf8')
     .digest('hex')
     .toLowerCase();
+}
+
+/** Whether the report agrees with the orchestrator about which task and project it belongs to. */
+export function disagreesAboutOwner(report: ExecutorReport, owner: ReportOwner): boolean {
+  return report.taskId !== owner.taskId || report.projectId !== owner.projectId;
 }
 
 /**
@@ -105,9 +122,21 @@ export function decisionId(report: ExecutorReport): string | null {
  * §Security). It writes its rationale into the report file, and the orchestrator on the host is
  * what puts it in the table. This function is that step, and nothing else in the loop writes
  * `agent_decisions`.
+ *
+ * **The identity comes from the owner, never from the report** (найдено живым гейтом 163). The two
+ * id columns are foreign keys, and a live executor writing its own `projectId`/`taskId` is a model
+ * filling in a field — on the gate's own run one of them wrote ids that belonged to nothing, the
+ * insert raised `FOREIGN KEY constraint failed`, and the exception took the whole iteration down.
+ * The report is *information* (that is this file's first sentence); the orchestrator is what knows
+ * which task it started. Their disagreement is worth reporting to the operator and worth nothing as
+ * authority.
  */
-export function recordDecision(database: DatabaseSync, report: ExecutorReport): string | null {
-  const id = decisionId(report);
+export function recordDecision(
+  database: DatabaseSync,
+  report: ExecutorReport,
+  owner: ReportOwner,
+): string | null {
+  const id = decisionId(report, owner);
   if (id === null) return null;
   if (report.rationale === undefined || report.rationale.trim() === '') return null;
 
@@ -116,13 +145,7 @@ export function recordDecision(database: DatabaseSync, report: ExecutorReport): 
       `INSERT OR REPLACE INTO agent_decisions (decision_id, project_id, task_id, title, rationale)
        VALUES (?, ?, ?, ?, ?)`,
     )
-    .run(
-      id,
-      report.projectId,
-      report.taskId,
-      report.decisionTitle ?? report.taskId,
-      report.rationale,
-    );
+    .run(id, owner.projectId, owner.taskId, report.decisionTitle ?? owner.taskId, report.rationale);
 
   return id;
 }

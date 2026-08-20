@@ -1,0 +1,17 @@
+{
+  "taskId": "2",
+  "milestoneId": "ms_02",
+  "title": "Создание JSON-схем валидации сценариев и файлов сохранений",
+  "description": "Создать файл `schemas/scenario.schema.json` согласно спецификации в `constitution.md`. В схеме сценария явно указать закрытый список допустимых значений для `endingType` (строго `'win'` и `'lose'`), уточнив, что свойство `endingType` является необязательным строковым полем внутри объекта описания сцены (`scene`), и оно должно присутствовать у сцен, имеющих флаг `isEnding: true`. Указать, что `requiredState` и `setState` являются простыми плоскими объектами типа `Record<string, boolean>` (где ключами являются имена переменных, а значениями — исключительно логические значения `true` или `false` без вложенных выражений, логических операторов или массивов). Также явно указать в схеме сценария, что `initialState` должен строго соответствовать типу `Record<string, boolean>` (простой плоский объект с булевыми значениями без вложенности). Создать файл `schemas/save.schema.json` для валидации сохраняемого прогресса со свойствами `scenarioPath`, `currentSceneId`, `stepsCount` и `variables`.\n  _Зависимости: 1_",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "schemas/scenario.schema.json",
+    "schemas/save.schema.json"
+  ],
+  "dependsOn": [
+    "1"
+  ],
+  "unitTestCmd": "npm test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

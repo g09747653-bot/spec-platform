@@ -1,0 +1,15 @@
+{
+  "reportId": "report_6",
+  "taskId": "6",
+  "projectId": "b2a2b018-c565-449f-8f65-fb03acd826ee",
+  "executorId": "claude-agent",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 114,
+    "passed": 114,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "Проверка тупиковых сцен вынесена в отдельную функцию findDeadEndErrors, выполняется после проверки связности графа",
+  "rationale": "В lib/validator.js добавлена функция findDeadEndErrors(scenarioData), проверяющая каждую сцену из scenes: если массив options отсутствует или пуст И isEnding !== true, сцена считается тупиковой и в errors добавляется русскоязычное сообщение с id сцены и путём /scenes/<id>. Эта проверка вызывается в validateScenario после findGraphErrors (только если граф уже связен и все nextSceneId валидны), возвращая {valid: false, errors} при обнаружении тупиков — по аналогии с уже существующей обработкой ошибок связности графа. Пустой массив options трактуется как отсутствие переходов (JSON-схема не задаёт minItems для options, поэтому scenario.schema.json пропускает такие сцены как валидные по структуре, но семантически это тупик). Наличие isEnding: true само по себе достаточно для прохождения проверки, даже без options — это соответствует уже существующей схеме (isEnding: true требует только endingType, а не options) и подтверждается ранее существовавшим тестом test/demo-scenario.test.js ('каждая сцена содержит варианты выбора либо является концовкой'), который проходил и до, и после изменения. Добавлено 3 новых теста в test/validator.test.js: тупиковая сцена без options, тупиковая сцена с пустым options: [], и подтверждение, что isEnding: true без options проходит проверку. npm test — 114/114 пройдено, npm run lint — 0 ошибок."
+}

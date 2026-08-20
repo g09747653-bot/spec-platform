@@ -1,0 +1,15 @@
+{
+  "reportId": "report_3",
+  "taskId": "3",
+  "projectId": "b2a2b018-c565-449f-8f65-fb03acd826ee",
+  "executorId": "claude-agent",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 58,
+    "passed": 58,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "Создан scenarios/demo.json по эталонному примеру из bundle/architecture.md; schemas/scenario.schema.json не изменялась",
+  "rationale": "Задача перечисляет schemas/scenario.schema.json в filesToEdit, но по факту требует создать демонстрационный сценарий scenarios/demo.json. Файл schemas/scenario.schema.json уже реализован в задаче 2 и полностью покрывает нужную структуру (booleanStateMap для initialState/requiredState/setState, условная обязательность endingType при isEnding: true), поэтому изменения в схему не вносились — она использована как есть для валидации нового сценария. Создан scenarios/demo.json ('Побег из запертой комнаты') по примеру, зафиксированному в bundle/architecture.md: сцена start_room с поиском ключа на столе (take_key, устанавливает hasKey: true через setState) и проверкой запертой двери без ключа (door_locked, требует hasKey: false через requiredState), и победная концовка victory (isEnding: true, endingType: 'win'), доступная только при hasKey: true. Все три требуемых элемента логики покрыты булевыми флагами в initialState/setState/requiredState, без вложенных структур. Добавлен test/demo-scenario.test.js (9 новых тестов): валидация по JSON-схеме через ajv, проверка типов флагов, связности графа сцен (все nextSceneId существуют, все сцены достижимы из initialSceneId), отсутствие тупиковых сцен без options/isEnding, наличие поиска ключа/проверки двери/победной концовки в тексте сцен, и полная симуляция прохождения квеста от старта до победного выхода. Полный прогон npm test: 58/58 тестов проходят (включая ранее существовавшие наборы для state-machine, cli-view, save-manager и schemas). npm run lint выдаёт только 4 предсуществующих предупреждения no-unused-vars в lib/cli-view.js, не связанных с этой задачей."
+}

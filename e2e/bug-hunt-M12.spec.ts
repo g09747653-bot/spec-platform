@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { createSignedInUser, signIn } from './fixtures/auth';
+import { unexpectedConsole } from './fixtures/console-noise';
+import { reloadSettled } from './fixtures/reload';
 import {
   collectFor,
   completeInterview,
@@ -40,39 +42,15 @@ function watchConsole(page: Page): string[] {
 }
 
 /**
- * The console noise this application cannot prevent, and why each line is here.
+ * The console noise this application cannot prevent, read from the one place it is written
+ * (task 173; `e2e/fixtures/console-noise.ts`).
  *
- * Kept deliberately short: an allow-list that grows is a console check that stops working.
- *
- * **One event, three vocabularies.** Every entry below is the same thing — Playwright aborting an
- * in-flight request because the test navigated or reloaded — said by three engines in three ways.
- * The list was written against Chromium's wording, so the check passed there and failed everywhere
- * else: `bug-hunt-M12.spec.ts:210` reloads five times, and on Firefox one of those reloads yields
- * «Error in input stream», on WebKit «Load failed». Both were counted as defects of the product,
- * which is why this case has been red on non-Chromium engines intermittently since the engine matrix
- * landed (А-15) — including on `main`. A check whose verdict depends on which browser's dictionary
- * an aborted fetch was translated into is not checking the application.
+ * It used to be a list right here, and four more copies of it lived in the hand-run walks. D-276
+ * found what that costs: the list was Chromium's vocabulary, so this file's five reloads failed on
+ * Firefox and WebKit — intermittently, since А-15 split the matrix by engine, including on `main`.
  */
-const EXPECTED = [
-  // Playwright aborts in-flight requests when a test navigates or reloads — Chromium's wording.
-  /Failed to load resource/i,
-  /net::ERR_ABORTED/i,
-  /The user aborted a request/i,
-  /Failed to fetch/i,
-  // The same abort, as Firefox words it.
-  /Error in input stream/i,
-  // The same abort, as WebKit words it. Anchored: only the bare message, never a longer sentence
-  // that happens to contain it.
-  /^pageerror: Load failed$/i,
-  /^console\.error: Load failed$/i,
-  /cancelled due to load failure/i,
-  // Next's own dev overlay fetching a stack frame for an error it is about to display. Not the
-  // application's code, and present only because the E2E run uses a dev server.
-  /__nextjs_original-stack-frames/i,
-];
-
 function unexpected(problems: readonly string[]): string[] {
-  return problems.filter((problem) => !EXPECTED.some((pattern) => pattern.test(problem)));
+  return unexpectedConsole(problems);
 }
 
 const CONTROLS = [
@@ -151,13 +129,13 @@ test.describe('M12п bug hunt', () => {
 
     // Reload in the collapsed state, and again in the expanded one.
     await page.getByTestId('sidebar-toggle').click();
-    await page.reload();
+    await reloadSettled(page);
     await expect(page.getByTestId('session')).toBeVisible();
     await expect(page.getByTestId('session-sidebar')).toHaveAttribute('data-collapsed', 'true');
     await stillAlive(page, 'reloaded collapsed');
 
     await page.getByTestId('sidebar-toggle').click();
-    await page.reload();
+    await reloadSettled(page);
     await expect(page.getByTestId('sidebar-panel')).toBeVisible();
     await stillAlive(page, 'reloaded expanded');
 
@@ -269,12 +247,12 @@ test.describe('M12п bug hunt', () => {
     });
 
     // Reload at this state and at every state a stage passes through.
-    await page.reload();
+    await reloadSettled(page);
     await expect(page.getByTestId('session')).toBeVisible();
     await stillAlive(page, 'reloaded after chat');
 
     await collectFor(page, 'requirements');
-    await page.reload();
+    await reloadSettled(page);
     await stillAlive(page, 'reloaded at generate');
 
     /*
@@ -290,7 +268,7 @@ test.describe('M12п bug hunt', () => {
 
     await page.getByTestId('generate-spec').click();
     await expect(page.getByTestId('spec-card')).toBeVisible({ timeout: 40_000 });
-    await page.reload();
+    await reloadSettled(page);
     await expect(page.getByTestId('spec-card')).toBeVisible();
     await stillAlive(page, 'reloaded at pending approval');
 
@@ -298,7 +276,7 @@ test.describe('M12п bug hunt', () => {
     await expect(page.getByTestId('spec-card')).toHaveAttribute('data-approved', 'true');
     await page.getByTestId('proceed').click();
     await expect(page.getByTestId('review-board')).toBeVisible({ timeout: 40_000 });
-    await page.reload();
+    await reloadSettled(page);
     await expect(page.getByTestId('review-board')).toBeVisible();
     await stillAlive(page, 'reloaded at pending review');
 
@@ -364,7 +342,7 @@ test.describe('M12п bug hunt', () => {
     }
 
     // A reload closes the pane rather than restoring a stale one — and leaves the session usable.
-    await page.reload();
+    await reloadSettled(page);
     await expect(page.getByTestId('session')).toBeVisible();
     await expect(page.getByTestId('viewer-pane')).toHaveCount(0);
     await stillAlive(page, 'reloaded with the viewer having been open');

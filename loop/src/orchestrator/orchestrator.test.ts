@@ -16,7 +16,11 @@ import {
 } from '../intake/handoff.ts';
 import { createLogger } from '../observability/log.ts';
 
+import { createFakeEngine } from '../docker/testing/fake-engine.ts';
+
+import { freezePipeline, isFrozen } from './freeze.ts';
 import {
+  driveProject,
   nextRunnableTask,
   readHandoffTree,
   recoverFromDisk,
@@ -227,5 +231,107 @@ describe('choosing what runs next (task 158)', () => {
     expect(
       database.prepare("SELECT status FROM milestones WHERE milestone_id = 'ms_01'").get()?.status,
     ).toBe('COMPLETED');
+  });
+});
+
+/**
+ * Step 0, in full: an empty database and a plan that is only on disk (task 162).
+ *
+ * The A0 bundle calls this «Шаг 0» and means the project row before anything that references it —
+ * the whole point being that a rebuilt database never meets `FOREIGN KEY constraint failed`. What
+ * task 162 adds is the two things the plan on disk can be *missing*: a lost `techStack`, which is
+ * knowable from the workspace, and a freeze, which must survive untouched.
+ */
+describe('полное восстановление Шага 0 (task 162)', () => {
+  it('rebuilds project, milestones and tasks into a database that was deleted, with no FK error', () => {
+    writeTree([task('1.1', 'ms_01', 'COMPLETED'), task('2.1', 'ms_02', 'PAUSED')]);
+    recoverFromDisk(database, workspace, createLogger(database));
+
+    // The operator deletes `local.db` — a supported thing to do — and the process boots again.
+    database.close();
+    rmSync(join(workspace, '.db'), { recursive: true, force: true });
+    database = openMigratedDatabase(join(workspace, '.db', 'loop.db'));
+
+    const recovered = recoverFromDisk(database, workspace, createLogger(database));
+
+    expect(recovered[0]).toMatchObject({ projectId: 'toy', milestones: 2, tasks: 2 });
+    expect(
+      database.prepare('SELECT count(*) AS n FROM agent_logs').get()?.n,
+      'the log line about the recovery landed, so the project row preceded it',
+    ).toBeGreaterThan(0);
+
+    const board = readBoard(database, 'toy');
+    expect(
+      board?.milestones.flatMap((milestone) => milestone.tasks).map((entry) => entry.status),
+    ).toEqual(['COMPLETED', 'PAUSED']);
+    expect(board?.workspaceDir, 'and the directory it was recovered from').toBe(projectDirectory);
+  });
+
+  it('detects a stack an assignment lost rather than dropping the assignment', () => {
+    writeTree([task('1.1', 'ms_01', 'PENDING')]);
+
+    /* A Node project on disk, and an assignment whose `techStack` is simply gone. */
+    writeFileSync(
+      join(projectDirectory, 'package.json'),
+      JSON.stringify({ name: 'toy', scripts: { test: 'node --test' } }),
+      'utf8',
+    );
+
+    const path = join(projectDirectory, HANDOFF.tasks, taskFileName('1.1'));
+    const { techStack: _dropped, ...withoutStack } = JSON.parse(
+      readFileSync(path, 'utf8'),
+    ) as Record<string, unknown>;
+    writeFileSync(path, JSON.stringify(withoutStack, null, 2), 'utf8');
+
+    const recovered = recoverFromDisk(database, workspace, createLogger(database));
+
+    expect(recovered[0]?.tasks, 'the assignment survived').toBe(1);
+    expect(recovered[0]?.repaired).toEqual(['1.1']);
+    expect(
+      HandoffTask.parse(JSON.parse(readFileSync(path, 'utf8'))).techStack,
+      'and the answer was written back, because the disk is the source of truth',
+    ).toBe('nodejs');
+  });
+
+  it('comes back frozen, and stands there until a person retries', async () => {
+    writeTree([task('1.1', 'ms_01', 'PAUSED'), task('2.1', 'ms_02', 'PENDING')]);
+
+    const engine = createFakeEngine();
+    await freezePipeline(database, engine, {
+      projectId: 'toy',
+      projectDirectory,
+      taskId: '1.1',
+      reason: 'Приёмочный прогон вернул 1 — задача не принята.',
+      inFlight: [{ taskId: '1.1', previousStatus: 'IN_PROGRESS' }],
+    });
+
+    // The process dies and a new one boots into the same directory.
+    database.close();
+    rmSync(join(workspace, '.db'), { recursive: true, force: true });
+    database = openMigratedDatabase(join(workspace, '.db', 'loop.db'));
+
+    const recovered = recoverFromDisk(database, workspace, createLogger(database));
+
+    expect(recovered[0]?.frozen, 'the marker on disk is what the boot reads').toBe(true);
+    expect(readBoard(database, 'toy')?.status).toBe('PAUSED');
+    expect(
+      HandoffTask.parse(
+        JSON.parse(
+          readFileSync(join(projectDirectory, HANDOFF.tasks, taskFileName('1.1')), 'utf8'),
+        ),
+      ).status,
+      'a boot does not tidy a freeze into PENDING',
+    ).toBe('PAUSED');
+
+    // And driving it does nothing at all: only `retry` is a way on.
+    const drove = await driveProject('toy', projectDirectory, {
+      database,
+      engine,
+      logger: createLogger(database),
+      credential: { kind: 'ANTHROPIC_API_KEY', value: 'x' },
+    });
+
+    expect(drove).toEqual([]);
+    expect(isFrozen(projectDirectory)).toBe(true);
   });
 });

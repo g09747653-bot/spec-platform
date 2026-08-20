@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createChain } from './chain.ts';
-import { buildProviders } from './providers.ts';
+import { buildProviders, DEFAULT_MODELS } from './providers.ts';
 import { AllProvidersFailedError, NoProviderConfiguredError } from './types.ts';
 
 /**
@@ -51,6 +51,31 @@ describe('which providers a configuration actually has (task 156)', () => {
 
       expect(buildProviders([only], credentials).map((provider) => provider.id)).toEqual([only]);
     }
+  });
+
+  /**
+   * Which model a link asks for when nothing names one (task 172).
+   *
+   * A default that has quietly died is a mine for the next clean machine — the M15а gate walked onto
+   * exactly that one (`gemini-2.5-flash`: 404, «no longer available to new users») and survived only
+   * because its `.env` overrode it. What a test can hold is that there is one place the answer comes
+   * from and that configuration still wins; liveness itself is a measurement, recorded in the journal
+   * and re-measured by every live gate.
+   */
+  it('takes its model from one table, and lets the configuration override it', () => {
+    expect(buildProviders(['google'], { googleApiKey: 'k' })[0]?.model).toBe(DEFAULT_MODELS.google);
+    expect(buildProviders(['anthropic'], { anthropicApiKey: 'k' })[0]?.model).toBe(
+      DEFAULT_MODELS.anthropic,
+    );
+    expect(buildProviders(['openai'], { openaiApiKey: 'k' })[0]?.model).toBe(DEFAULT_MODELS.openai);
+    expect(
+      buildProviders(['ollama'], { localApiBase: 'http://127.0.0.1:11434/v1' })[0]?.model,
+    ).toBe(DEFAULT_MODELS.ollama);
+
+    expect(
+      buildProviders(['google'], { googleApiKey: 'k', googleModel: 'gemini-от-заказчика' })[0]
+        ?.model,
+    ).toBe('gemini-от-заказчика');
   });
 });
 

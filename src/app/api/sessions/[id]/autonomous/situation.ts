@@ -234,6 +234,7 @@ export async function assembleDriverContext(
     steps: run.steps,
     stepBudget: env.MAX_AUTONOMOUS_STEPS,
     idleSteps: 0,
+    fruitlessAsks: run.fruitlessAsks,
   };
 
   const fingerprint = fingerprintOf([
@@ -253,9 +254,25 @@ export async function assembleDriverContext(
    * The idle count is decided **before** the move, against the digest the previous step recorded: a
    * run whose stored fingerprint still describes the session is a run whose last move changed
    * nothing. A first step has nothing to compare against and is never idle.
+   *
+   * **Two settlements are not evidence of a loop** (task 170), and the count is *carried* over both
+   * rather than reset — earlier idle observations were real and stay on the record:
+   *
+   * - a claim that was never settled (`step_outcome IS NULL`) is a step that counted itself and then
+   *   never came back: a process killed mid-move, which on this product means the operator
+   *   restarting the stack while the driver was inside a model call. Its digest necessarily still
+   *   describes the session, because the move it promised never happened, and charging the run for a
+   *   step it did not take is what the M15а walk paid for — with `MAX_IDLE_STEPS` at two, one
+   *   restart plus one honest fruitless ask ended the journey as «I was going round in circles»;
+   * - a `fruitless-ask` is an interviewer that produced no round. Bounded, but by its own budget
+   *   (`MAX_FRUITLESS_ASKS`) and with its own ending, because asking again is what a person does.
    */
   situation.idleSteps =
-    run.fingerprint === null ? 0 : fingerprint === run.fingerprint ? run.idleSteps + 1 : 0;
+    run.fingerprint === null || fingerprint !== run.fingerprint
+      ? 0
+      : run.stepOutcome === null || run.stepOutcome === 'fruitless-ask'
+        ? run.idleSteps
+        : run.idleSteps + 1;
 
   return { situation, position, fingerprint, round, board };
 }

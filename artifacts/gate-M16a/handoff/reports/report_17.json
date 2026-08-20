@@ -1,0 +1,15 @@
+{
+  "reportId": "report_17",
+  "taskId": "17",
+  "projectId": "b2a2b018-c565-449f-8f65-fb03acd826ee",
+  "executorId": "claude-agent",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 149,
+    "passed": 149,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "node:test mock.module для мокирования fs/promises + флаг --experimental-test-module-mocks в npm test",
+  "rationale": "Задача была выполнена ранее (см. предыдущую версию report_17.json) и проверена повторно в этом прогоне: test/state.test.js (16 тестов) на GameState (lib/state-machine.js, задача 8) и save-manager (lib/save-manager.js, задача 11) присутствует и покрывает все пункты задачи — неявную инициализацию флагов как false, фильтрацию опций сцены по requiredState, применение setState через transition как плоского Record<string, boolean>, инкремент stepsCount, валидацию имени сохранения по SAFE_SAVE_NAME_REGEX и длине с граничными значениями 0/1/20/21 символ, и блокировку Path Traversal (в имени сохранения и в resolveScenarioPath) — с полным мокированием node:fs/promises через t.mock.module (без обращения к реальному диску), в отличие от test/save-manager.test.js, использующего mkdtemp.\n\nЕдинственная правка вне test/state.test.js — строка \"test\" в package.json изменена на \"node --experimental-test-module-mocks --test\", т.к. флаг обязателен для mock.module() и не может быть передан через NODE_OPTIONS или точечно на файл. Замечание для архитектора остаётся в силе: package.json указывает \"engines\": { \"node\": \">=18.0.0\" }, а mock.module() требует Node 22.3/20.18+; для сред на более старом Node этот тестовый файл не запустится.\n\nПри повторном прогоне в этой сессии полный набор вырос до 149 тестов (149/149 пройдено) за счёт тестов, добавленных другими задачами после предыдущего отчёта; изменений в код не потребовалось. npm run lint — 0 ошибок."
+}

@@ -6,6 +6,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import pg from 'pg';
 
+import { unexpectedConsole } from './fixtures/console-noise.ts';
+
 /**
  * **The M12п gate, walked by the executor** (task 140; А-2.1) — the live half of the design finale.
  *
@@ -113,21 +115,6 @@ function measure(line: string): void {
   console.log(`[${stamp()}] · ${line}`);
   measurements.push(`- ${line}`);
 }
-
-/**
- * The console noise a browser makes that is not the product's fault, and why each line is here.
- *
- * Taken from `bug-hunt-M12.spec.ts` on purpose: a walk that reloads a page mid-stream aborts its own
- * in-flight requests, and every engine reports that as a console error. Kept deliberately short — an
- * allow-list that grows is a console check that has stopped working.
- */
-const EXPECTED_CONSOLE = [
-  /Failed to load resource/i,
-  /net::ERR_ABORTED/i,
-  /The user aborted a request/i,
-  /Failed to fetch/i,
-  /NS_BINDING_ABORTED/i,
-];
 
 /* ------------------------------------------------------------------ sign-in */
 
@@ -1218,15 +1205,19 @@ const bullets = (lines: readonly string[]) =>
  * aborts its own requests, and those are the browser's words about the harness, not the product's
  * about itself.
  */
-const unexpectedConsole = consoleErrors.filter(
-  (line) => !EXPECTED_CONSOLE.some((pattern) => pattern.test(line)),
-);
+/*
+ * The one dictionary of browser noise, read from `e2e/fixtures/console-noise.ts` (task 173).
+ *
+ * It was copied into this file and three other walks; D-276 fixed the copy that runs in CI and left
+ * the rest stale, which is a fix waiting to be undone by whoever reads the wrong one next.
+ */
+const unexpected = unexpectedConsole(consoleErrors);
 
-if (unexpectedConsole.length > 0) {
+if (unexpected.length > 0) {
   problem(
-    `${String(unexpectedConsole.length)} unexpected console error(s) — a React warning or an ` +
+    `${String(unexpected.length)} unexpected console error(s) — a React warning or an ` +
       'uncaught exception is a defect even when the pixels are right. First: ' +
-      (unexpectedConsole[0] ?? ''),
+      (unexpected[0] ?? ''),
   );
 }
 
@@ -1331,7 +1322,7 @@ writeFileSync(
     '',
     `**Verdict: ${problems.length === 0 ? 'GREEN' : 'RED'}** — ${String(problems.length)} problem(s), ` +
       `${String(step)} state(s) captured, ${String(consoleErrors.length)} console record(s) of which ` +
-      `${String(unexpectedConsole.length)} unexpected.`,
+      `${String(unexpected.length)} unexpected.`,
     '',
     '## Problems',
     '',

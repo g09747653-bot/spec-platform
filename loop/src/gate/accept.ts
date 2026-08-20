@@ -7,6 +7,8 @@ import { readLogFrames } from '../docker/log-frames.ts';
 import { bindMount } from '../docker/paths.ts';
 import type { HandoffTask, TechStack } from '../intake/handoff.ts';
 
+import { runInCleanCopy } from './clean-run.ts';
+import { runController, type ControllerVerdict } from './controller.ts';
 import { commandsRefusal, type ResolvedCommands } from './tech-stack.ts';
 
 /** One entry of `expectedArtifacts`, as the assignment carries it. */
@@ -71,6 +73,15 @@ export interface AcceptanceVerdict {
   e2eExitCode: number | null;
   artifacts: ArtifactWalkResult[];
   output: string;
+  /**
+   * The style pass, and whether it sent the task back before a single test ran (task 161).
+   *
+   * `returnedByController` is **not** a refusal: the code was never judged. The cycle turns it into
+   * a task returned to its executor, which is a different outcome from a red verdict — see
+   * `run-cycle.ts`.
+   */
+  controller: ControllerVerdict | null;
+  returnedByController: boolean;
 }
 
 export interface AcceptanceDeps {
@@ -87,77 +98,6 @@ export const ACCEPTANCE_TIMEOUT_MS = 15 * 60_000;
 /** `delivery-gate-${taskId}` — distinct from the executor's name, so neither can find the other. */
 export function acceptanceContainerName(taskId: string): string {
   return `delivery-gate-${taskId}`;
-}
-
-/**
- * Runs one command in the clean container and returns everything it said.
- *
- * `stdout` and `stderr` are concatenated, in arrival order, because `successRegex` is specified to
- * match against both (бандл A0 §Artifact Walks) — a build tool that reports success on stderr is
- * common enough that splitting them would make the contract wrong for half of them.
- */
-async function runInClean(
-  engine: DockerEngine,
-  image: string,
-  copyPath: string,
-  name: string,
-  command: string,
-  deps: AcceptanceDeps,
-): Promise<{ exitCode: number | null; output: string }> {
-  const stale = await engine.findByName(name);
-  if (stale !== null) await engine.removeContainer(stale, { force: true });
-
-  const id = await engine.createContainer({
-    name,
-    image,
-    cmd: ['sh', '-lc', command],
-    binds: [bindMount(copyPath, '/workspace')],
-    workingDir: '/workspace',
-    /*
-     * No environment at all beyond what the image ships. The acceptance run is not the executor: it
-     * has no assignment to read and no key to spend, and a gate that could reach a paid API is a
-     * gate whose verdict costs money to obtain.
-     */
-    env: {},
-  });
-
-  const collected: string[] = [];
-
-  try {
-    await engine.startContainer(id);
-
-    const draining = (async () => {
-      try {
-        for await (const line of readLogFrames(await engine.attachLogs(id, { follow: true }))) {
-          collected.push(line.text);
-          deps.onLine?.({ stream: line.stream, text: line.text });
-        }
-      } catch {
-        // A stream that ends abruptly costs the tail of a log, not the verdict.
-      }
-    })();
-
-    const abort = new AbortController();
-    const timer = setTimeout(() => {
-      abort.abort();
-    }, deps.timeoutMs ?? ACCEPTANCE_TIMEOUT_MS);
-    timer.unref();
-
-    let exitCode: number | null;
-    try {
-      exitCode = await engine.waitContainer(id, abort.signal);
-    } catch {
-      await engine.stopContainer(id, 0).catch(() => undefined);
-      exitCode = null;
-    } finally {
-      clearTimeout(timer);
-    }
-
-    await draining;
-    return { exitCode, output: collected.join('\n') };
-  } finally {
-    await engine.removeContainer(id, { force: true }).catch(() => undefined);
-  }
 }
 
 /**
@@ -182,6 +122,8 @@ export async function acceptTask(
       e2eExitCode: null,
       artifacts: [],
       output: '',
+      controller: null,
+      returnedByController: false,
     };
   }
 
@@ -206,6 +148,39 @@ export async function acceptTask(
         e2eExitCode: null,
         artifacts: [],
         output: copied.output,
+        controller: null,
+        returnedByController: false,
+      };
+    }
+
+    /*
+     * **The controller, before a single test** (task 161). It shares this copy rather than making
+     * its own: the copy is the expensive part, and a style pass that paid for a second one would
+     * cost more than the suite it is trying to save.
+     */
+    const controller = await runController(
+      commands.techStack,
+      copyPath,
+      image,
+      `${name}-style`,
+      deps,
+      task.filesToEdit,
+    );
+
+    deps.onLine?.({ stream: 'stdout', text: controller.reason });
+
+    if (!controller.clean) {
+      return {
+        accepted: false,
+        reason: controller.reason,
+        unitExitCode: null,
+        e2eExitCode: null,
+        artifacts: [],
+        output: controller.findings
+          .map((finding) => `$ ${finding.label}\n${finding.output}`)
+          .join('\n\n'),
+        controller,
+        returnedByController: true,
       };
     }
 
@@ -215,7 +190,14 @@ export async function acceptTask(
     ] as const) {
       if (command === '') continue;
 
-      const run = await runInClean(deps.engine, image, copyPath, `${name}-${label}`, command, deps);
+      const run = await runInCleanCopy(
+        deps.engine,
+        image,
+        copyPath,
+        `${name}-${label}`,
+        command,
+        deps,
+      );
       output.push(`$ ${command}\n${run.output}`);
 
       if (run.exitCode !== 0) {
@@ -229,6 +211,8 @@ export async function acceptTask(
           e2eExitCode: label === 'e2e' ? run.exitCode : null,
           artifacts: [],
           output: output.join('\n\n'),
+          controller,
+          returnedByController: false,
         };
       }
     }
@@ -244,6 +228,8 @@ export async function acceptTask(
         e2eExitCode: 0,
         artifacts,
         output: output.join('\n\n'),
+        controller,
+        returnedByController: false,
       };
     }
 
@@ -255,6 +241,8 @@ export async function acceptTask(
       e2eExitCode: 0,
       artifacts,
       output: output.join('\n\n'),
+      controller,
+      returnedByController: false,
     };
   } finally {
     try {
@@ -356,7 +344,7 @@ async function walkArtifacts(
   const results: ArtifactWalkResult[] = [];
 
   for (const [index, artifact] of task.expectedArtifacts.entries()) {
-    const run = await runInClean(
+    const run = await runInCleanCopy(
       deps.engine,
       image,
       copyPath,

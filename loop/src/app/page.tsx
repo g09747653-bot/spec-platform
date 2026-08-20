@@ -1,6 +1,8 @@
 import { readBoard, listProjects, summarise } from '../db/board.ts';
 import { getDatabase } from '../db/client.ts';
 import { createLogger } from '../observability/log.ts';
+import { readFreeze } from '../orchestrator/freeze.ts';
+import { FreezeBanner } from '../ui/freeze-banner.tsx';
 import { LiveFeed } from '../ui/live-feed.tsx';
 import { MILESTONE_STATUS_RU, PROJECT_STATUS_RU, RU, TASK_STATUS_RU } from '../ui/strings.ts';
 
@@ -39,9 +41,26 @@ export default function DashboardPage() {
   const counts = summarise(board);
   const tail = createLogger(database).tail(board.projectId, FEED_TAIL);
 
+  /*
+   * The freeze is read from **disk**, not from the project's row (task 160). The marker is what
+   * survives a restart and what refuses to resume, so a dashboard that showed the row's status
+   * instead would be showing an index of the truth rather than the truth — and the two differ for
+   * exactly as long as it takes a recovery to run.
+   */
+  const freeze = board.workspaceDir === null ? null : readFreeze(board.workspaceDir);
+
   return (
     <>
       <Masthead />
+
+      {freeze !== null && (
+        <FreezeBanner
+          reason={freeze.reason}
+          taskId={freeze.taskId}
+          pausedCount={freeze.paused.length}
+          workspaceDir={board.workspaceDir}
+        />
+      )}
 
       <p className="meta" data-testid="project-line">
         {RU.project}: <strong data-testid="project-title">{board.title}</strong>{' '}

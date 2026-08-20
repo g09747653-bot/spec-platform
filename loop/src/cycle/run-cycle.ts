@@ -8,8 +8,14 @@ import { runExecutor, type ExecutorRun } from '../executor/run.ts';
 import { acceptTask, type AcceptanceVerdict } from '../gate/accept.ts';
 import { blockedPath } from '../gate/blocked.ts';
 import { eventBus } from '../events/bus.ts';
-import { readReport, recordDecision, type ExecutorReport } from '../gate/report.ts';
+import {
+  disagreesAboutOwner,
+  readReport,
+  recordDecision,
+  type ExecutorReport,
+} from '../gate/report.ts';
 import { detectAndRewrite } from '../gate/tech-stack.ts';
+import { frozenMsFor } from '../orchestrator/freeze.ts';
 import { HANDOFF, HandoffTask, taskFileName } from '../intake/handoff.ts';
 import type { Logger } from '../observability/log.ts';
 
@@ -31,7 +37,15 @@ import type { Logger } from '../observability/log.ts';
  * it has its own test.
  */
 
-export type CycleOutcome = 'COMPLETED' | 'FAILED' | 'BLOCKED';
+/**
+ * `RETURNED` is the controller's verdict and nothing else (task 161).
+ *
+ * It sits apart from `FAILED` because it means something different: the code was **not judged**. A
+ * red suite is a statement about the product and freezes the pipeline (task 160); a red formatter is
+ * a draft that is not ready to be judged, and the honest response is to hand it back to the executor
+ * with the findings, exactly as a reviewer hands back a pull request over style.
+ */
+export type CycleOutcome = 'COMPLETED' | 'FAILED' | 'BLOCKED' | 'RETURNED';
 
 export interface CycleResult {
   taskId: string;
@@ -57,6 +71,12 @@ export interface CycleDeps {
   executorTimeoutMs?: number;
   acceptanceTimeoutMs?: number;
   model?: string | undefined;
+  /** The plan's budget signal, forwarded from the executor's stream as it arrives (task 159). */
+  onRateLimit?: (signal: {
+    status?: string | undefined;
+    window?: string | undefined;
+    resetsAt?: number | undefined;
+  }) => void;
 }
 
 export interface CycleRequest {
@@ -129,6 +149,9 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
     {
       engine,
       ...(deps.executorTimeoutMs === undefined ? {} : { timeoutMs: deps.executorTimeoutMs }),
+      ...(deps.onRateLimit === undefined ? {} : { onRateLimit: deps.onRateLimit }),
+      /* The ceiling measures work: time the pipeline spends frozen is not this task's (task 160). */
+      frozenMs: () => frozenMsFor(projectId),
       onLine: (line) => {
         logger.write({
           projectId,
@@ -139,6 +162,20 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
         });
       },
     },
+  );
+
+  /*
+   * How long the iteration took, said out loud (task 163).
+   *
+   * The five-minute ceiling (`ITERATION_TIMEOUT_MS`) is a number nobody has data about yet: the M15а
+   * gate saw one live task finish in three minutes and a pre-flight in thirty-two seconds, which is
+   * two points. The Architect's verdict was «мерить, а не двигать» — so every iteration writes its
+   * own duration into the feed, and a gate can collect the distribution instead of arguing about the
+   * ceiling from two samples.
+   */
+  say(
+    `Итерация исполнителя: ${(executor.durationMs / 1000).toFixed(1)} с, исход ${executor.outcome}.`,
+    executor.outcome === 'TIMEOUT' ? 'WARN' : 'INFO',
   );
 
   // 3. What it claims — recorded, shown, and deciding nothing.
@@ -154,7 +191,19 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
           : ` (тестов ${String(read.report.testsRun.total)}, упало ${String(read.report.testsRun.failed)}).`) +
         ' Это информация для ленты — решает независимый перепрогон.',
     );
-    recorded = recordDecision(database, read.report);
+    if (disagreesAboutOwner(read.report, { projectId, taskId })) {
+      /*
+       * A report that names a different task or project. Said out loud and then ignored as identity:
+       * the orchestrator started this task and knows which it is (see `recordDecision`).
+       */
+      say(
+        `Отчёт называет себя задачей ${read.report.taskId} проекта ${read.report.projectId} — ` +
+          'запись идёт под теми, кого запускал оркестратор.',
+        'WARN',
+      );
+    }
+
+    recorded = recordDecision(database, read.report, { projectId, taskId });
     if (recorded !== null) say(`Обоснование исполнителя записано решением ${recorded}.`);
   } else if (read.reason === 'missing') {
     say('Исполнитель не оставил отчёта.', 'WARN');
@@ -187,7 +236,8 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
 
   if (executor.outcome === 'TIMEOUT') {
     setStatus(database, projectDirectory, projectId, taskId, 'FAILED');
-    const reason = 'Исполнитель не уложился в отведённое время итерации.';
+    const reason =
+      'Исполнитель не уложился в отведённое время итерации (время заморозки не в счёт).';
     say(reason, 'ERROR');
 
     return {
@@ -224,6 +274,36 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
   });
 
   // 5. The verdict.
+  if (acceptance.returnedByController) {
+    /*
+     * Back to `PENDING`, which is the executor's queue: the scheduler will pick it up again, with
+     * the findings already in the feed the next executor's operator is reading. The status is not
+     * `FAILED`, because nothing failed — the tests never ran.
+     */
+    setStatus(database, projectDirectory, projectId, taskId, 'PENDING');
+    say(acceptance.reason, 'WARN');
+    for (const finding of acceptance.controller?.findings ?? []) {
+      logger.write({
+        projectId,
+        taskId,
+        agentRole: 'CONTROLLER',
+        logLevel: 'WARN',
+        message: `${finding.label}: ${finding.output.split('\n').slice(0, 12).join('\n')}`,
+      });
+    }
+
+    return {
+      taskId,
+      outcome: 'RETURNED',
+      reported,
+      executor,
+      acceptance,
+      reason: acceptance.reason,
+      decisionId: recorded,
+      techStackRewritten: rewritten,
+    };
+  }
+
   const outcome: CycleOutcome = acceptance.accepted ? 'COMPLETED' : 'FAILED';
   setStatus(database, projectDirectory, projectId, taskId, outcome);
   say(acceptance.reason, acceptance.accepted ? 'INFO' : 'ERROR');

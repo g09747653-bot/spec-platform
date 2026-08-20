@@ -27,6 +27,35 @@ export function executorStubEnabled(): boolean {
 /* eslint-enable no-restricted-properties */
 
 /**
+ * How long the scripted executor pretends to work, in seconds — **and not the same for every task**.
+ *
+ * Three by default, which keeps an ordinary rehearsal quick. Two things the gate rehearsal taught,
+ * both of them about being representative rather than convenient:
+ *
+ * - it has to be **long** enough that executors are still running when the first acceptance returns
+ *   a verdict, because «красный CI замораживает работающих исполнителей» cannot be rehearsed against
+ *   a container that has already exited;
+ * - it has to be **uneven**, because a wave of identical stubs starts together, finishes together
+ *   and reaches acceptance together — so there is never a moment with one task red and others still
+ *   working, which is precisely the moment the freeze exists for. Real executors differ by minutes;
+ *   a uniform stub was the unrealistic part, not the timing of the walk.
+ *
+ * The spread is derived from the task id, so it is deterministic: the same plan rehearses the same
+ * way twice.
+ */
+export function executorStubSeconds(taskId = ''): number {
+  /* eslint-disable-next-line no-restricted-properties -- see the note on this module. */
+  const raw = Number(process.env.LOOP_EXECUTOR_STUB_SLEEP ?? '3');
+  const base = Number.isFinite(raw) && raw >= 0 ? raw : 3;
+
+  let codes = 0;
+  for (let index = 0; index < taskId.length; index += 1) codes += taskId.charCodeAt(index);
+  const spread = codes % 4;
+
+  return Math.round(base * (0.4 + 0.3 * spread));
+}
+
+/**
  * What the scripted executor does: exactly what a real one must — touch the workspace, then leave a
  * report where the orchestrator will look for it.
  */
@@ -47,7 +76,7 @@ export function executorStubCommand(taskId: string, projectId: string): string[]
     '-c',
     [
       'echo "стаб-исполнитель начал"',
-      'sleep 3',
+      `sleep ${String(executorStubSeconds(taskId))}`,
       "printf '%s\\n' '// отметка стабового исполнителя гейта M15а' >> /workspace/README.md",
       `mkdir -p /workspace/handoff/reports`,
       `cat > "/workspace/handoff/reports/report_${taskId}.json" <<'JSON'`,

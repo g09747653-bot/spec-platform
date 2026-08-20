@@ -15,6 +15,7 @@ const emptyBoard = (): Board => ({
   description: null,
   status: 'ACTIVE',
   createdAt: '',
+  workspaceDir: null,
   milestones: [],
 });
 
