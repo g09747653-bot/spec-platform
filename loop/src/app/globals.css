@@ -214,3 +214,37 @@ ol.feed > li[data-level='WARN'] .what {
   color: var(--muted);
   margin: 0;
 }
+
+/*
+ * The stop state (task 160). Loud on purpose and once only: an operator who opens the dashboard to
+ * a frozen pipeline must not have to look for the reason, and everything else on the page is
+ * deliberately quiet so that this is the only thing shouting.
+ */
+.panel.frozen {
+  border-color: var(--danger, #b42318);
+  border-width: 2px;
+}
+
+.panel.frozen h2 {
+  color: var(--danger, #b42318);
+}
+
+.frozen-reason {
+  margin: 0.25rem 0 0.5rem;
+  font-weight: 600;
+}
+
+.panel.frozen button {
+  font: inherit;
+  padding: 0.4rem 0.9rem;
+  border-radius: 0.4rem;
+  border: 1px solid var(--danger, #b42318);
+  background: var(--danger, #b42318);
+  color: #fff;
+  cursor: pointer;
+}
+
+.panel.frozen button[disabled] {
+  opacity: 0.6;
+  cursor: default;
+}

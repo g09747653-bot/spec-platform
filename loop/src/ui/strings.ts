@@ -35,6 +35,15 @@ export const RU = {
 
   totals: 'Всего задач',
   cold: 'Состояние загружено с диска',
+
+  frozenTitle: 'Конвейер заморожен: красный CI',
+  frozenTask: 'Красная задача',
+  frozenPaused: 'Приостановлено исполнителей',
+  retry: 'Возобновить',
+  retrying: 'Возобновляем…',
+  retryFailed: 'Возобновить не удалось',
+  retryNoDirectory:
+    'Каталог проекта неизвестен этой базе — возобновите через POST /api/orchestrator/retry.',
 } as const;
 
 export const PROJECT_STATUS_RU: Record<ProjectStatus, string> = {

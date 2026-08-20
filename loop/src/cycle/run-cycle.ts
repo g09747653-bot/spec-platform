@@ -57,6 +57,12 @@ export interface CycleDeps {
   executorTimeoutMs?: number;
   acceptanceTimeoutMs?: number;
   model?: string | undefined;
+  /** The plan's budget signal, forwarded from the executor's stream as it arrives (task 159). */
+  onRateLimit?: (signal: {
+    status?: string | undefined;
+    window?: string | undefined;
+    resetsAt?: number | undefined;
+  }) => void;
 }
 
 export interface CycleRequest {
@@ -129,6 +135,7 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
     {
       engine,
       ...(deps.executorTimeoutMs === undefined ? {} : { timeoutMs: deps.executorTimeoutMs }),
+      ...(deps.onRateLimit === undefined ? {} : { onRateLimit: deps.onRateLimit }),
       onLine: (line) => {
         logger.write({
           projectId,

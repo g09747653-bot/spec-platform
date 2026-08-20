@@ -31,6 +31,7 @@ const ProjectRow = z.object({
   description: z.string().nullable(),
   status: z.enum(PROJECT_STATUSES),
   created_at: z.string(),
+  workspace_dir: z.string().nullable(),
 });
 
 const MilestoneRow = z.object({
@@ -76,6 +77,8 @@ export interface Board {
   description: string | null;
   status: ProjectStatus;
   createdAt: string;
+  /** Where the project's files are — what «Возобновить» names when it lifts a freeze (task 160). */
+  workspaceDir: string | null;
   milestones: BoardMilestone[];
 }
 
@@ -104,7 +107,8 @@ export function listProjects(database: DatabaseSync): { projectId: string; title
 export function readBoard(database: DatabaseSync, projectId: string): Board | null {
   const projectRow = database
     .prepare(
-      'SELECT project_id, title, description, status, created_at FROM projects WHERE project_id = ?',
+      `SELECT project_id, title, description, status, created_at, workspace_dir
+       FROM projects WHERE project_id = ?`,
     )
     .get(projectId);
 
@@ -136,6 +140,7 @@ export function readBoard(database: DatabaseSync, projectId: string): Board | nu
     description: project.description,
     status: project.status,
     createdAt: project.created_at,
+    workspaceDir: project.workspace_dir,
     milestones: milestones.map((milestone) => ({
       milestoneId: milestone.milestone_id,
       title: milestone.title,

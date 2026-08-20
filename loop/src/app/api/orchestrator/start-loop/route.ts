@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 
 import { z } from 'zod';
 
@@ -12,6 +12,7 @@ import { intakeBundle, IntakeRefused } from '../../../../intake/intake.ts';
 import { createChain } from '../../../../llm/chain.ts';
 import { createLogger } from '../../../../observability/log.ts';
 import { driveProject } from '../../../../orchestrator/orchestrator.ts';
+import { withinWorkspace } from '../workspace.ts';
 
 /**
  * `POST /api/orchestrator/start-loop` — the one way in (task 158; бандл A0 §API).
@@ -58,11 +59,12 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const env = getEnv();
-  const root = env.WORKSPACE_ROOT_PATH;
+  /* Resolved before anything is compared: «inside the workspace» is a fact about real paths. */
+  const root = resolve(env.WORKSPACE_ROOT_PATH);
   const requested = parsed.data.projectDirectory;
-  const directory = isAbsolute(requested) ? requested : join(root, requested);
+  const directory = resolve(isAbsolute(requested) ? requested : join(root, requested));
 
-  if (!withinRoot(root, directory)) {
+  if (!withinWorkspace(root, directory)) {
     return Response.json(
       { error: `рабочая директория должна лежать внутри WORKSPACE_ROOT_PATH (${root})` },
       { status: 400 },
@@ -134,6 +136,7 @@ export async function POST(request: Request): Promise<Response> {
       engine,
       logger,
       credential: executorCredential(env),
+      maxExecutors: env.LOOP_MAX_EXECUTORS,
       ...(env.LOOP_ANTHROPIC_MODEL === undefined ? {} : { model: env.LOOP_ANTHROPIC_MODEL }),
       ...(executorStubEnabled() ? { executorCommand: executorStubCommand } : {}),
     },
@@ -159,16 +162,4 @@ export async function POST(request: Request): Promise<Response> {
     regenerated: intake.regenerated,
     degradations: intake.degradations,
   });
-}
-
-/** `directory` is `root` itself or below it — compared on normalised, separator-agnostic paths. */
-function withinRoot(root: string, directory: string): boolean {
-  const normalise = (value: string) =>
-    value.replaceAll('\\', '/').replace(/\/+$/, '').toLowerCase();
-  const normalisedRoot = normalise(root);
-  const normalisedDirectory = normalise(directory);
-
-  return (
-    normalisedDirectory === normalisedRoot || normalisedDirectory.startsWith(`${normalisedRoot}/`)
-  );
 }

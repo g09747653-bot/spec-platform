@@ -6,6 +6,7 @@ import {
   type ExecutorCredentialKind,
 } from '../executor/credential.ts';
 import { LLM_PROVIDERS } from '../llm/types.ts';
+import { DEFAULT_MAX_EXECUTORS } from '../orchestrator/schedule.ts';
 
 /**
  * The loop's configuration, parsed once and never read raw (task 152).
@@ -107,6 +108,19 @@ const envObject = z.object({
   LOOP_LLM_TIMEOUT_MS: z.preprocess(
     blankToUndefined,
     z.coerce.number().int().positive().default(120_000),
+  ),
+
+  /**
+   * How many executor containers may run at once (task 159; бандл A0 Task 3.1).
+   *
+   * Ten by default, which is the bundle's number and the customer's machine's — and it is a
+   * **ceiling, not a target**: the scheduler starts fewer whenever the plan's own shape says so
+   * (a milestone with two tasks, files that collide, a spent rate-limit window). A run whose actual
+   * parallelism sits below this is a run obeying its plan, not a run underperforming.
+   */
+  LOOP_MAX_EXECUTORS: z.preprocess(
+    blankToUndefined,
+    z.coerce.number().int().min(1).max(64).default(DEFAULT_MAX_EXECUTORS),
   ),
 
   LOCAL_LLM_API_BASE: optional(url('LOCAL_LLM_API_BASE')),

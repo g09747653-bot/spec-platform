@@ -198,3 +198,54 @@ test('cold start reaches an interactive page within three seconds', async ({ pag
 async function countFeedLines(page: Page): Promise<number> {
   return page.getByTestId('feed-line').count();
 }
+
+/**
+ * The stop state and the one control that lifts it (task 160).
+ *
+ * The freeze is produced by the production function through the harness, so what the page renders is
+ * a real marker — the same bytes a red acceptance verdict writes — rather than a fixture shaped like
+ * one. What the browser proves is the half nothing else can: that an operator who opens a frozen
+ * dashboard is told which task went red and why **before** they touch anything, and that the only
+ * control which resumes the pipeline is a button they have to press.
+ */
+test('a frozen pipeline says so on the dashboard, with the reason and one way on', async ({
+  page,
+  request,
+}) => {
+  const frozen = await request.post('/api/harness', {
+    data: {
+      action: 'freeze',
+      projectId: PROJECT,
+      taskId: 'task_2',
+      reason: 'Приёмочный прогон «npm test» в чистом контейнере вернул 1 — задача не принята.',
+      paused: ['task_3'],
+    },
+  });
+  expect(frozen.ok()).toBe(true);
+
+  await page.goto('/');
+
+  const banner = page.getByTestId('freeze-banner');
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText('Конвейер заморожен');
+  await expect(page.getByTestId('freeze-reason')).toContainText('чистом контейнере вернул 1');
+  await expect(page.getByTestId('freeze-detail')).toContainText('task_2');
+  await expect(page.getByTestId('freeze-paused')).toHaveText('1');
+
+  // The board agrees: the paused task is paused, in the operator's own words.
+  await expect(page.getByTestId('task').filter({ hasText: 'Репозиторий заметок' })).toContainText(
+    'Приостановлена',
+  );
+
+  // Pressing it lifts the freeze, and the banner goes with it.
+  await page.getByTestId('retry-pipeline').click();
+  await expect(page.getByTestId('freeze-banner')).toHaveCount(0);
+  await expect(page.getByTestId('retry-error')).toHaveCount(0);
+});
+
+test('an unfrozen dashboard carries no stop state at all', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page.getByTestId('freeze-banner')).toHaveCount(0);
+  await expect(page.getByTestId('retry-pipeline')).toHaveCount(0);
+});

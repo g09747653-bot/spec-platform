@@ -63,6 +63,19 @@ export interface ExecutorDeps {
   engine: DockerEngine;
   /** Where a line of the container's output goes. Called for every line, as it arrives. */
   onLine: (line: { stream: 'stdout' | 'stderr'; text: string; level: LogLevel }) => void;
+  /**
+   * The plan's budget signal, the moment the CLI emits it (task 159; А-24 §2).
+   *
+   * Reported **while the container runs** rather than folded into `usage` and read afterwards,
+   * because that is the difference between throttling and describing a throttle: the orchestrator
+   * has to stop starting new containers now, not once this one finishes. Called on every change of
+   * the reported status, never on repetitions of the same one.
+   */
+  onRateLimit?: (signal: {
+    status?: string | undefined;
+    window?: string | undefined;
+    resetsAt?: number | undefined;
+  }) => void;
   /** Overridable so the timeout case does not spend five minutes proving itself. */
   timeoutMs?: number;
   /** Injected so tests can measure without waiting. Defaults to the wall clock. */
@@ -158,7 +171,16 @@ export async function runExecutor(
      * needs to see a task going wrong while it is going wrong.
      */
     const draining = drain(engine, id, onLine, (line) => {
+      const before = usage.rateLimitStatus;
       usage = foldStreamLine(usage, line);
+
+      if (usage.rateLimitStatus !== undefined && usage.rateLimitStatus !== before) {
+        deps.onRateLimit?.({
+          status: usage.rateLimitStatus,
+          window: usage.rateLimitWindow,
+          resetsAt: usage.rateLimitResetsAt,
+        });
+      }
     });
 
     const timedOut = await waitWithDeadline(engine, id, timeoutMs);

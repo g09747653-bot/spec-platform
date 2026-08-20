@@ -204,6 +204,8 @@ export function importHandoff(
   projectTitle: string,
   milestones: readonly SlicedMilestone[],
   tasks: readonly HandoffTask[],
+  /** Where this project's files are. Recorded so the dashboard can name it back (task 160). */
+  workspaceDir?: string,
 ): void {
   database.exec('BEGIN');
 
@@ -211,11 +213,19 @@ export function importHandoff(
     // Step 0 — the project row, before anything that references it.
     database
       .prepare(
-        `INSERT INTO projects (project_id, title, description, status)
-         VALUES (?, ?, ?, 'ACTIVE')
-         ON CONFLICT (project_id) DO UPDATE SET title = excluded.title`,
+        `INSERT INTO projects (project_id, title, description, status, workspace_dir)
+         VALUES (?, ?, ?, 'ACTIVE', ?)
+         ON CONFLICT (project_id) DO UPDATE SET
+           title = excluded.title,
+           /* A directory the caller did not name must not erase the one already recorded. */
+           workspace_dir = COALESCE(excluded.workspace_dir, projects.workspace_dir)`,
       )
-      .run(projectId, projectTitle, 'Импортирован из машинного бандла Spec Platform');
+      .run(
+        projectId,
+        projectTitle,
+        'Импортирован из машинного бандла Spec Platform',
+        workspaceDir ?? null,
+      );
 
     // Step 1 — the milestones.
     const milestone = database.prepare(

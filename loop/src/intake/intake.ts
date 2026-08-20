@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 
 import type { Chain } from '../llm/chain.ts';
@@ -99,13 +99,23 @@ export async function intakeBundle(
    */
   database
     .prepare(
-      `INSERT INTO projects (project_id, title, description, status) VALUES (?, ?, ?, 'ACTIVE')
-       ON CONFLICT (project_id) DO UPDATE SET title = excluded.title`,
+      `INSERT INTO projects (project_id, title, description, status, workspace_dir)
+       VALUES (?, ?, ?, 'ACTIVE', ?)
+       ON CONFLICT (project_id) DO UPDATE SET
+         title = excluded.title,
+         workspace_dir = COALESCE(excluded.workspace_dir, projects.workspace_dir)`,
     )
     .run(
       projectId,
       request.projectTitle ?? projectId,
       'Импортирован из машинного бандла Spec Platform',
+      /*
+       * **Absolute, always** (task 160). The column is read back by an endpoint that resolves paths
+       * against `WORKSPACE_ROOT_PATH`, so a relative value stored here would be joined to the root a
+       * second time and point at a directory that does not exist. Whoever calls the intake may say
+       * it either way; what is written down has one meaning.
+       */
+      resolve(request.projectDirectory),
     );
 
   const say = (message: string, level: 'INFO' | 'WARN' | 'ERROR' = 'INFO') => {
@@ -194,7 +204,14 @@ export async function intakeBundle(
   mkdirSync(join(request.projectDirectory, HANDOFF.reports), { recursive: true });
   writeHandoff(request.projectDirectory, slice.milestones, tasks, projectId);
 
-  importHandoff(database, projectId, request.projectTitle ?? projectId, slice.milestones, tasks);
+  importHandoff(
+    database,
+    projectId,
+    request.projectTitle ?? projectId,
+    slice.milestones,
+    tasks,
+    resolve(request.projectDirectory),
+  );
 
   say(
     `Handoff записан: вех ${String(slice.milestones.length)}, заданий ${String(tasks.length)}, ` +
