@@ -70,18 +70,27 @@ function createFakeBotApi() {
           const ready = () =>
             updates.filter((update) => (update as { update_id: number }).update_id >= offset);
 
+          /* Один ответ на запрос: протухший waiter после таймера не пишет второй раз
+             (находка репетиции гейта 167 — тот же стенд, тот же класс). */
+          let settled = false;
+          const answer = (result: unknown) => {
+            if (settled) return;
+            settled = true;
+            ok(result);
+          };
+
           if (ready().length > 0) {
-            ok(ready());
+            answer(ready());
             return;
           }
           /* Длинный опрос: держим запрос, пока не придёт апдейт или не истечёт timeout. */
           const timeoutMs = Number(payload.timeout ?? 0) * 1000;
           const timer = setTimeout(() => {
-            ok([]);
+            answer([]);
           }, timeoutMs);
           waiters.push(() => {
             clearTimeout(timer);
-            ok(ready());
+            answer(ready());
           });
           return;
         }
