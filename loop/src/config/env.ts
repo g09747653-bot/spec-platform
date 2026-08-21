@@ -163,6 +163,13 @@ const envObject = z.object({
   WHISPER_API_BASE: optional(url('WHISPER_API_BASE')),
   TELEGRAM_BOT_TOKEN: optional(z.string().min(1)),
   TELEGRAM_OWNER_CHAT_ID: optional(z.string().min(1)),
+  /**
+   * База Bot API (задача 167). Боевое умолчание — api.telegram.org; гейтовая прогулка подставляет
+   * локальный стенд, потому что ВХОДЯЩЕЕ сообщение владельца в настоящий Bot API программно не
+   * вложить (это привилегия человека с аккаунтом), а сквозной путь без рук доказывается на всём
+   * остальном настоящем. Тот же класс крана, что DOCKER_ENGINE_PIPE.
+   */
+  TELEGRAM_API_BASE: optional(url('TELEGRAM_API_BASE')),
 });
 
 export const envSchema = envObject;

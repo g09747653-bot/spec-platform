@@ -380,7 +380,7 @@ describe('суверенитет на входе: задумка запуска�
     expect(launchCalls).toHaveLength(0);
   });
 
-  it('голос без настроенной транскрибации отвечает именованно, текстовый путь называется', async () => {
+  it('голосовое от владельца → именованный ответ «голос отложен», никаких действий (165, А-29)', async () => {
     await startGateway();
 
     api.push({
@@ -392,8 +392,12 @@ describe('суверенитет на входе: задумка запуска�
     });
     await until(() => api.sent.length > 0);
 
-    expect(api.sent[0]?.text).toContain('Голосовой путь ещё не настроен');
-    expect(api.sent[0]?.text).toContain('текстом');
+    expect(api.sent[0]?.text).toContain('Голос отложен решением владельца');
+    expect(api.sent[0]?.text).toContain('пришлите задумку текстом');
+    /* Никаких действий: ни запуска, ни кнопок, ни скачивания файла — один именованный ответ. */
+    expect(api.sent).toHaveLength(1);
+    expect(api.sent[0]?.reply_markup).toBeUndefined();
+    expect(launchCalls).toHaveLength(0);
   });
 });
 

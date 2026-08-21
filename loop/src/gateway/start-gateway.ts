@@ -55,7 +55,10 @@ export function startGatewayFromEnv(
   if (holder[KEY] !== undefined) return holder[KEY];
 
   const gateway = createTelegramGateway({
-    client: createTelegramClient({ token }),
+    client: createTelegramClient({
+      token,
+      ...(env.TELEGRAM_API_BASE === undefined ? {} : { apiBase: env.TELEGRAM_API_BASE }),
+    }),
     ownerChatId,
     database: getDatabase(),
     bus: eventBus(),
@@ -82,7 +85,38 @@ export function startGatewayFromEnv(
 
         return `Заморожено исполнителей: ${String(record.paused.length)}. Продолжение — «Возобновить» на дашборде.`;
       },
-      /* launch и transcribe подключают задачи 166 и 165; до того шлюз отвечает именованно. */
+
+      /*
+       * Фасад задачи 166 — подключается присутствием SPEC_PLATFORM_API_BASE; без него подтверждённая
+       * задумка получает именованный ответ, не молчание (опциональность M17а). Хук `transcribe`
+       * сознательно НЕ подключён: голос отложен решением владельца (А-29 п.2), шов остаётся.
+       */
+      launch:
+        env.SPEC_PLATFORM_API_BASE === undefined
+          ? async (_idea, notify) => {
+              await notify(
+                'Фасад запуска не сконфигурирован: SPEC_PLATFORM_API_BASE не задан (loop/.env) — задумка никуда не пошла.',
+              );
+            }
+          : async (idea, notify) => {
+              const { runFacade } = await import('./facade.ts');
+              await runFacade(
+                idea,
+                {
+                  platformBase: env.SPEC_PLATFORM_API_BASE ?? '',
+                  loopBase: `http://127.0.0.1:${String(env.PORT)}`,
+                  workspaceRoot: env.WORKSPACE_ROOT_PATH,
+                },
+                {
+                  notify,
+                  log: (line, level) => {
+                    log(
+                      `[loop][tg${level === undefined || level === 'INFO' ? '' : ` ${level}`}] ${line}`,
+                    );
+                  },
+                },
+              );
+            },
     },
     log: (line, level) => {
       log(`[loop][tg${level === undefined || level === 'INFO' ? '' : ` ${level}`}] ${line}`);
