@@ -534,10 +534,24 @@ async function main(): Promise<number> {
   for (const image of Object.values(ACCEPTANCE_IMAGES)) {
     const have = spawnSync('docker', ['image', 'inspect', image], { stdio: 'ignore' });
     if (have.status === 0) continue;
-    note(`Тяну приёмочный образ ${image}…`);
-    const pulled = spawnSync('docker', ['pull', image], { encoding: 'utf8' });
-    if (pulled.status !== 0) {
-      throw new Error(`не удалось дотянуть образ ${image}: ${(pulled.stderr || '').slice(-200)}`);
+
+    /* Реестр флейкает (попытка 4 умерла на TLS-таймауте auth.docker.io) — три захода с паузой. */
+    let lastError = '';
+    let pulledOk = false;
+    for (let attempt = 1; attempt <= 3 && !pulledOk; attempt += 1) {
+      note(`Тяну приёмочный образ ${image} (заход ${String(attempt)}/3)…`);
+      const pulled = spawnSync('docker', ['pull', image], { encoding: 'utf8' });
+      if (pulled.status === 0) {
+        pulledOk = true;
+        break;
+      }
+      lastError = (pulled.stderr || '').slice(-200);
+      spawnSync(process.execPath, ['-e', 'setTimeout(() => process.exit(0), 5000)'], {
+        stdio: 'ignore',
+      });
+    }
+    if (!pulledOk) {
+      throw new Error(`не удалось дотянуть образ ${image} за три захода: ${lastError}`);
     }
   }
   note('Приёмочные образы на месте (все пять стеков).');
