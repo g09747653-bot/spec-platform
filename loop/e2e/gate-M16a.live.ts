@@ -993,8 +993,16 @@ async function main(): Promise<void> {
             );
           } else {
             const ceiling = 1_800;
-            const taskPath = join(projectDirectory, 'handoff', 'tasks', `task_${frozen.taskId}.json`);
-            const assignment = JSON.parse(readFileSync(taskPath, 'utf8')) as Record<string, unknown>;
+            const taskPath = join(
+              projectDirectory,
+              'handoff',
+              'tasks',
+              `task_${frozen.taskId}.json`,
+            );
+            const assignment = JSON.parse(readFileSync(taskPath, 'utf8')) as Record<
+              string,
+              unknown
+            >;
             assignment.iterationTimeoutSec = ceiling;
             writeFileSync(taskPath, `${JSON.stringify(assignment, null, 2)}\n`, 'utf8');
             rescuedCeilings.set(frozen.taskId, ceiling);

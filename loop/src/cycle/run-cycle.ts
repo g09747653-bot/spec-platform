@@ -152,9 +152,7 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
       : assignment.iterationTimeoutSec * 1_000;
 
   if (assignment.iterationTimeoutSec !== undefined) {
-    say(
-      `Задание несёт собственный потолок итерации: ${String(assignment.iterationTimeoutSec)} с.`,
-    );
+    say(`Задание несёт собственный потолок итерации: ${String(assignment.iterationTimeoutSec)} с.`);
   }
 
   // 2. The executor.

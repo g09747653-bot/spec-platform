@@ -242,9 +242,9 @@ describe('the M14а gate bundle, intaken for real (task 156 AC-1)', () => {
 
     await run();
 
-    expect(
-      HandoffTask.parse(JSON.parse(readFileSync(path, 'utf8'))).iterationTimeoutSec,
-    ).toBe(1_800);
+    expect(HandoffTask.parse(JSON.parse(readFileSync(path, 'utf8'))).iterationTimeoutSec).toBe(
+      1_800,
+    );
   });
 
   it('leaves the bytes of the tree untouched on a second intake', async () => {
