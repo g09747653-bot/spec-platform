@@ -192,7 +192,7 @@ describe('what the executor container is given (task 155)', () => {
     await runExecutor(REQUEST, { engine, onLine: () => undefined });
 
     expect(recorded.created[0]?.cmd).toEqual(
-      claudeCommand({ taskFile: REQUEST.taskFile, credentialKind: 'ANTHROPIC_API_KEY' }),
+      claudeCommand({ taskFile: REQUEST.taskFile, taskId: REQUEST.taskId, credentialKind: 'ANTHROPIC_API_KEY' }),
     );
   });
 
@@ -313,6 +313,7 @@ describe('how an iteration ends (task 155)', () => {
 describe('the Claude Code command (task 155)', () => {
   const command = claudeCommand({
     taskFile: '/workspace/handoff/tasks/task_7.json',
+    taskId: 'task_7',
     credentialKind: 'ANTHROPIC_API_KEY',
   });
 
@@ -348,7 +349,7 @@ describe('the Claude Code command (task 155)', () => {
   });
 
   it('carries a model only when one was asked for', () => {
-    const base = { taskFile: '/t.json', credentialKind: 'ANTHROPIC_API_KEY' } as const;
+    const base = { taskFile: '/t.json', taskId: 'task_7', credentialKind: 'ANTHROPIC_API_KEY' } as const;
 
     expect(claudeCommand(base)).not.toContain('--model');
     expect(claudeCommand({ ...base, model: 'sonnet' })).toContain('sonnet');
@@ -363,6 +364,7 @@ describe('the Claude Code command (task 155)', () => {
 describe('isolation follows the credential, because bare mode cannot read a token (А-23)', () => {
   const subscription = claudeCommand({
     taskFile: '/workspace/handoff/tasks/task_7.json',
+    taskId: 'task_7',
     credentialKind: 'CLAUDE_CODE_OAUTH_TOKEN',
   });
 
@@ -385,6 +387,7 @@ describe('isolation follows the credential, because bare mode cannot read a toke
   it('changes nothing else: the same prompt, tools, bounds and format on both paths', () => {
     const apiKey = claudeCommand({
       taskFile: '/workspace/handoff/tasks/task_7.json',
+      taskId: 'task_7',
       credentialKind: 'ANTHROPIC_API_KEY',
     });
 

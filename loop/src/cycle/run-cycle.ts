@@ -15,6 +15,14 @@ import {
   type ExecutorReport,
 } from '../gate/report.ts';
 import { detectAndRewrite } from '../gate/tech-stack.ts';
+import {
+  clearVerdict,
+  EDIT_CLOCK_TOLERANCE_MS,
+  hasRedVerdict,
+  readVerdict,
+  workspaceEditedSince,
+  writeRedVerdict,
+} from '../gate/verdicts.ts';
 import { frozenMsFor } from '../orchestrator/freeze.ts';
 import { HANDOFF, HandoffTask, taskFileName } from '../intake/handoff.ts';
 import type { Logger } from '../observability/log.ts';
@@ -138,6 +146,18 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
   say('Задача передана исполнителю.');
 
   /*
+   * Повтор ли это красной задачи — решается ДО итерации (задача 176). Вердикт прошлой приёмки
+   * лежит на диске (`handoff/reports/verdict_*.md`), исполнитель прочитает его из своего
+   * монтирования; здесь запоминается сам факт и момент старта — против них после итерации
+   * распознаётся «SUCCESS без единой правки» (mtime-класс прогона Б).
+   */
+  const hadRedVerdict = hasRedVerdict(projectDirectory, taskId);
+  const iterationStartedAt = Date.now();
+  if (hadRedVerdict) {
+    say('Повторная итерация: вердикт прошлой приёмки на диске, исполнителю велено прочитать его первым.');
+  }
+
+  /*
    * The assignment, read **off the disk** before the executor starts (task 174). The disk is the
    * source of truth, and `iterationTimeoutSec` is a mark an operator may have put there by hand —
    * a per-task ceiling outranks whatever the run was configured with, because the point of the
@@ -258,6 +278,49 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
     const reason =
       'Исполнитель не уложился в отведённое время итерации (время заморозки не в счёт).';
     say(reason, 'ERROR');
+    writeRedVerdict(projectDirectory, { taskId, reason, acceptance: null });
+
+    return {
+      taskId,
+      outcome: 'FAILED',
+      reported,
+      executor,
+      acceptance: null,
+      reason,
+      decisionId: recorded,
+      techStackRewritten: rewritten,
+    };
+  }
+
+  /*
+   * «SUCCESS без единой правки при красной причине» — именованный отказ повтора (задача 176).
+   *
+   * Класс прогона Б: задание говорит «создай утилиту», всё уже создано, и исполнитель трижды
+   * честно отвечает SUCCESS, не тронув ни файла, — а приёмка трижды платит полный прогон за ту же
+   * красноту. Третьего одинакового захода не будет: повтор, который заявляет успех, обязан был
+   * что-то починить. Допуск часов смещает ошибку в безопасную сторону — сомнительное «не трогал»
+   * читается как «трогал», и тогда приёмка просто идёт своим чередом, как шла вчера.
+   */
+  if (
+    hadRedVerdict &&
+    reported?.status === 'SUCCESS' &&
+    !workspaceEditedSince(projectDirectory, iterationStartedAt - EDIT_CLOCK_TOLERANCE_MS)
+  ) {
+    setStatus(database, projectDirectory, projectId, taskId, 'FAILED');
+    const reason =
+      'Повтор без правок при красной причине: исполнитель отчитался SUCCESS, не изменив ни файла, ' +
+      '— прежний вердикт приёмки остаётся в силе, задача не принята (именованный отказ, задача 176).';
+    say(reason, 'ERROR');
+
+    const previous = readVerdict(projectDirectory, taskId);
+    writeRedVerdict(projectDirectory, {
+      taskId,
+      reason:
+        previous === null
+          ? reason
+          : `${reason}\n\nПрежний вердикт сохранён ниже — причина красноты не изменилась.\n\n---\n\n${previous}`,
+      acceptance: null,
+    });
 
     return {
       taskId,
@@ -313,6 +376,8 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
         message: `${finding.label}: ${finding.output.split('\n').slice(0, 12).join('\n')}`,
       });
     }
+    /* Возврат несёт причину не только в ленту, но и исполнителю повтора (задача 176). */
+    writeRedVerdict(projectDirectory, { taskId, reason: acceptance.reason, acceptance });
 
     return {
       taskId,
@@ -329,6 +394,16 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
   const outcome: CycleOutcome = acceptance.accepted ? 'COMPLETED' : 'FAILED';
   setStatus(database, projectDirectory, projectId, taskId, outcome);
   say(acceptance.reason, acceptance.accepted ? 'INFO' : 'ERROR');
+
+  /*
+   * Вердикт — на диск, исполнителю следующей попытки; принятая задача уносит свой (задача 176).
+   * Пишется до возврата из цикла, тем же порядком «диск → база → лента», что и статус.
+   */
+  if (acceptance.accepted) {
+    clearVerdict(projectDirectory, taskId);
+  } else {
+    writeRedVerdict(projectDirectory, { taskId, reason: acceptance.reason, acceptance });
+  }
 
   if (!acceptance.accepted && reported?.status === 'SUCCESS') {
     say(

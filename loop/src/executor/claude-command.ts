@@ -55,6 +55,8 @@ import type { ExecutorCredentialKind } from './credential.ts';
 export interface ClaudeCommandOptions {
   /** Where the assignment sits inside the container — under the mounted workspace. */
   taskFile: string;
+  /** The task's id — it names the verdict file a repeat iteration must read (task 176). */
+  taskId: string;
   /** Which credential the container was handed — it decides the isolation flags. */
   credentialKind: ExecutorCredentialKind;
   /** Bounds the agentic loop from inside the CLI. */
@@ -75,11 +77,16 @@ export const DEFAULT_MAX_TURNS = 60;
  * workspace, it is the same file the orchestrator wrote and will later re-read, and a copy of it in
  * the prompt would be a second version of the task that can disagree with the first.
  */
-export function executorPrompt(taskFile: string): string {
+export function executorPrompt(taskFile: string, taskId: string): string {
   return [
     `Прочитай файл задания ${taskFile} — это твоё задание целиком.`,
     '',
-    'Выполни его в текущей рабочей директории: внеси правки в файлы, перечисленные в filesToEdit,',
+    `Если существует handoff/reports/verdict_${taskId}.md — прочитай его ПЕРВЫМ: это вердикт`,
+    'приёмки предыдущей попытки этой же задачи (что именно красное: упавшая команда, вывод,',
+    'находки контролёра). Твоя работа — починить названную причину. Отчёт SUCCESS без единой',
+    'правки файлов при этом вердикте будет отвергнут по имени.',
+    '',
+    'Выполни задание в текущей рабочей директории: внеси правки в файлы, перечисленные в filesToEdit,',
     'напиши тесты и прогони их. Работай самостоятельно и не задавай вопросов — ответить некому.',
     '',
     'Если существует handoff/RESEARCH.md — прочитай его: это снимок рабочей директории, сделанный',
@@ -111,7 +118,7 @@ export function claudeCommand(options: ClaudeCommandOptions): string[] {
     'claude',
     ...isolation,
     '-p',
-    executorPrompt(options.taskFile),
+    executorPrompt(options.taskFile, options.taskId),
     '--output-format',
     'stream-json',
     '--verbose',

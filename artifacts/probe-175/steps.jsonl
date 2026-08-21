@@ -1,0 +1,8 @@
+{"at":"29s","kind":"ask-round","moved":true,"done":false,"stopReason":null,"steps":1}
+{"at":"52s","kind":"answer-round","moved":true,"done":false,"stopReason":null,"steps":2}
+{"at":"54s","kind":"proceed","moved":true,"done":false,"stopReason":null,"steps":3}
+{"at":"78s","kind":"ask-round","moved":true,"done":false,"stopReason":null,"steps":4}
+{"at":"94s","kind":"answer-round","moved":true,"done":false,"stopReason":null,"steps":5}
+{"at":"96s","kind":"proceed","moved":true,"done":false,"stopReason":null,"steps":6}
+{"at":"181s","kind":"generate","moved":true,"done":false,"stopReason":null,"steps":7}
+{"at":"183s","kind":"approve-spec","moved":true,"done":false,"stopReason":null,"steps":8}

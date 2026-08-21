@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
-    "db:migrate": "node src/db/migrate-cli.ts"
+    "db:migrate": "node src/db/migrate-cli.ts",
+    "bridge": "node --env-file-if-exists=.env src/bridge/serve.ts"
   },
   "dependencies": {
     "ajv": "8.20.0",

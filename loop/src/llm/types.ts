@@ -12,7 +12,7 @@
  * code (which tasks depend on which, when a task is done, what the gate says).
  */
 
-export const LLM_PROVIDERS = ['anthropic', 'openai', 'google', 'ollama'] as const;
+export const LLM_PROVIDERS = ['anthropic', 'openai', 'google', 'ollama', 'claude-cli'] as const;
 
 export type LlmProviderId = (typeof LLM_PROVIDERS)[number];
 
