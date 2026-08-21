@@ -74,6 +74,8 @@ export interface OrchestratorDeps {
   executorCommand?: (taskId: string, projectId: string) => readonly string[];
   executorTimeoutMs?: number;
   acceptanceTimeoutMs?: number;
+  /** One test command's own limit inside the acceptance run (task 174). */
+  acceptanceTestTimeoutMs?: number;
   model?: string | undefined;
   /** `MAX_EXECUTORS` — the ceiling on containers at once (task 159). */
   maxExecutors?: number;

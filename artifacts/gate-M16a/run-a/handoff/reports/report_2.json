@@ -1,0 +1,15 @@
+{
+  "reportId": "report_2",
+  "taskId": "2",
+  "projectId": "tekstovyy-kvest",
+  "executorId": "claude-code",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 19,
+    "passed": 19,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "additionalProperties: false добавлен на всех уровнях объектных схем",
+  "rationale": "Помимо явных требований задачи (закрытый enum для endingType, плоские Record<string, boolean> для requiredState/setState/initialState), в обе схемы добавлен `additionalProperties: false` для объекта сценария целиком, объекта сцены и объекта опции (а также для объекта сохранения). Это прямо предписано в constitution.md (раздел Security Constraints) и architecture.md (раздел Security Architecture, п. 2 «Безопасная десериализация JSON»): схема должна закрывать возможность внедрения посторонних свойств (например, `__proto__`/`constructor`) до передачи данных в машину состояний, что защищает от Prototype Pollution. Добавлен отдельный тест, подтверждающий, что сценарий с посторонним свойством верхнего уровня отклоняется валидатором.\n\nПримечание архитектору: в момент выполнения этой задачи в рабочей директории параллельно велась работа над другими задачами (lib/state-machine.js, lib/cli-view.js, тесты state.test.js/cli-view.test.js). Полный прогон `npm test` на момент сдачи показывает 43 теста, 38 успешных и 5 неуспешных — все 5 падений находятся в test/cli-view.test.js (несоответствие ожидаемых ANSI-кодов цвета в styleWin/styleLose/styleItem/styleEnding) и не связаны с файлами из filesToEdit этой задачи (schemas/scenario.schema.json, schemas/save.schema.json). Возможно, они относятся к незавершённой параллельной задаче 12/13 и должны быть проверены её исполнителем отдельно. testsRun в этом отчёте отражает только тесты, относящиеся к задаче 2 (test/schemas.test.js), все 19 из которых проходят."
+}

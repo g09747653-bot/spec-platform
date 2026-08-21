@@ -217,6 +217,36 @@ describe('the M14а gate bundle, intaken for real (task 156 AC-1)', () => {
     expect(onDisk.unitTestCmd).toBe('npm test');
   });
 
+  it('keeps an operator’s iteration-ceiling mark across a re-intake (task 174)', async () => {
+    /*
+     * `iterationTimeoutSec` is written into `task_*.json` by a person (or the architect) about a
+     * task known to be heavy. A resume that dropped it would re-arm the default ceiling on exactly
+     * the task it was measured to kill — the same defect as rewriting the prose, wearing a number.
+     */
+    const first = await run();
+    const marked = first.tasks[0]?.taskId ?? '';
+    const path = join(directory, 'project', 'handoff', 'tasks', `task_${marked}.json`);
+
+    writeFileSync(
+      path,
+      `${JSON.stringify(
+        HandoffTask.parse({
+          ...HandoffTask.parse(JSON.parse(readFileSync(path, 'utf8'))),
+          iterationTimeoutSec: 1_800,
+        }),
+        null,
+        2,
+      )}\n`,
+      'utf8',
+    );
+
+    await run();
+
+    expect(
+      HandoffTask.parse(JSON.parse(readFileSync(path, 'utf8'))).iterationTimeoutSec,
+    ).toBe(1_800);
+  });
+
   it('leaves the bytes of the tree untouched on a second intake', async () => {
     await run(stubChain(JSON.stringify({ description: 'Раз', filesToEdit: ['a.ts'] })));
 
@@ -409,6 +439,37 @@ describe('who writes the assignment texts (task 156)', () => {
 
     expect(result.writtenByModel).toBe(16);
     expect(result.tasks[0]?.unitTestCmd).toBeUndefined();
+  });
+
+  it('carries the architect’s iteration-ceiling mark into the assignment (task 174)', async () => {
+    const result = await run(
+      stubChain(
+        JSON.stringify({
+          description: 'Тяжёлая задача: собрать большой корпус.',
+          filesToEdit: [],
+          iterationTimeoutSec: 1_200,
+        }),
+      ),
+    );
+
+    expect(result.writtenByModel).toBe(16);
+    expect(result.tasks[0]?.iterationTimeoutSec).toBe(1_200);
+  });
+
+  it('reads an out-of-range ceiling as «no mark» rather than losing the description', async () => {
+    const result = await run(
+      stubChain(
+        JSON.stringify({
+          description: 'Задача с фантазией о суточном потолке.',
+          filesToEdit: [],
+          iterationTimeoutSec: 999_999,
+        }),
+      ),
+    );
+
+    expect(result.writtenByModel).toBe(16);
+    expect(result.tasks[0]?.description).toBe('Задача с фантазией о суточном потолке.');
+    expect(result.tasks[0]?.iterationTimeoutSec).toBeUndefined();
   });
 
   it('writes the assignment anyway when every provider fails, and names the degradation', async () => {

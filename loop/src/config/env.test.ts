@@ -83,6 +83,16 @@ describe('the loop environment (task 152)', () => {
     expect(() => parseEnv({ ...FLOOR, PORT: '70000' })).toThrow(LoopConfigurationError);
   });
 
+  it('defaults the acceptance-test limit to five minutes, and reads an override (task 174)', () => {
+    expect(parseEnv({ ...FLOOR }).ACCEPTANCE_TEST_TIMEOUT_MS).toBe(300_000);
+    expect(
+      parseEnv({ ...FLOOR, ACCEPTANCE_TEST_TIMEOUT_MS: '120000' }).ACCEPTANCE_TEST_TIMEOUT_MS,
+    ).toBe(120_000);
+    expect(() => parseEnv({ ...FLOOR, ACCEPTANCE_TEST_TIMEOUT_MS: '-1' })).toThrow(
+      LoopConfigurationError,
+    );
+  });
+
   it('exits with code 1 and names the variable in stderr', () => {
     const written: string[] = [];
     let exited: number | null = null;

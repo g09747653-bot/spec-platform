@@ -142,6 +142,7 @@ export async function POST(request: Request): Promise<Response> {
       logger,
       credential: executorCredential(env),
       maxExecutors: env.LOOP_MAX_EXECUTORS,
+      acceptanceTestTimeoutMs: env.ACCEPTANCE_TEST_TIMEOUT_MS,
       researchChain: researcher.providers.length === 0 ? null : researcher,
       ...(env.LOOP_ANTHROPIC_MODEL === undefined ? {} : { model: env.LOOP_ANTHROPIC_MODEL }),
       ...(executorStubEnabled() ? { executorCommand: executorStubCommand } : {}),

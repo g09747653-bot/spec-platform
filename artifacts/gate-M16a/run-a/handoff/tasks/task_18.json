@@ -1,0 +1,18 @@
+{
+  "taskId": "18",
+  "milestoneId": "ms_08",
+  "title": "Написание сквозных интеграционных тестов игрового цикла",
+  "description": "Создать файл `test/integration.test.js`. Реализовать эмуляцию stdin/stdout через потоки (Streams) для прохождения демонстрационного квеста `demo.json` от начала до победного конца. Проверить перезапись файлов автосохранения на каждом шаге и вывод финальной статистики.\n  _Зависимости: 15, 16, 17_",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "test/integration.test.js"
+  ],
+  "dependsOn": [
+    "15",
+    "16",
+    "17"
+  ],
+  "unitTestCmd": "npm test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

@@ -1,0 +1,14 @@
+{
+  "taskId": "11",
+  "milestoneId": "ms_02",
+  "title": "Реализовать cli.js для case-converter: --text, fallback на stdin, --mode, --out, ошибка с перечислением допустимых режимов",
+  "description": "_Dependencies: 10_",
+  "techStack": "nodejs",
+  "filesToEdit": [],
+  "dependsOn": [
+    "10"
+  ],
+  "unitTestCmd": "npm test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

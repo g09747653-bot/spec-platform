@@ -1,0 +1,16 @@
+{
+  "taskId": "21",
+  "milestoneId": "ms_03",
+  "title": "Написать процесс-тесты cli.js для json-formatter (успех, --help, отсутствующий файл, --indent < 0 → сообщение --indent must be a non-negative integer и exit 1, битый JSON — проверка только префикса invalid JSON:, --out, отсутствие сетевых require)",
+  "description": "Открой json-formatter/cli.js и json-formatter/lib.js, изучи фактический интерфейс (флаги, коды выхода, точный текст ошибок), реализованный в задаче 20 — не угадывай их. Создай файл json-formatter/test/cli.test.js с process-тестами, которые запускают cli.js как отдельный дочерний процесс (через child_process.spawnSync или execFileSync с 'node', путём до cli.js), а не импортируют его напрямую. Для входных JSON-файлов используй временные файлы, создаваемые в самом тесте (fs.mkdtempSync(path.join(os.tmpdir(), ...)) + fs.writeFileSync), и удаляй их после теста — не добавляй закоммиченные фикстуры. Покрой следующие сценарии отдельными кейсами: 1) успешный запуск — на вход валидный JSON-файл, ожидается exit code 0 и корректно отформатированный JSON в stdout; 2) флаг --help — ожидается exit code 0 и присутствие текста использования в stdout; 3) отсутствующий файл — передать несуществующий путь, ожидается exit code 1 и сообщение об ошибке в stderr; 4) --indent со значением меньше нуля — ожидается exit code 1 и то, что stderr содержит ровно строку '--indent must be a non-negative integer' (сверь точную формулировку с реализацией в cli.js, а не с этим описанием); 5) битый JSON на входе — ожидается exit code 1 и что stderr НАЧИНАЕТСЯ с префикса 'invalid JSON:' (проверяй через startsWith/toMatch на префикс, не сравнивай с полным текстом сообщения, так как оно зависит от исходного парсер-эксепшена); 6) флаг --out — запусти cli.js с --out <путь_к_временному_файлу>, проверь, что после выполнения файл создан и содержит ожидаемый отформатированный JSON; 7) отдельным тестом статически проверь исходный код json-formatter/cli.js и json-formatter/lib.js (прочитав их как текст через fs.readFileSync) и убедись, что там отсутствуют require/import сетевых модулей Node ('http', 'https', 'net', 'dgram', 'tls', 'dns') — тест должен провалиться, если такой require появится. Не изменяй cli.js или lib.js, если только не обнаружишь, что задача 20 не соответствует архитектуре (двухслойное разделение cli.js/lib.js); в этом случае исправь только то, что нарушает архитектурный контракт, не расширяя функциональность.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "json-formatter/test/cli.test.js"
+  ],
+  "dependsOn": [
+    "20"
+  ],
+  "unitTestCmd": "npm --prefix json-formatter test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

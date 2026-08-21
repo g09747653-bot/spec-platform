@@ -1,0 +1,49 @@
+{
+  "at": "2026-08-20T23:49:57.868Z",
+  "seconds": 217.8,
+  "strategy": "dependencies",
+  "milestones": 9,
+  "tasks": 19,
+  "writtenByModel": 19,
+  "keptFromDisk": 0,
+  "degradations": [],
+  "descriptionsDifferFromBundleProse": 19,
+  "withUnitTestCmd": 14,
+  "withIterationTimeoutSec": 0,
+  "sample": [
+    {
+      "taskId": "1",
+      "title": "Инициализация npm-пакета, настройка ESM и инструментов качества кода",
+      "description": "1. Инициализируйте npm-проект в корневой директории, создав файл package.json со следующими обязательными параметрами: \"type\": \"module\", требованиями к версии Node.js \"engines\": { \"node\": \">=18.0.0\" } и полем \"bin\": { \"quest-engine\": \"./bin/index.js\" }.\n2. Установите основные зависимости проекта: ajv, prompts, yoctocolor.\n3. Установите инструменты проверки качества кода eslint и prettier в качестве devDependencies.\n4. Настройте ESLint, создав файл конфигурации eslint.config.js (или .eslintrc.json) с поддержкой ES-модулей и окружения Node.js.\n5. Настройте форматирование кода, создав конфигураци",
+      "filesToEdit": [
+        "package.json",
+        "eslint.config.js",
+        ".prettierrc",
+        "bin/index.js"
+      ],
+      "unitTestCmd": null,
+      "iterationTimeoutSec": null
+    },
+    {
+      "taskId": "2",
+      "title": "Создание JSON-схем валидации сценариев и файлов сохранений",
+      "description": "1. Прочитайте файлы `bundle/constitution.md` и `bundle/architecture.md` для понимания точной структуры сценария и файлов сохранений.\n2. Создайте директорию `schemas`, если она не существует.\n3. Создайте файл `schemas/scenario.schema.json`. Опишите в нём JSON-схему (draft-07) для валидации сценария игры:\n   - Установите `initialState` как плоский объект с булевыми значениями (`type: object`, `additionalProperties: { type: boolean }`).\n   - Опишите структуру сцены (`scene`).\n   - Для поля `endingType` в объекте сцены укажите тип `string` со строго ограниченным списком значений `['win', 'lose']`.",
+      "filesToEdit": [
+        "schemas/scenario.schema.json",
+        "schemas/save.schema.json"
+      ],
+      "unitTestCmd": null,
+      "iterationTimeoutSec": null
+    },
+    {
+      "taskId": "3",
+      "title": "Написание встроенного демонстрационного сценария квеста",
+      "description": "1. Создать директорию `scenarios`, если она еще не создана.\n2. Создать файл сценария `scenarios/demo.json` на тему «Побег из запертой комнаты».\n3. В структуре JSON определить начальное состояние игры в свойстве `initialState` с булевым флагом, например `hasKey: false`.\n4. Реализовать граф сцен (`scenes`), включающий как минимум:\n   - Стартовую комнату с возможностью осмотреть стол и подойти к двери.\n   - Сцену осмотра стола, где игрок находит ключ (при этом состояние `hasKey` меняется на `true` с помощью `setState`).\n   - Сцену у двери, которая предлагает разные исходы или выборы в зависимости",
+      "filesToEdit": [
+        "scenarios/demo.json"
+      ],
+      "unitTestCmd": "npm test",
+      "iterationTimeoutSec": null
+    }
+  ]
+}

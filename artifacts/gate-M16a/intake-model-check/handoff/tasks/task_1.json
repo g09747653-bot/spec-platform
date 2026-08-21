@@ -1,0 +1,16 @@
+{
+  "taskId": "1",
+  "milestoneId": "ms_01",
+  "title": "Инициализация npm-пакета, настройка ESM и инструментов качества кода",
+  "description": "1. Инициализируйте npm-проект в корневой директории, создав файл package.json со следующими обязательными параметрами: \"type\": \"module\", требованиями к версии Node.js \"engines\": { \"node\": \">=18.0.0\" } и полем \"bin\": { \"quest-engine\": \"./bin/index.js\" }.\n2. Установите основные зависимости проекта: ajv, prompts, yoctocolor.\n3. Установите инструменты проверки качества кода eslint и prettier в качестве devDependencies.\n4. Настройте ESLint, создав файл конфигурации eslint.config.js (или .eslintrc.json) с поддержкой ES-модулей и окружения Node.js.\n5. Настройте форматирование кода, создав конфигурационный файл .prettierrc.\n6. Добавьте в package.json скрипты проверки качества кода: \"lint\": \"eslint .\" и \"format\": \"prettier --write \\\".\\\" \".\n7. Создайте директорию bin и в ней исполняемый файл index.js с базовой заглушкой, начинающийся с шебанга #!/usr/bin/env node.\n8. Проверьте работоспособность утилит линтинга и форматирования.",
+  "techStack": "generic",
+  "filesToEdit": [
+    "package.json",
+    "eslint.config.js",
+    ".prettierrc",
+    "bin/index.js"
+  ],
+  "dependsOn": [],
+  "expectedArtifacts": [],
+  "status": "PENDING"
+}

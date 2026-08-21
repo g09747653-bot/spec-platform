@@ -36,6 +36,19 @@ const Enrichment = z.object({
   filesToEdit: z.array(z.string()),
   unitTestCmd: z.string().nullish().transform(nullToUndefined),
   e2eTestCmd: z.string().nullish().transform(nullToUndefined),
+  /**
+   * The architect's mark on a task known to be heavy (task 174) — same bounds as the task schema.
+   * `null` is «no mark», by the same measured lesson as the commands above; an out-of-range number
+   * is also read as no mark rather than costing the whole assignment its description.
+   */
+  iterationTimeoutSec: z
+    .number()
+    .int()
+    .positive()
+    .max(7_200)
+    .nullish()
+    .catch(undefined)
+    .transform((value) => value ?? undefined),
 });
 
 /** An empty string is as absent as `null`: a command nobody can run is not a command. */
@@ -102,11 +115,15 @@ function prompt(task: BundleTask, context: AssignmentContext): string {
     '  "description": "что именно сделать, по шагам, в повелительном наклонении",',
     '  "filesToEdit": ["путь/от/корня/рабочей/директории.ts"],',
     '  "unitTestCmd": "команда модульных тестов, если применима",',
-    '  "e2eTestCmd": "команда сквозных тестов, если применима"',
+    '  "e2eTestCmd": "команда сквозных тестов, если применима",',
+    '  "iterationTimeoutSec": null',
     '}',
     '',
     'filesToEdit — предложение, а не догадка: перечисляй только те файлы, которые следуют из',
     'записи задачи и архитектуры. Если файлы не выводятся, верни пустой массив.',
+    'iterationTimeoutSec — почти всегда null: у исполнителя и так есть просторный потолок времени.',
+    'Ставь число секунд (не больше 7200) только для задачи, заведомо необычно тяжёлой — например,',
+    'генерация большого корпуса или долгая сборка, названная в самой записи задачи.',
   ].join('\n');
 }
 
@@ -149,6 +166,7 @@ export async function buildAssignment(
     filesToEdit: pathsMentionedIn(`${task.title}\n${task.description}`),
     unitTestCmd: undefined,
     e2eTestCmd: undefined,
+    iterationTimeoutSec: undefined,
   };
 
   let enrichment = fallback;
@@ -183,6 +201,9 @@ export async function buildAssignment(
     dependsOn: task.dependsOn,
     ...(enrichment.unitTestCmd === undefined ? {} : { unitTestCmd: enrichment.unitTestCmd }),
     ...(enrichment.e2eTestCmd === undefined ? {} : { e2eTestCmd: enrichment.e2eTestCmd }),
+    ...(enrichment.iterationTimeoutSec === undefined
+      ? {}
+      : { iterationTimeoutSec: enrichment.iterationTimeoutSec }),
     expectedArtifacts: artifacts,
     status: 'PENDING',
   });

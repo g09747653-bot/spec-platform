@@ -1,0 +1,43 @@
+{
+  "taskId": "31",
+  "milestoneId": "ms_04",
+  "title": "Провести ручную сквозную проверку мгновенного отклика (время до первого вывода) для всех утилит, кроме countdown-timer",
+  "description": "Проведи ручную сквозную (E2E) проверку мгновенности отклика (времени до первого вывода в stdout) для девяти утилит: temperature-converter, word-counter, password-generator, case-converter, roman-numerals, palindrome-checker, json-formatter, lorem-ipsum-generator, percentage-calculator. countdown-timer исключи из проверки, так как по своей природе она преднамеренно растягивает вывод во времени.\n\n1. Для каждой из девяти директорий убедись, что `cli.js` и `lib.js` присутствуют и соответствуют результатам предыдущих задач (3, 6, 9, 12, 15, 18, 21, 24, 27, 30), то есть утилита уже реализована и её собственные тесты (`npm test` внутри директории утилиты) проходят.\n2. Определи для каждой утилиты представительный валидный вызов (по её README/help-выводу/тестам) — то есть тот режим работы, при котором результат должен выводиться немедленно, без ожидания сети, таймеров или ручного ввода через stdin (если ввод не передан аргументом).\n3. Запусти каждую утилиту через `node cli.js <представительные аргументы>` и измерь время от старта процесса до появления первого содержательного вывода в stdout (используй `Measure-Command` в PowerShell или `time` в bash). Зафиксируй, что вывод появляется практически сразу (в пределах времени старта Node.js, без искусственных задержек, ожидания event loop, незакрытых хендлов или зависания на stdin).\n4. Отдельно проверь случай, когда утилита ожидает stdin (если такой предусмотрен архитектурой) — убедись, что после подачи данных через pipe (`echo ... | node cli.js`) вывод тоже появляется мгновенно, а не блокируется.\n5. Убедись, что ни одна из девяти утилит не зависает после вывода результата (процесс должен корректно завершиться с ожидаемым exit code, не оставляя открытых хендлов, таймеров или слушателей, которые держат event loop).\n6. Если для какой-либо утилиты обнаружена задержка, зависание или незавершение процесса — это дефект в `cli.js` или `lib.js` этой утилиты (например, не закрытый stream, забытый setTimeout/setInterval, или блокирующее ожидание stdin без данных); исправь причину напрямую в файлах затронутой утилиты и повтори проверку.\n7. Не вноси изменений в countdown-timer и не переноси в неё логику из других утилит.\n\nВНИМАНИЕ ОПЕРАТОРА: прежняя команда тестов была в синтаксисе PowerShell — приёмка гоняет её в sh и падает с кодом 2. Команда заменена на sh-совместимую; ничего в ней не меняй.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "temperature-converter/cli.js",
+    "temperature-converter/lib.js",
+    "word-counter/cli.js",
+    "word-counter/lib.js",
+    "password-generator/cli.js",
+    "password-generator/lib.js",
+    "case-converter/cli.js",
+    "case-converter/lib.js",
+    "roman-numerals/cli.js",
+    "roman-numerals/lib.js",
+    "palindrome-checker/cli.js",
+    "palindrome-checker/lib.js",
+    "json-formatter/cli.js",
+    "json-formatter/lib.js",
+    "lorem-ipsum-generator/cli.js",
+    "lorem-ipsum-generator/lib.js",
+    "percentage-calculator/cli.js",
+    "percentage-calculator/lib.js"
+  ],
+  "dependsOn": [
+    "3",
+    "6",
+    "9",
+    "12",
+    "15",
+    "18",
+    "21",
+    "24",
+    "27",
+    "30"
+  ],
+  "unitTestCmd": "for d in temperature-converter word-counter password-generator case-converter roman-numerals palindrome-checker json-formatter lorem-ipsum-generator percentage-calculator countdown-timer; do (cd \"$d\" && npm test) || exit 1; done",
+  "e2eTestCmd": "for d in temperature-converter word-counter password-generator case-converter roman-numerals palindrome-checker json-formatter lorem-ipsum-generator percentage-calculator countdown-timer; do (cd \"$d\" && npm test) || exit 1; done",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

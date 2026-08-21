@@ -1,0 +1,17 @@
+{
+  "taskId": "33",
+  "milestoneId": "ms_05",
+  "title": "Собрать корневой README.md с перечнем всех десяти утилит (директория, команда, однострочное описание, пример вызова, включая пример с --help)",
+  "description": "1. Перечисли фактическое содержимое корня рабочей директории и найди все десять каталогов утилит (temperature-converter, word-counter, password-generator, case-converter, roman-numerals, palindrome-checker, json-formatter, lorem-ipsum-generator, percentage-calculator, countdown-timer) — ничего не додумывай, если какой-то каталог отсутствует, зафиксируй это как факт, а не молчаливо пропусти.\n2. Для каждого найденного каталога прочитай его package.json (поля name, bin, scripts.start, description) и cli.js, чтобы узнать реальное имя бинарника, реальный npm-скрипт запуска и реальный синтаксис аргументов — не изобретай имена флагов.\n3. Для каждой утилиты выполни `node <dir>/cli.js --help` (и, если применимо, базовый рабочий вызов с валидными аргументами) и убедись, что команда завершается успешно и выводит осмысленный текст — используй реальный вывод, а не придуманный, при составлении примеров в README.\n4. Создай/перезапиши файл README.md в корне рабочей директории. Включи: краткое вступление (что это набор из десяти независимых консольных утилит без общего кода, см. architecture.md), и для каждой из десяти утилит — отдельный раздел или строку таблицы с: (a) названием каталога, (b) одной строкой описания (взятой из package.json/справки, а не выдуманной), (c) примером базового вызова (например `node <dir>/cli.js <args>` и/или `npm start` внутри каталога, в соответствии с реальными scripts), (d) примером вызова с флагом --help.\n5. Сохрани порядок утилит как в architecture.md (temperature-converter, word-counter, password-generator, case-converter, roman-numerals, palindrome-checker, json-formatter, lorem-ipsum-generator, percentage-calculator, countdown-timer).\n6. Не добавляй в README упоминаний общего кода, общего package.json или межпакетных require — это архитектурно запрещено; README должен описывать каждую утилиту как полностью независимую.\n7. Не редактируй файлы внутри каталогов самих утилит и не трогай bundle/, lib/, test/ — задача касается исключительно README.md.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "README.md"
+  ],
+  "dependsOn": [
+    "31",
+    "32"
+  ],
+  "e2eTestCmd": "for d in temperature-converter word-counter password-generator case-converter roman-numerals palindrome-checker json-formatter lorem-ipsum-generator percentage-calculator countdown-timer; do node \"$d/cli.js\" --help || exit 1; done",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

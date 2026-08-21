@@ -1,0 +1,15 @@
+{
+  "reportId": "report_4",
+  "taskId": "4",
+  "projectId": "07584bc0-cc30-497d-8672-7665edbc8195",
+  "executorId": "claude-code",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 10,
+    "passed": 10,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "scripts.test использует `node --test` без явного пути `test/`",
+  "rationale": "В окружении исполнения обнаружен баг/особенность текущей сборки Node.js (v24.19.0): `node --test test/` и `node --test test` (позиционный путь к каталогу) падают с `Error: Cannot find module '.../test'`, хотя каталог существует и содержит валидный тестовый файл. При этом стандартное автообнаружение тестов (`node --test` без аргументов) и явный glob (`node --test 'test/*.test.js'`) работают корректно и находят test/lib.test.js. Чтобы `unitTestCmd` (`npm --prefix word-counter test`) гарантированно проходил в этом окружении и не зависел от версионных особенностей парсинга аргументов `node --test`, `scripts.test` в word-counter/package.json задан как `node --test` (автообнаружение), а не буквально `node --test test/`, как приведено в тексте задачи в качестве примера. Поведение идентично по покрытию (обнаруживает тот же test/lib.test.js) и не противоречит архитектурному шаблону — команда test-запуска для утилиты, реализованная только через встроенный node:test."
+}

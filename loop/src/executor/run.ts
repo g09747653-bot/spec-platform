@@ -91,8 +91,17 @@ export interface ExecutorDeps {
   frozenMs?: () => number;
 }
 
-/** Five minutes, from the A0 bundle. A run past it is not slow, it is stuck. */
-export const ITERATION_TIMEOUT_MS = 5 * 60_000;
+/**
+ * Fifteen minutes — a back stop, not a working limit (task 174; А-26 §2).
+ *
+ * The A0 bundle said five, and the M16а gate measured what five does to honest work: 26 live
+ * iterations, median ~105 s, p90 ~300 s — the tail of real work stood exactly on the ceiling, and
+ * three iterations out of twenty-six were killed by it rather than finished. 900 s is 3× the
+ * measured p90: far enough back that it only ever catches a run that is genuinely stuck (the
+ * argument of D-234 — завершаемость в строке, потолок как упор). A task known to be heavier still
+ * carries its own `iterationTimeoutSec` in the assignment.
+ */
+export const ITERATION_TIMEOUT_MS = 15 * 60_000;
 
 /** `delivery-executor-${taskId}` — the one place this name is formed (бандл A0 §Красный CI). */
 export function executorContainerName(taskId: string): string {

@@ -139,6 +139,18 @@ const envObject = z.object({
     z.coerce.number().int().min(1).max(64).default(DEFAULT_MAX_EXECUTORS),
   ),
 
+  /**
+   * One acceptance **test** command's limit, in milliseconds (task 174; А-26 §3).
+   *
+   * Five minutes by default. The fifteen-minute acceptance ceiling stays the back stop for the
+   * whole run — this bounds the recognisable case inside it: a test the executor wrote that never
+   * finishes, which the M16а gate paid fifteen minutes to discover once.
+   */
+  ACCEPTANCE_TEST_TIMEOUT_MS: z.preprocess(
+    blankToUndefined,
+    z.coerce.number().int().positive().default(300_000),
+  ),
+
   LOCAL_LLM_API_BASE: optional(url('LOCAL_LLM_API_BASE')),
   LOCAL_LLM_MODEL: optional(z.string().min(1)),
   WHISPER_API_BASE: optional(url('WHISPER_API_BASE')),

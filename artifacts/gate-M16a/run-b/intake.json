@@ -1,0 +1,15 @@
+{
+  "status": "IN_PROGRESS",
+  "projectId": "07584bc0-cc30-497d-8672-7665edbc8195",
+  "bundleId": "07584bc0-cc30-497d-8672-7665edbc8195",
+  "strategy": "dependencies",
+  "milestones": 5,
+  "tasks": 33,
+  "writtenByModel": 31,
+  "keptFromDisk": 0,
+  "regenerated": false,
+  "degradations": [
+    "3: ответ модели не разобран: ✖ Invalid input: expected object, received null",
+    "11: ответ модели не разобран: ✖ Invalid input: expected string, received undefined\n  → at description\n✖ Invalid input: expected array, received undefined\n  → at filesToEdit"
+  ]
+}

@@ -1,0 +1,166 @@
+{
+  "milestones": [
+    {
+      "title": "Веха 1",
+      "status": "COMPLETED",
+      "tasks": [
+        {
+          "taskId": "1",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "4",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "7",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "10",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "13",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "16",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "19",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "22",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "25",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "28",
+          "status": "COMPLETED"
+        }
+      ]
+    },
+    {
+      "title": "Веха 2",
+      "status": "COMPLETED",
+      "tasks": [
+        {
+          "taskId": "2",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "5",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "8",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "11",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "14",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "17",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "20",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "23",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "26",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "29",
+          "status": "COMPLETED"
+        }
+      ]
+    },
+    {
+      "title": "Веха 3",
+      "status": "COMPLETED",
+      "tasks": [
+        {
+          "taskId": "3",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "6",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "9",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "12",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "15",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "18",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "21",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "24",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "27",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "30",
+          "status": "COMPLETED"
+        }
+      ]
+    },
+    {
+      "title": "Веха 4",
+      "status": "COMPLETED",
+      "tasks": [
+        {
+          "taskId": "31",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "32",
+          "status": "COMPLETED"
+        }
+      ]
+    },
+    {
+      "title": "Веха 5",
+      "status": "COMPLETED",
+      "tasks": [
+        {
+          "taskId": "33",
+          "status": "COMPLETED"
+        }
+      ]
+    }
+  ]
+}

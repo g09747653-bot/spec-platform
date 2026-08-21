@@ -1,0 +1,17 @@
+{
+  "taskId": "25",
+  "milestoneId": "ms_01",
+  "title": "Создать каркас percentage-calculator и реализовать lib.js с тремя формулами (of/share/change) и модульными тестами, включая деление на ноль и нечисловые значения",
+  "description": "Создать каркас утилиты percentage-calculator по двухслойному шаблону проекта. 1) Создать percentage-calculator/package.json: без зависимостей от других директорий репозитория, с полем bin (например percentage-calculator -> cli.js), scripts.test запускающим встроенный тест-раннер Node (`node --test test/`). 2) Создать percentage-calculator/lib.js — только чистые функции, без импорта fs/process/readline: реализовать три формулы процентов — of(percent, base) = процент от числа, share(part, whole) = какую долю (в процентах) part составляет от whole, change(oldValue, newValue) = процентное изменение. Для каждой функции валидировать входные аргументы: нечисловые значения (NaN, не-number, undefined) и деление на ноль (base=0 для of при вычислении доли/относительных случаев, whole=0 для share, oldValue=0 для change) должны бросать типизированную ошибку домена (например Error с понятным message или собственный класс ошибки), а не возвращать Infinity/NaN молча. 3) Создать минимальный percentage-calculator/cli.js как тонкую IO-оболочку (разбор process.argv, вызов функций lib.js, вывод в stdout, ошибки в stderr с ненулевым process.exitCode) — без вычислительной логики внутри cli.js. 4) Создать percentage-calculator/test/lib.test.js с модульными тестами lib.js на встроенном node:test + node:assert/strict, покрывающими: обычные корректные вычисления для всех трёх формул, деление на ноль для каждой формулы, нечисловые/отсутствующие аргументы для каждой формулы. Не создавать зависимостей на другие директории репозитория и не переиспользовать код из bundle/lib/state-machine.js.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "percentage-calculator/package.json",
+    "percentage-calculator/lib.js",
+    "percentage-calculator/cli.js",
+    "percentage-calculator/test/lib.test.js"
+  ],
+  "dependsOn": [],
+  "unitTestCmd": "npm --prefix percentage-calculator test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

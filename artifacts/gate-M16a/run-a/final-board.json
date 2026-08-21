@@ -1,0 +1,134 @@
+{
+  "milestones": [
+    {
+      "title": "Веха 1",
+      "status": "COMPLETED",
+      "tasks": [
+        {
+          "taskId": "1",
+          "status": "COMPLETED"
+        }
+      ]
+    },
+    {
+      "title": "Веха 2",
+      "status": "COMPLETED",
+      "tasks": [
+        {
+          "taskId": "2",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "7",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "12",
+          "status": "COMPLETED"
+        }
+      ]
+    },
+    {
+      "title": "Веха 3",
+      "status": "COMPLETED",
+      "tasks": [
+        {
+          "taskId": "3",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "4",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "8",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "9",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "13",
+          "status": "COMPLETED"
+        }
+      ]
+    },
+    {
+      "title": "Веха 4",
+      "status": "COMPLETED",
+      "tasks": [
+        {
+          "taskId": "5",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "10",
+          "status": "COMPLETED"
+        }
+      ]
+    },
+    {
+      "title": "Веха 5",
+      "status": "COMPLETED",
+      "tasks": [
+        {
+          "taskId": "6",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "11",
+          "status": "COMPLETED"
+        }
+      ]
+    },
+    {
+      "title": "Веха 6",
+      "status": "COMPLETED",
+      "tasks": [
+        {
+          "taskId": "14",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "16",
+          "status": "COMPLETED"
+        },
+        {
+          "taskId": "17",
+          "status": "COMPLETED"
+        }
+      ]
+    },
+    {
+      "title": "Веха 7",
+      "status": "COMPLETED",
+      "tasks": [
+        {
+          "taskId": "15",
+          "status": "COMPLETED"
+        }
+      ]
+    },
+    {
+      "title": "Веха 8",
+      "status": "COMPLETED",
+      "tasks": [
+        {
+          "taskId": "18",
+          "status": "COMPLETED"
+        }
+      ]
+    },
+    {
+      "title": "Веха 9",
+      "status": "COMPLETED",
+      "tasks": [
+        {
+          "taskId": "19",
+          "status": "COMPLETED"
+        }
+      ]
+    }
+  ]
+}

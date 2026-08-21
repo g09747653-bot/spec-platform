@@ -70,6 +70,8 @@ export interface CycleDeps {
   executorCommand?: readonly string[];
   executorTimeoutMs?: number;
   acceptanceTimeoutMs?: number;
+  /** One test command's own limit inside the acceptance run (task 174) — see `gate/accept.ts`. */
+  acceptanceTestTimeoutMs?: number;
   model?: string | undefined;
   /** The plan's budget signal, forwarded from the executor's stream as it arrives (task 159). */
   onRateLimit?: (signal: {
@@ -135,6 +137,26 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
   setStatus(database, projectDirectory, projectId, taskId, 'IN_PROGRESS');
   say('Задача передана исполнителю.');
 
+  /*
+   * The assignment, read **off the disk** before the executor starts (task 174). The disk is the
+   * source of truth, and `iterationTimeoutSec` is a mark an operator may have put there by hand —
+   * a per-task ceiling outranks whatever the run was configured with, because the point of the
+   * mark is precisely to except one heavy task from the general rule.
+   */
+  const assignment = HandoffTask.parse(
+    JSON.parse(readFileSync(join(projectDirectory, HANDOFF.tasks, taskFileName(taskId)), 'utf8')),
+  );
+  const iterationTimeoutMs =
+    assignment.iterationTimeoutSec === undefined
+      ? deps.executorTimeoutMs
+      : assignment.iterationTimeoutSec * 1_000;
+
+  if (assignment.iterationTimeoutSec !== undefined) {
+    say(
+      `Задание несёт собственный потолок итерации: ${String(assignment.iterationTimeoutSec)} с.`,
+    );
+  }
+
   // 2. The executor.
   const executor = await runExecutor(
     {
@@ -148,7 +170,7 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
     },
     {
       engine,
-      ...(deps.executorTimeoutMs === undefined ? {} : { timeoutMs: deps.executorTimeoutMs }),
+      ...(iterationTimeoutMs === undefined ? {} : { timeoutMs: iterationTimeoutMs }),
       ...(deps.onRateLimit === undefined ? {} : { onRateLimit: deps.onRateLimit }),
       /* The ceiling measures work: time the pipeline spends frozen is not this task's (task 160). */
       frozenMs: () => frozenMsFor(projectId),
@@ -167,11 +189,10 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
   /*
    * How long the iteration took, said out loud (task 163).
    *
-   * The five-minute ceiling (`ITERATION_TIMEOUT_MS`) is a number nobody has data about yet: the M15а
-   * gate saw one live task finish in three minutes and a pre-flight in thirty-two seconds, which is
-   * two points. The Architect's verdict was «мерить, а не двигать» — so every iteration writes its
-   * own duration into the feed, and a gate can collect the distribution instead of arguing about the
-   * ceiling from two samples.
+   * This line is where the ceiling's data comes from: the M16а gate collected the distribution of
+   * live iterations out of `agent_logs` by exactly this sentence, and the 900-second default of
+   * task 174 is 3× the p90 it measured. The feed keeps writing every duration so the next decision
+   * about the ceiling is also made on numbers rather than on two samples.
    */
   say(
     `Итерация исполнителя: ${(executor.durationMs / 1000).toFixed(1)} с, исход ${executor.outcome}.`,
@@ -262,6 +283,9 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
   const acceptance = await acceptTask(task, commands, projectDirectory, {
     engine,
     ...(deps.acceptanceTimeoutMs === undefined ? {} : { timeoutMs: deps.acceptanceTimeoutMs }),
+    ...(deps.acceptanceTestTimeoutMs === undefined
+      ? {}
+      : { testTimeoutMs: deps.acceptanceTestTimeoutMs }),
     onLine: (line) => {
       logger.write({
         projectId,

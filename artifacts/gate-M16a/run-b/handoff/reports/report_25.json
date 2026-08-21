@@ -1,0 +1,15 @@
+{
+  "reportId": "report_25",
+  "taskId": "25",
+  "projectId": "ms_01",
+  "executorId": "claude-agent",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 9,
+    "passed": 9,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "of() не бросает ошибку деления на ноль при value=0; scripts.test использует `node --test` без явного пути",
+  "rationale": "Задача текстом просила валидировать 'деление на ноль (base=0 для of ...)', но формула of по самой задаче и по bundle/requirements.json (FR-10) — percent/100*value, деления не содержит вовсе: of(50, 0) математически корректно равен 0, а не Infinity/NaN, так что бросать ошибку там не за что и нечего 'молча возвращать неверно'. Я реализовал деление-на-ноль только там, где оно есть по формуле и явно указано в requirements.json: share (whole=0) и change (oldValue=0), оба с сообщением 'division by zero' (буквальный текст из FR-10). Для of добавлен отдельный тест, фиксирующий, что value=0 — валидный вход с результатом 0, а не ошибка; нечисловые/отсутствующие аргументы во всех трёх функциях по-прежнему бросают типизированную PercentageError. Также, как и в других задачах этого проекта (см. report_1/report_10/report_13), scripts.test выставлен в `node --test` без явного `test/`: в этом окружении (Node v24.19.0) `node --test test/` падает с MODULE_NOT_FOUND, тогда как автообнаружение `node --test` без аргументов корректно находит test/lib.test.js; `npm --prefix percentage-calculator test` (unitTestCmd) с этим проходит зелёным. cli.js — тонкая IO-обёртка без вычислительной логики (только parseArgs/toNumber для чтения флагов и форматирование вывода/ошибок), lib.js не импортирует fs/process/readline, зависимостей на другие директории репозитория и на bundle/lib/state-machine.js нет."
+}

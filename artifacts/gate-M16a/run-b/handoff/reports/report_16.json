@@ -1,0 +1,15 @@
+{
+  "reportId": "report_16",
+  "taskId": "16",
+  "projectId": "ms_01",
+  "executorId": "claude-agent",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 28,
+    "passed": 28,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "scripts.test использует `node --test` без явного пути `test/`; ошибки домена — подкласс Error с фиксированным `name`",
+  "rationale": "В этом окружении (Node v24.19.0) `node --test test/` и `node --test test` завершаются с MODULE_NOT_FOUND ('Cannot find module .../test'), тогда как `node --test test/lib.test.js` и `node --test` без аргументов (автообнаружение **/*.test.js от cwd) работают корректно — похоже на особенность резолвинга позиционных аргументов test runner в этой сборке Node. Поэтому scripts.test выставлен как `node --test` без явного пути, что совпадает с формулировкой из bundle/architecture.md ('npm test → node --test') и с unitTestCmd задачи ('cd palindrome-checker && npm install && npm test') — прогон проходит целиком (28/28).\n\nПо ошибкам домена: bundle/architecture.md (раздел Data Model) описывает ошибки как 'обычный Error со строкой message', без указания на конкретный класс/иерархию, но задача явно требует не 'throw new Error(...) произвольного вида', а типизированную ошибку домена. Я реализовал это как `class PalindromeCheckerError extends Error` с фиксированным `name`, экспортируемый из lib.js, — это остаётся обычным Error (совместимо с architecture.md и с тем, как cli.js в будущем сможет просто читать err.message для stderr), но даёт проверяемый 'тип' ошибки (instanceof / err.name) для модульных тестов невалидного входа, как и просит задача. Другие требования bundle/requirements.json (FR-7) к palindrome-checker (yes/no, --strict, поддержка кириллицы и латиницы, регистронезависимость и игнорирование пунктуации/пробелов в нормализованном режиме) реализованы в lib.js и покрыты тестами; cli.js в этой задаче не создавался согласно явному пункту 5 задания."
+}

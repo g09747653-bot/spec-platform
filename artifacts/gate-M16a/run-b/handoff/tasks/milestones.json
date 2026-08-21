@@ -1,0 +1,43 @@
+{
+  "projectId": "07584bc0-cc30-497d-8672-7665edbc8195",
+  "milestones": [
+    {
+      "milestoneId": "ms_01",
+      "title": "Веха 1",
+      "description": "Задач в вехе: 10. Начальная веха — ничего не ждёт.",
+      "dependsOn": []
+    },
+    {
+      "milestoneId": "ms_02",
+      "title": "Веха 2",
+      "description": "Задач в вехе: 10. Ждёт завершения ms_01.",
+      "dependsOn": [
+        "ms_01"
+      ]
+    },
+    {
+      "milestoneId": "ms_03",
+      "title": "Веха 3",
+      "description": "Задач в вехе: 10. Ждёт завершения ms_02.",
+      "dependsOn": [
+        "ms_02"
+      ]
+    },
+    {
+      "milestoneId": "ms_04",
+      "title": "Веха 4",
+      "description": "Задач в вехе: 2. Ждёт завершения ms_03.",
+      "dependsOn": [
+        "ms_03"
+      ]
+    },
+    {
+      "milestoneId": "ms_05",
+      "title": "Веха 5",
+      "description": "Задач в вехе: 1. Ждёт завершения ms_04.",
+      "dependsOn": [
+        "ms_04"
+      ]
+    }
+  ]
+}

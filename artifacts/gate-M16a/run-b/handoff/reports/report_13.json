@@ -1,0 +1,15 @@
+{
+  "reportId": "report_13",
+  "taskId": "13",
+  "projectId": "ms_01",
+  "executorId": "claude-code",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 11,
+    "passed": 11,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "CommonJS instead of ESM; adjusted npm test script due to a node --test quirk",
+  "rationale": "bundle/constitution.md mandates CommonJS (require/module.exports) in all ten utilities and explicitly forbids \"type\": \"module\". The sibling directory temperature-converter/package.json already in the working directory uses \"type\": \"module\", which contradicts that rule. I followed the constitution (the authoritative spec) for roman-numerals rather than copying that pattern, so roman-numerals is plain CommonJS with no \"type\" field; this leaves an inconsistency between roman-numerals and temperature-converter that the architect may want to reconcile by fixing temperature-converter. Separately, on this environment's Node.js build (v24.19.0), `node --test test/` (an explicit directory argument) fails with MODULE_NOT_FOUND, while bare `node --test` (default auto-discovery, which covers test/*.test.js) and explicit file globs work correctly. I set package.json's test script to plain `node --test` to rely on default discovery instead of the directory-argument form, since the latter is broken in this environment; this also matches the exact unitTestCmd `cd roman-numerals && npm install && npm test`, which was run successfully. lib.js exports toRoman/fromRoman plus a RomanNumeralError class (typed domain error) as required; fromRoman validates canonical form by recomputing the value and requiring toRoman(value) to exactly equal the input string, which naturally rejects IIII, VV, IIV, and any other non-canonical or invalid sequence. cli.js is a minimal stub with no domain logic (prints a TODO to stderr and exits 1), as scoped by the task."
+}
