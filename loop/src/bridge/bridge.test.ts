@@ -33,7 +33,12 @@ interface ExecCall {
 
 /** Стаб `execFile`: записывает вызов, отвечает заданным stdout. */
 function fakeExec(calls: ExecCall[], stdout: string): typeof execFile {
-  return ((path: string, args: readonly string[], options: { env: Record<string, string> }, callback: (error: Error | null, stdout: string, stderr: string) => void) => {
+  return ((
+    path: string,
+    args: readonly string[],
+    options: { env: Record<string, string> },
+    callback: (error: Error | null, stdout: string, stderr: string) => void,
+  ) => {
     const call: ExecCall = { path, args, env: options.env, stdin: '' };
     calls.push(call);
     return {
@@ -265,14 +270,19 @@ describe('сервер моста — OpenAI-совместимая поверх
       .map((piece) => piece.slice('data: '.length));
 
     expect(events.at(-1)).toBe('[DONE]');
-    const parsed = events.slice(0, -1).map((piece) => JSON.parse(piece) as {
-      choices: { delta: Record<string, string>; finish_reason: string | null }[];
-    });
+    const parsed = events.slice(0, -1).map(
+      (piece) =>
+        JSON.parse(piece) as {
+          choices: { delta: Record<string, string>; finish_reason: string | null }[];
+        },
+    );
 
     /* Первая дельта — роль; между ней и контентом были пустые keep-alive дельты. */
     expect(parsed[0]?.choices[0]?.delta.role).toBe('assistant');
     const empties = parsed.filter(
-      (event) => Object.keys(event.choices[0]?.delta ?? {}).length === 0 && event.choices[0]?.finish_reason === null,
+      (event) =>
+        Object.keys(event.choices[0]?.delta ?? {}).length === 0 &&
+        event.choices[0]?.finish_reason === null,
     );
     expect(empties.length).toBeGreaterThan(0);
 
@@ -319,9 +329,7 @@ describe('сервер моста — OpenAI-совместимая поверх
     expect((await fetch(`${base}/health`)).status).toBe(200);
     expect((await fetch(`${base}/elsewhere`)).status).toBe(404);
     expect(
-      (
-        await fetch(`${base}/v1/chat/completions`, { method: 'POST', body: 'не json' })
-      ).status,
+      (await fetch(`${base}/v1/chat/completions`, { method: 'POST', body: 'не json' })).status,
     ).toBe(400);
     server.close();
   });
@@ -352,9 +360,9 @@ describe('конфиг-тест цепочки — адаптер спереди
   });
 
   it('звено без своей базы пропускается, как ollama без своей — контур работает как вчера', () => {
-    expect(buildProviders(['claude-cli', 'google'], { googleApiKey: 'g' }).map((p) => p.id)).toEqual(
-      ['google'],
-    );
+    expect(
+      buildProviders(['claude-cli', 'google'], { googleApiKey: 'g' }).map((p) => p.id),
+    ).toEqual(['google']);
   });
 
   it('per-role шов задачи 161 принимает claude-cli', () => {

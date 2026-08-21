@@ -36,8 +36,7 @@ export function hasRedVerdict(projectDirectory: string, taskId: string): boolean
 /** Хвост вывода — достаточно, чтобы назвать причину; целиком вывод остаётся в ленте. */
 const OUTPUT_TAIL_LINES = 60;
 
-const tail = (text: string): string =>
-  text.split('\n').slice(-OUTPUT_TAIL_LINES).join('\n').trim();
+const tail = (text: string): string => text.split('\n').slice(-OUTPUT_TAIL_LINES).join('\n').trim();
 
 export interface RedVerdictNote {
   taskId: string;
@@ -67,11 +66,25 @@ export function writeRedVerdict(projectDirectory: string, note: RedVerdictNote):
   const acceptance = note.acceptance;
   if (acceptance !== null) {
     for (const finding of acceptance.controller?.findings ?? []) {
-      lines.push('', `## Находка контролёра: ${finding.label}`, '', '```', tail(finding.output), '```');
+      lines.push(
+        '',
+        `## Находка контролёра: ${finding.label}`,
+        '',
+        '```',
+        tail(finding.output),
+        '```',
+      );
     }
 
     if (acceptance.output.trim() !== '' && !acceptance.returnedByController) {
-      lines.push('', '## Хвост вывода приёмочного прогона', '', '```', tail(acceptance.output), '```');
+      lines.push(
+        '',
+        '## Хвост вывода приёмочного прогона',
+        '',
+        '```',
+        tail(acceptance.output),
+        '```',
+      );
     }
 
     const failedArtifacts = acceptance.artifacts.filter(
@@ -80,7 +93,9 @@ export function writeRedVerdict(projectDirectory: string, note: RedVerdictNote):
     if (failedArtifacts.length > 0) {
       lines.push('', '## Неподтверждённые артефакты', '');
       for (const artifact of failedArtifacts) {
-        lines.push(`- \`${artifact.path}\`: ${artifact.present ? tail(artifact.output) : 'файла нет'}`);
+        lines.push(
+          `- \`${artifact.path}\`: ${artifact.present ? tail(artifact.output) : 'файла нет'}`,
+        );
       }
     }
   }

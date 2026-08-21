@@ -154,7 +154,9 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
   const hadRedVerdict = hasRedVerdict(projectDirectory, taskId);
   const iterationStartedAt = Date.now();
   if (hadRedVerdict) {
-    say('Повторная итерация: вердикт прошлой приёмки на диске, исполнителю велено прочитать его первым.');
+    say(
+      'Повторная итерация: вердикт прошлой приёмки на диске, исполнителю велено прочитать его первым.',
+    );
   }
 
   /*

@@ -13,6 +13,7 @@ import { executorStubCommand, executorStubEnabled } from '../../../../config/har
 import { getDatabase } from '../../../../db/client.ts';
 import { createDockerEngine } from '../../../../docker/engine.ts';
 import { resolveEndpoint } from '../../../../docker/transport.ts';
+import { eventBus } from '../../../../events/bus.ts';
 import { intakeBundle, IntakeRefused } from '../../../../intake/intake.ts';
 import { createRoleChain } from '../../../../llm/roles.ts';
 import { createLogger } from '../../../../observability/log.ts';
@@ -128,6 +129,13 @@ export async function POST(request: Request): Promise<Response> {
       { status: error instanceof IntakeRefused ? 422 : 400 },
     );
   }
+
+  /*
+   * The launch, said on the bus (task 164): the Telegram gateway's «проект запущен» alert reads
+   * this event — the intake succeeded and the pipeline is about to drive. The project row is
+   * already ACTIVE in the index; this line is the *event* of it, which a row cannot be.
+   */
+  eventBus().publish({ type: 'project-status', projectId: intake.projectId, status: 'ACTIVE' });
 
   /*
    * The pipeline runs on after the answer. Errors reach the feed rather than a caller who has

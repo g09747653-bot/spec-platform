@@ -31,12 +31,20 @@ if (token === '') {
 
 const port = Number(process.env.BRIDGE_PORT ?? 8091);
 if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-  process.stderr.write(`мост подписки не запущен: BRIDGE_PORT «${String(process.env.BRIDGE_PORT)}» — не порт.\n`);
+  process.stderr.write(
+    `мост подписки не запущен: BRIDGE_PORT «${String(process.env.BRIDGE_PORT)}» — не порт.\n`,
+  );
   process.exit(1);
 }
 
-const defaultCli = join(homedir(), '.local', 'bin', process.platform === 'win32' ? 'claude.exe' : 'claude');
-const cliPath = process.env.CLAUDE_CLI_PATH?.trim() ?? (existsSync(defaultCli) ? defaultCli : 'claude');
+const defaultCli = join(
+  homedir(),
+  '.local',
+  'bin',
+  process.platform === 'win32' ? 'claude.exe' : 'claude',
+);
+const cliPath =
+  process.env.CLAUDE_CLI_PATH?.trim() ?? (existsSync(defaultCli) ? defaultCli : 'claude');
 
 /* cwd вне репозитория: неинтерактивный ход не должен видеть ничьих файлов. */
 const workDir = join(tmpdir(), 'claude-bridge-cwd');
@@ -60,5 +68,7 @@ const server = createBridgeServer({
 });
 
 server.listen(port, '127.0.0.1', () => {
-  log(`мост подписки слушает http://127.0.0.1:${String(port)}/v1 (CLI: ${cliPath}; лог: ${logPath})`);
+  log(
+    `мост подписки слушает http://127.0.0.1:${String(port)}/v1 (CLI: ${cliPath}; лог: ${logPath})`,
+  );
 });

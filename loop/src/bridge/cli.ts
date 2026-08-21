@@ -153,8 +153,7 @@ export function runCli(prompt: string, system: string, options: CliOptions): Pro
             usage: {
               prompt_tokens: parsed.usage?.input_tokens ?? 0,
               completion_tokens: parsed.usage?.output_tokens ?? 0,
-              total_tokens:
-                (parsed.usage?.input_tokens ?? 0) + (parsed.usage?.output_tokens ?? 0),
+              total_tokens: (parsed.usage?.input_tokens ?? 0) + (parsed.usage?.output_tokens ?? 0),
             },
             apiMs: parsed.duration_api_ms ?? 0,
           });

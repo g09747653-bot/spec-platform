@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
@@ -218,7 +226,11 @@ describe('вердикт приёмки — исполнителю повтор�
             'utf8',
           );
           if (executorEdits) {
-            writeFileSync(join(projectDirectory, 'src', 'util.js'), `// правка ${String(Date.now())}\n`, 'utf8');
+            writeFileSync(
+              join(projectDirectory, 'src', 'util.js'),
+              `// правка ${String(Date.now())}\n`,
+              'utf8',
+            );
           }
           return { exitCode: 0 };
         }
@@ -292,7 +304,9 @@ describe('вердикт приёмки — исполнителю повтор�
     expect(result.reason).toContain('Повтор без правок при красной причине');
     expect(result.acceptance).toBeNull();
     /* Приёмка этого цикла не начиналась: ни копии, ни тестового контейнера. */
-    expect(repeat.engine.containers.filter((c) => c.name.includes('delivery-gate-'))).toHaveLength(0);
+    expect(repeat.engine.containers.filter((c) => c.name.includes('delivery-gate-'))).toHaveLength(
+      0,
+    );
 
     /* Вердикт обновлён отказом, прежняя причина сохранена — повтор читает обе. */
     const text = readFileSync(verdictPath(projectDirectory, TASK), 'utf8');
