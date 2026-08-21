@@ -120,6 +120,44 @@ export interface BlockWatcher {
  * database updated after, in the same order everything else in the loop uses, so a crash between
  * the two is repaired by the next import rather than losing the operator's action.
  */
+/**
+ * Один вотчер на каталог проекта, надолго (задача 167 — находка живого гейта).
+ *
+ * `watchBlocks` был построен и оттестирован задачей 157 — и НЕ подключён ни в одной точке
+ * продукта: файл блокировки обещал «контур увидит удаление», а удаление не видел никто. Оператор
+ * гейта M17а снял блокировку по инструкции ленты, и статус в индексе остался BLOCKED навсегда —
+ * молчаливый отказ ровно того класса, который гейт объявляет красным. Реестр на `globalThis` — по
+ * той же причине, что шина: dev-перезагрузка модулей не должна плодить вторые вотчеры.
+ *
+ * Снятие чинит СТАТУС (диск → индекс → лента); перезапуск конвейера остаётся за оператором
+ * (`start-loop`), как лента и говорит.
+ */
+const WATCHERS = Symbol.for('spec-platform.loop.block-watchers');
+
+interface WatcherHolder {
+  [WATCHERS]?: Map<string, BlockWatcher>;
+}
+
+function watcherRegistry(): Map<string, BlockWatcher> {
+  const holder = globalThis as unknown as WatcherHolder;
+  holder[WATCHERS] ??= new Map<string, BlockWatcher>();
+  return holder[WATCHERS];
+}
+
+export function ensureBlockWatcher(
+  database: DatabaseSync,
+  projectDirectory: string,
+  onUnblocked: (taskId: string) => void,
+): BlockWatcher {
+  const registry = watcherRegistry();
+  const existing = registry.get(projectDirectory);
+  if (existing !== undefined) return existing;
+
+  const watcher = watchBlocks(database, projectDirectory, onUnblocked);
+  registry.set(projectDirectory, watcher);
+  return watcher;
+}
+
 export function watchBlocks(
   database: DatabaseSync,
   projectDirectory: string,

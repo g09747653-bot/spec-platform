@@ -18,6 +18,8 @@ import { fileURLToPath } from 'node:url';
 
 import { chromium, type Browser, type Page } from '@playwright/test';
 
+import { ACCEPTANCE_IMAGES } from '../src/gate/accept.ts';
+
 /**
  * **Гейт M17а — сквозной путь без рук** (task 167; А-2.1; А-29).
  *
@@ -66,7 +68,7 @@ const PLATFORM_PORT = 3000;
 const PLATFORM_URL = `http://127.0.0.1:${String(PLATFORM_PORT)}`;
 const BRIDGE_PORT = 8091;
 const STUB = process.env.GATE_STUB === '1';
-const BUDGET_MS = Number(process.env.GATE_BUDGET_MS ?? 3.5 * 3_600_000);
+const BUDGET_MS = Number(process.env.GATE_BUDGET_MS ?? 5 * 3_600_000);
 
 const IDEA =
   process.env.GATE_IDEA ??
@@ -86,7 +88,11 @@ const PHASE_BUDGETS = {
   planAcceptedMs: 50 * 60_000,
 } as const;
 
-const MAX_AUTO_RESUMES = 4;
+/**
+ * Сколько настоящих красных заморозок прогулка возобновит сама. Шесть — мерка M16а (D-303:
+ * широкий план попросил пять-шесть спасений), поднято с четырёх по замеру попытки 3.
+ */
+const MAX_AUTO_RESUMES = Number(process.env.GATE_MAX_RESUMES ?? 6);
 
 const steps: { at: string; what: string }[] = [];
 const findings: string[] = [];
@@ -521,6 +527,22 @@ async function main(): Promise<number> {
   note(`Docker: ${docker.stdout.trim()}.`);
 
   /*
+   * Приёмочные образы — ДО прогона (находка попытки 3): стек выбирает спецификация, которой ещё
+   * нет, поэтому тянутся все пять. Недостающий образ посреди прогона — это красный цикл create→404
+   * на каждой попытке задачи и BLOCKED от честного исполнителя, диагностировавшего среду.
+   */
+  for (const image of Object.values(ACCEPTANCE_IMAGES)) {
+    const have = spawnSync('docker', ['image', 'inspect', image], { stdio: 'ignore' });
+    if (have.status === 0) continue;
+    note(`Тяну приёмочный образ ${image}…`);
+    const pulled = spawnSync('docker', ['pull', image], { encoding: 'utf8' });
+    if (pulled.status !== 0) {
+      throw new Error(`не удалось дотянуть образ ${image}: ${(pulled.stderr || '').slice(-200)}`);
+    }
+  }
+  note('Приёмочные образы на месте (все пять стеков).');
+
+  /*
    * Репетиция (GATE_STUB=1) гоняет ВСЮ бухгалтерию прогулки быстро и без единого модельного
    * вызова: платформенную половину замещает стенд с НАСТОЯЩИМ машинным бандлом M14а в экспорте
    * (плюс toy-скелет nodejs в том же ZIP — приёмке стаб-задач нужен запускаемый проект), интейк
@@ -738,6 +760,18 @@ async function main(): Promise<number> {
       }
 
       if (outboxHas('Проект завершён')) break;
+
+      /*
+       * Блокировка — легитимная остановка исполнителя, требующая ЧЕЛОВЕКА (протокол задачи 157);
+       * прогулке автоматизировать владельца тут нечестно — она падает сразу с текстом блокировки
+       * (находка попытки 3: молчаливое догорание бюджета час скрывало остановившийся конвейер).
+       */
+      const blockedAlert = outboxLast('Задача заблокирована');
+      if (blockedAlert !== undefined && Date.parse(blockedAlert.at) > handsOffAt) {
+        throw new Error(
+          `исполнитель заблокировал задачу — нужен человек: ${blockedAlert.text.split('\n').slice(0, 4).join(' · ')}`,
+        );
+      }
 
       /*
        * Настоящий красный вердикт замораживает конвейер и алертит владельца; владелец жал бы

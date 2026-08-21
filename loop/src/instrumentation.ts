@@ -23,19 +23,24 @@ export async function register(): Promise<void> {
     { createLogger },
     { recoverFromDisk },
     { startGatewayFromEnv },
+    { ensureBlockWatcher },
+    { eventBus },
   ] = await Promise.all([
     import('./config/env.ts'),
     import('./db/client.ts'),
     import('./observability/log.ts'),
     import('./orchestrator/orchestrator.ts'),
     import('./gateway/start-gateway.ts'),
+    import('./gate/blocked.ts'),
+    import('./events/bus.ts'),
   ]);
 
   const env = getEnv();
 
   try {
     const database = getDatabase();
-    const recovered = recoverFromDisk(database, env.WORKSPACE_ROOT_PATH, createLogger(database));
+    const logger = createLogger(database);
+    const recovered = recoverFromDisk(database, env.WORKSPACE_ROOT_PATH, logger);
 
     for (const project of recovered) {
       console.log(
@@ -43,6 +48,29 @@ export async function register(): Promise<void> {
           `задач ${String(project.tasks)}` +
           (project.resumed.length === 0 ? '' : `, возобновлено ${project.resumed.join(', ')}`),
       );
+
+      /*
+       * The block watcher, armed per recovered project (task 167's finding): the BLOCKED file
+       * promises «контур увидит удаление» — this is where the seeing is wired in. The unblock
+       * repairs the status; restarting the pipeline stays the operator's start-loop.
+       */
+      ensureBlockWatcher(database, project.projectDirectory, (taskId) => {
+        logger.write({
+          projectId: project.projectId,
+          taskId,
+          agentRole: 'ORCHESTRATOR',
+          logLevel: 'WARN',
+          message:
+            `Блокировка задачи ${taskId} снята оператором (файл удалён) — задача снова PENDING. ` +
+            'Запустите конвейер снова (start-loop), чтобы продолжить.',
+        });
+        eventBus().publish({
+          type: 'task-status',
+          projectId: project.projectId,
+          taskId,
+          status: 'PENDING',
+        });
+      });
     }
   } catch (error) {
     /*
