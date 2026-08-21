@@ -39,6 +39,9 @@ export const DEFAULT_MODELS = {
   openai: 'gpt-4.1-mini',
   google: 'gemini-3.5-flash',
   ollama: 'qwen3:8b',
+  /* Мост игнорирует поле model — какая модель отвечает, решает CLI подписки; имя тут — честный
+   * ярлык для журналов, не выбор (задача 175). */
+  'claude-cli': 'claude-subscription-bridge',
 } as const;
 
 export interface ProviderCredentials {
@@ -51,6 +54,12 @@ export interface ProviderCredentials {
   /** OpenAI-compatible local endpoint (Ollama). Its presence is what configures the provider. */
   localApiBase?: string | undefined;
   localModel?: string | undefined;
+  /**
+   * The subscription bridge — the repo's own OpenAI-compatible server over Claude Code CLI
+   * (task 175). A separate link rather than a second use of `ollama`, so a log line naming the
+   * provider names the budget it spends: «ollama» is the local card, «claude-cli» is the plan.
+   */
+  claudeCliApiBase?: string | undefined;
   timeoutMs?: number | undefined;
 }
 
@@ -258,6 +267,18 @@ export function buildProviders(
           credentials.localApiBase,
           undefined,
           credentials.localModel ?? DEFAULT_MODELS.ollama,
+          timeoutMs,
+        ),
+      );
+    }
+
+    if (id === 'claude-cli' && credentials.claudeCliApiBase !== undefined) {
+      built.push(
+        openAiCompatible(
+          'claude-cli',
+          credentials.claudeCliApiBase,
+          undefined,
+          DEFAULT_MODELS['claude-cli'],
           timeoutMs,
         ),
       );

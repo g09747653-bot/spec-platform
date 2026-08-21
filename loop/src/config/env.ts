@@ -153,6 +153,13 @@ const envObject = z.object({
 
   LOCAL_LLM_API_BASE: optional(url('LOCAL_LLM_API_BASE')),
   LOCAL_LLM_MODEL: optional(z.string().min(1)),
+  /**
+   * Мост подписки — звено `claude-cli` цепочки (task 175). Его присутствие и конфигурирует
+   * провайдера, как `LOCAL_LLM_API_BASE` конфигурирует `ollama`; своя переменная, а не второе
+   * использование локальной, чтобы журнал, называя звено, называл и бюджет: ollama — карта,
+   * claude-cli — тариф.
+   */
+  CLAUDE_CLI_API_BASE: optional(url('CLAUDE_CLI_API_BASE')),
   WHISPER_API_BASE: optional(url('WHISPER_API_BASE')),
   TELEGRAM_BOT_TOKEN: optional(z.string().min(1)),
   TELEGRAM_OWNER_CHAT_ID: optional(z.string().min(1)),
@@ -215,6 +222,7 @@ export function providerCredentials(env: LoopEnv): RoleCredentials {
     googleModel: env.LOOP_GOOGLE_MODEL,
     localApiBase: env.LOCAL_LLM_API_BASE,
     localModel: env.LOCAL_LLM_MODEL,
+    claudeCliApiBase: env.CLAUDE_CLI_API_BASE,
     timeoutMs: env.LOOP_LLM_TIMEOUT_MS,
   };
 }

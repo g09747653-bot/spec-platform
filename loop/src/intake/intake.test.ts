@@ -374,6 +374,39 @@ describe('the researcher’s report reaches the architect (task 161)', () => {
   });
 });
 
+describe('инструкция архитектора заданий требует POSIX sh (task 176)', () => {
+  /**
+   * Урок прогона Б, закреплённый фикстурно в промпте: модель, мыслившая Windows-ом, писала команды
+   * тестов в синтаксисе PowerShell, и приёмка честно валила их кодом 2 через `sh -lc`. Строка
+   * инструкции — в каждом промпте задания; тест утверждает промпт, а не то, что модель с ним
+   * сделала, — тот же шов, что у отчёта исследователя выше.
+   */
+  it('каждый промпт задания несёт строку про POSIX sh и `sh -lc`', async () => {
+    const asked: string[] = [];
+    const recording: Chain = {
+      providers: [{ id: 'google', model: 'gemini', generate: () => Promise.resolve('') }],
+      generate: (request) => {
+        asked.push(request.prompt);
+        return Promise.resolve({
+          text: JSON.stringify({ description: 'Сделай', filesToEdit: [] }),
+          provider: 'google',
+        });
+      },
+    };
+
+    await run(recording);
+
+    const assignmentPrompts = asked.filter((prompt) => prompt.includes('Запись задачи из бандла'));
+    expect(assignmentPrompts.length).toBeGreaterThan(0);
+
+    for (const prompt of assignmentPrompts) {
+      expect(prompt).toContain('POSIX sh');
+      expect(prompt).toContain('sh -lc');
+      expect(prompt).toContain('PowerShell');
+    }
+  });
+});
+
 describe('who writes the assignment texts (task 156)', () => {
   it('uses the model when the chain answers', async () => {
     const result = await run(

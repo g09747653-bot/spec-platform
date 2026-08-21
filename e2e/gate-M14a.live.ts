@@ -463,8 +463,16 @@ async function watchTheRun(
       `the watch ran out of its ${String(RUN_BUDGET_MS / 60_000)}-minute budget with the run still moving at ${last.stage}/${last.substage}`,
     );
   }
-  if (restart === null) {
+  /*
+   * С выключенным рестартом (`GATE_RESTART=0`) его отсутствие — заказ, а не дефект: вердикт
+   * прогулки не должен лгать ярлыком RED на содержательно completed прогоне (А-27 §6). PROBLEM
+   * пишется только когда рестарт был включён и окно для него так и не наступило.
+   */
+  if (restart === null && RESTART_STAGES.size > 0) {
     problem('окно для рестарта (collect средней стадии) так и не наступило — рестарт не исполнен');
+  }
+  if (restart === null && RESTART_STAGES.size === 0) {
+    say('рестарт выключен (GATE_RESTART=0) — прогулка без него, и это заказ, не дефект');
   }
 
   return { finished: last, restart };

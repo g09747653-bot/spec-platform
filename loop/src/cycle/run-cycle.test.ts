@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
@@ -7,6 +15,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { openMigratedDatabase } from '../db/migrate.ts';
 import { createFakeEngine } from '../docker/testing/fake-engine.ts';
+import { executorPrompt } from '../executor/claude-command.ts';
+import { hasRedVerdict, verdictPath } from '../gate/verdicts.ts';
 import { HANDOFF, HandoffTask, importHandoff, taskFileName } from '../intake/handoff.ts';
 import { createLogger, type Logger } from '../observability/log.ts';
 
@@ -180,5 +190,148 @@ describe('the per-task iteration ceiling (task 174)', () => {
     });
 
     expect(legacy.iterationTimeoutSec).toBeUndefined();
+  });
+});
+
+describe('вердикт приёмки — исполнителю повтора (task 176)', () => {
+  const TASK = 'task_verdict';
+
+  /** Отчёт SUCCESS, каким его пишет исполнитель. Пишется хуком фейкового контейнера. */
+  const successReport = () =>
+    JSON.stringify(
+      {
+        reportId: 'r1',
+        taskId: TASK,
+        projectId: PROJECT,
+        executorId: 'stub',
+        status: 'SUCCESS',
+        testsRun: { total: 1, passed: 1, failed: 0 },
+      },
+      null,
+      2,
+    );
+
+  /**
+   * Один стаб-цикл: исполнитель пишет отчёт (и правит файл, когда велено), контейнер `-unit`
+   * выходит кодом, который назначил кейс. Свежий движок на каждый цикл, чтобы утверждать «приёмка
+   * не запускалась» по контейнерам ИМЕННО этого цикла.
+   */
+  const cycle = (unitExitCode: number, executorEdits: boolean) => {
+    const engine = createFakeEngine({
+      onStart: ({ name }) => {
+        if (name.startsWith('delivery-executor-')) {
+          writeFileSync(
+            join(projectDirectory, HANDOFF.reports, `report_${TASK}.json`),
+            successReport(),
+            'utf8',
+          );
+          if (executorEdits) {
+            writeFileSync(
+              join(projectDirectory, 'src', 'util.js'),
+              `// правка ${String(Date.now())}\n`,
+              'utf8',
+            );
+          }
+          return { exitCode: 0 };
+        }
+        if (name.endsWith('-unit')) return { exitCode: unitExitCode };
+        return { exitCode: 0 };
+      },
+    });
+
+    return {
+      engine,
+      run: () =>
+        runCycle(
+          { projectId: PROJECT, taskId: TASK, projectDirectory },
+          {
+            database,
+            engine,
+            logger,
+            credential: { kind: 'ANTHROPIC_API_KEY', value: 'not-a-real-key' },
+            executorCommand: ['sh', '-c', 'true'],
+          },
+        ),
+    };
+  };
+
+  /** Рабочее дерево «постарело»: правки прошлого цикла не должны выглядеть правками нового. */
+  const ageWorkspace = () => {
+    const past = new Date(Date.now() - 60_000);
+    for (const path of [
+      join(projectDirectory, 'src', 'util.js'),
+      join(projectDirectory, 'src'),
+      join(projectDirectory, 'package.json'),
+    ]) {
+      if (existsSync(path)) utimesSync(path, past, past);
+    }
+  };
+
+  beforeEach(() => {
+    writeTree([task(TASK)]);
+    mkdirSync(join(projectDirectory, 'src'), { recursive: true });
+    ageWorkspace();
+  });
+
+  it('красный вердикт ложится на диск с причиной; зелёный повтор с правками уносит его', async () => {
+    const red = cycle(1, true);
+    const first = await red.run();
+
+    expect(first.outcome).toBe('FAILED');
+    expect(hasRedVerdict(projectDirectory, TASK)).toBe(true);
+    const text = readFileSync(verdictPath(projectDirectory, TASK), 'utf8');
+    expect(text).toContain('НЕ ПРИНЯТА');
+    expect(text).toContain('вернул 1');
+
+    ageWorkspace();
+    const green = cycle(0, true);
+    const second = await green.run();
+
+    expect(second.outcome).toBe('COMPLETED');
+    expect(hasRedVerdict(projectDirectory, TASK)).toBe(false);
+  });
+
+  it('повтор без правок при красной причине — именованный отказ, приёмка не запускается', async () => {
+    const red = cycle(1, true);
+    await red.run();
+    expect(hasRedVerdict(projectDirectory, TASK)).toBe(true);
+
+    ageWorkspace();
+    const repeat = cycle(0, false);
+    const result = await repeat.run();
+
+    expect(result.outcome).toBe('FAILED');
+    expect(result.reason).toContain('Повтор без правок при красной причине');
+    expect(result.acceptance).toBeNull();
+    /* Приёмка этого цикла не начиналась: ни копии, ни тестового контейнера. */
+    expect(repeat.engine.containers.filter((c) => c.name.includes('delivery-gate-'))).toHaveLength(
+      0,
+    );
+
+    /* Вердикт обновлён отказом, прежняя причина сохранена — повтор читает обе. */
+    const text = readFileSync(verdictPath(projectDirectory, TASK), 'utf8');
+    expect(text).toContain('Повтор без правок');
+    expect(text).toContain('вернул 1');
+  });
+
+  it('повтор С правками идёт приёмке своим чередом — отказ не срабатывает зря', async () => {
+    const red = cycle(1, true);
+    await red.run();
+
+    ageWorkspace();
+    const repeat = cycle(1, true);
+    const result = await repeat.run();
+
+    /* Правка была — приёмка запускалась и снова красная; это старое честное поведение. */
+    expect(result.outcome).toBe('FAILED');
+    expect(result.reason).toContain('вернул 1');
+    expect(repeat.engine.containers.some((c) => c.name.endsWith('-unit'))).toBe(true);
+  });
+
+  it('промпт исполнителя называет файл вердикта по имени задачи', () => {
+    const prompt = executorPrompt('/workspace/handoff/tasks/task_verdict.json', TASK);
+    expect(prompt).toContain(`handoff/reports/verdict_${TASK}.md`);
+    expect(prompt).toContain('прочитай его ПЕРВЫМ');
+    expect(prompt).toContain('SUCCESS');
   });
 });

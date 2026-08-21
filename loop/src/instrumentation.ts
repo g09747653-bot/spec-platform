@@ -17,11 +17,18 @@ export async function register(): Promise<void> {
    * no place for. */
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
 
-  const [{ getEnv }, { getDatabase }, { createLogger }, { recoverFromDisk }] = await Promise.all([
+  const [
+    { getEnv },
+    { getDatabase },
+    { createLogger },
+    { recoverFromDisk },
+    { startGatewayFromEnv },
+  ] = await Promise.all([
     import('./config/env.ts'),
     import('./db/client.ts'),
     import('./observability/log.ts'),
     import('./orchestrator/orchestrator.ts'),
+    import('./gateway/start-gateway.ts'),
   ]);
 
   const env = getEnv();
@@ -44,5 +51,18 @@ export async function register(): Promise<void> {
      * reported rather than inferred from a server that will not boot.
      */
     console.error('[loop] восстановление с диска не удалось', error);
+  }
+
+  try {
+    /*
+     * The Telegram gateway, after the recovery (task 164): its /status must read the restored
+     * board, not an empty database. Optional and named — without the token pair the loop runs
+     * exactly as it did yesterday, and the console says which variable would turn it on.
+     */
+    startGatewayFromEnv(env, (line) => {
+      console.log(line);
+    });
+  } catch (error) {
+    console.error('[loop] Telegram-шлюз не запустился', error);
   }
 }

@@ -168,6 +168,7 @@ export async function runExecutor(
       request.command ??
       claudeCommand({
         taskFile: request.taskFile,
+        taskId: request.taskId,
         credentialKind: request.credential.kind,
         ...(request.model === undefined ? {} : { model: request.model }),
         ...(request.maxTurns === undefined ? {} : { maxTurns: request.maxTurns }),
