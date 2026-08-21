@@ -41,7 +41,14 @@ export async function runInCleanCopy(
   const id = await engine.createContainer({
     name,
     image,
-    cmd: ['sh', '-lc', command],
+    /*
+     * `-c`, НЕ `-lc` — замерено гейтом M17а: login-шелл перечитывает /etc/profile и ЗАТИРАЕТ
+     * контейнерный PATH, так что в golang:1.23-bookworm `sh -lc 'go version'` отвечает 127
+     * «go: not found», а `sh -c` — версией (у rust /usr/local/cargo/bin гибнет так же). Дефект
+     * спал, пока планы были nodejs (/usr/local/bin переживает /etc/profile), и убил все go-приёмки
+     * живого прогона. `-l` пришёл из привычек бандла A0 и не давал здесь ничего.
+     */
+    cmd: ['sh', '-c', command],
     binds: [bindMount(copyPath, '/workspace')],
     workingDir: '/workspace',
     /*

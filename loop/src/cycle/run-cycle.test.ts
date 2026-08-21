@@ -314,6 +314,32 @@ describe('вердикт приёмки — исполнителю повтор�
     expect(text).toContain('вернул 1');
   });
 
+  it('отказ — один раз на цепочку: второй такой же повтор уходит приёмке на перепроверку (находка гейта M17а)', async () => {
+    /* Красный → отказ повтора (как выше) → и ТРЕТИЙ заход без правок: причина могла быть
+       переходной (образ, PATH, среда) — решает перепрогон приёмки, а не вечный отказ. */
+    await cycle(1, true).run();
+    ageWorkspace();
+    const refused = await cycle(0, false).run();
+    expect(refused.reason).toContain('Повтор без правок');
+
+    ageWorkspace();
+    const third = cycle(0, false);
+    const result = await third.run();
+
+    expect(result.outcome).toBe('COMPLETED');
+    /* Приёмка НА ЭТОТ раз запускалась — и решила сама. */
+    expect(third.engine.containers.some((c) => c.name.endsWith('-unit'))).toBe(true);
+    expect(hasRedVerdict(projectDirectory, TASK)).toBe(false);
+  });
+
+  it('приёмка гоняет команды через sh -c, не -lc: login-шелл терял toolchain-PATH (находка гейта M17а)', async () => {
+    const green = cycle(0, true);
+    await green.run();
+
+    const unit = green.engine.containers.find((c) => c.name.endsWith('-unit'));
+    expect(unit?.spec.cmd?.slice(0, 2)).toEqual(['sh', '-c']);
+  });
+
   it('повтор С правками идёт приёмке своим чередом — отказ не срабатывает зря', async () => {
     const red = cycle(1, true);
     await red.run();
