@@ -1,0 +1,13 @@
+﻿{
+    "available":  true,
+    "startedAt":  "2026-08-21T04:13:59.4931575+03:00",
+    "endedAt":  "2026-08-21T05:10:18.5917000+03:00",
+    "durationSec":  3379.1,
+    "intervalMs":  500,
+    "samples":  6114,
+    "peakMb":  2522,
+    "thresholdMb":  12288,
+    "overThreshold":  false,
+    "samplesOver":  0,
+    "log":  "C:\\Users\\Bob\\Desktop\\F\\Fmyspec-clone-spec-platform\\artifacts\\gate-M16a\\run-a\\vram.json.log"
+}

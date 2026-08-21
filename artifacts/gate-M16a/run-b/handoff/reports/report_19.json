@@ -1,0 +1,15 @@
+{
+  "reportId": "report_19",
+  "taskId": "19",
+  "projectId": "ms_01",
+  "executorId": "claude-agent",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 12,
+    "passed": 12,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "scripts.test использует `node --test` без явного пути `test/`; cli.js реализован как минимальный тонкий IO-слой сверх минимума задачи",
+  "rationale": "В этом окружении (Node v24.19.0) `node --test test/` и `node --test test` завершаются с MODULE_NOT_FOUND ('Cannot find module .../test'), хотя `node --test 'test/*.test.js'` и `node --test` (без аргумента, автообнаружение **/*.test.js от cwd) работают корректно — похоже на особенность резолвинга позиционных аргументов test runner в этой сборке Node (тот же симптом уже фиксировался в report_1.json для temperature-converter). Поскольку `unitTestCmd` из задачи (`npm --prefix json-formatter test`) жёстко фиксирован и npm выставляет cwd в json-formatter/ при выполнении scripts.test, я заменил scripts.test на `node --test` без аргумента — тесты из test/lib.test.js обнаруживаются автоматически, и весь прогон (12/12) проходит через ровно ту команду, что указана в unitTestCmd. lib.js экспортирует parseJson(raw) (обёртка над JSON.parse, бросает Error('invalid JSON: ' + исходное сообщение), не глотая его) и formatJson(parsed, indent) (валидирует indent как целое число >= 0, иначе бросает Error('--indent must be a non-negative integer'), иначе возвращает JSON.stringify(parsed, null, indent)); indent === 0 явно поддержан как валидный компактный кейс, отличный от отсутствия значения. lib.js не импортирует fs/process/readline. cli.js реализован как тонкий IO-слой (позиционный файловый путь либо чтение stdin, флаг --indent, try/catch вокруг lib.js с выводом err.message в stderr и process.exitCode=1) — хотя задача этого явно не требовала тестировать, файл входит в filesToEdit, и по архитектуре (bundle/architecture.md) должен существовать рабочий тонкий cli.js; полная реализация протокола (--file, --out, --help, точные тексты соглашения о stdin-fallback) вынесена в зависимую задачу 20 согласно bundle/tasks.json и не дублировалась здесь. Тесты в test/lib.test.js покрывают: успешный парсинг простого, вложенного (объект в объекте) и смешанного JSON (массив объектов, смешанная вложенность); форматирование с indent 2 и 4 (сверка с JSON.stringify как эталоном); indent 0 (компактный вывод без переводов строк); ошибку невалидного JSON (проверка префикса 'invalid JSON:' и того, что исходное сообщение не потеряно); ошибку невалидного indent (отрицательный, NaN, строка, нецелое число)."
+}

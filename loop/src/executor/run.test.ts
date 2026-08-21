@@ -10,6 +10,7 @@ import { EXECUTOR_DOCKERFILE, EXECUTOR_IMAGE, CLAUDE_CODE_VERSION } from './imag
 import {
   executorContainerName,
   executorEnvironment,
+  ITERATION_TIMEOUT_MS,
   runExecutor,
   type ExecutorRequest,
 } from './run.ts';
@@ -208,6 +209,17 @@ describe('what the executor container is given (task 155)', () => {
 });
 
 describe('how an iteration ends (task 155)', () => {
+  /**
+   * 900 s — 3× the p90 of the 26 live iterations the M16а gate measured (task 174; А-26 §2).
+   *
+   * The five-minute value killed three honest iterations out of twenty-six; the ceiling is a back
+   * stop for a run that is stuck, not a working limit for a run that is thinking. Anyone moving
+   * this number moves a measured decision — bring new data.
+   */
+  it('defaults the iteration ceiling to 900 seconds of working time', () => {
+    expect(ITERATION_TIMEOUT_MS).toBe(900_000);
+  });
+
   it('is SUCCESS when the container exits zero', async () => {
     const { engine } = fakeEngine({ exitCode: 0 });
 

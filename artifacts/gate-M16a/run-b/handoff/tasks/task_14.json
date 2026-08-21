@@ -1,0 +1,17 @@
+{
+  "taskId": "14",
+  "milestoneId": "ms_02",
+  "title": "Реализовать cli.js для roman-numerals: XOR-проверка --number/--roman, автоопределение формата при stdin-fallback (^[0-9]+$), --out, ошибки pass either --number or --roman, not both / number out of range (1-3999) / invalid roman numeral: <value>, а также ошибку отсутствия ввода, когда не переданы ни --number, ни --roman, а stdin — интерактивный TTY или пуст: missing input: pass --number/--roman or pipe data via stdin",
+  "description": "Реализуй `roman-numerals/cli.js` — слой ввода-вывода утилиты roman-numerals, использующий чистые функции из `roman-numerals/lib.js` (задача 13). Не помещай в cli.js никакой доменной логики валидации/конвертации — только разбор аргументов, чтение stdin, вызов lib.js, форматирование вывода и exit code.\n\n1. Разбери `process.argv` на флаги `--number <value>`, `--roman <value>`, `--out <path>` (без внешних зависимостей для парсинга, вручную).\n2. Реализуй XOR-проверку: если переданы одновременно и `--number`, и `--roman` — выведи в stderr `pass either --number or --roman, not both` и завершись с ненулевым exit code, не читая stdin.\n3. Если передан ровно один из флагов (`--number` или `--roman`), используй его значение как ввод, минуя stdin.\n4. Если не передан ни `--number`, ни `--roman` — организуй stdin-fallback:\n   - если stdin — интерактивный TTY (`process.stdin.isTTY === true`) или прочитанные данные пусты (после trim) — выведи в stderr `missing input: pass --number/--roman or pipe data via stdin` и завершись с ненулевым exit code;\n   - иначе прочитай весь stdin, обрежь пробелы и автоопредели формат: если строка целиком соответствует `^[0-9]+$` — трактуй как число (путь `--number`), иначе — как римскую запись (путь `--roman`).\n5. Для числового пути вызови функцию конвертации в римскую запись из lib.js; если lib.js сигнализирует, что число вне диапазона 1–3999 (типизированная ошибка домена), перехвати её в cli.js и выведи в stderr ровно `number out of range (1-3999)`, ненулевой exit code.\n6. Для римского пути вызови функцию конвертации в число из lib.js; если lib.js сигнализирует о невалидной записи, перехвати ошибку и выведи в stderr `invalid roman numeral: <value>`, где `<value>` — исходная переданная строка, ненулевой exit code.\n7. При успехе выведи результат в stdout (без лишнего форматирования, если из architecture/requirements не следует иное), exit code 0.\n8. Реализуй флаг `--out <path>`: при успешном вычислении запиши результат в указанный файл (через `fs`, доступный только в cli.js) в дополнение к выводу в stdout (или вместо — свериться с требованиями к --out в requirements.json/architecture.md, если там зафиксировано конкретное поведение; если не зафиксировано — записывай тот же текст, что выводится в stdout).\n9. Убедись, что `lib.js` не импортируется с побочными эффектами и что вся валидация диапазона/формата остаётся в lib.js — cli.js только маппит типизированные ошибки на сообщения и exit code.\n10. Добавь process-тесты для cli.js в `roman-numerals/test/`, покрывающие: --number, --roman, взаимоисключение флагов, автоопределение формата через stdin (число и римская запись), пустой/TTY stdin без флагов, ошибку диапазона числа, ошибку невалидной римской записи, запись через --out.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "roman-numerals/cli.js",
+    "roman-numerals/test/cli.test.js"
+  ],
+  "dependsOn": [
+    "13"
+  ],
+  "unitTestCmd": "cd roman-numerals && npm test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

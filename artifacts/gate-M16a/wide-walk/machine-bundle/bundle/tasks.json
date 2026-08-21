@@ -1,0 +1,368 @@
+{
+  "bundleId": "07584bc0-cc30-497d-8672-7665edbc8195",
+  "projectId": "07584bc0-cc30-497d-8672-7665edbc8195",
+  "tasks": [
+    {
+      "taskId": "1",
+      "title": "Создать каркас temperature-converter (package.json с bin, scripts.start/scripts.test) и реализовать чистую функцию конвертации в lib.js с модульными тестами (happy path, границы c/f/k, значения ниже абсолютного нуля)",
+      "description": "_Dependencies: —_",
+      "dependsOn": [],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "2",
+      "title": "Реализовать cli.js для temperature-converter: разбор --value/--from/--to, fallback на stdin (\"<value> <from> <to>\"), -h/--help, форматирование <результат> <UNIT>, обработка --out, единая обработка ошибок в stderr",
+      "description": "_Dependencies: 1_",
+      "dependsOn": [
+        "1"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "3",
+      "title": "Написать процесс-тесты cli.js для temperature-converter (успех, --help, все сценарии ошибок, --out, stdin-fallback, отсутствие сетевых require)",
+      "description": "_Dependencies: 2_",
+      "dependsOn": [
+        "2"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "4",
+      "title": "Создать каркас word-counter и реализовать lib.js (подсчёт строк/слов/Unicode-символов через [...content].length) с модульными тестами, включая пустой файл и содержимое без завершающего \\n",
+      "description": "_Dependencies: —_",
+      "dependsOn": [],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "5",
+      "title": "Реализовать cli.js для word-counter: --file, fallback на stdin, вывод трёх строк lines/words/chars, --out, ошибка cannot read file: <path>",
+      "description": "_Dependencies: 4_",
+      "dependsOn": [
+        "4"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "6",
+      "title": "Написать процесс-тесты cli.js для word-counter (успех, --help, несуществующий/недоступный путь, директория вместо файла, stdin-fallback, --out, отсутствие сетевых require)",
+      "description": "_Dependencies: 5_",
+      "dependsOn": [
+        "5"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "7",
+      "title": "Создать каркас password-generator и реализовать lib.js на node:crypto (randomInt/randomBytes) с модульными тестами: классы символов, приоритет --no-symbols над --symbols-set, ошибка при отключении всех классов, границы length/count",
+      "description": "_Dependencies: —_",
+      "dependsOn": [],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "8",
+      "title": "Реализовать cli.js для password-generator: --length, --count, --no-lower/--no-upper/--no-digits/--no-symbols, --symbols-set, вывод --count строк без меток, явный отказ unknown flag: --out при попытке передать --out",
+      "description": "_Dependencies: 7_",
+      "dependsOn": [
+        "7"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "9",
+      "title": "Написать процесс-тесты cli.js для password-generator: успех, --help, ошибки границ и «все классы отключены», отказ --out, тест отсутствия нового файлового следа (сравнение process.cwd()/os.tmpdir()/os.homedir() до и после запуска), отсутствие сетевых require",
+      "description": "_Dependencies: 8_",
+      "dependsOn": [
+        "8"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "10",
+      "title": "Создать каркас case-converter и реализовать lib.js (токенизация и сборка для upper/lower/title/camel/pascal/snake/kebab) с модульными тестами по каждому режиму и граничным вводом",
+      "description": "_Dependencies: —_",
+      "dependsOn": [],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "11",
+      "title": "Реализовать cli.js для case-converter: --text, fallback на stdin, --mode, --out, ошибка с перечислением допустимых режимов",
+      "description": "_Dependencies: 10_",
+      "dependsOn": [
+        "10"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "12",
+      "title": "Написать процесс-тесты cli.js для case-converter (успех по каждому режиму, --help, невалидный --mode, stdin-fallback, --out, отсутствие сетевых require)",
+      "description": "_Dependencies: 11_",
+      "dependsOn": [
+        "11"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "13",
+      "title": "Создать каркас roman-numerals и реализовать lib.js (арабское→римское и римское→арабское, проверка канонической формы, диапазон 1–3999) с модульными тестами на границы и невалидные записи (IIII, VV)",
+      "description": "_Dependencies: —_",
+      "dependsOn": [],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "14",
+      "title": "Реализовать cli.js для roman-numerals: XOR-проверка --number/--roman, автоопределение формата при stdin-fallback (^[0-9]+$), --out, ошибки pass either --number or --roman, not both / number out of range (1-3999) / invalid roman numeral: <value>, а также ошибку отсутствия ввода, когда не переданы ни --number, ни --roman, а stdin — интерактивный TTY или пуст: missing input: pass --number/--roman or pipe data via stdin",
+      "description": "_Dependencies: 13_",
+      "dependsOn": [
+        "13"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "15",
+      "title": "Написать процесс-тесты cli.js для roman-numerals (успех в обе стороны, --help, оба флага сразу, вне диапазона, невалидная римская запись, stdin с числом и с римской записью, отсутствие обоих флагов при пустом/TTY-подобном stdin → сообщение missing input: pass --number/--roman or pipe data via stdin и exit 1, --out, отсутствие сетевых require)",
+      "description": "_Dependencies: 14_",
+      "dependsOn": [
+        "14"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "16",
+      "title": "Создать каркас palindrome-checker и реализовать lib.js (нормализованное и строгое сравнение, поддержка латиницы и кириллицы) с модульными тестами",
+      "description": "_Dependencies: —_",
+      "dependsOn": [],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "17",
+      "title": "Реализовать cli.js для palindrome-checker: --text, fallback на stdin, --strict, вывод yes/no, --out, exit 0 для обоих результатов",
+      "description": "_Dependencies: 16_",
+      "dependsOn": [
+        "16"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "18",
+      "title": "Написать процесс-тесты cli.js для palindrome-checker (yes/no с exit 0, --help, --strict включён/выключен, отсутствие входных данных → exit 1, --out, отсутствие сетевых require)",
+      "description": "_Dependencies: 17_",
+      "dependsOn": [
+        "17"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "19",
+      "title": "Создать каркас json-formatter и реализовать lib.js (парсинг через JSON.parse, форматирование JSON.stringify(parsed, null, indent)) с модульными тестами, включая --indent 0 и вложенные структуры",
+      "description": "_Dependencies: —_",
+      "dependsOn": [],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "20",
+      "title": "Реализовать cli.js для json-formatter: --file, fallback на stdin, --indent, --out (обычная семантика дублирования), ошибки cannot read file: <path> и invalid JSON: <причина>; отрицательное значение --indent трактуется как ошибка ввода (не как эквивалент --indent 0) и приводит к сообщению --indent must be a non-negative integer с exit 1; то же сообщение используется, если --indent не является целым числом",
+      "description": "_Dependencies: 19_",
+      "dependsOn": [
+        "19"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "21",
+      "title": "Написать процесс-тесты cli.js для json-formatter (успех, --help, отсутствующий файл, --indent < 0 → сообщение --indent must be a non-negative integer и exit 1, битый JSON — проверка только префикса invalid JSON:, --out, отсутствие сетевых require)",
+      "description": "_Dependencies: 20_",
+      "dependsOn": [
+        "20"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "22",
+      "title": "Создать каркас lorem-ipsum-generator, встроить статический массив латинских слов и реализовать детерминированную (без Math.random/crypto.random) генерацию по абзацам/словам/предложениям в lib.js с модульными тестами, проверяющими точное содержимое при фиксированных параметрах",
+      "description": "_Dependencies: —_",
+      "dependsOn": [],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "23",
+      "title": "Реализовать cli.js для lorem-ipsum-generator: взаимоисключающие --paragraphs/--words/--sentences, значение по умолчанию --paragraphs 3, разделение абзацев пустой строкой, --out, ошибка при передаче двух и более флагов, а также ошибка, когда значение переданного флага ≤ 0 или не является целым числом (например, --paragraphs must be a positive integer, с именем соответствующего флага в тексте сообщения)",
+      "description": "_Dependencies: 22_",
+      "dependsOn": [
+        "22"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "24",
+      "title": "Написать процесс-тесты cli.js для lorem-ipsum-generator (побайтовое сравнение вывода по умолчанию и по каждому флагу, --help, конфликт флагов, ≤0/нецелые значения → сообщение вида --<flag> must be a positive integer и exit 1, --out, отсутствие сетевых require)",
+      "description": "_Dependencies: 23_",
+      "dependsOn": [
+        "23"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "25",
+      "title": "Создать каркас percentage-calculator и реализовать lib.js с тремя формулами (of/share/change) и модульными тестами, включая деление на ноль и нечисловые значения",
+      "description": "_Dependencies: —_",
+      "dependsOn": [],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "26",
+      "title": "Реализовать cli.js для percentage-calculator: --mode и соответствующий набор обязательных числовых флагов на режим, отсутствие stdin-fallback, --out, вывод с toFixed(2), ошибка division by zero; ошибка при значении --mode, не входящем в {of, share, change}, с перечислением допустимых значений (по аналогии с сообщением case-converter о недопустимом --mode, см. задачу 11); ошибка при отсутствии одного из обязательных для выбранного --mode числовых флагов, сообщающая, какой именно флаг отсутствует и для какого режима он обязателен",
+      "description": "_Dependencies: 25_",
+      "dependsOn": [
+        "25"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "27",
+      "title": "Написать процесс-тесты cli.js для percentage-calculator (успех по каждому режиму, --help, невалидный --mode с проверкой перечисления допустимых значений в stderr, отсутствующий обязательный флаг режима при переданном и при пустом stdin, деление на ноль, --out, отсутствие сетевых require)",
+      "description": "_Dependencies: 26_",
+      "dependsOn": [
+        "26"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "28",
+      "title": "Создать каркас countdown-timer и реализовать в lib.js чистую тик-функцию ({ totalSeconds, elapsedSeconds } → { display: 'MM:SS', done }, включая минуты без ведущего нуля при ≥100) с модульными тестами",
+      "description": "_Dependencies: —_",
+      "dependsOn": [],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "29",
+      "title": "Реализовать cli.js для countdown-timer: --duration, --quiet, цикл на setInterval, немедленная первая строка, финальный блок \\x07+Time's up!+\\n, обработчик SIGINT (без финального сообщения, exit 1), явный отказ unknown flag: --out, ошибка duration must be a positive integer number of seconds",
+      "description": "_Dependencies: 28_",
+      "dependsOn": [
+        "28"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "30",
+      "title": "Написать процесс-тесты cli.js для countdown-timer с короткой длительностью (несколько секунд): проверка финальной байтовой последовательности и exit 0, --quiet подавляет промежуточные строки, --help, невалидный/отсутствующий --duration, отправка SIGINT до истечения → exit 1 через child.kill('SIGINT'), отказ --out, отсутствие сетевых require. Критерий приёмки на случай нестабильности SIGINT-теста именно на Windows (среда разработки): тест обязан посылать сигнал только через child.kill('SIGINT') и проверять исключительно код завершения 1, не проверяя отсутствие финального блока побайтово в том же прогоне; если и это оказывается нестабильным на Windows (сигнал не доставляется эмуляцией Node.js), тест допустимо пометить как пропускаемый на этой платформе (skip с проверкой process.platform) с явной причиной в тексте пропуска, но сам сценарий и его проверка не удаляются из файла теста и должны выполняться там, где сигнал доставляется штатно",
+      "description": "_Dependencies: 29_",
+      "dependsOn": [
+        "29"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "31",
+      "title": "Провести ручную сквозную проверку мгновенного отклика (время до первого вывода) для всех утилит, кроме countdown-timer",
+      "description": "_Dependencies: 3, 6, 9, 12, 15, 18, 21, 24, 27, 30_",
+      "dependsOn": [
+        "3",
+        "6",
+        "9",
+        "12",
+        "15",
+        "18",
+        "21",
+        "24",
+        "27",
+        "30"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "32",
+      "title": "Провести ручную проверку глобальной установки (npm link и npm install -g) и вызова по командному имени из произвольной директории для всех десяти утилит как минимум на Windows; по возможности — на macOS/Linux",
+      "description": "_Dependencies: 3, 6, 9, 12, 15, 18, 21, 24, 27, 30_",
+      "dependsOn": [
+        "3",
+        "6",
+        "9",
+        "12",
+        "15",
+        "18",
+        "21",
+        "24",
+        "27",
+        "30"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    },
+    {
+      "taskId": "33",
+      "title": "Собрать корневой README.md с перечнем всех десяти утилит (директория, команда, однострочное описание, пример вызова, включая пример с --help)",
+      "description": "_Dependencies: 31, 32_",
+      "dependsOn": [
+        "31",
+        "32"
+      ],
+      "metadata": {
+        "expectedArtifacts": []
+      }
+    }
+  ]
+}

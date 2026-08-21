@@ -178,8 +178,34 @@ export function createFakeEngine(options: FakeEngineOptions = {}): FakeEngine {
       return Promise.resolve();
     },
 
-    async waitContainer(id) {
-      await finished.get(id);
+    async waitContainer(id, signal) {
+      /*
+       * The abort matters to the fake for the same reason it matters to the daemon: a bounded run
+       * (`clean-run.ts`, task 174) tells the wait to stop waiting, and a fake that ignored the
+       * signal would hang the very test that exists to prove the bound.
+       */
+      const done = finished.get(id) ?? Promise.resolve();
+
+      if (signal === undefined) {
+        await done;
+        return find(id)?.exitCode ?? 0;
+      }
+
+      if (signal.aborted) throw new Error('прервано');
+
+      await Promise.race([
+        done,
+        new Promise<never>((_, reject) => {
+          signal.addEventListener(
+            'abort',
+            () => {
+              reject(new Error('прервано'));
+            },
+            { once: true },
+          );
+        }),
+      ]);
+
       return find(id)?.exitCode ?? 0;
     },
 

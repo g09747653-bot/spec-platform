@@ -1,0 +1,16 @@
+{
+  "taskId": "12",
+  "milestoneId": "ms_03",
+  "title": "Написать процесс-тесты cli.js для case-converter (успех по каждому режиму, --help, невалидный --mode, stdin-fallback, --out, отсутствие сетевых require)",
+  "description": "Внутри директории case-converter создай файл test/cli.test.js с процесс-тестами cli.js (без импорта lib.js напрямую — cli.js запускается как дочерний процесс через child_process.spawnSync/execFileSync, чтобы проверялось реальное поведение бинаря: argv, stdin, stdout, stderr, exit code). Шаги: 1) Определи по факту исходников case-converter/cli.js и case-converter/lib.js (созданных в задаче 11) полный список поддерживаемых режимов --mode (например upper/lower/title/camel/snake/kebab/pascal — использовать реальный список из lib.js, а не придумывать). 2) Для каждого режима напиши тест, который запускает cli.js с этим --mode и тестовой входной строкой, и проверяет корректный результат в stdout и exitCode 0. 3) Добавь тест на --help: запусти cli.js --help, проверь exitCode 0 и наличие в stdout текста использования (usage/список режимов). 4) Добавь тест на невалидный --mode (например --mode=nonexistent): проверь ненулевой exitCode и сообщение об ошибке в stderr, а также отсутствие мусора в stdout. 5) Добавь тест на stdin-fallback: запусти cli.js без позиционного аргумента текста, передай текст через stdin (options.input в spawnSync), проверь, что результат обработан корректно. 6) Добавь тест на --out <file>: запусти cli.js с флагом --out и путём к временному файлу (используй временную директорию, например через os.tmpdir() или scratch-каталог теста), проверь, что результат записан в файл, а не в stdout, и что exitCode 0; после теста удали временный файл. 7) Добавь тест на отсутствие сетевых require: прочитай исходный текст case-converter/cli.js как строку и убедись, что он не содержит require('http'), require('https'), require('net'), require('dgram'), require('tls'), require('dns') ни в каком виде (учти возможные вариации кавычек). 8) Тесты должны запускать cli.js как отдельный процесс (node cli.js ...) относительно package.json case-converter, используя bin-путь или прямой путь к файлу — не импортируй cli.js как модуль в этом файле, так как это процесс-тесты, а не unit-тесты. 9) Убедись, что тесты не зависят от других утилит репозитория и не используют require к другим директориям верхнего уровня.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "case-converter/test/cli.test.js"
+  ],
+  "dependsOn": [
+    "11"
+  ],
+  "unitTestCmd": "cd case-converter && npm test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

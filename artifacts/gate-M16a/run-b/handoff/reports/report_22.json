@@ -1,0 +1,15 @@
+{
+  "reportId": "report_22",
+  "taskId": "22",
+  "projectId": "ms_01",
+  "executorId": "claude-agent",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 15,
+    "passed": 15,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "scripts.test использует `node --test` без пути `test/`; статический словарь встроен так, что LEAD_PHRASE — это первые 5 слов WORDS, а не отдельный несвязанный список",
+  "rationale": "1) В этом окружении (Node v24.19.0) `node --test test/` завершается MODULE_NOT_FOUND ('Cannot find module .../test'), тогда как `node --test` без аргументов (автообнаружение **/*.test.js) работает и находит test/lib.test.js. Это совпадает с той же особенностью, зафиксированной в report_1/report_10/report_13 для других утилит этого репозитория, так что я применил то же решение: scripts.test = `node --test`, и unitTestCmd (`npm --prefix lorem-ipsum-generator test`) проходит 15/15. 2) Статический массив WORDS начинается словами lorem/ipsum/dolor/sit/amet — теми же, что и константа стартовой фразы LEAD_PHRASE — что позволило сделать генерацию единым циклическим проходом с общим курсором для всех трёх режимов (слова/предложения/абзацы), где курсор после стартовой фразы или (если флаг startWithLorem=false) сразу с 6-го слова словаря продолжает один и тот же детерминированный цикл; это гарантирует, что флаг startWithLorem реально меняет содержимое вывода во всех трёх режимах (первая версия алгоритма этого не делала для sentences/paragraphs, т.к. LEAD_PHRASE дублировал первые слова цикла — исправлено до написания тестов). lib.js — чистый CommonJS без require('fs'|'http'|'https'|'dns'|'readline'), без Math.random/crypto.random*/Date.now/process.pid, бросает InvalidCountError (RangeError) на некорректный count вместо process.exit. cli.js — тонкий слой: парсит --paragraphs/--words/--sentences (по умолчанию --paragraphs 3), вызывает lib.js, пишет результат в stdout или ошибку в stderr с process.exitCode=1, без собственной логики генерации; полная валидация конфликтующих флагов, --out и точные тексты ошибок явно вынесены в зависимую задачу 23 согласно bundle/tasks.json, поэтому в cli.js это не реализовывалось намеренно."
+}

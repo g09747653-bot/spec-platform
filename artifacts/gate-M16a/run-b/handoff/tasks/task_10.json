@@ -1,0 +1,16 @@
+{
+  "taskId": "10",
+  "milestoneId": "ms_01",
+  "title": "Создать каркас case-converter и реализовать lib.js (токенизация и сборка для upper/lower/title/camel/pascal/snake/kebab) с модульными тестами по каждому режиму и граничным вводом",
+  "description": "1. Создать директорию `case-converter/` как независимый npm-пакет по шаблону из architecture.md.\n2. Написать `case-converter/package.json`: имя пакета, `main`/`bin` не обязателен на этом шаге (bin/cli.js — отдельная задача), указать `scripts.test` (например, `node --test test/`), объявить зависимости для тестирования, если требуются (или использовать встроенный `node:test`/`assert`).\n3. Реализовать `case-converter/lib.js` как модуль чистых функций без побочных эффектов (без `fs`, `process`, `readline`, без ввода-вывода):\n   - функцию токенизации строки на слова, корректно разбирающую camelCase, PascalCase, snake_case, kebab-case, пробельные разделители, смешанные разделители и цифры внутри слов;\n   - функции сборки токенов в каждый из режимов: `upper` (UPPER CASE), `lower` (lower case), `title` (Title Case), `camel` (camelCase), `pascal` (PascalCase), `snake` (snake_case), `kebab` (kebab-case);\n   - единую точку входа (например, `convert(input, mode)`), которая токенизирует и вызывает нужный сборщик;\n   - обработку граничных случаев: пустая строка, строка из одних разделителей, строка из одного символа/токена, повторяющиеся разделители, ведущие/замыкающие разделители, unicode-буквы — согласно поведению, ожидаемому в constitution.md/requirements.json для этой утилиты; при недопустимом режиме или ошибке домена бросать типизированную ошибку домена (не через `process.exit`).\n4. Написать модульные тесты в `case-converter/test/` (например, `lib.test.js`), покрывающие:\n   - каждый из семи режимов на характерном входе (в т.ч. смешанный регистр/разделители);\n   - граничные случаи: пустая строка, один символ, только разделители, повторяющиеся разделители, ведущие/замыкающие разделители, строки с цифрами, unicode;\n   - поведение при недопустимом режиме (ожидаемая ошибка).\n5. Прогнать тесты и убедиться, что все проходят; `cli.js` в этой задаче не создавать — это отдельная задача.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "case-converter/package.json",
+    "case-converter/lib.js",
+    "case-converter/test/lib.test.js"
+  ],
+  "dependsOn": [],
+  "unitTestCmd": "npm --prefix case-converter test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

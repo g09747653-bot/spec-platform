@@ -1,0 +1,15 @@
+{
+  "reportId": "report_3",
+  "taskId": "3",
+  "projectId": "tekstovyy-kvest",
+  "executorId": "claude-code",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 70,
+    "passed": 70,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "Содержимое demo.json взято дословно из примера в architecture.md; изменений в scenario.schema.json не потребовалось",
+  "rationale": "Создан scenarios/demo.json («Побег из запертой комнаты») со сценами start_room (стол с ключом / запертая дверь / выход), take_key и door_locked (тупиковые развилки, ведущие обратно в start_room) и victory (isEnding: true, endingType: \"win\"). Содержимое воспроизводит эталонный пример из bundle/architecture.md (раздел Data Model → «Пример файла сценария (demo.json)»), чтобы не расходиться с уже согласованной спецификацией, на которую ссылаются другие задачи (например, save.schema.json содержит пример scenarioPath: \"scenarios/demo.json\"). Булев флаг hasKey используется в initialState (false), requiredState (блокирует выбор «взять ключ» второй раз и не даёт открыть дверь без ключа) и setState (устанавливается в true при возврате из take_key). Файл schemas/scenario.schema.json был указан в filesToEdit задачи, но по итогам сверки с задачей 2 (report_2) схема уже полностью соответствует требованиям (additionalProperties: false на всех уровнях, закрытый enum endingType, плоские Record<string, boolean> для initialState/requiredState/setState, anyOf для сцен с options/isEnding) — правок в схему не вносилось. Добавлен test/demo-scenario.test.js: валидация demo.json по scenario.schema.json через Ajv, проверка ссылочной целостности всех nextSceneId, проверка отсутствия тупиковых сцен без isEnding, и сквозной интеграционный тест прохождения квеста через реальный класс GameState (lib/state-machine.js) — от старта через попытку открыть запертую дверь без ключа, к столу за ключом и до победной концовки. Полный прогон npm test — 70/70 (учитывает тесты, добавленные параллельно другими исполнителями по задачам 1, 2, 7, 8, 9/10/11)."
+}

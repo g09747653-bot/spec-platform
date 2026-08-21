@@ -1,0 +1,16 @@
+{
+  "taskId": "4",
+  "milestoneId": "ms_03",
+  "title": "Реализация валидатора структуры сценария с помощью Ajv",
+  "description": "1. Создайте файл `lib/validator.js`.\n2. Импортируйте JSON-схему сценария из `schemas/scenario.schema.json`. Для совместимости с ESM используйте чтение файла через `fs.promises.readFile` и `JSON.parse` или механизм `createRequire` из модуля `module`.\n3. Импортируйте библиотеку `ajv` (и `ajv-formats`, если требуется по схеме). Настройте экземпляр Ajv.\n4. Реализуйте и экспортируйте (ESM) функцию `validateScenario(scenarioData)`.\n5. Добавьте в функцию `validateScenario` защиту от Prototype Pollution: рекурсивно проверяйте объект `scenarioData` и блокируйте (выбрасывайте ошибку) при обнаружении ключей `__proto__`, `constructor` или `prototype`.\n6. Обеспечьте валидацию данных с помощью Ajv. Если валидация не пройдена, формируйте понятные русскоязычные сообщения об ошибках (например, переводя ключевые ошибки Ajv на русский язык или форматируя их список).\n7. Функция должна возвращать объект `{ valid: true }` в случае успеха или `{ valid: false, errors: ['сообщение 1', ...] }` при ошибках (или выбрасывать структурированное исключение с русскоязычным описанием, согласуясь с общей архитектурой).",
+  "techStack": "generic",
+  "filesToEdit": [
+    "lib/validator.js"
+  ],
+  "dependsOn": [
+    "2"
+  ],
+  "unitTestCmd": "npm test",
+  "expectedArtifacts": [],
+  "status": "PENDING"
+}

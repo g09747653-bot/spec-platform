@@ -1,0 +1,15 @@
+{
+  "reportId": "report_12",
+  "taskId": "12",
+  "projectId": "tekstovyy-kvest",
+  "executorId": "claude-code",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 43,
+    "passed": 43,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "Собственная реализация ANSI-обёртки вместо прямого вызова функций yoctocolors",
+  "rationale": "Библиотека `yoctocolors` определяет поддержку цвета единожды при импорте модуля (`tty.WriteStream.prototype.hasColors()`), жёстко привязываясь к реальному `process.stdout` без возможности передать другой поток или переопределить решение. Это делает невозможным ни детерминированное модульное тестирование включённого цветного режима (в песочнице/CI поток вывода не является TTY, поэтому `yoctocolors` всегда отдаёт бесцветный текст), ни явное задание бесцветного режима по требованиям задачи (учёт `NO_COLOR`/`FORCE_COLOR`, инъекция потока). Поэтому в `lib/cli-view.js` реализована собственная функция `isColorSupported(stream, env)` с полной логикой авто-определения (TTY, `hasColors()`, `NO_COLOR`, `FORCE_COLOR`), а стилизующие функции (`styleWin`, `styleLose`/`styleError`, `styleItem`, `styleEnding`) применяют те же ANSI SGR-коды, что использует `yoctocolors` (32/39 зелёный, 31/39 красный, 33/39 жёлтый), но под управлением этой собственной, тестируемой логики. Зависимость `yoctocolors` в `package.json` сохранена (задача 1), поведение по кодам цвета идентично поведению библиотеки. Архитектору стоит учитывать это при написании задачи 13 (интерактивные меню поверх `lib/cli-view.js`): использовать экспортируемые `styleWin/styleLose/styleError/styleItem/styleEnding/isColorSupported`, а не функции `yoctocolors` напрямую."
+}

@@ -1,0 +1,17 @@
+{
+  "taskId": "1",
+  "milestoneId": "ms_01",
+  "title": "Создать каркас temperature-converter (package.json с bin, scripts.start/scripts.test) и реализовать чистую функцию конвертации в lib.js с модульными тестами (happy path, границы c/f/k, значения ниже абсолютного нуля)",
+  "description": "1. Создай директорию `temperature-converter/` в корне рабочей директории (рядом с существующими `lib/`, `test/`, вне `bundle/`).\n2. Добавь `temperature-converter/package.json`: укажи `name`, `version`, `bin` (указывающий на `cli.js`), `scripts.start` (запуск `node cli.js`), `scripts.test` (запуск тестового раннера, например `node --test test/`), и зависимости, если нужен тестовый фреймворк. Не добавляй зависимостей на другие директории репозитория.\n3. Создай пустой `temperature-converter/cli.js` — минимальную заглушку слоя ввода-вывода (может быть shebang + отсутствие логики домена), чтобы `bin` из package.json указывал на существующий файл; реализация CLI-логики не входит в эту задачу.\n4. Реализуй в `temperature-converter/lib.js` чистую функцию(и) конвертации температуры между Цельсием, Фаренгейтом и Кельвином без побочных эффектов: без `fs`, `process`, `readline`, без чтения/записи ввода-вывода. Функция должна принимать значение и единицы (from/to) и возвращать число или бросать типизированную ошибку домена при значении ниже абсолютного нуля для соответствующей шкалы.\n5. Не переноси валидацию или форматирование ввода в `cli.js` — вся логика домена, включая проверку границ (абсолютный ноль: -273.15°C, -459.67°F, 0K), должна находиться в `lib.js`.\n6. Напиши модульные тесты в `temperature-converter/test/*.test.js`, покрывающие: happy path конвертации между всеми парами единиц (C↔F, C↔K, F↔K), граничные значения на точке абсолютного нуля для c/f/k, и значения ниже абсолютного нуля (должны приводить к ошибке домена).\n7. Прогони тесты и убедись, что все проходят.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "temperature-converter/package.json",
+    "temperature-converter/cli.js",
+    "temperature-converter/lib.js",
+    "temperature-converter/test/lib.test.js"
+  ],
+  "dependsOn": [],
+  "unitTestCmd": "npm --prefix temperature-converter test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

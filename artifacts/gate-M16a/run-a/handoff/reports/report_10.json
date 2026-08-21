@@ -1,0 +1,15 @@
+{
+  "reportId": "report_10",
+  "taskId": "10",
+  "projectId": "tekstovyy-kvest",
+  "executorId": "claude-code",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 124,
+    "passed": 124,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "listSaveGames возвращает плоский объект {name, isValid, scenarioPath, currentSceneId, stepsCount, variables} вместо {fileName, isValid, data?} из architecture.md; schemas/save.schema.json оставлена без изменений",
+  "rationale": "architecture.md (JSDoc lib/save-manager.js) описывает сигнатуру Promise<Array<{fileName, isValid, data?}>>, но формулировка задачи 10 явно и более специфично требует другую, строго определённую структуру для повреждённого сохранения: {name, isValid: false, scenarioPath: null, currentSceneId: null, stepsCount: 0, variables: {}}. Кроме того, lib/cli-view.js (задача 13, уже реализована) обращается к полям save.name/save.isValid/save.stepsCount напрямую — то есть контракт с полем name (не fileName) и плоскими полями уже закреплён как рабочая конвенция между модулями. По аналогии с решением задачи 9 (задача — более специфичный и более поздний источник истины, чем общее описание в architecture.md/constitution.md), для валидных сохранений использована та же плоская форма ({name, isValid: true, ...данные файла}) для единообразия, а не вложенное поле data.\n\nschemas/save.schema.json была указана в filesToEdit, но уже полностью соответствовала требованиям задачи (created ранее, используется в test/schemas.test.js): required scenarioPath/currentSceneId/stepsCount/variables, additionalProperties: false, stepsCount — целое ≥ 0, variables — плоские булевы значения. Изменений в файл не вносилось.\n\nlistSaveGames(cwd): читает директорию через readdir(withFileTypes), отбирает файлы (не директории) с суффиксом `.save.json`, чьё базовое имя проходит SAVE_NAME_PATTERN (`^[a-zA-Z0-9]{1,20}$`, тот же паттерн, что и в writeSaveGame из задачи 9) — файлы с несоответствующим именем в список вообще не попадают, как того требует формулировка задачи. Для каждого прошедшего фильтр файла: чтение → JSON.parse → проверка на Prototype Pollution (запрещённые ключи __proto__/constructor/prototype на любом уровне вложенности, по аналогии с lib/validator.js) → валидация через ajv по schemas/save.schema.json. Любой сбой на этих этапах (ошибка чтения, невалидный JSON, pollution, несоответствие схеме) не отбрасывает файл, а возвращает его с isValid: false и строго заданной нейтральной структурой из задачи, чтобы CLI (formatSaveChoiceTitle/promptSaveSelection из задачи 13) отобразил пометку «[Поврежден]» без сырых стек-трейсов (требование constitution.md). Добавлено 9 новых тестов в test/save-manager.test.js (пустая директория, несколько валидных сохранений, игнорирование файлов без нужного суффикса/с недопустимым именем, битый JSON, несоответствие схеме, Prototype Pollution в variables, устойчивость к поддиректории с именем `*.save.json`). Полный прогон `npm test`: 124/124 (было 63 после задачи 9), регрессий нет; `npm run lint` и `prettier --check` — чисто."
+}

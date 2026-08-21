@@ -1,0 +1,15 @@
+{
+  "reportId": "report_4",
+  "taskId": "4",
+  "projectId": "tekstovyy-kvest",
+  "executorId": "claude-code",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 111,
+    "passed": 111,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "Prototype Pollution защищена отдельным рекурсивным сканом ключей, а не только через additionalProperties: false",
+  "rationale": "Создан lib/validator.js с функцией validateScenario(scenarioData), которая компилирует schemas/scenario.schema.json через Ajv (allErrors: true) и переводит все ошибки Ajv (required, additionalProperties, type, enum, const, minItems, anyOf и т.д.) в понятные русскоязычные сообщения с указанием пути до проблемного поля. Задача явно требует защиты парсинга от Prototype Pollution, но одной схемы для этого недостаточно: объекты requiredState/setState/initialState/variables описаны в scenario.schema.json как `additionalProperties: { type: \"boolean\" }`, то есть Ajv разрешает любое имя ключа (включая \"__proto__\", \"constructor\", \"prototype\"), если его значение — булево. Поэтому в validator.js добавлена отдельная рекурсивная проверка findPollutionPaths, которая обходит весь объект сценария (включая вложенные объекты и массивы options) и до вызова Ajv отклоняет любые опасные имена свойств на любом уровне вложенности с понятным сообщением на русском. additionalProperties: false на верхних уровнях схемы (внесённый в задаче 2) остаётся первой линией защиты для явно описанных объектов. Изменений в schemas/scenario.schema.json не потребовалось — по итогам сверки с report_2 схема уже полностью соответствует требованиям задачи. Проверка связности графа переходов (задача 5) и валидация тупиковых сцен без options/isEnding сознательно не реализована в этой задаче (тупиковые сцены уже отклоняются схемой через anyOf, но обход графа на недостижимость вершин — отдельная задача 5, зависящая от этой). Добавлен test/validator.test.js (12 тестов): валидный сценарий и demo.json, нестроковый вход, отсутствие обязательных полей, неизвестные свойства, enum endingType, тупиковая сцена, а также отдельно — Prototype Pollution через __proto__ на верхнем уровне и спрятанный внутри requiredState/setState/initialState. Полный прогон npm test: 111/111 (учитывает все ранее существующие тесты по задачам 1, 2, 3, 7, 8, 9, 12). npx eslint и npx prettier --check не выявили замечаний по новым файлам."
+}

@@ -1,0 +1,16 @@
+{
+  "taskId": "2",
+  "milestoneId": "ms_02",
+  "title": "Создание JSON-схем валидации сценариев и файлов сохранений",
+  "description": "1. Прочитайте файлы `bundle/constitution.md` и `bundle/architecture.md` для понимания точной структуры сценария и файлов сохранений.\n2. Создайте директорию `schemas`, если она не существует.\n3. Создайте файл `schemas/scenario.schema.json`. Опишите в нём JSON-схему (draft-07) для валидации сценария игры:\n   - Установите `initialState` как плоский объект с булевыми значениями (`type: object`, `additionalProperties: { type: boolean }`).\n   - Опишите структуру сцены (`scene`).\n   - Для поля `endingType` в объекте сцены укажите тип `string` со строго ограниченным списком значений `['win', 'lose']`. Сделайте поле необязательным.\n   - Добавьте условную валидацию (например, через `dependencies` или `if-then-else`), гарантирующую, что если `isEnding` равен `true`, то `endingType` должен присутствовать.\n   - Свойства `requiredState` и `setState` внутри опций/переходов опишите как плоские объекты с булевыми значениями (`type: object`, `additionalProperties: { type: boolean }`).\n4. Создайте файл `schemas/save.schema.json`. Опишите в нём JSON-схему (draft-07) для валидации сохранений прогресса:\n   - Требуемые свойства: `scenarioPath` (строка), `currentSceneId` (строка), `stepsCount` (целое неотрицательное число) и `variables` (плоский объект `Record<string, boolean>`).\n   - Сделайте все эти четыре свойства обязательными (`required`).\n5. Убедитесь в валидности синтаксиса обоих JSON-файлов схем.",
+  "techStack": "generic",
+  "filesToEdit": [
+    "schemas/scenario.schema.json",
+    "schemas/save.schema.json"
+  ],
+  "dependsOn": [
+    "1"
+  ],
+  "expectedArtifacts": [],
+  "status": "PENDING"
+}

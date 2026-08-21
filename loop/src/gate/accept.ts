@@ -89,11 +89,24 @@ export interface AcceptanceDeps {
   onLine?: (line: { stream: 'stdout' | 'stderr'; text: string }) => void;
   /** Bounds the whole acceptance run. Tests are slower than an edit; the default reflects that. */
   timeoutMs?: number;
+  /**
+   * Bounds one **test** command, separately from the run as a whole (task 174; А-26 §3).
+   *
+   * The M16а gate met the case this exists for: an executor wrote a test that never finishes, and
+   * the acceptance spent its whole fifteen-minute ceiling discovering that. «Тест, который не
+   * заканчивается» is a recognisable class with a recognisable price, so it gets its own, much
+   * closer limit and its own named reason — while the fifteen-minute ceiling stays where it was,
+   * as the back stop for everything else the acceptance does.
+   */
+  testTimeoutMs?: number;
   /** Overridable so a test can point at an image it already has. */
   images?: Partial<Record<TechStack, string>>;
 }
 
 export const ACCEPTANCE_TIMEOUT_MS = 15 * 60_000;
+
+/** Five minutes for one test command. A suite that is still running past this is not finishing. */
+export const ACCEPTANCE_TEST_TIMEOUT_MS = 5 * 60_000;
 
 /** `delivery-gate-${taskId}` — distinct from the executor's name, so neither can find the other. */
 export function acceptanceContainerName(taskId: string): string {
@@ -184,20 +197,26 @@ export async function acceptTask(
       };
     }
 
+    /*
+     * The test command's own limit, under the run's ceiling (task 174). `Math.min` is what keeps
+     * the fifteen minutes a *back stop*: an operator who configures the test limit above it has
+     * not moved the ceiling, and the reason below names whichever bound actually applied.
+     */
+    const testBudgetMs = Math.min(
+      deps.testTimeoutMs ?? ACCEPTANCE_TEST_TIMEOUT_MS,
+      deps.timeoutMs ?? ACCEPTANCE_TIMEOUT_MS,
+    );
+
     for (const [label, command] of [
       ['unit', commands.unitTestCmd],
       ['e2e', commands.e2eTestCmd],
     ] as const) {
       if (command === '') continue;
 
-      const run = await runInCleanCopy(
-        deps.engine,
-        image,
-        copyPath,
-        `${name}-${label}`,
-        command,
-        deps,
-      );
+      const run = await runInCleanCopy(deps.engine, image, copyPath, `${name}-${label}`, command, {
+        ...deps,
+        timeoutMs: testBudgetMs,
+      });
       output.push(`$ ${command}\n${run.output}`);
 
       if (run.exitCode !== 0) {
@@ -205,7 +224,7 @@ export async function acceptTask(
           accepted: false,
           reason:
             run.exitCode === null
-              ? `Приёмочный прогон «${command}» не уложился в отведённое время — задача не принята.`
+              ? `Тесты не завершились: «${command}» остановлен по пределу ${String(Math.round(testBudgetMs / 1000))} с — задача не принята.`
               : `Приёмочный прогон «${command}» в чистом контейнере вернул ${String(run.exitCode)} — задача не принята.`,
           unitExitCode: label === 'unit' ? run.exitCode : null,
           e2eExitCode: label === 'e2e' ? run.exitCode : null,

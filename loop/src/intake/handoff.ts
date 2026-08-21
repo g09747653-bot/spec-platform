@@ -70,6 +70,17 @@ export const HandoffTask = z.object({
   dependsOn: z.array(z.string()).default([]),
   unitTestCmd: z.string().optional(),
   e2eTestCmd: z.string().optional(),
+  /**
+   * The iteration ceiling for **this** task, in seconds (task 174; А-26 §2).
+   *
+   * Optional and additive — the compatibility contract of D-223: every assignment written before
+   * this field existed parses exactly as it did. Absent means the default ceiling
+   * (`ITERATION_TIMEOUT_MS`); present, it is the mark an assignment architect or an operator puts
+   * on a task known to be heavy. Bounded above because the ceiling is a back stop, and a field
+   * that could push it out indefinitely would repeal the one property the wrapper exists for —
+   * a wall clock the container cannot argue with.
+   */
+  iterationTimeoutSec: z.number().int().positive().max(7_200).optional(),
   expectedArtifacts: z.array(ExpectedArtifact),
   status: z.enum(HANDOFF_TASK_STATUSES),
 });
@@ -189,6 +200,10 @@ export function mergeWithDisk(existing: HandoffTask | null, fresh: HandoffTask):
     status: existing.status,
     ...(existing.unitTestCmd === undefined ? {} : { unitTestCmd: existing.unitTestCmd }),
     ...(existing.e2eTestCmd === undefined ? {} : { e2eTestCmd: existing.e2eTestCmd }),
+    /* An operator's mark on a heavy task survives a re-intake for the same reason the prose does. */
+    ...(existing.iterationTimeoutSec === undefined
+      ? {}
+      : { iterationTimeoutSec: existing.iterationTimeoutSec }),
   });
 }
 

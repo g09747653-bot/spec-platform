@@ -1,0 +1,16 @@
+{
+  "taskId": "11",
+  "milestoneId": "ms_05",
+  "title": "Безопасное разрешение путей сценариев и защита от Path Traversal при загрузке",
+  "description": "Добавить в `lib/save-manager.js` функцию загрузки, считывающую `scenarioPath` из файла сохранения. Применить `path.resolve` для получения абсолютного пути и убедиться, что итоговый файл физически находится строго внутри текущей директории запуска `process.cwd()` или директории встроенных сценариев пакета. Ограничить попытки несанкционированного чтения системных файлов.\n  _Зависимости: 10_",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "lib/save-manager.js"
+  ],
+  "dependsOn": [
+    "10"
+  ],
+  "unitTestCmd": "npm test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

@@ -1,0 +1,16 @@
+{
+  "reportId": "report_10",
+  "taskId": "10",
+  "projectId": "ms_01",
+  "executorId": "agent",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 31,
+    "passed": 31,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "test script uses `node --test` without an explicit `test/` path argument",
+  "rationale": "In this sandboxed execution environment, `node --test test/` (and even `node --test test` without trailing slash) fails with a spurious `Cannot find module '.../test'` MODULE_NOT_FOUND error from the CJS loader, even though the directory and file exist and are readable. Running bare `node --test` (Node's default recursive discovery of `**/*.test.js`) works correctly and picks up exactly `test/lib.test.js`, so `case-converter/package.json`'s `scripts.test` was set to `node --test` instead of `node --test test/`. This is functionally equivalent for this package (only one test directory exists) and `npm --prefix case-converter test` (the task's unitTestCmd) passes cleanly with it. Flagging this in case other utility packages in this repo hit the same directory-argument quirk in this environment.\n\nAlso followed FR-5/architecture.md over the task text where they diverged: `upper`/`lower` do a simple whole-string case change (not tokenize+rebuild), `title` only splits on whitespace (not on `_`/`-`/camelCase boundaries), while `camel`/`pascal`/`snake`/`kebab` use the full tokenizer (camelCase/PascalCase/snake_case/kebab-case/space/mixed separators/digit-run boundaries, Unicode-aware). Invalid mode throws a typed `CaseConverterError` (not `process.exit`), listing all valid modes in the message. `cli.js` was intentionally not created, per the task's explicit scope note.",
+  "blockReason": null
+}

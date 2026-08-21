@@ -1,0 +1,16 @@
+{
+  "taskId": "9",
+  "milestoneId": "ms_03",
+  "title": "Реализация механизма записи файлов автосохранения",
+  "description": "1. Создайте директорию `lib`, если она отсутствует.\n2. Создайте файл `lib/save-manager.js` как ESM-модуль.\n3. Импортируйте встроенные модули `path` и `fs/promises` (или `node:path` и `node:fs/promises`).\n4. Реализуйте и экспортируйте асинхронную функцию `writeSaveGame(cwd, saveName, saveData)`.\n5. В функции выполните валидацию строки `saveName` по регулярному выражению `/^[a-zA-Z0-9]{1,20}$/`. Если строка не соответствует, выбросите ошибку `Error` с понятным описанием.\n6. Сформируйте путь сохранения с помощью `path.join(cwd, `${saveName}.save.json`)`.\n7. Сериализуйте `saveData` в формат JSON и асинхронно запишите полученную строку на диск, используя `fs/promises.writeFile`.",
+  "techStack": "generic",
+  "filesToEdit": [
+    "lib/save-manager.js"
+  ],
+  "dependsOn": [
+    "2",
+    "7"
+  ],
+  "expectedArtifacts": [],
+  "status": "PENDING"
+}

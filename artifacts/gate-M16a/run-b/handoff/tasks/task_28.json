@@ -1,0 +1,17 @@
+{
+  "taskId": "28",
+  "milestoneId": "ms_01",
+  "title": "Создать каркас countdown-timer и реализовать в lib.js чистую тик-функцию ({ totalSeconds, elapsedSeconds } → { display: 'MM:SS', done }, включая минуты без ведущего нуля при ≥100) с модульными тестами",
+  "description": "1. Создать директорию `countdown-timer/` как независимый npm-пакет по шаблону из architecture.md.\n2. Создать `countdown-timer/package.json`: имя `countdown-timer`, `bin` на `cli.js`, `scripts.start` и `scripts.test` (использовать встроенный `node --test` без внешних зависимостей, если иное не продиктовано остальными задачами бандла).\n3. Создать `countdown-timer/lib.js` — только чистая логика, без импорта `fs`/`process`/`readline`. Реализовать и экспортировать функцию `tick({ totalSeconds, elapsedSeconds })`, возвращающую `{ display, done }`:\n   - `remaining = totalSeconds - elapsedSeconds`, не может быть отрицательным для вычисления display (при `remaining <= 0` считать `remaining = 0`).\n   - `done = remaining <= 0`.\n   - `minutes = Math.floor(remaining / 60)`, `seconds = remaining % 60`.\n   - `display` в формате `MM:SS`, где `SS` всегда с ведущим нулём (00–59), а `MM` — без ведущего нуля при значении ≥100 (т.е. дополнять нулём до двух знаков только когда minutes < 100, при minutes ≥ 100 писать число как есть).\n   - Не выполнять никакого вывода в консоль и не обращаться к `Date`/таймерам — функция чистая и детерминированная от входных чисел.\n4. Создать `countdown-timer/cli.js` минимальным каркасом слоя ввода-вывода (разбор `process.argv`, установка `process.exitCode`), без вычислительной логики — детальная реализация CLI-поведения не входит в эту задачу, но файл должен существовать согласно шаблону утилиты и импортировать `lib.js`.\n5. Создать `countdown-timer/test/tick.test.js` с модульными тестами для `tick`, покрывающими минимум: totalSeconds=elapsedSeconds (done=true, display 00:00), обычный случай с MM<100 и ведущим нулём в MM, случай с MM≥100 без ведущего нуля, граничный случай seconds=0 и seconds=59, elapsedSeconds > totalSeconds (не уходить в отрицательное отображение).\n6. Убедиться, что `lib.js` не содержит `require('fs')`, `require('process')`, `require('readline')` и не ссылается на другие директории верхнего уровня репозитория.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "countdown-timer/package.json",
+    "countdown-timer/lib.js",
+    "countdown-timer/cli.js",
+    "countdown-timer/test/tick.test.js"
+  ],
+  "dependsOn": [],
+  "unitTestCmd": "cd countdown-timer && npm test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

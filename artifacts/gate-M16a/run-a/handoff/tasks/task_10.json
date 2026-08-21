@@ -1,0 +1,17 @@
+{
+  "taskId": "10",
+  "milestoneId": "ms_04",
+  "title": "Реализация чтения, фильтрации и валидации списка файлов сохранений",
+  "description": "Добавить в `lib/save-manager.js` функцию `listSaveGames(cwd)`. Она должна сканировать рабочую директорию, находить файлы со специализированным расширением `.save.json`, чьи имена соответствуют регулярному выражению `^[a-zA-Z0-9]{1,20}$`, и валидировать их структуру по `schemas/save.schema.json`. Файлы, поврежденные структурно, не должны скрываться, а должны возвращаться функцией `listSaveGames` с флагом `isValid: false`, используя строго определенную структуру объекта для поврежденного сохранения: `{ name: string, isValid: false, scenarioPath: null, currentSceneId: null, stepsCount: 0, variables: {} }`, чтобы интерфейс CLI-представления отобразил их с пометкой `[Поврежден]`.\n  _Зависимости: 9_",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "lib/save-manager.js",
+    "schemas/save.schema.json"
+  ],
+  "dependsOn": [
+    "9"
+  ],
+  "unitTestCmd": "npm test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

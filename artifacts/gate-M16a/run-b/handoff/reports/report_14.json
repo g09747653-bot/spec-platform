@@ -1,0 +1,15 @@
+{
+  "reportId": "report_14",
+  "taskId": "14",
+  "projectId": "ms_02",
+  "executorId": "claude-code",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 23,
+    "passed": 23,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "Error messages pass through lib.js verbatim; added --help/-h; TTY branch not covered by an automated test",
+  "rationale": "Implemented roman-numerals/cli.js as a pure I/O shell over lib.js (task 13): manual argv parsing for --number/--roman/--out (both 'flag value' and 'flag=value' forms), XOR check before any stdin read, stdin fallback with format autodetection via /^[0-9]+$/, and a single top-level try/catch that writes error.message to stderr with exit code 1. I did not remap RomanNumeralError messages case-by-case: lib.js already throws the exact strings required by requirements.json ('number out of range (1-3999)' and 'invalid roman numeral: <value>' using the original passed string), so cli.js just forwards err.message, keeping all domain wording in lib.js as the architecture requires. --out duplicates stdout into the file rather than replacing it, per requirements.json FR-1 ('stdout-plus-optional-file'), even though the existing percentage-calculator/cli.js in this repo does the opposite (replaces stdout) — I followed the authoritative spec, not the sibling utility's precedent; the architect may want to fix percentage-calculator for consistency. I also added -h/--help support (not explicitly listed in task_14's description) because architecture.md/requirements.json FR-1 mandate it uniformly for all ten utilities and count its absence as an open defect (Success Criteria #4); this mirrors the pattern already used in percentage-calculator/cli.js. One item from the task's test list (#10) is only partially covered: the true-interactive-TTY branch (process.stdin.isTTY === true) is implemented per spec, but I did not write an automated test for it since spawning a real pseudo-terminal isn't available in this sandboxed test environment and forcing it would risk a hanging test; instead I test the equivalent reachable case (no flags + empty/absent stdin, and no flags + whitespace-only stdin), which exercises the same error message and exit code via the non-TTY path."
+}

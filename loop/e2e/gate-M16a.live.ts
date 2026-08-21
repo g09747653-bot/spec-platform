@@ -11,6 +11,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { request as httpRequest } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -38,10 +39,13 @@ import { unexpectedConsole } from '../../e2e/fixtures/console-noise.ts';
  *   measurement rather than a configuration value;
  * - **every `rate_limit_event`** — the tariff closing mid-run is a *working state*, and a cascade of
  *   failures around one is a red condition of this gate;
- * - **the distribution of iteration durations** — the five-minute ceiling is currently supported by
- *   two data points, and the verdict was «мерить, а не двигать»;
+ * - **the distribution of iteration durations** — round 1 collected 26 of them and the 900-second
+ *   ceiling of task 174 is 3× their p90; the walk keeps collecting so the next decision is also
+ *   made on data;
  * - **peak VRAM**, through `loop/scripts/vram_monitor.ps1` running beside the walk on the customer's
- *   own machine (gate-only by А-20 §3г; CI has no GPU and does not run it).
+ *   own machine (gate-only by А-20 §3г; CI has no GPU and does not run it);
+ * - **`MaxListenersExceededWarning`** — counted from the server log, so the wide run answers
+ *   «держится или течёт» (А-26 §6) with a number.
  *
  * Red conditions: every one of M15а's — an interactive hang, `database is locked`, state lost across
  * the restart, a credential in an artifact — plus this milestone's own: fewer than three executors
@@ -60,6 +64,11 @@ import { unexpectedConsole } from '../../e2e/fixtures/console-noise.ts';
  *   GATE_STUB        `1` to rehearse the whole walk with a scripted executor — do this first
  *   GATE_MAX_EXECUTORS  the ceiling for this walk (default 10)
  *   GATE_BUDGET_MS   how long the pipeline may take before the walk gives up (default 2 h)
+ *   GATE_STAGED      `0` to skip the staged red CI and the SIGKILL (round 2: both were proven by
+ *                    round 1's live run, А-26 §8 — the red conditions all stay armed)
+ *   GATE_TARGET_PARALLEL  when >0, the tariff-measurement claim of run Б (А-26 §5): the walk must
+ *                    either see this many executors at once or see the subscription window close —
+ *                    both are results; neither is a failed measurement
  */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -76,11 +85,40 @@ const MAX_EXECUTORS = Number(process.env.GATE_MAX_EXECUTORS ?? 10);
 const BUDGET_MS = Number(process.env.GATE_BUDGET_MS ?? 7_200_000);
 const PROJECT_DIRECTORY_NAME = 'toy';
 
+/**
+ * Whether this walk stages the red CI and the SIGKILL itself.
+ *
+ * On by default — that is the full gate. Round 2 runs with `GATE_STAGED=0` because both
+ * interruptions were proven live in round 1 (А-26 §8: «инсценированный красный и SIGKILL повторять
+ * не обязательно»); what stays on is everything that *watches* — genuine red verdicts are still
+ * rescued by the button, and every red condition still turns the walk red.
+ */
+const STAGED = process.env.GATE_STAGED !== '0';
+
 /** The parallelism this milestone is about. Fewer than this at any moment and the gate is red. */
 const REQUIRED_PARALLEL = 3;
 
-/** How many genuine red verdicts the walk will rescue before it stops calling that a resume. */
-const MAX_GENUINE_RETRIES = 3;
+/**
+ * Run Б's tariff-measurement target (А-26 §5). Zero — off — for an ordinary walk.
+ *
+ * The claim is deliberately a disjunction: the wide bundle exists to load the subscription, and
+ * «пик ≥8 исполнителей» and «упор в лимит подписки» are both honest outcomes of loading it. Only
+ * seeing *neither* means the measurement did not happen — a plan that never went wide enough.
+ */
+const TARGET_PARALLEL = Number(process.env.GATE_TARGET_PARALLEL ?? 0);
+
+/** The iteration ceiling the measurements are read against (task 174: 900 s, 3× measured p90). */
+const ITERATION_CEILING_SECONDS = 900;
+
+/**
+ * How many genuine red verdicts the walk will rescue before it stops calling that a resume.
+ *
+ * Six, raised from three by round 2's own measurement: this bundle's plan needed five — a broken
+ * test (task 7), a style ceiling reached twice (task 5), a never-ending test caught by the new
+ * acceptance-test limit (task 17), and an iteration past 900 s (task 18). Every rescue is still
+ * counted and printed, so the number a plan actually needs stays a measurement.
+ */
+const MAX_GENUINE_RETRIES = 6;
 
 const NEWLINE = String.fromCharCode(10);
 
@@ -255,6 +293,48 @@ function killServer(hard: boolean): void {
     server.kill(hard ? 'SIGKILL' : 'SIGTERM');
   }
   server = null;
+}
+
+/**
+ * `POST` без предела на молчание тела — вместо `fetch` (task 163, прогон Б).
+ *
+ * Node's `fetch` убивает тихое тело на 300-й секунде (undici body timeout) — а `start-loop` с
+ * модельным интейком широкого бандла честно молчит минуты: 33 задания пишутся до того, как роут
+ * отвечает. Первый запуск прогона Б умер ровно на пятой минуте с «fetch failed» — предел
+ * транспорта, не контура. `node:http` не имеет этого предела вовсе.
+ */
+function postJson(
+  url: string,
+  payload: unknown,
+): Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }> {
+  return new Promise((settle, refuse) => {
+    const body = JSON.stringify(payload);
+    const target = new URL(url);
+    const sent = httpRequest(
+      {
+        hostname: target.hostname,
+        port: target.port,
+        path: target.pathname,
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) },
+      },
+      (response) => {
+        const pieces: Buffer[] = [];
+        response.on('data', (piece: Buffer) => pieces.push(piece));
+        response.on('end', () => {
+          const text = Buffer.concat(pieces).toString('utf8');
+          const status = response.statusCode ?? 0;
+          settle({
+            ok: status >= 200 && status < 300,
+            status,
+            json: () => Promise.resolve(JSON.parse(text) as unknown),
+          });
+        });
+      },
+    );
+    sent.on('error', refuse);
+    sent.end(body);
+  });
 }
 
 async function waitFor(
@@ -577,13 +657,9 @@ async function main(): Promise<void> {
 
     // --- intake ---------------------------------------------------------------------------------
     note('POST /api/orchestrator/start-loop (без maxCycles — весь план)');
-    const response = await fetch(`${BASE_URL}/api/orchestrator/start-loop`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        projectDirectory: PROJECT_DIRECTORY_NAME,
-        projectTitle: 'Текстовый квест (гейт M16а)',
-      }),
+    const response = await postJson(`${BASE_URL}/api/orchestrator/start-loop`, {
+      projectDirectory: PROJECT_DIRECTORY_NAME,
+      projectTitle: 'Текстовый квест (гейт M16а)',
     });
 
     const intake: unknown = await response.json();
@@ -629,222 +705,230 @@ async function main(): Promise<void> {
       await shot(page, '03-параллель');
     }
 
-    // --- staged red CI ---------------------------------------------------------------------------
-    note('Подкладываем падающий тест — инсценированный красный CI.');
-    writeFileSync(join(projectDirectory, RED_TEST_PATH), RED_TEST, 'utf8');
-
     const frozenMarker = join(projectDirectory, 'handoff', 'FROZEN.md');
-    let frozenAt = 0;
-    /*
-     * What the daemon was running **just** before the freeze, with the time it was seen.
-     *
-     * The freshness matters and the rehearsal proved it: an older non-empty set belongs to a wave
-     * that has since finished, and asserting «these should be paused» over containers that exited a
-     * minute ago produces a confident verdict about nothing.
-     */
-    let executorsBeforeFreeze: { at: number; names: string[] } = { at: 0, names: [] };
 
-    await waitFor(async () => {
-      await sample();
-      if (liveExecutors.length > 0) {
-        executorsBeforeFreeze = { at: Date.now(), names: liveExecutors };
-      }
-      if (!existsSync(frozenMarker)) return false;
-      frozenAt = Date.now();
-      return true;
-    }, 1_800_000).catch(() => {
-      finding('Красный вердикт не заморозил конвейер за отведённое время.');
-      verdict = 'RED';
-    });
-
-    /*
-     * The planted test comes out **immediately**, before anything else is asserted: while it is
-     * there every acceptance that copies the workspace is red, and the gate is staging one red
-     * verdict, not a permanent one.
-     */
-    rmSync(join(projectDirectory, RED_TEST_PATH), { force: true });
-    note('Подложенный тест убран — красный был инсценирован ровно на одну приёмку.');
-
-    if (frozenAt > 0) {
-      /*
-       * «Все контейнеры paused ≤1 с» — asked of the daemon, not of the loop's own board: the claim
-       * is about what `docker pause` did, and the only witness that cannot be mistaken about it is
-       * docker.
-       */
-      /*
-       * The claim is about the containers that were **running when the freeze landed**, so the set
-       * is the one sampled just before it rather than whatever `docker ps` happens to show now: a
-       * container that finished on its own between the marker and this line was never frozen, and
-       * asserting over an empty list would pass vacuously.
-       */
-      const paused: string[] = [];
-      const missed: string[] = [];
-      const gone: string[] = [];
-
-      /** A set older than this describes a wave that has already finished, not the frozen one. */
-      const FRESH_MS = 5_000;
-      const fresh =
-        executorsBeforeFreeze.names.length > 0 && frozenAt - executorsBeforeFreeze.at <= FRESH_MS;
-
-      let pausedWithinSecond = fresh;
-
-      if (!fresh) {
-        finding(
-          'Инсценированный красный пришёлся на момент, когда ни один исполнитель не работал ' +
-            `(последний живой набор видели ${String(Math.round((frozenAt - executorsBeforeFreeze.at) / 1000))} с назад) ` +
-            '— доказательство паузы было бы пустым.',
-        );
-        verdict = 'RED';
-      }
-
-      await waitFor(() => {
-        paused.length = 0;
-        missed.length = 0;
-        gone.length = 0;
-
-        for (const name of executorsBeforeFreeze.names) {
-          const state = containerPaused(name);
-          if (state === true) paused.push(name);
-          else if (state === false) missed.push(name);
-          else gone.push(name);
-        }
-
-        return missed.length === 0 && paused.length > 0;
-      }, 5_000).catch(() => {
-        pausedWithinSecond = false;
-      });
-
-      const took = Date.now() - frozenAt;
-      if (took > 1_000) pausedWithinSecond = false;
-
-      measure(
-        `Заморозка: работало исполнителей ${String(executorsBeforeFreeze.names.length)}, ` +
-          `на паузе ${String(paused.length)} (${paused.join(', ') || '—'}), ` +
-          `не встали ${String(missed.length)}, успели выйти ${String(gone.length)}, ` +
-          `через ${String(took)} мс после отметки на диске.`,
+    if (!STAGED) {
+      note(
+        'GATE_STAGED=0: инсценированный красный CI и SIGKILL пропущены — оба доказаны живым ' +
+          'прогоном раунда 1 (А-26 §8). Красные условия и спасение настоящих красных — в силе.',
       );
+    }
 
-      if (!pausedWithinSecond) {
-        finding(
-          `Контейнеры не встали на паузу за 1 с (заняло ${String(took)} мс; ` +
-            `не на паузе: ${missed.join(', ') || '—'}; вышли сами: ${gone.join(', ') || '—'}).`,
-        );
-        verdict = 'RED';
-      }
+    if (STAGED) {
+      // --- staged red CI ---------------------------------------------------------------------------
+      note('Подкладываем падающий тест — инсценированный красный CI.');
+      writeFileSync(join(projectDirectory, RED_TEST_PATH), RED_TEST, 'utf8');
 
-      await page.reload();
-      await shot(page, '04-заморозка');
-
-      const frozenBoard = await sample();
-      measure(`На заморозке: PAUSED ${String(countIn(frozenBoard, 'PAUSED'))} задач(и).`);
-
-      /* And it does not resume itself: ten seconds of nothing at all. */
-      const before = readFileSync(frozenMarker, 'utf8');
-      await new Promise((settle) => setTimeout(settle, 10_000));
-
-      if (!existsSync(frozenMarker) || readFileSync(frozenMarker, 'utf8') !== before) {
-        finding('Заморозка снялась сама — отметка на диске изменилась без «Возобновить».');
-        verdict = 'RED';
-      } else {
-        measure('Заморозка не самовозобновилась: 10 с без единого движения.');
-      }
-
-      // --- retry ---------------------------------------------------------------------------------
+      let frozenAt = 0;
       /*
-       * A person pressing «Возобновить» is looking at a board that has stopped moving. So does the
-       * walk: the acceptances that were already in flight when the freeze landed had copied the
-       * workspace *with* the planted test, and their verdicts arrive after it. Retrying before they
-       * do would resume a pipeline that is about to freeze again over a test that no longer exists.
+       * What the daemon was running **just** before the freeze, with the time it was seen.
+       *
+       * The freshness matters and the rehearsal proved it: an older non-empty set belongs to a wave
+       * that has since finished, and asserting «these should be paused» over containers that exited a
+       * minute ago produces a confident verdict about nothing.
        */
-      note('Ждём, пока замороженный конвейер затихнет…');
-      await waitFor(async () => {
-        const board = await sample();
-        /*
-         * «Затих» is **not** «no containers»: the frozen ones are paused, and a paused container
-         * never exits — that is the point of pausing it. What settles is everything else: the
-         * acceptances that were in flight when the freeze landed finish, and their tasks leave
-         * `IN_PROGRESS`. Waiting for an empty `docker ps` waits for ever, which is how this walk
-         * spent fourteen minutes staring at two containers it had itself asked to be frozen.
-         */
-        const unpaused = executorContainers().filter((name) => containerPaused(name) === false);
+      let executorsBeforeFreeze: { at: number; names: string[] } = { at: 0, names: [] };
 
-        return unpaused.length === 0 && countIn(board, 'IN_PROGRESS') === 0;
-      }, 600_000).catch(() => {
-        note('Конвейер не затих полностью — жмём «Возобновить» по тому, что есть.');
-      });
-
-      const frozenBoardNow = await sample();
-      measure(
-        `Перед возобновлением: красных ${String(countIn(frozenBoardNow, 'FAILED'))}, ` +
-          `приостановленных ${String(countIn(frozenBoardNow, 'PAUSED'))}, ` +
-          `принято ${String(countIn(frozenBoardNow, 'COMPLETED'))}.`,
-      );
-
-      note('Жмём «Возобновить».');
-      await page.reload();
-      await page.getByTestId('retry-pipeline').click();
       await waitFor(async () => {
         await sample();
-        return !existsSync(frozenMarker);
-      }, 120_000).catch(() => {
-        finding('«Возобновить» не сняло заморозку.');
+        if (liveExecutors.length > 0) {
+          executorsBeforeFreeze = { at: Date.now(), names: liveExecutors };
+        }
+        if (!existsSync(frozenMarker)) return false;
+        frozenAt = Date.now();
+        return true;
+      }, 1_800_000).catch(() => {
+        finding('Красный вердикт не заморозил конвейер за отведённое время.');
         verdict = 'RED';
       });
 
-      await shot(page, '05-после-возобновления');
-      measure('Заморозка снята кнопкой «Возобновить» — единственным путём назад.');
-    }
+      /*
+       * The planted test comes out **immediately**, before anything else is asserted: while it is
+       * there every acceptance that copies the workspace is red, and the gate is staging one red
+       * verdict, not a permanent one.
+       */
+      rmSync(join(projectDirectory, RED_TEST_PATH), { force: true });
+      note('Подложенный тест убран — красный был инсценирован ровно на одну приёмку.');
 
-    // --- SIGKILL into live parallelism ------------------------------------------------------------
-    note('Ожидание живой параллели, чтобы SIGKILL пришёлся по работающим контейнерам…');
-    await waitFor(async () => {
-      const board = await sample();
-      return countIn(board, 'IN_PROGRESS') >= 2;
-    }, 900_000).catch(() => {
-      note('Параллель ниже двух — SIGKILL придётся по тому, что есть.');
-    });
+      if (frozenAt > 0) {
+        /*
+         * «Все контейнеры paused ≤1 с» — asked of the daemon, not of the loop's own board: the claim
+         * is about what `docker pause` did, and the only witness that cannot be mistaken about it is
+         * docker.
+         */
+        /*
+         * The claim is about the containers that were **running when the freeze landed**, so the set
+         * is the one sampled just before it rather than whatever `docker ps` happens to show now: a
+         * container that finished on its own between the marker and this line was never frozen, and
+         * asserting over an empty list would pass vacuously.
+         */
+        const paused: string[] = [];
+        const missed: string[] = [];
+        const gone: string[] = [];
 
-    const beforeKill = await sample();
-    const runningAtKill = countIn(beforeKill, 'IN_PROGRESS');
-    writeFileSync(
-      join(OUT, 'before-kill.json'),
-      `${JSON.stringify(beforeKill, null, 2)}\n`,
-      'utf8',
-    );
+        /** A set older than this describes a wave that has already finished, not the frozen one. */
+        const FRESH_MS = 5_000;
+        const fresh =
+          executorsBeforeFreeze.names.length > 0 && frozenAt - executorsBeforeFreeze.at <= FRESH_MS;
 
-    killServer(true);
-    await new Promise((settle) => setTimeout(settle, 3_000));
-    measure(`SIGKILL при ${String(runningAtKill)} работающих исполнителях.`);
+        let pausedWithinSecond = fresh;
 
-    await startServer('после SIGKILL');
-    await page.goto(BASE_URL);
-    await page.waitForSelector('[data-testid="milestone"]');
-    await shot(page, '06-после-рестарта');
+        if (!fresh) {
+          finding(
+            'Инсценированный красный пришёлся на момент, когда ни один исполнитель не работал ' +
+              `(последний живой набор видели ${String(Math.round((frozenAt - executorsBeforeFreeze.at) / 1000))} с назад) ` +
+              '— доказательство паузы было бы пустым.',
+          );
+          verdict = 'RED';
+        }
 
-    const afterRestart = await sample();
-    writeFileSync(
-      join(OUT, 'after-restart.json'),
-      `${JSON.stringify(afterRestart, null, 2)}\n`,
-      'utf8',
-    );
+        await waitFor(() => {
+          paused.length = 0;
+          missed.length = 0;
+          gone.length = 0;
 
-    if (afterRestart.milestones.length !== beforeKill.milestones.length) {
-      finding(
-        `План потерян на рестарте: вех до ${String(beforeKill.milestones.length)}, ` +
-          `после ${String(afterRestart.milestones.length)}.`,
+          for (const name of executorsBeforeFreeze.names) {
+            const state = containerPaused(name);
+            if (state === true) paused.push(name);
+            else if (state === false) missed.push(name);
+            else gone.push(name);
+          }
+
+          return missed.length === 0 && paused.length > 0;
+        }, 5_000).catch(() => {
+          pausedWithinSecond = false;
+        });
+
+        const took = Date.now() - frozenAt;
+        if (took > 1_000) pausedWithinSecond = false;
+
+        measure(
+          `Заморозка: работало исполнителей ${String(executorsBeforeFreeze.names.length)}, ` +
+            `на паузе ${String(paused.length)} (${paused.join(', ') || '—'}), ` +
+            `не встали ${String(missed.length)}, успели выйти ${String(gone.length)}, ` +
+            `через ${String(took)} мс после отметки на диске.`,
+        );
+
+        if (!pausedWithinSecond) {
+          finding(
+            `Контейнеры не встали на паузу за 1 с (заняло ${String(took)} мс; ` +
+              `не на паузе: ${missed.join(', ') || '—'}; вышли сами: ${gone.join(', ') || '—'}).`,
+          );
+          verdict = 'RED';
+        }
+
+        await page.reload();
+        await shot(page, '04-заморозка');
+
+        const frozenBoard = await sample();
+        measure(`На заморозке: PAUSED ${String(countIn(frozenBoard, 'PAUSED'))} задач(и).`);
+
+        /* And it does not resume itself: ten seconds of nothing at all. */
+        const before = readFileSync(frozenMarker, 'utf8');
+        await new Promise((settle) => setTimeout(settle, 10_000));
+
+        if (!existsSync(frozenMarker) || readFileSync(frozenMarker, 'utf8') !== before) {
+          finding('Заморозка снялась сама — отметка на диске изменилась без «Возобновить».');
+          verdict = 'RED';
+        } else {
+          measure('Заморозка не самовозобновилась: 10 с без единого движения.');
+        }
+
+        // --- retry ---------------------------------------------------------------------------------
+        /*
+         * A person pressing «Возобновить» is looking at a board that has stopped moving. So does the
+         * walk: the acceptances that were already in flight when the freeze landed had copied the
+         * workspace *with* the planted test, and their verdicts arrive after it. Retrying before they
+         * do would resume a pipeline that is about to freeze again over a test that no longer exists.
+         */
+        note('Ждём, пока замороженный конвейер затихнет…');
+        await waitFor(async () => {
+          const board = await sample();
+          /*
+           * «Затих» is **not** «no containers»: the frozen ones are paused, and a paused container
+           * never exits — that is the point of pausing it. What settles is everything else: the
+           * acceptances that were in flight when the freeze landed finish, and their tasks leave
+           * `IN_PROGRESS`. Waiting for an empty `docker ps` waits for ever, which is how this walk
+           * spent fourteen minutes staring at two containers it had itself asked to be frozen.
+           */
+          const unpaused = executorContainers().filter((name) => containerPaused(name) === false);
+
+          return unpaused.length === 0 && countIn(board, 'IN_PROGRESS') === 0;
+        }, 600_000).catch(() => {
+          note('Конвейер не затих полностью — жмём «Возобновить» по тому, что есть.');
+        });
+
+        const frozenBoardNow = await sample();
+        measure(
+          `Перед возобновлением: красных ${String(countIn(frozenBoardNow, 'FAILED'))}, ` +
+            `приостановленных ${String(countIn(frozenBoardNow, 'PAUSED'))}, ` +
+            `принято ${String(countIn(frozenBoardNow, 'COMPLETED'))}.`,
+        );
+
+        note('Жмём «Возобновить».');
+        await page.reload();
+        await page.getByTestId('retry-pipeline').click();
+        await waitFor(async () => {
+          await sample();
+          return !existsSync(frozenMarker);
+        }, 120_000).catch(() => {
+          finding('«Возобновить» не сняло заморозку.');
+          verdict = 'RED';
+        });
+
+        await shot(page, '05-после-возобновления');
+        measure('Заморозка снята кнопкой «Возобновить» — единственным путём назад.');
+      }
+
+      // --- SIGKILL into live parallelism ------------------------------------------------------------
+      note('Ожидание живой параллели, чтобы SIGKILL пришёлся по работающим контейнерам…');
+      await waitFor(async () => {
+        const board = await sample();
+        return countIn(board, 'IN_PROGRESS') >= 2;
+      }, 900_000).catch(() => {
+        note('Параллель ниже двух — SIGKILL придётся по тому, что есть.');
+      });
+
+      const beforeKill = await sample();
+      const runningAtKill = countIn(beforeKill, 'IN_PROGRESS');
+      writeFileSync(
+        join(OUT, 'before-kill.json'),
+        `${JSON.stringify(beforeKill, null, 2)}\n`,
+        'utf8',
       );
-      verdict = 'RED';
-    } else {
-      measure(`План пережил SIGKILL: вех ${String(afterRestart.milestones.length)}.`);
-    }
 
-    note('Возобновление конвейера после рестарта…');
-    const resumed = await fetch(`${BASE_URL}/api/orchestrator/start-loop`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ projectDirectory: PROJECT_DIRECTORY_NAME }),
-    });
-    note(`Возобновление после рестарта: ${String(resumed.status)}`);
+      killServer(true);
+      await new Promise((settle) => setTimeout(settle, 3_000));
+      measure(`SIGKILL при ${String(runningAtKill)} работающих исполнителях.`);
+
+      await startServer('после SIGKILL');
+      await page.goto(BASE_URL);
+      await page.waitForSelector('[data-testid="milestone"]');
+      await shot(page, '06-после-рестарта');
+
+      const afterRestart = await sample();
+      writeFileSync(
+        join(OUT, 'after-restart.json'),
+        `${JSON.stringify(afterRestart, null, 2)}\n`,
+        'utf8',
+      );
+
+      if (afterRestart.milestones.length !== beforeKill.milestones.length) {
+        finding(
+          `План потерян на рестарте: вех до ${String(beforeKill.milestones.length)}, ` +
+            `после ${String(afterRestart.milestones.length)}.`,
+        );
+        verdict = 'RED';
+      } else {
+        measure(`План пережил SIGKILL: вех ${String(afterRestart.milestones.length)}.`);
+      }
+
+      note('Возобновление конвейера после рестарта…');
+      const resumed = await postJson(`${BASE_URL}/api/orchestrator/start-loop`, {
+        projectDirectory: PROJECT_DIRECTORY_NAME,
+      });
+      note(`Возобновление после рестарта: ${String(resumed.status)}`);
+    }
 
     // --- to the end -------------------------------------------------------------------------------
     /*
@@ -855,12 +939,35 @@ async function main(): Promise<void> {
      * executor wrote and broke, a file two tasks disagreed about. Freezing on that is the product
      * working; what a person does next is read the feed and press «Возобновить». A walk that instead
      * sat waiting for a frozen pipeline to finish would be measuring the loop's ability to run
-     * without a human, which is not what «красный CI» claims. Bounded, and every one of them counted:
-     * a plan that needs a fourth rescue is a finding about the plan, not a resume worth making.
+     * without a human, which is not what «красный CI» claims. Bounded, and every one of them counted.
+     *
+     * **A freeze over the iteration ceiling gets the operator's other move first** (task 174): the
+     * task is marked with its own `iterationTimeoutSec` on disk — the mark the schema exists for —
+     * and only then resumed. Resuming without the mark would re-run the same task into the same
+     * ceiling, which round 2's first attempt measured: task 18 died at 900 s, was requeued bare,
+     * and died at 900 s again. A task that hits its ceiling twice *with* the raised mark stays red —
+     * at that point a hang is the better explanation than size.
      */
     note('Ожидание конца плана…');
     const deadline = started + BUDGET_MS;
     let genuineFreezes = 0;
+    /** Tasks the operator marked with a per-task ceiling after a timeout freeze (task 174). */
+    const rescuedCeilings = new Map<string, number>();
+
+    /** The freeze marker's own record — the walk reads the reason the loop wrote, not a guess. */
+    const readFreezeRecord = (): { taskId: string; reason: string } => {
+      const record = readFileSync(frozenMarker, 'utf8');
+      try {
+        const block = /```json\n([\s\S]*?)```/.exec(record);
+        const parsed = JSON.parse(block?.[1] ?? '{}') as { taskId?: unknown; reason?: unknown };
+        return {
+          taskId: typeof parsed.taskId === 'string' ? parsed.taskId : '',
+          reason: typeof parsed.reason === 'string' ? parsed.reason : '',
+        };
+      } catch {
+        return { taskId: '', reason: record.split(NEWLINE).slice(0, 6).join(' ') };
+      }
+    };
 
     await waitFor(async () => {
       const board = await sample();
@@ -872,8 +979,39 @@ async function main(): Promise<void> {
 
       if (existsSync(frozenMarker) && genuineFreezes < MAX_GENUINE_RETRIES) {
         genuineFreezes += 1;
-        const record = readFileSync(frozenMarker, 'utf8').split(NEWLINE).slice(0, 6).join(' ');
-        note(`Настоящий красный вердикт (${String(genuineFreezes)}): ${record.slice(0, 240)}`);
+        const frozen = readFreezeRecord();
+        note(
+          `Настоящий красный вердикт (${String(genuineFreezes)}): задача ${frozen.taskId || '?'} — ` +
+            frozen.reason.slice(0, 200),
+        );
+
+        if (/не уложился/i.test(frozen.reason) && frozen.taskId !== '') {
+          if (rescuedCeilings.has(frozen.taskId)) {
+            note(
+              `Задача ${frozen.taskId} упёрлась в потолок повторно уже С ПОМЕТКОЙ — оператор больше ` +
+                'не поднимает предел: это уже похоже на зависание, а не на размер.',
+            );
+          } else {
+            const ceiling = 1_800;
+            const taskPath = join(
+              projectDirectory,
+              'handoff',
+              'tasks',
+              `task_${frozen.taskId}.json`,
+            );
+            const assignment = JSON.parse(readFileSync(taskPath, 'utf8')) as Record<
+              string,
+              unknown
+            >;
+            assignment.iterationTimeoutSec = ceiling;
+            writeFileSync(taskPath, `${JSON.stringify(assignment, null, 2)}\n`, 'utf8');
+            rescuedCeilings.set(frozen.taskId, ceiling);
+            note(
+              `Оператор помечает задачу ${frozen.taskId}: iterationTimeoutSec=${String(ceiling)} — ` +
+                'штатная механика задачи 174, потом «Возобновить».',
+            );
+          }
+        }
 
         await page.reload();
         await page.getByTestId('retry-pipeline').click();
@@ -887,6 +1025,15 @@ async function main(): Promise<void> {
       measure(
         `Настоящих красных вердиктов за прогон: ${String(genuineFreezes)} — каждый снят кнопкой ` +
           '«Возобновить», как это сделал бы оператор.',
+      );
+    }
+    if (rescuedCeilings.size > 0) {
+      measure(
+        'Пометки per-task потолка за прогон: ' +
+          [...rescuedCeilings.entries()]
+            .map(([taskId, ceiling]) => `задача ${taskId} → ${String(ceiling)} с`)
+            .join(', ') +
+          ' (механика задачи 174, применена оператором прогулки).',
       );
     }
 
@@ -921,8 +1068,22 @@ async function main(): Promise<void> {
     }
 
     if (/не уложился в/i.test(wholeLog)) {
-      finding('Исполнитель упёрся в стенные часы — возможное интерактивное зависание.');
-      verdict = 'RED';
+      /*
+       * The proxy line alone stopped being a verdict when task 174 landed: hitting the ceiling is
+       * now a state the operator has a move for. It is a hang only when the move did not save it —
+       * the task never reached `COMPLETED`, or nobody marked it. A rescued timeout on a finished
+       * plan is a *measurement* of the ceiling, and calling it red would fail the gate for the
+       * exact mechanism the round exists to prove.
+       */
+      if (done === total && total > 0 && rescuedCeilings.size > 0) {
+        measure(
+          'Потолок итерации срабатывал; помеченные задачи доведены до COMPLETED — это работа ' +
+            'предела и пометки, а не зависание.',
+        );
+      } else {
+        finding('Исполнитель упёрся в стенные часы — возможное интерактивное зависание.');
+        verdict = 'RED';
+      }
     }
 
     const unexpected = unexpectedConsole(consoleErrors);
@@ -980,7 +1141,15 @@ async function main(): Promise<void> {
   const durations = iterationSeconds(logged);
   const tariff = tariffLines(logged);
   const throttles = throttleEvents(logged);
-  const overCeiling = durations.filter((value) => value >= 300).length;
+  const overCeiling = durations.filter((value) => value >= ITERATION_CEILING_SECONDS).length;
+
+  /*
+   * `MaxListenersExceededWarning` — the observation of А-26 §6: Node warning about `drain`
+   * listeners on one Gzip stream, a counter that grows with simultaneous containers. Counted here
+   * so the wide run answers «держится или течёт» with a number instead of a memory.
+   */
+  const maxListenersWarnings = (serverLog.join('').match(/MaxListenersExceededWarning/g) ?? [])
+    .length;
 
   writeFileSync(
     join(OUT, 'measurements.json'),
@@ -990,12 +1159,14 @@ async function main(): Promise<void> {
         peakParallel,
         peakInProgress,
         requiredParallel: REQUIRED_PARALLEL,
+        targetParallel: TARGET_PARALLEL,
         samples,
         iterationSeconds: durations,
-        iterationCeilingSeconds: 300,
+        iterationCeilingSeconds: ITERATION_CEILING_SECONDS,
         overCeiling,
         tariff,
         throttles,
+        maxListenersWarnings,
       },
       null,
       2,
@@ -1005,13 +1176,41 @@ async function main(): Promise<void> {
 
   measure(`Длительности итераций: ${describeDistribution(durations)}.`);
   measure(
-    `Потолок итерации 300 с: превышений ${String(overCeiling)} из ${String(durations.length)}.`,
+    `Потолок итерации ${String(ITERATION_CEILING_SECONDS)} с: превышений ${String(overCeiling)} ` +
+      `из ${String(durations.length)}.`,
   );
   measure(
     throttles.length === 0
       ? `Окно тарифа за прогон не закрывалось ни разу (строк о лимите ${String(tariff.length)}, все «allowed»).`
       : `Событий закрытого окна тарифа: ${String(throttles.length)}.`,
   );
+  measure(
+    `MaxListenersExceededWarning в логе сервера: ${String(maxListenersWarnings)} раз(а) ` +
+      `при пике ${String(peakParallel)} контейнеров.`,
+  );
+
+  /*
+   * Run Б's own claim (А-26 §5): the tariff was measured under real width. Either arm of the
+   * disjunction is a result — a peak at or past the target, or the window actually closing.
+   */
+  if (TARGET_PARALLEL > 0) {
+    if (peakParallel >= TARGET_PARALLEL) {
+      measure(
+        `Цель ширины достигнута: пик ${String(peakParallel)} ≥ ${String(TARGET_PARALLEL)} исполнителей.`,
+      );
+    } else if (throttles.length > 0) {
+      measure(
+        `Пик ${String(peakParallel)} ниже цели ${String(TARGET_PARALLEL)}, но окно тарифа закрывалось — ` +
+          'упор в лимит подписки, и это тоже результат замера (А-26 §5).',
+      );
+    } else {
+      finding(
+        `Замер тарифа не состоялся: пик ${String(peakParallel)} < ${String(TARGET_PARALLEL)} ` +
+          'и окно тарифа ни разу не закрылось — план не дал настоящей ширины.',
+      );
+      verdict = 'RED';
+    }
+  }
 
   /*
    * The cascade. A tariff window closing is a *working state*: the pipeline pauses and goes on. If
@@ -1046,7 +1245,13 @@ function readVram(): string | null {
   if (!existsSync(path)) return null;
 
   try {
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as {
+    /*
+     * The BOM, stripped. Windows PowerShell 5.1 writes UTF-8 **with** one — the monitor's own
+     * file even documents why it must — and Node's `JSON.parse` refuses a document that starts
+     * with U+FEFF. The rehearsal caught the pair: a perfectly good measurement reported as
+     * «итог нечитаем», which is D-294's defect class wearing the opposite sign.
+     */
+    const parsed = JSON.parse(readFileSync(path, 'utf8').replace(/^\uFEFF/, '')) as {
       available?: boolean;
       peakMb?: number | null;
       thresholdMb?: number;
@@ -1075,6 +1280,14 @@ function writeResult(
     `# Гейт M16а — ${verdict}`,
     '',
     `* **Режим:** ${STUB ? 'репетиция на стабовом исполнителе' : 'живой исполнитель Claude Code'}`,
+    `* **Инсценировки:** ${
+      STAGED
+        ? 'красный CI и SIGKILL — в этом прогоне'
+        : 'пропущены (GATE_STAGED=0; доказаны раундом 1, А-26 §8)'
+    }`,
+    ...(TARGET_PARALLEL > 0
+      ? [`* **Цель ширины (прогон Б):** ≥${String(TARGET_PARALLEL)} исполнителей или упор в лимит`]
+      : []),
     `* **Проект:** ${projectId}`,
     `* **Длительность:** ${minutes} мин`,
     `* **Бандл:** ${BUNDLE_SOURCE}`,

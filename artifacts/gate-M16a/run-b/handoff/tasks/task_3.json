@@ -1,0 +1,14 @@
+{
+  "taskId": "3",
+  "milestoneId": "ms_03",
+  "title": "Написать процесс-тесты cli.js для temperature-converter (успех, --help, все сценарии ошибок, --out, stdin-fallback, отсутствие сетевых require)",
+  "description": "_Dependencies: 2_",
+  "techStack": "nodejs",
+  "filesToEdit": [],
+  "dependsOn": [
+    "2"
+  ],
+  "unitTestCmd": "npm test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}
