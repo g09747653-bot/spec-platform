@@ -1,0 +1,39 @@
+{
+  "status": 200,
+  "body": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "text": "Собери консольный планировщик личных дел. Нужно добавлять дела с датой, показывать список на сегодня и отмечать сделанные. Данные храни в локальном файле.",
+              "thoughtSignature": "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"
+            }
+          ],
+          "role": "model"
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 377,
+      "candidatesTokenCount": 39,
+      "totalTokenCount": 848,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 33
+        },
+        {
+          "modality": "AUDIO",
+          "tokenCount": 344
+        }
+      ],
+      "thoughtsTokenCount": 432,
+      "serviceTier": "standard"
+    },
+    "modelVersion": "gemini-3.5-flash",
+    "responseId": "TGGIaqHtGpSE7M8Pxai_-Qw"
+  }
+}
