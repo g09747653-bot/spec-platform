@@ -1,0 +1,18 @@
+{
+  "taskId": "22",
+  "milestoneId": "ms_08",
+  "title": "Настроить кроссплатформенную сборку и CI-матрицу",
+  "description": "1. Создай GitHub Actions workflow `.github/workflows/ci.yml`, срабатывающий на `push` и `pull_request` для всех веток (каждое изменение, NFR-8). 2. В workflow добавь job `test` с matrix `os: [ubuntu-latest, windows-latest, macos-latest]`, выполняющий `go build ./...` и `go test ./...` на каждой из трёх ОС — это покрывает требование прогона полного тестового набора на Windows, macOS и Linux. 3. Добавь отдельный job `cross-build` (можно на `ubuntu-latest`, так как cross-compilation в Go не требует физического целевого хоста при `CGO_ENABLED=0`), который матрицей `GOOS/GOARCH` собирает бинарник `cmd/unitconv` для пяти целей: `windows/amd64`, `darwin/amd64`, `darwin/arm64`, `linux/amd64`, `linux/arm64`. 4. Вынеси логику кросс-сборки в скрипт `scripts/build-all.sh`, принимающий пары GOOS/GOARCH, вызывающий `CGO_ENABLED=0 GOOS=... GOARCH=... go build -o dist/unitconv-$GOOS-$GOARCH ./cmd/unitconv` для каждой цели и завершающийся ненулевым кодом при любой ошибке сборки; workflow должен вызывать этот скрипт, а не дублировать команды сборки внутри YAML. 5. Убедись, что оба job'а (`test` и `cross-build`) обязаны завершиться успешно, чтобы workflow в целом считался успешным (fail-fast по умолчанию matrix-стратегии не отключай без причины). 6. Не добавляй публикацию артефактов, релизы или деплой — задача ограничена сборкой и тестовым прогоном.",
+  "techStack": "go",
+  "filesToEdit": [
+    ".github/workflows/ci.yml",
+    "scripts/build-all.sh"
+  ],
+  "dependsOn": [
+    "20",
+    "21"
+  ],
+  "unitTestCmd": "sh scripts/build-all.sh && go test ./...",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

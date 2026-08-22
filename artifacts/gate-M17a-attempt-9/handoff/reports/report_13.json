@@ -1,0 +1,16 @@
+{
+  "reportId": "report_13",
+  "taskId": "13",
+  "projectId": "unitconv",
+  "executorId": "claude-agent",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 97,
+    "passed": 95,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "Добавлен единственный недостающий сценарий — эмуляция сбоя между записью временного файла и os.Rename",
+  "rationale": "Слой хранения истории — фактически internal/history (Store: Load/Append/writeAtomic, см. architecture.md, раздел «Модули»); internal/storage/store.go — тонкий алиас поверх него, созданный задачей 11 и не подлежащий переструктурированию. Из пяти сценариев, требуемых задачей, четыре уже были полностью реализованы предыдущими задачами (10-12) в internal/history/history_test.go: добавление в пустую историю (TestAppend_EmptyHistory), переполнение на 11-й записи с проверкой вытеснения самой старой и сохранения порядка (TestAppend_TruncatesToTenOnEleventh), чтение при отсутствующем файле (TestLoad_MissingFile), чтение при повреждённом JSON с проверкой apperr.EnvironmentError (TestLoad_CorruptedFile). Единственный отсутствовавший сценарий — эмуляция сбоя между записью временного файла и os.Rename (проверка NFR-2) — ни в internal/history, ни в internal/storage тестов на это не было (проверено grep по 'Rename|crash|atomic' в *_test.go — пусто). Добавлен TestCrashBetweenTempWriteAndRename в internal/history/history_test.go: тест сначала сохраняет валидную историю через настоящий Store.Append, затем напрямую (без изменения продуктивного кода) создаёт временный файл в той же директории с тем же префиксом '.tmp-*', который использует writeAtomic, заполняет его новыми данными и намеренно не вызывает os.Rename — это и есть точка прерывания. Далее тест проверяет побайтовое совпадение history.json с состоянием до 'сбоя' и успешную загрузку через Store.Load(). Продуктивный код не менялся: тесты не вскрыли баг, writeAtomic в internal/history/history.go корректно реализует temp+Sync+Rename с очисткой временного файла на любой ошибке. Go в окружении отсутствовал изначально; установлен через apt-get install golang-go (go1.19.8), как и в предыдущих итерациях. go vet ./... — чисто; go test ./... — 95 PASS, 2 SKIP (ожидаемые скипы TestAppend_ReadOnlyDirectoryWrapsEnvironmentError в internal/history и internal/storage — исполнитель работает от root, для которого Unix-права каталога не действуют, что уже объяснено в тексте самого теста), 0 FAIL.",
+  "note": "testsRun.total/passed посчитаны по go test ./... -v (все top-level тесты и подтесты всех пакетов модуля), включая новый TestCrashBetweenTempWriteAndRename; 2 SKIP не считаются ни passed, ни failed."
+}

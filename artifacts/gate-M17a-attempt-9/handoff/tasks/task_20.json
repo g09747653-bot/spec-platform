@@ -1,0 +1,16 @@
+{
+  "taskId": "20",
+  "milestoneId": "ms_07",
+  "title": "Написать интеграционные (чёрный ящик) тесты CLI",
+  "description": "Запускать собранный бинарник через `os/exec` с подстановкой `HOME`/`USERPROFILE` на временную директорию для каждого теста; проверять полный stdout, полный stderr, код завершения и обязательное наличие единиц измерения в каждом выводимом числе.\n  _Dependencies: 19_",
+  "techStack": "go",
+  "filesToEdit": [
+    "os/exec"
+  ],
+  "dependsOn": [
+    "19"
+  ],
+  "unitTestCmd": "go test ./...",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

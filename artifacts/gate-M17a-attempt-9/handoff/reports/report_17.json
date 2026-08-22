@@ -1,0 +1,15 @@
+{
+  "reportId": "report_17",
+  "taskId": "17",
+  "projectId": "unitconv",
+  "executorId": "claude-agent",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 62,
+    "passed": 62,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "Повторная проверка: реализация задачи 17 в internal/cli/history.go, history_test.go и cli.go уже присутствовала в рабочей директории и полностью соответствует требованиям задачи",
+  "rationale": "Файл handoff/reports/verdict_17.md отсутствует (не найден ни один сигнал отклонения предыдущей попытки), а internal/cli/history.go, internal/cli/history_test.go и internal/cli/cli.go уже содержат рабочую реализацию: handleHistory вызывает только history.NewStore(path).Load() (без обращения к internal/convert), printHistory разворачивает срез записей для вывода новые→старые (FR-11), пустая история печатает 'История переводов пуста.' и возвращает nil (код 0, FR-12), форматирование строки делегировано в internal/format.FormatHistoryLine (без дублирования логики округления/отображения единиц), а ошибка чтения (повреждённый JSON) пробрасывается наверх и обрабатывается через apperr.Print в dispatchHistory — historyHandler подключён в var-блоке cli.go. Компилятор Go отсутствовал в окружении при старте этой попытки — переустановлен через apt-get (golang-go, go1.19.8). После установки go build ./..., go vet ./..., gofmt -l . (пусто) и go test ./... по всему модулю прошли без ошибок (62/62 тестов верхнего уровня, 0 провалов), включая 3 теста задачи 17 в history_test.go: несколько записей с проверкой порядка новые→старые, пустая история (сообщение + код 0), повреждённый JSON (тип ошибки *apperr.EnvironmentError и код завершения 2 через полный Run). Изменений в код не вносилось — существующая реализация уже корректна и покрыта тестами."
+}

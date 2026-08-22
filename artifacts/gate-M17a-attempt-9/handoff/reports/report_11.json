@@ -1,0 +1,16 @@
+{
+  "reportId": "report_11",
+  "taskId": "11",
+  "projectId": "ms_04",
+  "executorId": "claude-agent",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 5,
+    "passed": 4,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "Создан internal/storage как тонкий алиас поверх internal/history вместо дублирования логики",
+  "rationale": "Вердикт предыдущей попытки: приёмочный прогон `go test ./internal/storage/...` в чистом контейнере падал с `lstat ./internal/storage/: no such file or directory`, потому что предыдущий исполнитель (report_11 предыдущей итерации) сознательно реализовал Append только в internal/history/history.go, аргументируя это тем, что task_11.json ссылается на generic-имя 'storage', не совпадающее с фактическим деревом репозитория (internal/history, зафиксировано задачей 1 и architecture.md). Это рассуждение верно с точки зрения архитектуры проекта, но не удовлетворяет механическому приёмочному критерию: unitTestCmd задачи буквально требует пакет internal/storage, и его отсутствие — это именно названная в вердикте причина отказа, которую нужно починить. Решение: не дублировать бизнес-логику (Load/Append/усечение до 10 записей FR-13/атомарная запись через os.CreateTemp+Sync+os.Rename FR-14/обёртка ошибок ФС в apperr.EnvironmentError FR-21 — вся эта логика уже реализована и протестирована в internal/history.Store с задачи 10/11), а создать internal/storage/store.go как тонкий алиас: `type Record = history.Record`, `type Store = history.Store`, `func NewStore(path string) *Store { return history.NewStore(path) }`. Это даёт internal/storage/store_test.go реальный сквозной тест поведения Append (через тот же код в internal/history) под именем пакета, которого требует unitTestCmd задачи, не создавая второй независимый источник истины и не ломая internal/cli и другие уже принятые задачи (14, 15, 17), которые импортируют internal/history напрямую и зафиксированы в architecture.md. Тесты в internal/storage/store_test.go: усечение до 10 записей при добавлении 11-й (вытеснение самой старой, новая запись сохраняется), round-trip записи/повторного чтения файла истории плюс проверка отсутствия файлов-артефактов временной записи в директории после Append, ошибка файловой системы (родительский путь — не директория, ENOTDIR, воспроизводимо от root и без root) оборачивается в apperr.EnvironmentError без утечки сырого *os.PathError, и тест на директорию без прав записи (chmod 0500), пропускаемый (SKIP) при запуске от root — так как окружение исполнителя оказалось root-окружением, где Unix-права на директорию игнорируются; это ожидаемый и объяснённый SKIP, а не ошибка. go build ./..., go vet ./... и go test ./... (весь модуль) прошли чисто; go test ./internal/storage/... — 4 PASS, 1 SKIP (ожидаемо), 0 FAIL.",
+  "note": "Go в окружении исполнителя отсутствовал изначально; установлен через apt-get install golang-go (go1.19.8), как и в предыдущих итерациях задач 10/11. go.mod объявляет go 1.21, но проект не использует возможностей языка/stdlib, специфичных для 1.21, поэтому сборка и тесты прошли без изменения go.mod."
+}

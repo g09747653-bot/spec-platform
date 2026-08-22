@@ -1,0 +1,17 @@
+{
+  "taskId": "12",
+  "milestoneId": "ms_05",
+  "title": "Настроить права доступа к каталогу и файлу истории",
+  "description": "1. Внимательно прочитай `bundle/requirements.json` и найди пункт с идентификатором NFR-5 — это источник истины для данной задачи. В самой записи задачи упомянут файл `solution.md`, но такого файла в бандле нет (есть только `architecture.md`, `constitution.md`, `requirements.json`, `tasks.json`); не пытайся его найти или создать, ориентируйся на `requirements.json` и `architecture.md`.\n2. Найди в пакете `internal/storage` код, отвечающий за определение пути к каталогу `~/.unitconv/` (обычно через `os.UserHomeDir()`) и файлу `history.json`, а также код чтения/добавления/усечения истории и её атомарной записи (реализован в задаче 11 — не переписывай саму логику атомарности, только права доступа).\n3. Убедись, что каталог создаётся вызовом вида `os.MkdirAll(dirPath, 0700)`: на POSIX-системах Go применит режим 0700 к вновь созданному каталогу; на Windows это же значение будет проигнорировано рантаймом, и каталог унаследует NTFS-права родительского каталога профиля пользователя — это ожидаемое и достаточное поведение, отдельного кода под Windows писать не нужно.\n4. Убедись, что финальный файл `history.json` (и временный файл, используемый для атомарной перезаписи через rename) создаётся с режимом 0600, например через `os.OpenFile(path, os.O_CREATE|os.O_WRONLY|..., 0600)` или `os.WriteFile(path, data, 0600)`.\n5. Не добавляй принудительный `chmod` на уже существующие каталог/файл при каждом запуске программы — режим должен выставляться только в момент создания (флаг `O_CREATE`), чтобы не переопределять права, изменённые пользователем вручную.\n6. Проверь, что команда `convert` по-прежнему успешно создаёт каталог и файл истории при первом запуске (когда их ещё нет), и что повторные запуски не ломаются на уже существующих каталоге/файле.",
+  "techStack": "go",
+  "filesToEdit": [
+    "internal/storage/storage.go"
+  ],
+  "dependsOn": [
+    "11"
+  ],
+  "unitTestCmd": "go test ./internal/storage/...",
+  "e2eTestCmd": "go build -o /tmp/unitconv_bin ./cmd/unitconv && rm -rf /tmp/uctest_home && mkdir -p /tmp/uctest_home && HOME=/tmp/uctest_home /tmp/unitconv_bin convert length 1 m km >/dev/null && test \"$(stat -c %a /tmp/uctest_home/.unitconv)\" = \"700\" && test \"$(stat -c %a /tmp/uctest_home/.unitconv/history.json)\" = \"600\"",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}
