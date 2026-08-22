@@ -346,7 +346,14 @@ interface OpenTask {
   body: ScannedLine[];
   /** Dependencies the entry line itself stated — the Spec-Kit inline clause (D-316). */
   inlineDepends: string[];
+  /** True for the lettered-checkbox shape — the one whose phases carry the ordering (D-317). */
+  lettered: boolean;
+  /** Index of the phase heading this entry sits under; 0 before any phase heading. */
+  phase: number;
 }
+
+/** `## Phase 3: …` / `## Фаза 2 — …` — the phase headings the Spec-Kit plan orders itself by. */
+const PHASE_HEADING = /^(?:phase|фаза)\s+\d+/i;
 
 /**
  * Every task entry the document states, in document order.
@@ -354,10 +361,22 @@ interface OpenTask {
  * A heading entry's body runs to the next entry or to any heading at its own level or shallower —
  * the next milestone ends the last task of the previous one. A checkbox entry's body runs to the
  * next entry or to any heading at all. Fenced lines are body wherever they fall, never boundaries.
+ *
+ * **Lettered entries additionally inherit their phase's ordering** (D-317). The Spec-Kit plan
+ * carries most of its order in `## Phase N` headings and prose («ни одна история не может быть
+ * начата до завершения этой фазы») rather than in per-task clauses: the live acceptance plan
+ * stated 7 inline clauses across 41 tasks, the other 34 exported with an empty `dependsOn`, and
+ * the loop's scheduler honestly started T019 alongside T001 — five tasks blocked on missing
+ * prerequisites in the first wave. So every lettered task depends on every task of the previous
+ * phase, conservatively — exactly the fallback the intake applies to a fully clause-less plan
+ * (task 156), applied here where the phases are still visible. Scoped to the lettered shape on
+ * purpose: the historical goldens of the other shapes are dependency-free records and must keep
+ * exporting byte-for-byte.
  */
 export function parseTaskEntries(tasksMarkdown: string): MachineTaskRow[] {
-  const rows: MachineTaskRow[] = [];
+  const rows: (MachineTaskRow & { lettered: boolean; phase: number })[] = [];
   let open: OpenTask | null = null;
+  let phase = 0;
 
   const close = () => {
     if (open === null) return;
@@ -384,12 +403,21 @@ export function parseTaskEntries(tasksMarkdown: string): MachineTaskRow[] {
         ]),
       ],
       metadata: { expectedArtifacts: [] },
+      lettered: open.lettered,
+      phase: open.phase,
     });
     open = null;
   };
 
   for (const line of scanLines(tasksMarkdown)) {
     if (!line.fenced) {
+      const anyHeading = HEADING.exec(line.text);
+      if (anyHeading !== null && PHASE_HEADING.test(stripEmphasis(anyHeading[2] ?? ''))) {
+        close();
+        phase += 1;
+        continue;
+      }
+
       const heading = TASK_HEADING.exec(line.text);
       if (heading !== null) {
         close();
@@ -399,6 +427,8 @@ export function parseTaskEntries(tasksMarkdown: string): MachineTaskRow[] {
           level: (heading[1] ?? '').length,
           body: [],
           inlineDepends: [],
+          lettered: false,
+          phase,
         };
         continue;
       }
@@ -412,6 +442,8 @@ export function parseTaskEntries(tasksMarkdown: string): MachineTaskRow[] {
           level: null,
           body: [],
           inlineDepends: [],
+          lettered: false,
+          phase,
         };
         continue;
       }
@@ -434,6 +466,8 @@ export function parseTaskEntries(tasksMarkdown: string): MachineTaskRow[] {
           level: null,
           body: [],
           inlineDepends: inline === null ? [] : parseDependsOn(inline[1] ?? ''),
+          lettered: true,
+          phase,
         };
         continue;
       }
@@ -447,6 +481,8 @@ export function parseTaskEntries(tasksMarkdown: string): MachineTaskRow[] {
           level: null,
           body: [],
           inlineDepends: [],
+          lettered: false,
+          phase,
         };
         continue;
       }
@@ -466,7 +502,24 @@ export function parseTaskEntries(tasksMarkdown: string): MachineTaskRow[] {
   }
 
   close();
-  return rows;
+
+  /* The phase ordering, made explicit for the lettered shape (D-317) — see the doc block above. */
+  const letteredPhases = [
+    ...new Set(rows.filter((row) => row.lettered).map((row) => row.phase)),
+  ].sort((a, b) => a - b);
+
+  for (const row of rows) {
+    if (!row.lettered) continue;
+    const at = letteredPhases.indexOf(row.phase);
+    if (at <= 0) continue;
+
+    const previous = rows
+      .filter((other) => other.lettered && other.phase === letteredPhases[at - 1])
+      .map((other) => other.taskId);
+    row.dependsOn = [...new Set([...row.dependsOn, ...previous])];
+  }
+
+  return rows.map(({ lettered: _lettered, phase: _phase, ...row }) => row);
 }
 
 export function deriveTasks(
