@@ -157,15 +157,21 @@ beforeAll(async () => {
   }
 
   await ensureExecutorImage(engine);
-  if (!(await engine.hasImage('node:24-bookworm-slim'))) {
-    await engine.pullImage('node:24-bookworm-slim');
+  /* The neutral image is the observer's and the copy's (D-314); the node image runs the tests. */
+  for (const image of ['node:24-bookworm-slim', 'debian:bookworm-slim']) {
+    if (!(await engine.hasImage(image))) await engine.pullImage(image);
   }
 }, 40 * 60_000);
 
 afterAll(async () => {
   if (!reachable) return;
 
-  for (const name of ['delivery-executor-cycle_1', 'delivery-gate-cycle_1-unit']) {
+  for (const name of [
+    'delivery-executor-cycle_1',
+    'delivery-gate-cycle_1-copy',
+    'delivery-gate-cycle_1-observe',
+    'delivery-gate-cycle_1-unit',
+  ]) {
     const leftover = await engine.findByName(name);
     if (leftover !== null) await engine.removeContainer(leftover, { force: true });
   }

@@ -1,12 +1,4 @@
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  utimesSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
@@ -95,13 +87,18 @@ function writeTree(tasks: readonly HandoffTask[]): void {
   );
 }
 
+/** Ответ наблюдателя копии: generic-листинг — команды у заданий этого файла свои (stated). */
+const EMPTY_LISTING = { exitCode: 0, stdout: ['__LOOP_OBSERVE_MANIFEST__'] };
+
 /** An executor that never returns; the deadline is the only way the cycle can end. */
 function hangingExecutor() {
   return createFakeEngine({
-    onStart: ({ name }) =>
-      name.startsWith('delivery-executor-')
-        ? { stdout: ['работаю…'], until: new Promise<void>(() => undefined) }
-        : { exitCode: 0 },
+    onStart: ({ name }) => {
+      if (name.startsWith('delivery-executor-')) {
+        return { stdout: ['работаю…'], until: new Promise<void>(() => undefined) };
+      }
+      return name.endsWith('-observe') ? EMPTY_LISTING : { exitCode: 0 };
+    },
   });
 }
 
@@ -211,29 +208,40 @@ describe('вердикт приёмки — исполнителю повтор�
       2,
     );
 
+  /** Снимки дерева, какими их отдаёт контейнерный наблюдатель (D-314): дифф и есть «правки». */
+  const BASE_TREE = ['f 10 100.0 ./src/util.js', 'd 4096 100.0 ./src'];
+  const EDITED_TREE = ['f 24 200.0 ./src/util.js', 'd 4096 200.0 ./src'];
+
   /**
-   * Один стаб-цикл: исполнитель пишет отчёт (и правит файл, когда велено), контейнер `-unit`
-   * выходит кодом, который назначил кейс. Свежий движок на каждый цикл, чтобы утверждать «приёмка
-   * не запускалась» по контейнерам ИМЕННО этого цикла.
+   * Один стаб-цикл: исполнитель пишет отчёт, наблюдатель отвечает снимками (после итерации —
+   * правленым, когда велено), контейнер `-unit` выходит кодом, который назначил кейс. Свежий
+   * движок на каждый цикл, чтобы утверждать «приёмка не запускалась» по контейнерам ИМЕННО этого
+   * цикла. Хостовый workspace НЕ трогается правками вовсе: цикл обязан судить по снимкам
+   * наблюдателя, а не по хостовому взгляду — это и есть шов D-314.
    */
-  const cycle = (unitExitCode: number, executorEdits: boolean) => {
+  const cycle = (
+    unitExitCode: number,
+    executorEdits: boolean,
+    overrides: Record<string, { exitCode?: number; stdout?: string[] }> = {},
+  ) => {
     const engine = createFakeEngine({
       onStart: ({ name }) => {
+        const suffix = Object.keys(overrides).find((key) => name.endsWith(key));
+        if (suffix !== undefined) return overrides[suffix] ?? { exitCode: 0 };
+
         if (name.startsWith('delivery-executor-')) {
           writeFileSync(
             join(projectDirectory, HANDOFF.reports, `report_${TASK}.json`),
             successReport(),
             'utf8',
           );
-          if (executorEdits) {
-            writeFileSync(
-              join(projectDirectory, 'src', 'util.js'),
-              `// правка ${String(Date.now())}\n`,
-              'utf8',
-            );
-          }
           return { exitCode: 0 };
         }
+        if (name.endsWith('-snapshot-before')) return { exitCode: 0, stdout: BASE_TREE };
+        if (name.endsWith('-snapshot-after')) {
+          return { exitCode: 0, stdout: executorEdits ? EDITED_TREE : BASE_TREE };
+        }
+        if (name.endsWith('-observe')) return EMPTY_LISTING;
         if (name.endsWith('-unit')) return { exitCode: unitExitCode };
         return { exitCode: 0 };
       },
@@ -255,22 +263,8 @@ describe('вердикт приёмки — исполнителю повтор�
     };
   };
 
-  /** Рабочее дерево «постарело»: правки прошлого цикла не должны выглядеть правками нового. */
-  const ageWorkspace = () => {
-    const past = new Date(Date.now() - 60_000);
-    for (const path of [
-      join(projectDirectory, 'src', 'util.js'),
-      join(projectDirectory, 'src'),
-      join(projectDirectory, 'package.json'),
-    ]) {
-      if (existsSync(path)) utimesSync(path, past, past);
-    }
-  };
-
   beforeEach(() => {
     writeTree([task(TASK)]);
-    mkdirSync(join(projectDirectory, 'src'), { recursive: true });
-    ageWorkspace();
   });
 
   it('красный вердикт ложится на диск с причиной; зелёный повтор с правками уносит его', async () => {
@@ -283,7 +277,6 @@ describe('вердикт приёмки — исполнителю повтор�
     expect(text).toContain('НЕ ПРИНЯТА');
     expect(text).toContain('вернул 1');
 
-    ageWorkspace();
     const green = cycle(0, true);
     const second = await green.run();
 
@@ -296,17 +289,18 @@ describe('вердикт приёмки — исполнителю повтор�
     await red.run();
     expect(hasRedVerdict(projectDirectory, TASK)).toBe(true);
 
-    ageWorkspace();
     const repeat = cycle(0, false);
     const result = await repeat.run();
 
     expect(result.outcome).toBe('FAILED');
     expect(result.reason).toContain('Повтор без правок при красной причине');
     expect(result.acceptance).toBeNull();
-    /* Приёмка этого цикла не начиналась: ни копии, ни тестового контейнера. */
-    expect(repeat.engine.containers.filter((c) => c.name.includes('delivery-gate-'))).toHaveLength(
-      0,
-    );
+    /* Приёмка этого цикла не начиналась: ни копии, ни тестового контейнера — снимки не в счёт. */
+    expect(
+      repeat.engine.containers.filter(
+        (c) => c.name.includes('delivery-gate-') && !c.name.includes('-snapshot-'),
+      ),
+    ).toHaveLength(0);
 
     /* Вердикт обновлён отказом, прежняя причина сохранена — повтор читает обе. */
     const text = readFileSync(verdictPath(projectDirectory, TASK), 'utf8');
@@ -318,11 +312,9 @@ describe('вердикт приёмки — исполнителю повтор�
     /* Красный → отказ повтора (как выше) → и ТРЕТИЙ заход без правок: причина могла быть
        переходной (образ, PATH, среда) — решает перепрогон приёмки, а не вечный отказ. */
     await cycle(1, true).run();
-    ageWorkspace();
     const refused = await cycle(0, false).run();
     expect(refused.reason).toContain('Повтор без правок');
 
-    ageWorkspace();
     const third = cycle(0, false);
     const result = await third.run();
 
@@ -332,11 +324,32 @@ describe('вердикт приёмки — исполнителю повтор�
     expect(hasRedVerdict(projectDirectory, TASK)).toBe(false);
   });
 
-  it('стек перепроверяется ПЕРЕД приёмкой: маркер, созданный исполнителем во время итерации, судится, а не снимок старта (находка гейта M17а)', async () => {
-    /* Задание без команд, workspace без манифеста: на старте цикла стек generic и приёмке было
-       бы «нечего запускать». Исполнитель кладёт package.json ВНУТРИ итерации — суд обязан видеть
-       уже nodejs и запустить npm test. До правки этот класс дал каскад 127/отказов в параллельной
-       вехе живого прогона. */
+  it('«без правок» доказывают только два УДАВШИХСЯ снимка: не взятый снимок читается как правка (дух D-308)', async () => {
+    await cycle(1, true).run();
+    expect(hasRedVerdict(projectDirectory, TASK)).toBe(true);
+
+    /* Наблюдатель снимка «до» слеп (например, образа нет) — отказ 176 по сомнению невозможен:
+       повтор уходит приёмке, и зелёный перепрогон честно закрывает задачу. */
+    const doubted = cycle(0, false, { '-snapshot-before': { exitCode: 1 } });
+    const result = await doubted.run();
+
+    expect(result.outcome).toBe('COMPLETED');
+    expect(doubted.engine.containers.some((c) => c.name.endsWith('-unit'))).toBe(true);
+
+    const feed = database
+      .prepare('SELECT message FROM agent_logs ORDER BY log_id')
+      .all()
+      .map((row) => String((row as { message: unknown }).message))
+      .join('\n');
+    expect(feed).toContain('Снимок дерева до итерации не взят');
+  });
+
+  it('суд видит мир контейнерным листингом в момент суда: маркер, созданный во время итерации, судится (находка гейта M17а, D-314)', async () => {
+    /* Задание без команд, ХОСТОВЫЙ workspace без манифеста — хостовыми глазами стек generic и
+       приёмке было бы «нечего запускать». Наблюдатель копии отвечает листингом с package.json:
+       суд обязан судить по нему — nodejs, npm test — и переписать задание. До правки этот класс
+       дал каскад 127/отказов в параллельной вехе живого прогона; слепоту хоста к контейнерным
+       записям в тесте не воспроизвести, поэтому тестируется шов: листинг решает, хост — нет. */
     rmSync(join(projectDirectory, 'package.json'), { force: true });
     writeFileSync(
       join(projectDirectory, HANDOFF.tasks, taskFileName(TASK)),
@@ -365,12 +378,17 @@ describe('вердикт приёмки — исполнителю повтор�
             successReport(),
             'utf8',
           );
-          writeFileSync(
-            join(projectDirectory, 'package.json'),
-            JSON.stringify({ name: 'born-mid-cycle', scripts: { test: 'node -e 0' } }),
-            'utf8',
-          );
           return { exitCode: 0 };
+        }
+        if (name.endsWith('-observe')) {
+          return {
+            exitCode: 0,
+            stdout: [
+              './package.json',
+              '__LOOP_OBSERVE_MANIFEST__',
+              '{"scripts":{"test":"node -e 0"}}',
+            ],
+          };
         }
         return { exitCode: 0 };
       },
@@ -390,6 +408,13 @@ describe('вердикт приёмки — исполнителю повтор�
     expect(result.outcome).toBe('COMPLETED');
     expect(result.techStackRewritten).toBe(true);
     expect(engine.containers.some((c) => c.name.endsWith('-unit'))).toBe(true);
+
+    /* Чем судили — на диске: следующий читатель задания видит стек вердикта. */
+    const onDisk = HandoffTask.parse(
+      JSON.parse(readFileSync(join(projectDirectory, HANDOFF.tasks, taskFileName(TASK)), 'utf8')),
+    );
+    expect(onDisk.techStack).toBe('nodejs');
+    expect(onDisk.unitTestCmd).toBe('npm test');
   });
 
   it('приёмка гоняет команды через sh -c, не -lc: login-шелл терял toolchain-PATH (находка гейта M17а)', async () => {
@@ -404,7 +429,6 @@ describe('вердикт приёмки — исполнителю повтор�
     const red = cycle(1, true);
     await red.run();
 
-    ageWorkspace();
     const repeat = cycle(1, true);
     const result = await repeat.run();
 

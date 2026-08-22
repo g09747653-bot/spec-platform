@@ -9,6 +9,7 @@ import { readBoard } from '../db/board.ts';
 import { openMigratedDatabase } from '../db/migrate.ts';
 import { createFakeEngine, type FakeEngine } from '../docker/testing/fake-engine.ts';
 import { acceptanceContainerName } from '../gate/accept.ts';
+import { observerStubOutcome } from '../gate/testing/observer-stub.ts';
 import { executorContainerName } from '../executor/run.ts';
 import { HANDOFF, HandoffTask, importHandoff, taskFileName } from '../intake/handoff.ts';
 import { createLogger, type Logger } from '../observability/log.ts';
@@ -156,7 +157,7 @@ describe('many executors at once (task 159)', () => {
 
     const engine: FakeEngine = createFakeEngine({
       onStart: ({ name, spec }) => {
-        if (!name.startsWith('delivery-executor-')) return {};
+        if (!name.startsWith('delivery-executor-')) return observerStubOutcome(name) ?? {};
 
         const taskId = name.replace('delivery-executor-', '');
         writeReport(taskId);
@@ -223,7 +224,7 @@ describe('many executors at once (task 159)', () => {
 
     const engine = createFakeEngine({
       onStart: ({ name }) => {
-        if (!name.startsWith('delivery-executor-')) return {};
+        if (!name.startsWith('delivery-executor-')) return observerStubOutcome(name) ?? {};
         const taskId = name.replace('delivery-executor-', '');
         writeReport(taskId);
         live += 1;
@@ -271,7 +272,7 @@ describe('the tariff window closing mid-run (task 159; А-24 §2)', () => {
 
     const engine = createFakeEngine({
       onStart: ({ name }) => {
-        if (!name.startsWith('delivery-executor-')) return {};
+        if (!name.startsWith('delivery-executor-')) return observerStubOutcome(name) ?? {};
         const taskId = name.replace('delivery-executor-', '');
         startedIn.push(taskId);
         writeReport(taskId);
@@ -363,7 +364,7 @@ describe('красный CI: the whole orchestration stops (task 160)', () => {
           return { exitCode: 1, stdout: ['1 test failed'] };
         }
 
-        return {};
+        return observerStubOutcome(name) ?? {};
       },
     });
 

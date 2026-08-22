@@ -9,7 +9,13 @@ import type { HandoffTask, TechStack } from '../intake/handoff.ts';
 
 import { runInCleanCopy } from './clean-run.ts';
 import { runController, type ControllerVerdict } from './controller.ts';
-import { commandsRefusal, type ResolvedCommands } from './tech-stack.ts';
+import { observeProjectRoot } from './observe.ts';
+import {
+  commandsRefusal,
+  detectStackFromObservation,
+  resolveCommands,
+  type ResolvedCommands,
+} from './tech-stack.ts';
 
 /** One entry of `expectedArtifacts`, as the assignment carries it. */
 export type ExpectedArtifact = HandoffTask['expectedArtifacts'][number];
@@ -45,6 +51,14 @@ export type ExpectedArtifact = HandoffTask['expectedArtifacts'][number];
  * bind-mounted, source read-only. No host-side recursive copy of a `node_modules` tree, no Windows
  * symlink privilege in the picture, and the copy is faithful enough that the tests run against what
  * the executor actually produced.
+ *
+ * **The stack is decided here too, from a container's listing of the copy — never from the host's
+ * view of the workspace** (D-314; принцип А-30). The live M17а gate measured the long-lived server
+ * process staying blind for ten minutes to a `go.mod` a container had written: a host-eyed
+ * detection judged yesterday's world, sent a live Go project into the `debian` image, and every
+ * command answered 127. The acceptance therefore observes the copy it is about to judge, with the
+ * same eyes that will run the tests, at the moment of judgment — which also *is* the re-detection
+ * before the verdict: there is no earlier snapshot left to trust.
  */
 
 /** The image the acceptance run uses per stack. `generic` needs the assignment's own commands. */
@@ -69,6 +83,13 @@ export interface AcceptanceVerdict {
   accepted: boolean;
   /** Why, in one sentence, for the feed and the report. */
   reason: string;
+  /**
+   * What the gate judged against — stack and commands, decided from the container's observation of
+   * the copy (D-314). Null when the run never got that far (no copy, no observation): then nothing
+   * about the project was decided at all. The cycle writes a non-null answer back into the
+   * assignment, because the disk is the source of truth.
+   */
+  commands: ResolvedCommands | null;
   unitExitCode: number | null;
   e2eExitCode: number | null;
   artifacts: ArtifactWalkResult[];
@@ -116,31 +137,19 @@ export function acceptanceContainerName(taskId: string): string {
 /**
  * Accepts or refuses one task.
  *
- * Order: the refusal that needs no container first (nothing to run), then the tests, then the
- * artifact walks. Tests before artifacts because a red suite makes the artifacts irrelevant, and
- * because a container that has already failed should not be asked twenty more questions.
+ * Order: copy first, then the container's observation of the copy — stack and commands are decided
+ * from that observation, so even «nothing to run» is a verdict of container eyes, never of the
+ * host's (D-314). Then the tests, then the artifact walks. Tests before artifacts because a red
+ * suite makes the artifacts irrelevant, and because a container that has already failed should not
+ * be asked twenty more questions.
  */
 export async function acceptTask(
   task: HandoffTask,
-  commands: ResolvedCommands,
   workspacePath: string,
   deps: AcceptanceDeps,
 ): Promise<AcceptanceVerdict> {
-  const refusal = commandsRefusal(commands);
-  if (refusal !== null) {
-    return {
-      accepted: false,
-      reason: refusal,
-      unitExitCode: null,
-      e2eExitCode: null,
-      artifacts: [],
-      output: '',
-      controller: null,
-      returnedByController: false,
-    };
-  }
-
-  const image = deps.images?.[commands.techStack] ?? ACCEPTANCE_IMAGES[commands.techStack];
+  /* The copy and the observation need no stack — the stack is their *result*, not their input. */
+  const neutralImage = deps.images?.generic ?? ACCEPTANCE_IMAGES.generic;
   const copyPath = mkdtempSync(join(tmpdir(), 'loop-gate-'));
   const name = acceptanceContainerName(task.taskId);
   const output: string[] = [];
@@ -151,12 +160,13 @@ export async function acceptTask(
      * nothing goes back: the source is mounted read-only, this directory is deleted at the end, and
      * the executor's workspace is never written to by the gate.
      */
-    const copied = await copyWorkspace(image, workspacePath, copyPath, `${name}-copy`, deps);
+    const copied = await copyWorkspace(neutralImage, workspacePath, copyPath, `${name}-copy`, deps);
 
     if (!copied.ok) {
       return {
         accepted: false,
         reason: `Копия кодовой базы для приёмки не сделана: ${copied.reason}`,
+        commands: null,
         unitExitCode: null,
         e2eExitCode: null,
         artifacts: [],
@@ -165,6 +175,51 @@ export async function acceptTask(
         returnedByController: false,
       };
     }
+
+    /*
+     * What is this project — asked of the copy, from inside a container (D-314). A failed
+     * observation refuses the run by its own name: guessing the stack when the observer is blind
+     * would put the verdict back on the host's eyes, which is the defect this step buries.
+     */
+    const observed = await observeProjectRoot(
+      deps.engine,
+      neutralImage,
+      copyPath,
+      `${name}-observe`,
+      deps,
+    );
+
+    if (!observed.ok) {
+      return {
+        accepted: false,
+        reason: `Наблюдение копии контейнером не удалось: ${observed.reason} — приёмка не судила.`,
+        commands: null,
+        unitExitCode: null,
+        e2eExitCode: null,
+        artifacts: [],
+        output: '',
+        controller: null,
+        returnedByController: false,
+      };
+    }
+
+    const commands = resolveCommands(task, detectStackFromObservation(observed));
+    const refusal = commandsRefusal(commands);
+    if (refusal !== null) {
+      return {
+        accepted: false,
+        reason: refusal,
+        commands,
+        unitExitCode: null,
+        e2eExitCode: null,
+        artifacts: [],
+        output: '',
+        controller: null,
+        returnedByController: false,
+      };
+    }
+
+    const image = deps.images?.[commands.techStack] ?? ACCEPTANCE_IMAGES[commands.techStack];
 
     /*
      * **The controller, before a single test** (task 161). It shares this copy rather than making
@@ -186,6 +241,7 @@ export async function acceptTask(
       return {
         accepted: false,
         reason: controller.reason,
+        commands,
         unitExitCode: null,
         e2eExitCode: null,
         artifacts: [],
@@ -226,6 +282,7 @@ export async function acceptTask(
             run.exitCode === null
               ? `Тесты не завершились: «${command}» остановлен по пределу ${String(Math.round(testBudgetMs / 1000))} с — задача не принята.`
               : `Приёмочный прогон «${command}» в чистом контейнере вернул ${String(run.exitCode)} — задача не принята.`,
+          commands,
           unitExitCode: label === 'unit' ? run.exitCode : null,
           e2eExitCode: label === 'e2e' ? run.exitCode : null,
           artifacts: [],
@@ -243,6 +300,7 @@ export async function acceptTask(
       return {
         accepted: false,
         reason: `Артефакты не подтвердились: ${failed.map((artifact) => artifact.path).join(', ')}.`,
+        commands,
         unitExitCode: 0,
         e2eExitCode: 0,
         artifacts,
@@ -256,6 +314,7 @@ export async function acceptTask(
       accepted: true,
       reason:
         'Чистый контейнер: тесты зелёные, артефакты подтверждены. Задача принята независимым перепрогоном.',
+      commands,
       unitExitCode: 0,
       e2eExitCode: 0,
       artifacts,

@@ -18,18 +18,22 @@ import {
 import { decisionId, disagreesAboutOwner, readReport, recordDecision } from './report.ts';
 import {
   commandsRefusal,
-  detectAndRewrite,
+  detectStackFromObservation,
   detectTechStack,
   resolveCommands,
+  rewriteAssignment,
 } from './tech-stack.ts';
 
 /**
  * The gate's own machinery (task 157), minus the parts that need a daemon.
  *
- * Three claims live here: that the stack detection rewrites the assignment on disk (the disk is the
- * source of truth, so a detection that stayed in memory would be lost on restart), that a blocking
- * file is created and — critically — that **deleting it returns the task to work within a second**,
- * and that the executor's rationale reaches `agent_decisions` under a reproducible identifier.
+ * Three claims live here: that the stack detection is a pure function over an observation whose
+ * facts the acceptance collects with container eyes (D-314) while boot-time recovery may still use
+ * the host's, that what the gate judged is written back into the assignment on disk (the disk is
+ * the source of truth, so a detection that stayed in memory would be lost on restart), that a
+ * blocking file is created and — critically — that **deleting it returns the task to work within a
+ * second**, and that the executor's rationale reaches `agent_decisions` under a reproducible
+ * identifier.
  */
 
 let directory: string;
@@ -98,35 +102,32 @@ afterEach(() => {
   }
 });
 
-describe('detecting the stack, and writing the answer to disk (task 157)', () => {
-  it('reads the marker files in A0’s order', () => {
-    writeFileSync(join(directory, 'package.json'), PACKAGE_WITH_TESTS, 'utf8');
-    expect(detectTechStack(directory).techStack).toBe('nodejs');
+describe('detecting the stack from an observation (task 157; D-314)', () => {
+  const observed = (paths: string[], packageJson: string | null = null) =>
+    detectStackFromObservation({ paths: new Set(paths), packageJson });
 
-    writeFileSync(join(directory, 'go.mod'), 'module x', 'utf8');
+  it('reads the marker files in A0’s order', () => {
+    expect(observed(['package.json'], PACKAGE_WITH_TESTS).techStack).toBe('nodejs');
     // package.json still wins: the order is fixed, not «whichever was found last».
-    expect(detectTechStack(directory).techStack).toBe('nodejs');
+    expect(observed(['package.json', 'go.mod'], PACKAGE_WITH_TESTS).techStack).toBe('nodejs');
+    expect(observed(['go.mod']).techStack).toBe('go');
+    expect(observed(['Cargo.toml']).techStack).toBe('rust');
+    expect(observed(['pyproject.toml', 'tests/e2e'])).toEqual({
+      techStack: 'python',
+      unitTestCmd: 'pytest',
+      e2eTestCmd: 'pytest tests/e2e',
+    });
   });
 
   it('is generic with no markers, and generic has no commands of its own', () => {
-    expect(detectTechStack(directory)).toEqual({
-      techStack: 'generic',
-      unitTestCmd: '',
-      e2eTestCmd: '',
-    });
+    expect(observed([])).toEqual({ techStack: 'generic', unitTestCmd: '', e2eTestCmd: '' });
   });
 
   it('proposes only the commands the project actually defines', () => {
     // A0's literal algorithm proposes `npm run test:e2e` for every Node project. A project without
     // that script answers with npm's own non-zero exit, and the gate then refuses a task for a
     // suite the plan never promised — which is how the first end-to-end run of the cycle failed.
-    writeFileSync(
-      join(directory, 'package.json'),
-      JSON.stringify({ scripts: { test: 'x' } }),
-      'utf8',
-    );
-
-    expect(detectTechStack(directory)).toEqual({
+    expect(observed(['package.json'], JSON.stringify({ scripts: { test: 'x' } }))).toEqual({
       techStack: 'nodejs',
       unitTestCmd: 'npm test',
       e2eTestCmd: '',
@@ -134,9 +135,7 @@ describe('detecting the stack, and writing the answer to disk (task 157)', () =>
   });
 
   it('proposes nothing for a manifest that declares no scripts at all', () => {
-    writeFileSync(join(directory, 'package.json'), '{}', 'utf8');
-
-    expect(detectTechStack(directory)).toEqual({
+    expect(observed(['package.json'], '{}')).toEqual({
       techStack: 'nodejs',
       unitTestCmd: '',
       e2eTestCmd: '',
@@ -146,7 +145,7 @@ describe('detecting the stack, and writing the answer to disk (task 157)', () =>
     const refusal = commandsRefusal(
       resolveCommands(
         { techStack: 'nodejs', unitTestCmd: undefined, e2eTestCmd: undefined },
-        detectTechStack(directory),
+        observed(['package.json'], '{}'),
       ),
     );
     expect(refusal).toContain('nodejs');
@@ -154,38 +153,53 @@ describe('detecting the stack, and writing the answer to disk (task 157)', () =>
   });
 
   it('survives an unreadable manifest by proposing nothing rather than throwing', () => {
-    writeFileSync(join(directory, 'package.json'), '{ это не json', 'utf8');
-
-    expect(detectTechStack(directory).unitTestCmd).toBe('');
+    expect(observed(['package.json'], '{ это не json').unitTestCmd).toBe('');
   });
 
-  it('rewrites the assignment on disk when the detection differs from it', () => {
-    writeTask({ techStack: 'generic' });
+  it('host-eyed collection agrees with the pure detection — recovery’s one legitimate use', () => {
+    // Boot-time recovery (task 162) runs in a fresh process, where the D-314 blindness was not
+    // measured; it repairs a lost field rather than judging a verdict, so host eyes stay allowed
+    // there — and must reach the same answers through the same pure function.
     writeFileSync(join(directory, 'package.json'), PACKAGE_WITH_TESTS, 'utf8');
+    expect(detectTechStack(directory)).toEqual({
+      techStack: 'nodejs',
+      unitTestCmd: 'npm test',
+      e2eTestCmd: 'npm run test:e2e',
+    });
 
-    const { commands, rewritten } = detectAndRewrite(directory, TASK.taskId);
+    rmSync(join(directory, 'package.json'));
+    expect(detectTechStack(directory).techStack).toBe('generic');
 
-    expect(rewritten).toBe(true);
-    expect(commands.techStack).toBe('nodejs');
+    writeFileSync(join(directory, 'go.mod'), 'module x', 'utf8');
+    expect(detectTechStack(directory).techStack).toBe('go');
+  });
 
-    // The next reader — a retry, a recovery, the operator — sees what the gate will judge against.
+  it('writes what the gate judged into the assignment on disk', () => {
+    writeTask({ techStack: 'generic' });
+
+    const commands = resolveCommands(
+      { techStack: 'generic', unitTestCmd: undefined, e2eTestCmd: undefined },
+      observed(['package.json'], PACKAGE_WITH_TESTS),
+    );
+    expect(rewriteAssignment(directory, TASK.taskId, commands)).toBe(true);
+
+    // The next reader — a retry, a recovery, the operator — sees what the gate judged against.
     const onDisk = readTask();
     expect(onDisk.techStack).toBe('nodejs');
     expect(onDisk.unitTestCmd).toBe('npm test');
   });
 
   it('rewrites nothing when the assignment already says the same thing', () => {
-    writeFileSync(join(directory, 'package.json'), PACKAGE_WITH_TESTS, 'utf8');
     writeTask({ techStack: 'nodejs', unitTestCmd: 'npm test', e2eTestCmd: 'npm run test:e2e' });
 
-    expect(detectAndRewrite(directory, TASK.taskId).rewritten).toBe(false);
+    const commands = resolveCommands(readTask(), observed(['package.json'], PACKAGE_WITH_TESTS));
+    expect(rewriteAssignment(directory, TASK.taskId, commands)).toBe(false);
   });
 
   it('keeps the assignment’s own commands over the detection’s guess', () => {
-    writeFileSync(join(directory, 'package.json'), PACKAGE_WITH_TESTS, 'utf8');
     writeTask({ techStack: 'nodejs', unitTestCmd: 'pnpm --filter core test' });
 
-    const { commands } = detectAndRewrite(directory, TASK.taskId);
+    const commands = resolveCommands(readTask(), observed(['package.json'], PACKAGE_WITH_TESTS));
 
     expect(commands.fromAssignment).toBe(true);
     expect(commands.unitTestCmd).toBe('pnpm --filter core test');
