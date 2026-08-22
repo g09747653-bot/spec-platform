@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { HANDOFF } from '../intake/handoff.ts';
@@ -141,49 +141,14 @@ export function clearVerdict(projectDirectory: string, taskId: string): void {
   rmSync(verdictPath(projectDirectory, taskId), { force: true });
 }
 
-/**
- * Изменился ли workspace с момента `sinceMs` (mtime-класс прогона Б).
- *
- * Обходит дерево проекта, минуя `handoff/` (отчёт и вердикт пишутся самим контуром) и скрытые
- * каталоги, с ранним выходом на первом же изменённом файле или каталоге. Ошибка чтения читается
- * как «изменялся» — недоказанное «не трогал» не должно становиться отказом повтора.
- *
- * Сдвиг часов контейнера и хоста покрыт допуском вызывающего (`EDIT_CLOCK_TOLERANCE_MS`), и
- * ошибка допуска смещена в сторону «правки были»: ложное «не было правок» отвергло бы честную
- * починку, ложное «были» лишь повторит приёмку — старое поведение, ничего не потеряно.
+/*
+ * Здесь жил хостовый mtime-обход «изменился ли workspace» с допуском на рассинхронизацию часов
+ * (EDIT_CLOCK_TOLERANCE_MS). Он умер с D-314: долгоживущий хостовый процесс стойко слеп к
+ * контейнерным записям, и слепой обход читал честную починку как «не тронул ни файла». Правки
+ * теперь распознаёт дифф двух контейнерных снимков дерева (`gate/observe.ts`, снимает цикл до и
+ * после итерации); дух допуска D-308 сохранён строже прежнего — любой не взятый снимок читается
+ * как «правки были», отказ повтора по сомнению невозможен.
  */
-export function workspaceEditedSince(projectDirectory: string, sinceMs: number): boolean {
-  const walk = (directory: string): boolean => {
-    let entries;
-    try {
-      entries = readdirSync(directory, { withFileTypes: true });
-    } catch {
-      return true;
-    }
-
-    for (const entry of entries) {
-      if (entry.name === 'handoff' || entry.name.startsWith('.')) continue;
-
-      const path = join(directory, entry.name);
-      let modifiedAt: number;
-      try {
-        modifiedAt = statSync(path).mtimeMs;
-      } catch {
-        return true;
-      }
-
-      if (modifiedAt >= sinceMs) return true;
-      if (entry.isDirectory() && walk(path)) return true;
-    }
-
-    return false;
-  };
-
-  return walk(projectDirectory);
-}
-
-/** Допуск на рассинхронизацию часов контейнера и хоста при сравнении mtime. */
-export const EDIT_CLOCK_TOLERANCE_MS = 2_000;
 
 /** Читает вердикт, когда он есть, — для ленты и тестов; исполнителю файл отдаёт монтирование. */
 export function readVerdict(projectDirectory: string, taskId: string): string | null {

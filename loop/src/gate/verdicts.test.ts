@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -11,7 +11,6 @@ import {
   hasRedVerdict,
   readVerdict,
   verdictPath,
-  workspaceEditedSince,
   writeRedVerdict,
 } from './verdicts.ts';
 
@@ -19,8 +18,8 @@ import {
  * Вердикт приёмки как файл источника правды (задача 176).
  *
  * Свойства ровно те, на которых стоит механизм: файл появляется с причиной и доказательствами,
- * принятие его уносит, а определение «были ли правки» не путает работу контура (handoff/) с
- * работой исполнителя.
+ * принятие его уносит. Распознавание «были ли правки» живёт теперь в `gate/observe.ts` (снимки
+ * контейнерными глазами, D-314) и тестируется там и в стаб-циклах.
  */
 
 let workspace: string;
@@ -42,6 +41,7 @@ describe('файл вердикта (task 176)', () => {
       acceptance: {
         accepted: false,
         reason: 'Приёмочный прогон «npm test» в чистом контейнере вернул 1 — задача не принята.',
+        commands: null,
         unitExitCode: 1,
         e2eExitCode: null,
         artifacts: [],
@@ -87,39 +87,3 @@ describe('файл вердикта (task 176)', () => {
   });
 });
 
-describe('были ли правки — mtime-класс прогона Б (task 176)', () => {
-  const old = (path: string) => {
-    const past = new Date(Date.now() - 60_000);
-    utimesSync(path, past, past);
-  };
-
-  it('файл контура (handoff/) и скрытые каталоги правками не считаются', () => {
-    const src = join(workspace, 'src');
-    mkdirSync(src, { recursive: true });
-    mkdirSync(join(workspace, '.git'), { recursive: true });
-    writeFileSync(join(src, 'util.js'), 'x', 'utf8');
-    old(join(src, 'util.js'));
-    old(src);
-
-    const since = Date.now() - 5_000;
-    /* Свежие записи ТОЛЬКО в handoff/ и в .git — рабочее дерево не менялось. */
-    writeFileSync(join(workspace, HANDOFF.reports, 'report_task_x.json'), '{}', 'utf8');
-    writeFileSync(join(workspace, '.git', 'index'), 'x', 'utf8');
-
-    expect(workspaceEditedSince(workspace, since)).toBe(false);
-  });
-
-  it('новый или тронутый файл рабочего дерева — правка', () => {
-    const src = join(workspace, 'src');
-    mkdirSync(src, { recursive: true });
-    writeFileSync(join(src, 'util.js'), 'x', 'utf8');
-    old(join(src, 'util.js'));
-    old(src);
-
-    const since = Date.now() - 5_000;
-    expect(workspaceEditedSince(workspace, since)).toBe(false);
-
-    writeFileSync(join(src, 'fixed.js'), 'починено', 'utf8');
-    expect(workspaceEditedSince(workspace, since)).toBe(true);
-  });
-});

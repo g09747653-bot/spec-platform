@@ -5,23 +5,22 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { DockerEngine } from '../docker/engine.ts';
 import type { ExecutorCredential } from '../executor/credential.ts';
 import { runExecutor, type ExecutorRun } from '../executor/run.ts';
-import { acceptTask, type AcceptanceVerdict } from '../gate/accept.ts';
+import { ACCEPTANCE_IMAGES, acceptTask, type AcceptanceVerdict } from '../gate/accept.ts';
 import { blockedPath } from '../gate/blocked.ts';
 import { eventBus } from '../events/bus.ts';
+import { snapshotTree, treesMatch, type TreeSnapshot } from '../gate/observe.ts';
 import {
   disagreesAboutOwner,
   readReport,
   recordDecision,
   type ExecutorReport,
 } from '../gate/report.ts';
-import { detectAndRewrite } from '../gate/tech-stack.ts';
+import { rewriteAssignment } from '../gate/tech-stack.ts';
 import {
   clearVerdict,
-  EDIT_CLOCK_TOLERANCE_MS,
   hasRedVerdict,
   readVerdict,
   verdictRefusedRepeat,
-  workspaceEditedSince,
   writeRedVerdict,
 } from '../gate/verdicts.ts';
 import { frozenMsFor } from '../orchestrator/freeze.ts';
@@ -34,16 +33,22 @@ import type { Logger } from '../observability/log.ts';
  * The order is the design, and every step of it exists because the one before it cannot be trusted
  * to have told the truth:
  *
- * 1. **detect and rewrite** the stack, so the gate judges against what the project *is* rather than
- *    what the intake guessed before any code existed;
- * 2. **run the executor** in its container, streaming its output into the feed as it happens;
- * 3. **read its report** — information, recorded and shown, deciding nothing;
- * 4. **run the acceptance** in a fresh clean container over a copy of the code;
- * 5. **write the verdict** to disk first and to the database after.
+ * 1. **run the executor** in its container, streaming its output into the feed as it happens;
+ * 2. **read its report** — information, recorded and shown, deciding nothing;
+ * 3. **run the acceptance** in a fresh clean container over a copy of the code — the stack it
+ *    judges against is observed there, from inside a container, at the moment of judgment (D-314);
+ * 4. **write the verdict** to disk first and to the database after, along with the stack the gate
+ *    actually judged, so the next reader of the assignment agrees with the verdict.
  *
- * `COMPLETED` is written by step 5 and only when step 4 said so. An executor that reports `SUCCESS`
+ * `COMPLETED` is written by step 4 and only when step 3 said so. An executor that reports `SUCCESS`
  * over a red codebase moves nothing — that is the case the whole two-phase design exists for, and
  * it has its own test.
+ *
+ * There used to be a step before all of these — a host-eyed stack detection at cycle start, plus a
+ * re-detection right before the verdict. Both died with D-314: the live gate measured the
+ * long-lived host process staying blind to container-written marker files for ten minutes, so any
+ * host reading was a verdict about the host's cache, not about the project. Every observation the
+ * gate consumes now happens inside a container (`gate/observe.ts`).
  */
 
 /**
@@ -135,29 +140,39 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
     logger.write({ projectId, taskId, agentRole: 'ORCHESTRATOR', logLevel: level, message });
   };
 
-  // 1. What is this project, actually — and write the answer back where the next reader will see it.
-  const { commands, rewritten } = detectAndRewrite(projectDirectory, taskId);
-  say(
-    rewritten
-      ? `Стек определён как ${commands.techStack}; задание на диске переписано (диск — источник правды).`
-      : `Стек задания уже соответствует проекту (${commands.techStack}).`,
-  );
-
   setStatus(database, projectDirectory, projectId, taskId, 'IN_PROGRESS');
   say('Задача передана исполнителю.');
 
   /*
    * Повтор ли это красной задачи — решается ДО итерации (задача 176). Вердикт прошлой приёмки
    * лежит на диске (`handoff/reports/verdict_*.md`), исполнитель прочитает его из своего
-   * монтирования; здесь запоминается сам факт и момент старта — против них после итерации
-   * распознаётся «SUCCESS без единой правки» (mtime-класс прогона Б).
+   * монтирования; здесь запоминается сам факт и берётся снимок дерева ДО итерации — против него
+   * после итерации распознаётся «SUCCESS без единой правки».
+   *
+   * Снимок берут контейнерные глаза, не хостовый mtime-обход (D-314): хост стойко слеп к
+   * контейнерным записям, и слепой детект читал честную починку как «не тронул ни файла». Дифф
+   * двух снимков одних глаз не нуждается и в допуске на рассинхронизацию часов (D-308) — его дух
+   * сохранён строже: любой не взятый снимок читается как «правки были», отказ по сомнению
+   * невозможен.
    */
   const hadRedVerdict = hasRedVerdict(projectDirectory, taskId);
-  const iterationStartedAt = Date.now();
+  let snapshotBefore: TreeSnapshot | null = null;
   if (hadRedVerdict) {
     say(
       'Повторная итерация: вердикт прошлой приёмки на диске, исполнителю велено прочитать его первым.',
     );
+    snapshotBefore = await snapshotTree(
+      engine,
+      ACCEPTANCE_IMAGES.generic,
+      projectDirectory,
+      `delivery-gate-${taskId}-snapshot-before`,
+    );
+    if (!snapshotBefore.ok) {
+      say(
+        `Снимок дерева до итерации не взят (${snapshotBefore.reason}) — повтор будет считаться правкой, отказ 176 по сомнению не срабатывает.`,
+        'WARN',
+      );
+    }
   }
 
   /*
@@ -178,7 +193,7 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
     say(`Задание несёт собственный потолок итерации: ${String(assignment.iterationTimeoutSec)} с.`);
   }
 
-  // 2. The executor.
+  // 1. The executor.
   const executor = await runExecutor(
     {
       taskId,
@@ -220,7 +235,7 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
     executor.outcome === 'TIMEOUT' ? 'WARN' : 'INFO',
   );
 
-  // 3. What it claims — recorded, shown, and deciding nothing.
+  // 2. What it claims — recorded, shown, and deciding nothing.
   const read = readReport(projectDirectory, taskId);
   const reported = read.ok ? read.report : null;
   let recorded: string | null = null;
@@ -272,7 +287,7 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
       acceptance: null,
       reason,
       decisionId: recorded,
-      techStackRewritten: rewritten,
+      techStackRewritten: false,
     };
   }
 
@@ -291,7 +306,7 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
       acceptance: null,
       reason,
       decisionId: recorded,
-      techStackRewritten: rewritten,
+      techStackRewritten: false,
     };
   }
 
@@ -305,12 +320,33 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
    * ПЕРЕХОДНОЙ — образ, PATH, среда, — и правок тогда объективно не нужно: живой прогон замерил,
    * как отказ-каждый-раз замыкает такую задачу в вечный красный цикл. Поэтому второй подряд
    * «SUCCESS без правок» уходит приёмке на перепроверку: изменившийся мир показывает себя там.
+   *
+   * «Не изменив ни файла» доказывается только парой удавшихся контейнерных снимков, совпавших
+   * строка в строку (D-314): не взятый снимок — до или после — читается как «правки были», и
+   * повтор уходит приёмке. Ошибка смещена в безопасную сторону, как и была: ложное «правки были»
+   * лишь повторяет приёмку, ложное «правок не было» отвергло бы честную починку.
    */
-  if (
-    hadRedVerdict &&
-    reported?.status === 'SUCCESS' &&
-    !workspaceEditedSince(projectDirectory, iterationStartedAt - EDIT_CLOCK_TOLERANCE_MS)
-  ) {
+  const repeatWithoutEdits = async (): Promise<boolean> => {
+    if (snapshotBefore?.ok !== true) return false;
+
+    const after = await snapshotTree(
+      engine,
+      ACCEPTANCE_IMAGES.generic,
+      projectDirectory,
+      `delivery-gate-${taskId}-snapshot-after`,
+    );
+    if (!after.ok) {
+      say(
+        `Снимок дерева после итерации не взят (${after.reason}) — повтор читается как правка, решает приёмка.`,
+        'WARN',
+      );
+      return false;
+    }
+
+    return treesMatch(snapshotBefore.entries, after.entries);
+  };
+
+  if (hadRedVerdict && reported?.status === 'SUCCESS' && (await repeatWithoutEdits())) {
     if (verdictRefusedRepeat(projectDirectory, taskId)) {
       say(
         'Повтор снова без правок — отказ уже был: приёмка перепроверяет заново (переходная причина покажет себя перепрогоном).',
@@ -342,12 +378,12 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
         acceptance: null,
         reason,
         decisionId: recorded,
-        techStackRewritten: rewritten,
+        techStackRewritten: false,
       };
     }
   }
 
-  // 4. The gate. A fresh container, a copy of the code, and no knowledge of what the executor said.
+  // 3. The gate. A fresh container, a copy of the code, and no knowledge of what the executor said.
   say('Приёмка: свежий чистый контейнер, копия кодовой базы, независимый прогон.');
 
   const task = HandoffTask.parse(
@@ -355,25 +391,13 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
   );
 
   /*
-   * Стек ПЕРЕПРОВЕРЯЕТСЯ перед самым судом (находка живого гейта M17а). Первый detect бежит на
-   * старте цикла — а итерация исполнителя длится минуты, и в параллельной вехе чужая задача 1
-   * успевает положить go.mod ПОСЛЕ старта соседних циклов: их приёмки, судившие по снимку старта,
-   * получали generic/debian и 127 на живом go-проекте — каскад заморозок одного класса. Приёмка
-   * судит против того, что проект ЕСТЬ на момент суда, — это её собственная доктрина (шаг 1), и
-   * перед судом она обходится тем же перечитыванием.
+   * Стек решает сама приёмка — контейнерным наблюдением копии в момент суда (D-314). Это и есть
+   * «перепроверка перед судом» находки живого гейта: итерация исполнителя длится минуты, и в
+   * параллельной вехе чужая задача успевает положить go.mod после старта цикла — судится то, что
+   * проект ЕСТЬ, а не снимок чьей-то памяти. Хостового детекта в цикле больше нет ни в одной
+   * точке: хостовый взгляд на bind-mount уликой не является.
    */
-  const { commands: commandsAtJudgment, rewritten: rewrittenAtJudgment } = detectAndRewrite(
-    projectDirectory,
-    taskId,
-  );
-  const stackRewritten = rewritten || rewrittenAtJudgment;
-  if (rewrittenAtJudgment || commandsAtJudgment.techStack !== commands.techStack) {
-    say(
-      `Стек к моменту приёмки: ${commandsAtJudgment.techStack} (на старте цикла был ${commands.techStack}).`,
-    );
-  }
-
-  const acceptance = await acceptTask(task, commandsAtJudgment, projectDirectory, {
+  const acceptance = await acceptTask(task, projectDirectory, {
     engine,
     ...(deps.acceptanceTimeoutMs === undefined ? {} : { timeoutMs: deps.acceptanceTimeoutMs }),
     ...(deps.acceptanceTestTimeoutMs === undefined
@@ -390,7 +414,21 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
     },
   });
 
-  // 5. The verdict.
+  /*
+   * Чем судили — на диск, в задание (диск — источник правды): исполнитель следующей итерации и
+   * оператор видят стек и команды, под которыми вынесен вердикт, а не догадку интейка.
+   */
+  let stackRewritten = false;
+  if (acceptance.commands !== null) {
+    stackRewritten = rewriteAssignment(projectDirectory, taskId, acceptance.commands);
+    if (stackRewritten) {
+      say(
+        `Стек на момент суда: ${acceptance.commands.techStack} (наблюдение изнутри контейнера); задание на диске переписано.`,
+      );
+    }
+  }
+
+  // 4. The verdict.
   if (acceptance.returnedByController) {
     /*
      * Back to `PENDING`, which is the executor's queue: the scheduler will pick it up again, with

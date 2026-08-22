@@ -6,17 +6,32 @@ import { HANDOFF, HandoffTask, taskFileName, type TechStack } from '../intake/ha
 /**
  * Detecting the project's stack, and writing the answer back to disk (task 157).
  *
- * The A0 solution's algorithm, unchanged: marker files decide, in a fixed order. What this module
- * adds is the second half of the sentence — **the answer is written back into `task_*.json`
- * immediately**, because the disk is the source of truth. A detection that lived only in memory
- * would be re-derived after every restart, and a detection that lived only in SQLite would be lost
- * with the database. The next process to read the assignment reads the same answer this one did.
+ * The A0 solution's algorithm, unchanged: marker files decide, in a fixed order. What changed with
+ * D-314 is **whose eyes collect the facts**. The detection itself is a pure function over an
+ * observation (`detectStackFromObservation`); the acceptance gate feeds it a listing taken from
+ * inside a container (`gate/observe.ts`), because the live M17а gate measured a long-lived host
+ * process being persistently blind to files a container had written through the bind mount —
+ * `go.mod` existed, fresh processes saw it, and the loop's own `existsSync` answered false for ten
+ * minutes straight, so the gate judged yesterday's world. The host-eyed collector below survives
+ * for exactly one caller: boot-time recovery, which runs in a fresh process (the measured blindness
+ * belongs to long-lived ones) and repairs an assignment's lost field rather than judging a verdict.
  */
 
 export interface DetectedStack {
   techStack: TechStack;
   unitTestCmd: string;
   e2eTestCmd: string;
+}
+
+/**
+ * The facts a detection consumes: paths of the project's two top levels (every marker file lives no
+ * deeper than `tests/e2e`), and the manifest's text when `package.json` is among them. Who collected
+ * them — a container's `find` or a fresh process's `existsSync` — is the caller's statement about
+ * whose eyes are trustworthy in its context.
+ */
+export interface StackObservation {
+  paths: ReadonlySet<string>;
+  packageJson: string | null;
 }
 
 /**
@@ -31,11 +46,11 @@ export interface DetectedStack {
  * A *stated* command is a different matter and is never second-guessed (see `resolveCommands`): the
  * plan naming a command it does not have is a defect in the plan, and the gate should say so.
  */
-export function detectTechStack(workspacePath: string): DetectedStack {
-  const has = (name: string) => existsSync(join(workspacePath, name));
+export function detectStackFromObservation(observation: StackObservation): DetectedStack {
+  const { paths } = observation;
 
-  if (has('package.json')) {
-    const scripts = packageScripts(join(workspacePath, 'package.json'));
+  if (paths.has('package.json')) {
+    const scripts = manifestScripts(observation.packageJson ?? '');
 
     return {
       techStack: 'nodejs',
@@ -43,17 +58,17 @@ export function detectTechStack(workspacePath: string): DetectedStack {
       e2eTestCmd: scripts.has('test:e2e') ? 'npm run test:e2e' : '',
     };
   }
-  if (has('requirements.txt') || has('pyproject.toml')) {
+  if (paths.has('requirements.txt') || paths.has('pyproject.toml')) {
     return {
       techStack: 'python',
       unitTestCmd: 'pytest',
-      e2eTestCmd: has(join('tests', 'e2e')) ? 'pytest tests/e2e' : '',
+      e2eTestCmd: paths.has('tests/e2e') ? 'pytest tests/e2e' : '',
     };
   }
-  if (has('go.mod')) {
+  if (paths.has('go.mod')) {
     return { techStack: 'go', unitTestCmd: 'go test ./...', e2eTestCmd: '' };
   }
-  if (has('Cargo.toml')) {
+  if (paths.has('Cargo.toml')) {
     return { techStack: 'rust', unitTestCmd: 'cargo test', e2eTestCmd: '' };
   }
 
@@ -61,10 +76,44 @@ export function detectTechStack(workspacePath: string): DetectedStack {
   return { techStack: 'generic', unitTestCmd: '', e2eTestCmd: '' };
 }
 
-/** The script names a `package.json` defines. An unreadable manifest defines none. */
-function packageScripts(path: string): Set<string> {
+/**
+ * Host-eyed detection — **boot-time recovery only** (task 162; `readHandoffTree`).
+ *
+ * Recovery runs in a process that has just started, and the D-314 blindness was measured on
+ * long-lived ones: fresh probes saw the container's files without trouble. It also repairs a lost
+ * `techStack` field rather than deciding an acceptance, so a stale answer costs a label, not a
+ * verdict. The cycle itself must not call this — the gate observes from inside a container
+ * (`gate/observe.ts`) at the moment it judges.
+ */
+export function detectTechStack(workspacePath: string): DetectedStack {
+  const paths = new Set<string>();
+  for (const marker of [
+    'package.json',
+    'requirements.txt',
+    'pyproject.toml',
+    'go.mod',
+    'Cargo.toml',
+    join('tests', 'e2e'),
+  ]) {
+    if (existsSync(join(workspacePath, marker))) paths.add(marker.replaceAll('\\', '/'));
+  }
+
+  let packageJson: string | null = null;
+  if (paths.has('package.json')) {
+    try {
+      packageJson = readFileSync(join(workspacePath, 'package.json'), 'utf8');
+    } catch {
+      packageJson = null;
+    }
+  }
+
+  return detectStackFromObservation({ paths, packageJson });
+}
+
+/** The script names a manifest's text defines. An unreadable manifest defines none. */
+function manifestScripts(text: string): Set<string> {
   try {
-    const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    const parsed: unknown = JSON.parse(text);
 
     if (typeof parsed === 'object' && parsed !== null && 'scripts' in parsed) {
       const { scripts } = parsed;
@@ -111,21 +160,21 @@ export function resolveCommands(
 }
 
 /**
- * Detects, writes the answer into the assignment on disk, and hands back what it decided.
+ * Writes what the gate actually judged against into the assignment on disk.
  *
- * The rewrite is immediate and unconditional when it changes something: a later reader — the
- * executor of a retry, a recovery after a crash, the operator opening the file — sees the stack the
- * gate is actually judging against rather than the guess the intake made before the code existed.
+ * The disk is the source of truth: a later reader — the executor of a retry, a recovery after a
+ * crash, the operator opening the file — must see the stack the verdict was reached under rather
+ * than the guess the intake made before the code existed. Called by the cycle right after the
+ * acceptance observed the stack with container eyes (D-314): the observation is the gate's, the
+ * bookkeeping is the cycle's.
  */
-export function detectAndRewrite(
+export function rewriteAssignment(
   projectDirectory: string,
   taskId: string,
-): { commands: ResolvedCommands; rewritten: boolean } {
+  commands: ResolvedCommands,
+): boolean {
   const path = join(projectDirectory, HANDOFF.tasks, taskFileName(taskId));
   const task = HandoffTask.parse(JSON.parse(readFileSync(path, 'utf8')));
-
-  const detected = detectTechStack(projectDirectory);
-  const commands = resolveCommands(task, detected);
 
   const updated: HandoffTask = {
     ...task,
@@ -134,13 +183,10 @@ export function detectAndRewrite(
     ...(commands.e2eTestCmd === '' ? {} : { e2eTestCmd: commands.e2eTestCmd }),
   };
 
-  const before = JSON.stringify(task);
-  const after = JSON.stringify(updated);
-
-  if (before === after) return { commands, rewritten: false };
+  if (JSON.stringify(task) === JSON.stringify(updated)) return false;
 
   writeFileSync(path, `${JSON.stringify(HandoffTask.parse(updated), null, 2)}\n`, 'utf8');
-  return { commands, rewritten: true };
+  return true;
 }
 
 /**
