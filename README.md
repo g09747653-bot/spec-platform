@@ -76,10 +76,12 @@ cp loop/.env.example loop/.env
 ```
 
 Заполните три обязательные переменные (`ANTHROPIC_API_KEY`, `PORT`, `WORKSPACE_ROOT_PATH`);
-остальные проверяются, только если заданы. Дальше:
+остальные проверяются, только если заданы. Дальше (сборка + продакшен-сервер — тем же способом
+контур живёт на гейтах и в собственной E2E; `PORT` передаётся переменной окружения процесса,
+из `loop/.env` его читает сам контур, но не выбор порта Next):
 
 ```bash
-pnpm loop:dev
+PORT=3100 pnpm loop:serve
 ```
 
 Дашборд откроется на `http://127.0.0.1:<PORT>` — по-русски, без входа и без пароля: контур слушает
@@ -87,7 +89,7 @@ pnpm loop:dev
 
 ### Задумка из Telegram (приёмка Программы А)
 
-1. Поднимите всё: мост подписки `pnpm --filter @spec-platform/loop bridge`; платформу с адаптерной цепочкой `LLM_PROVIDER_ORDER=ollama,google OLLAMA_BASE_URL=http://127.0.0.1:8091/v1 OLLAMA_CONTEXT_LENGTH=200000 LLM_REQUEST_TIMEOUT_MS=600000 pnpm local:up` (окно и предел запроса — Anthropic-класса: без первого платформа пакует под олламские 4096, без второго роняет звено на генерациях длиннее минуты); контур `pnpm loop:dev` с заполненными `TELEGRAM_BOT_TOKEN`, `TELEGRAM_OWNER_CHAT_ID`, `SPEC_PLATFORM_API_BASE=http://127.0.0.1:3000` — и Docker Desktop.
+1. Поднимите всё: мост подписки `pnpm --filter @spec-platform/loop bridge`; платформу с адаптерной цепочкой `LLM_PROVIDER_ORDER=ollama,google OLLAMA_BASE_URL=http://127.0.0.1:8091/v1 OLLAMA_CONTEXT_LENGTH=200000 LLM_REQUEST_TIMEOUT_MS=600000 pnpm local:up` (окно и предел запроса — Anthropic-класса: без первого платформа пакует под олламские 4096, без второго роняет звено на генерациях длиннее минуты); контур `PORT=3100 SPEC_PLATFORM_API_BASE=http://127.0.0.1:3000 pnpm loop:serve` с заполненными в `loop/.env` `TELEGRAM_BOT_TOKEN` и `TELEGRAM_OWNER_CHAT_ID` — и Docker Desktop.
 2. Напишите своему боту задумку проекта ТЕКСТОМ и нажмите «🚀 Запустить» под его ответом.
 3. Дальше руки не нужны: алерты о каждом звене придут в чат, финальный — «Проект завершён»; готовый продукт лежит в каталоге из алерта «Бандл получен» (голосовые отложены решением владельца — бот ответит именованно).
 

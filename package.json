@@ -23,6 +23,7 @@
     "loop:test": "pnpm --filter @spec-platform/loop test:unit",
     "loop:e2e": "pnpm --filter @spec-platform/loop test:e2e",
     "loop:dev": "pnpm --filter @spec-platform/loop dev",
+    "loop:serve": "pnpm --filter @spec-platform/loop build && pnpm --filter @spec-platform/loop start",
     "loop:migrate": "pnpm --filter @spec-platform/loop db:migrate",
     "test:preflight": "vitest run --config vitest.live.config.ts",
     "test:e2e": "playwright test",

@@ -277,16 +277,22 @@ function requirementBearingEntries(): {
 }
 
 /**
- * The lines of the first section under `heading` at its required level, up to the next heading at
- * the same or a shallower level. Fence-aware with the same rules as `parseHeadings`.
+ * The lines of the first section under `heading` — at its required level when `atLevel` is given,
+ * at whatever level the document put it otherwise — up to the next heading at the same or a
+ * shallower level than the one that opened it. Fence-aware with the same rules as `parseHeadings`.
  */
-function sliceSectionBody(markdown: string, section: RequiredSection): string {
+function sliceSectionBody(
+  markdown: string,
+  section: RequiredSection,
+  atLevel: number | null = section.level,
+): string {
   const wanted = normaliseHeading(section.heading);
   const lines = markdown.split(/\r?\n/);
 
   const body: string[] = [];
   let fence: string | null = null;
   let inside = false;
+  let openedAt = section.level;
 
   for (const line of lines) {
     const fenceMatch = FENCE.exec(line);
@@ -311,9 +317,10 @@ function sliceSectionBody(markdown: string, section: RequiredSection): string {
       const level = (atx[1] ?? '').length;
       const text = normaliseHeading(atx[2] ?? '');
 
-      if (inside && level <= section.level) return body.join('\n');
-      if (!inside && level === section.level && text === wanted) {
+      if (inside && level <= openedAt) return body.join('\n');
+      if (!inside && (atLevel === null || level === atLevel) && text === wanted) {
         inside = true;
+        openedAt = level;
         continue;
       }
       // A deeper heading inside the section is body — the subsections are the rows the machine
@@ -328,12 +335,29 @@ function sliceSectionBody(markdown: string, section: RequiredSection): string {
   return inside ? body.join('\n') : '';
 }
 
+/**
+ * The exact-level slice first, then the same heading at any level (D-316).
+ *
+ * The fallback exists for documents of a non-classic methodology: the speckit spec keeps the same
+ * «Functional Requirements» heading the baseline names, but one level deeper, inside its own
+ * «Requirements» section — and the Программа-А acceptance mapped a 28-KB document to an empty
+ * requirements.json because the exact-level slice found nothing and nothing else looked. The
+ * heading text still comes from the section schema alone: the fallback loosens *where* the section
+ * may sit, never *what* it is called (P3 — the list has exactly one home).
+ */
+function sliceSectionBodyTolerantly(markdown: string, section: RequiredSection): string {
+  const exact = sliceSectionBody(markdown, section);
+  if (exact !== '') return exact;
+
+  return sliceSectionBody(markdown, section, null);
+}
+
 export function requirementSectionBodies(markdown: string): RequirementSectionBodies {
   const entries = requirementBearingEntries();
 
   return {
-    functional: sliceSectionBody(markdown, entries.functional),
-    nonFunctional: sliceSectionBody(markdown, entries.nonFunctional),
+    functional: sliceSectionBodyTolerantly(markdown, entries.functional),
+    nonFunctional: sliceSectionBodyTolerantly(markdown, entries.nonFunctional),
   };
 }
 
