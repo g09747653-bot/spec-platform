@@ -1,0 +1,12 @@
+{
+  "taskId": "6.1",
+  "milestoneId": "ms_06",
+  "title": "Модульные тесты (Unit Tests)",
+  "description": "* *Описание:* Написать тесты для парсера аргументов (включая проверку значения по умолчанию для даты при добавлении задачи), валидатора дат и правил фильтрации задач.",
+  "techStack": "nodejs",
+  "filesToEdit": [],
+  "dependsOn": [],
+  "unitTestCmd": "npm test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

@@ -1,0 +1,12 @@
+{
+  "taskId": "6.2",
+  "milestoneId": "ms_06",
+  "title": "Интеграционные тесты (Integration Tests)",
+  "description": "* *Описание:* Написать тесты для проверки инициализации БД (`clean_slate`), транзакционности записи, механизма создания и ротации бэкапов (включая проверку лексикографической ротации по временным меткам), а также прав доступа к создаваемым файлам.",
+  "techStack": "nodejs",
+  "filesToEdit": [],
+  "dependsOn": [],
+  "unitTestCmd": "npm test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}
