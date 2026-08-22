@@ -44,6 +44,25 @@ export interface RedVerdictNote {
   reason: string;
   /** Вердикт приёмки, когда она успела состояться; null — красный случился раньше (таймаут). */
   acceptance: AcceptanceVerdict | null;
+  /** Этот вердикт — сам именованный отказ повтора: второй раз он не сработает (см. маркер). */
+  refusedRepeat?: boolean;
+}
+
+/**
+ * Маркер «повтор без правок уже отвергался этим вердиктом» (находка живого гейта M17а).
+ *
+ * Отказ 176 существует против исполнителя, который зачитывает SUCCESS над красным кодом, ничего
+ * не тронув. Но причина красноты бывает ПЕРЕХОДНОЙ — не про код: недоступный образ приёмки,
+ * потерянный toolchain-PATH, починенная оператором среда. Правок тогда объективно не нужно, и
+ * отказ, срабатывающий каждый повтор, замыкает задачу в вечный красный цикл (замерено: задача 1
+ * живого прогона, три круга подряд). Правило после находки: отказ срабатывает ОДИН раз на цепочку
+ * — второй подряд «SUCCESS без правок» уходит приёмке на перепроверку, и мир, если он изменился,
+ * получает шанс это показать.
+ */
+export const REFUSED_REPEAT_MARKER = '<!-- loop:refused-repeat -->';
+
+export function verdictRefusedRepeat(projectDirectory: string, taskId: string): boolean {
+  return readVerdict(projectDirectory, taskId)?.includes(REFUSED_REPEAT_MARKER) ?? false;
 }
 
 /**
@@ -98,6 +117,16 @@ export function writeRedVerdict(projectDirectory: string, note: RedVerdictNote):
         );
       }
     }
+  }
+
+  if (note.refusedRepeat === true) {
+    lines.push(
+      '',
+      REFUSED_REPEAT_MARKER,
+      'Повтор без правок уже был отвергнут этим вердиктом один раз. Следующий такой же повтор',
+      'уйдёт приёмке на перепроверку: если причина красноты была переходной (среда, образ, PATH),',
+      'перепрогон это покажет.',
+    );
   }
 
   lines.push('');

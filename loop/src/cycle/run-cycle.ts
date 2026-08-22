@@ -20,6 +20,7 @@ import {
   EDIT_CLOCK_TOLERANCE_MS,
   hasRedVerdict,
   readVerdict,
+  verdictRefusedRepeat,
   workspaceEditedSince,
   writeRedVerdict,
 } from '../gate/verdicts.ts';
@@ -295,45 +296,55 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
   }
 
   /*
-   * «SUCCESS без единой правки при красной причине» — именованный отказ повтора (задача 176).
+   * «SUCCESS без единой правки при красной причине» — именованный отказ повтора (задача 176),
+   * И РОВНО ОДИН РАЗ на цепочку (находка живого гейта M17а).
    *
    * Класс прогона Б: задание говорит «создай утилиту», всё уже создано, и исполнитель трижды
    * честно отвечает SUCCESS, не тронув ни файла, — а приёмка трижды платит полный прогон за ту же
-   * красноту. Третьего одинакового захода не будет: повтор, который заявляет успех, обязан был
-   * что-то починить. Допуск часов смещает ошибку в безопасную сторону — сомнительное «не трогал»
-   * читается как «трогал», и тогда приёмка просто идёт своим чередом, как шла вчера.
+   * красноту. Отказ даёт исполнителю один шанс прочитать причину и починить. Но причина бывает
+   * ПЕРЕХОДНОЙ — образ, PATH, среда, — и правок тогда объективно не нужно: живой прогон замерил,
+   * как отказ-каждый-раз замыкает такую задачу в вечный красный цикл. Поэтому второй подряд
+   * «SUCCESS без правок» уходит приёмке на перепроверку: изменившийся мир показывает себя там.
    */
   if (
     hadRedVerdict &&
     reported?.status === 'SUCCESS' &&
     !workspaceEditedSince(projectDirectory, iterationStartedAt - EDIT_CLOCK_TOLERANCE_MS)
   ) {
-    setStatus(database, projectDirectory, projectId, taskId, 'FAILED');
-    const reason =
-      'Повтор без правок при красной причине: исполнитель отчитался SUCCESS, не изменив ни файла, ' +
-      '— прежний вердикт приёмки остаётся в силе, задача не принята (именованный отказ, задача 176).';
-    say(reason, 'ERROR');
+    if (verdictRefusedRepeat(projectDirectory, taskId)) {
+      say(
+        'Повтор снова без правок — отказ уже был: приёмка перепроверяет заново (переходная причина покажет себя перепрогоном).',
+        'WARN',
+      );
+    } else {
+      setStatus(database, projectDirectory, projectId, taskId, 'FAILED');
+      const reason =
+        'Повтор без правок при красной причине: исполнитель отчитался SUCCESS, не изменив ни файла, ' +
+        '— прежний вердикт приёмки остаётся в силе, задача не принята (именованный отказ, задача 176).';
+      say(reason, 'ERROR');
 
-    const previous = readVerdict(projectDirectory, taskId);
-    writeRedVerdict(projectDirectory, {
-      taskId,
-      reason:
-        previous === null
-          ? reason
-          : `${reason}\n\nПрежний вердикт сохранён ниже — причина красноты не изменилась.\n\n---\n\n${previous}`,
-      acceptance: null,
-    });
+      const previous = readVerdict(projectDirectory, taskId);
+      writeRedVerdict(projectDirectory, {
+        taskId,
+        reason:
+          previous === null
+            ? reason
+            : `${reason}\n\nПрежний вердикт сохранён ниже — причина красноты не изменилась.\n\n---\n\n${previous}`,
+        acceptance: null,
+        refusedRepeat: true,
+      });
 
-    return {
-      taskId,
-      outcome: 'FAILED',
-      reported,
-      executor,
-      acceptance: null,
-      reason,
-      decisionId: recorded,
-      techStackRewritten: rewritten,
-    };
+      return {
+        taskId,
+        outcome: 'FAILED',
+        reported,
+        executor,
+        acceptance: null,
+        reason,
+        decisionId: recorded,
+        techStackRewritten: rewritten,
+      };
+    }
   }
 
   // 4. The gate. A fresh container, a copy of the code, and no knowledge of what the executor said.
@@ -343,7 +354,26 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
     JSON.parse(readFileSync(join(projectDirectory, HANDOFF.tasks, taskFileName(taskId)), 'utf8')),
   );
 
-  const acceptance = await acceptTask(task, commands, projectDirectory, {
+  /*
+   * Стек ПЕРЕПРОВЕРЯЕТСЯ перед самым судом (находка живого гейта M17а). Первый detect бежит на
+   * старте цикла — а итерация исполнителя длится минуты, и в параллельной вехе чужая задача 1
+   * успевает положить go.mod ПОСЛЕ старта соседних циклов: их приёмки, судившие по снимку старта,
+   * получали generic/debian и 127 на живом go-проекте — каскад заморозок одного класса. Приёмка
+   * судит против того, что проект ЕСТЬ на момент суда, — это её собственная доктрина (шаг 1), и
+   * перед судом она обходится тем же перечитыванием.
+   */
+  const { commands: commandsAtJudgment, rewritten: rewrittenAtJudgment } = detectAndRewrite(
+    projectDirectory,
+    taskId,
+  );
+  const stackRewritten = rewritten || rewrittenAtJudgment;
+  if (rewrittenAtJudgment || commandsAtJudgment.techStack !== commands.techStack) {
+    say(
+      `Стек к моменту приёмки: ${commandsAtJudgment.techStack} (на старте цикла был ${commands.techStack}).`,
+    );
+  }
+
+  const acceptance = await acceptTask(task, commandsAtJudgment, projectDirectory, {
     engine,
     ...(deps.acceptanceTimeoutMs === undefined ? {} : { timeoutMs: deps.acceptanceTimeoutMs }),
     ...(deps.acceptanceTestTimeoutMs === undefined
@@ -389,7 +419,7 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
       acceptance,
       reason: acceptance.reason,
       decisionId: recorded,
-      techStackRewritten: rewritten,
+      techStackRewritten: stackRewritten,
     };
   }
 
@@ -422,6 +452,6 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
     acceptance,
     reason: acceptance.reason,
     decisionId: recorded,
-    techStackRewritten: rewritten,
+    techStackRewritten: stackRewritten,
   };
 }

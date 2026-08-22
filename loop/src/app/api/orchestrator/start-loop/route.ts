@@ -14,6 +14,7 @@ import { getDatabase } from '../../../../db/client.ts';
 import { createDockerEngine } from '../../../../docker/engine.ts';
 import { resolveEndpoint } from '../../../../docker/transport.ts';
 import { eventBus } from '../../../../events/bus.ts';
+import { ensureBlockWatcher } from '../../../../gate/blocked.ts';
 import { intakeBundle, IntakeRefused } from '../../../../intake/intake.ts';
 import { createRoleChain } from '../../../../llm/roles.ts';
 import { createLogger } from '../../../../observability/log.ts';
@@ -136,6 +137,29 @@ export async function POST(request: Request): Promise<Response> {
    * already ACTIVE in the index; this line is the *event* of it, which a row cannot be.
    */
   eventBus().publish({ type: 'project-status', projectId: intake.projectId, status: 'ACTIVE' });
+
+  /*
+   * The block watcher for this project (task 167's finding): armed at the same moment the project
+   * becomes drivable, so «удалите файл — контур увидит» is true from the first block on. Idempotent
+   * across re-intakes of the same directory.
+   */
+  ensureBlockWatcher(database, directory, (taskId) => {
+    logger.write({
+      projectId: intake.projectId,
+      taskId,
+      agentRole: 'ORCHESTRATOR',
+      logLevel: 'WARN',
+      message:
+        `Блокировка задачи ${taskId} снята оператором (файл удалён) — задача снова PENDING. ` +
+        'Запустите конвейер снова (start-loop), чтобы продолжить.',
+    });
+    eventBus().publish({
+      type: 'task-status',
+      projectId: intake.projectId,
+      taskId,
+      status: 'PENDING',
+    });
+  });
 
   /*
    * The pipeline runs on after the answer. Errors reach the feed rather than a caller who has

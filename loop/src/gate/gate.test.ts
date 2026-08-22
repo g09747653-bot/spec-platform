@@ -8,7 +8,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openMigratedDatabase } from '../db/migrate.ts';
 import { HANDOFF, HandoffTask, taskFileName } from '../intake/handoff.ts';
 
-import { blockedPath, raiseBlock, renderBlockedFile, watchBlocks } from './blocked.ts';
+import {
+  blockedPath,
+  ensureBlockWatcher,
+  raiseBlock,
+  renderBlockedFile,
+  watchBlocks,
+} from './blocked.ts';
 import { decisionId, disagreesAboutOwner, readReport, recordDecision } from './report.ts';
 import {
   commandsRefusal,
@@ -279,7 +285,45 @@ describe('the blocking protocol (task 157)', () => {
     expect(unblocked).toEqual([]);
     await watcher.close();
   });
+
+  /**
+   * Реестр `ensureBlockWatcher` (задача 167 — находка живого гейта): сам вотчер был построен и
+   * оттестирован задачей 157, но НЕ подключён ни в одной точке продукта — файл блокировки обещал
+   * «контур увидит удаление», а удаление не видел никто. Свойства под тестом: подключение через
+   * реестр действительно снимает блокировку, и повторное подключение того же каталога не плодит
+   * второго вотчера (dev-перезагрузка модулей).
+   */
+  it('ensureBlockWatcher: снятие работает через реестр, второй вызов возвращает тот же вотчер', async () => {
+    writeTask();
+    raiseBlock(database, directory, details);
+
+    const unblocked: string[] = [];
+    const first = ensureBlockWatcher(database, directory, (taskId) => unblocked.push(taskId));
+    const second = ensureBlockWatcher(database, directory, () => undefined);
+    expect(second).toBe(first);
+
+    await first.ready;
+    rmSync(blockedPath(directory, TASK.taskId));
+    await waitFor(() => unblocked.length > 0, 5_000);
+
+    expect(unblocked).toEqual([TASK.taskId]);
+    expect(
+      database.prepare('SELECT status FROM tasks WHERE task_id = ?').get(TASK.taskId)?.status,
+    ).toBe('PENDING');
+
+    await first.close();
+    /* Каталог теста уходит вместе с afterEach — реестр не должен держать закрытый вотчер. */
+    watcherRegistryForTest().delete(directory);
+  });
 });
+
+/** Реестр — на globalThis; тест чистит за собой свою запись, не трогая чужие. */
+function watcherRegistryForTest(): Map<string, unknown> {
+  const holder = globalThis as unknown as Record<symbol, Map<string, unknown> | undefined>;
+  const key = Symbol.for('spec-platform.loop.block-watchers');
+  holder[key] ??= new Map();
+  return holder[key];
+}
 
 describe('the executor’s report (task 157)', () => {
   /** Who the orchestrator says this report is about — the only identity that reaches the table. */

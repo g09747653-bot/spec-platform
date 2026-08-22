@@ -70,18 +70,27 @@ function createFakeBotApi() {
           const ready = () =>
             updates.filter((update) => (update as { update_id: number }).update_id >= offset);
 
+          /* Один ответ на запрос: протухший waiter после таймера не пишет второй раз
+             (находка репетиции гейта 167 — тот же стенд, тот же класс). */
+          let settled = false;
+          const answer = (result: unknown) => {
+            if (settled) return;
+            settled = true;
+            ok(result);
+          };
+
           if (ready().length > 0) {
-            ok(ready());
+            answer(ready());
             return;
           }
           /* Длинный опрос: держим запрос, пока не придёт апдейт или не истечёт timeout. */
           const timeoutMs = Number(payload.timeout ?? 0) * 1000;
           const timer = setTimeout(() => {
-            ok([]);
+            answer([]);
           }, timeoutMs);
           waiters.push(() => {
             clearTimeout(timer);
-            ok(ready());
+            answer(ready());
           });
           return;
         }
@@ -380,7 +389,7 @@ describe('суверенитет на входе: задумка запуска�
     expect(launchCalls).toHaveLength(0);
   });
 
-  it('голос без настроенной транскрибации отвечает именованно, текстовый путь называется', async () => {
+  it('голосовое от владельца → именованный ответ «голос отложен», никаких действий (165, А-29)', async () => {
     await startGateway();
 
     api.push({
@@ -392,8 +401,12 @@ describe('суверенитет на входе: задумка запуска�
     });
     await until(() => api.sent.length > 0);
 
-    expect(api.sent[0]?.text).toContain('Голосовой путь ещё не настроен');
-    expect(api.sent[0]?.text).toContain('текстом');
+    expect(api.sent[0]?.text).toContain('Голос отложен решением владельца');
+    expect(api.sent[0]?.text).toContain('пришлите задумку текстом');
+    /* Никаких действий: ни запуска, ни кнопок, ни скачивания файла — один именованный ответ. */
+    expect(api.sent).toHaveLength(1);
+    expect(api.sent[0]?.reply_markup).toBeUndefined();
+    expect(launchCalls).toHaveLength(0);
   });
 });
 
