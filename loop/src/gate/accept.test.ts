@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { createFakeEngine, type FakeEngine, type StartOutcome } from '../docker/testing/fake-engine.ts';
+import {
+  createFakeEngine,
+  type FakeEngine,
+  type StartOutcome,
+} from '../docker/testing/fake-engine.ts';
 import { HandoffTask } from '../intake/handoff.ts';
 
 import { acceptTask, ACCEPTANCE_TEST_TIMEOUT_MS } from './accept.ts';
@@ -37,11 +41,7 @@ const TASK = HandoffTask.parse({
 /** The observer's answer for a copy that is a Node project with a test script. */
 const NODE_LISTING: StartOutcome = {
   exitCode: 0,
-  stdout: [
-    './package.json',
-    '__LOOP_OBSERVE_MANIFEST__',
-    '{"scripts":{"test":"npm test"}}',
-  ],
+  stdout: ['./package.json', '__LOOP_OBSERVE_MANIFEST__', '{"scripts":{"test":"npm test"}}'],
 };
 
 let workspace: string;

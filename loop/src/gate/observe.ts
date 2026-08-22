@@ -163,8 +163,7 @@ export async function observeProjectRoot(
 }
 
 export type TreeSnapshot =
-  | { ok: true; entries: ReadonlySet<string> }
-  | { ok: false; reason: string };
+  { ok: true; entries: ReadonlySet<string> } | { ok: false; reason: string };
 
 /**
  * Снимок дерева проекта: `тип размер mtime путь` на строку, минуя `handoff/` (его пишет сам

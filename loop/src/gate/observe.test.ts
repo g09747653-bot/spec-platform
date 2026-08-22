@@ -18,12 +18,7 @@ describe('наблюдение корня проекта (observeProjectRoot)', 
     const engine = createFakeEngine({
       onStart: () => ({
         exitCode: 0,
-        stdout: [
-          './go.mod',
-          './cmd',
-          './cmd/main.go',
-          '__LOOP_OBSERVE_MANIFEST__',
-        ],
+        stdout: ['./go.mod', './cmd', './cmd/main.go', '__LOOP_OBSERVE_MANIFEST__'],
       }),
     });
 
@@ -41,11 +36,7 @@ describe('наблюдение корня проекта (observeProjectRoot)', 
     const engine = createFakeEngine({
       onStart: () => ({
         exitCode: 0,
-        stdout: [
-          './package.json',
-          '__LOOP_OBSERVE_MANIFEST__',
-          '{"scripts":{"test":"node -e 0"}}',
-        ],
+        stdout: ['./package.json', '__LOOP_OBSERVE_MANIFEST__', '{"scripts":{"test":"node -e 0"}}'],
       }),
     });
 
