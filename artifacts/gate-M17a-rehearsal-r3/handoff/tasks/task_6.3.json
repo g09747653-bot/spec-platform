@@ -1,0 +1,12 @@
+{
+  "taskId": "6.3",
+  "milestoneId": "ms_06",
+  "title": "Системные E2E-тесты (CLI Tests)",
+  "description": "* *Описание:* Реализовать автоматизированный запуск утилиты в изолированном окружении, проверку кодов возврата процесса и сопоставление вывода в `stdout`/`stderr` с эталонными шаблонами.\n\n---",
+  "techStack": "nodejs",
+  "filesToEdit": [],
+  "dependsOn": [],
+  "unitTestCmd": "npm test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}
