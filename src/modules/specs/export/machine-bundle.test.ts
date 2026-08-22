@@ -222,7 +222,7 @@ describe('the speckit methodology’s live documents — the lettered-checkbox s
 
     // The inline clause is metadata, not a name: it feeds dependsOn and leaves the title.
     const t004 = derived.tasks.find((task) => task.taskId === 'T004');
-    expect(t004?.dependsOn).toEqual(['T006', 'T007']);
+    expect(t004?.dependsOn.slice(0, 2)).toEqual(['T006', 'T007']);
     expect(t004?.title).not.toContain('depends on');
     expect(t004?.title).toContain('Подготовить общие');
 
@@ -230,6 +230,39 @@ describe('the speckit methodology’s live documents — the lettered-checkbox s
     for (const task of derived.tasks) {
       for (const dependency of task.dependsOn) expect(ids).toContain(dependency);
     }
+  });
+
+  it('carries the phase ordering as explicit edges — the lettered plan’s order lives in its phases (D-317)', () => {
+    /* The live acceptance run without these: 34 of 41 tasks exported dependency-free, the
+       scheduler started T019 alongside T001, and five tasks blocked on missing prerequisites in
+       the first wave. A lettered task depends on every task of the previous phase, conservatively
+       — the same fallback the intake applies to a fully clause-less plan (task 156), applied
+       where the phases are still visible. */
+    const derived = deriveTasks(SPECKIT_TASKS(), 'speckit-live', 'speckit-live');
+    const get = (id: string) => derived.tasks.find((task) => task.taskId === id);
+
+    // Phase 1 is the root: no edges. Phase 2 waits for phase 1; inline clauses survive in front.
+    expect(get('T001')?.dependsOn).toEqual([]);
+    expect(get('T004')?.dependsOn).toEqual(['T006', 'T007', 'T001', 'T002', 'T003']);
+    // T012 opens phase 3 and waits for the whole of phase 2 — T019 can no longer start first.
+    expect(get('T012')?.dependsOn).toEqual([
+      'T004',
+      'T005',
+      'T006',
+      'T007',
+      'T008',
+      'T009',
+      'T010',
+      'T011',
+    ]);
+    expect(derived.tasks.filter((task) => task.dependsOn.length > 0)).toHaveLength(38);
+  });
+
+  it('adds no phase edges to the other shapes — historical goldens stay dependency-free', () => {
+    // The M14а live plan writes bold bullets under «Фаза N» headings and named no dependencies;
+    // its byte-for-byte golden already pins this, and this case says the same thing by name.
+    const derived = deriveTasks(read('fixtures/spec-bundle/golden/m14a-live.tasks.md'), 'x', 'x');
+    for (const task of derived.tasks) expect(task.dependsOn).toEqual([]);
   });
 
   it('slices the requirements out of a spec that keeps the heading one level deeper', () => {
