@@ -140,6 +140,22 @@ export function readBundle(directory: string): Bundle {
     ]);
   }
 
+  /*
+   * То же красное условие на requirements (D-316): при финальной приёмке Программы А пустые
+   * требования проскочили молча — интейк отверг только задачи, и дефект маппинга был виден лишь
+   * наполовину. Красна пустота ОБЕИХ групп сразу: методология вправе честно не иметь
+   * нефункциональной секции (speckit и не имеет), но спецификация без единого требования — это не
+   * спецификация, а нераспознанная форма.
+   */
+  if (
+    requirements.functionalRequirements.length === 0 &&
+    requirements.nonFunctionalRequirements.length === 0
+  ) {
+    throw new BundleRejected(BUNDLE_FILES.requirements, [
+      '/functionalRequirements: ни одного требования — схеме соответствует, но строить не по чему',
+    ]);
+  }
+
   return {
     bundleId: tasks.bundleId,
     projectId: tasks.projectId,

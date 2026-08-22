@@ -163,6 +163,55 @@ export function workspaceDirectoryName(now: number): string {
   );
 }
 
+/**
+ * Пустая выжимка при полновесном источнике — именованная причина отказа звена; null — бандл цел
+ * (D-316). Полновесность меряется источниками из того же архива: constitution/architecture в нём
+ * лежат дословно, и если ОНИ непусты, спецификация состоялась — нулевая выжимка тогда означает
+ * нераспознанную форму, а не пустую сессию. У requirements красна только пустота ОБЕИХ групп:
+ * методология может честно не иметь нефункциональной секции (speckit и не имеет).
+ */
+export function emptyExtracts(entries: Record<string, Uint8Array>): string | null {
+  const text = (name: string) => {
+    const content = entries[name];
+    return content === undefined ? '' : Buffer.from(content).toString('utf8').trim();
+  };
+
+  const sourcesBytes =
+    text('bundle/constitution.md').length + text('bundle/architecture.md').length;
+  if (sourcesBytes === 0) return null;
+
+  const rows = (name: string, pick: (parsed: unknown) => number[]): number[] | null => {
+    try {
+      return pick(JSON.parse(text(name)));
+    } catch {
+      return null;
+    }
+  };
+
+  const tasks = rows('bundle/tasks.json', (parsed) => [
+    (parsed as { tasks?: unknown[] }).tasks?.length ?? 0,
+  ]);
+  if (tasks !== null && tasks[0] === 0) {
+    return (
+      'выжимка bundle/tasks.json пуста (ноль задач) при полновесных источниках — ' +
+      'маппинг не распознал форму tasks-документа; конвейер не запускался'
+    );
+  }
+
+  const requirements = rows('bundle/requirements.json', (parsed) => [
+    (parsed as { functionalRequirements?: unknown[] }).functionalRequirements?.length ?? 0,
+    (parsed as { nonFunctionalRequirements?: unknown[] }).nonFunctionalRequirements?.length ?? 0,
+  ]);
+  if (requirements !== null && requirements[0] === 0 && requirements[1] === 0) {
+    return (
+      'выжимка bundle/requirements.json пуста (ни одного требования) при полновесных источниках — ' +
+      'маппинг не распознал форму requirements-документа; конвейер не запускался'
+    );
+  }
+
+  return null;
+}
+
 export interface FacadeOutcome {
   ok: boolean;
   /** Какое звено остановило путь; null при успехе. */
@@ -310,6 +359,16 @@ export async function runFacade(
       mkdirSync(dirname(target), { recursive: true });
       writeFileSync(target, Buffer.from(content));
     }
+
+    /*
+     * Смок выжимок ДО алерта «Бандл получен» (D-316; вердикт fix-раунда п.3). Финальная приёмка
+     * заказчика заплатила 58 минут генерации, чтобы узнать от интейка про ноль задач, — а пустые
+     * requirements проскочили бы и его. Ранний отказ по обеим выжимкам: полновесные источники при
+     * нулевой выжимке — это маппинг, не распознавший форму документов, и звено обязано назвать
+     * это немедленно, своим именем.
+     */
+    const empty = emptyExtracts(entries);
+    if (empty !== null) throw new Error(empty);
 
     log(`фасад: бандл из ${String(names.length)} файлов распакован в ${projectDirectory}`);
     await notify(

@@ -563,6 +563,18 @@ describe('bundles the intake refuses (task 156 AC-2/AC-3)', () => {
     expect(() => readBundle(bundleDir())).toThrow(/ноль задач/);
   });
 
+  it('refuses a schema-valid bundle with zero requirements — the Программа-А acceptance finding (D-316)', () => {
+    /* Пустые requirements при финальной приёмке проскочили молча: интейк отверг только задачи, и
+       дефект маппинга был виден наполовину. Контракту нужен страж на обеих выжимках. */
+    writeFileSync(
+      join(bundleDir(), 'requirements.json'),
+      JSON.stringify({ bundleId: 'b', functionalRequirements: [], nonFunctionalRequirements: [] }),
+      'utf8',
+    );
+
+    expect(() => readBundle(bundleDir())).toThrow(/ни одного требования/);
+  });
+
   it('names a missing file rather than throwing whatever `readFile` throws', () => {
     rmSync(join(bundleDir(), 'constitution.md'));
 

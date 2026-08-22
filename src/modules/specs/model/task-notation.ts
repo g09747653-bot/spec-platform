@@ -67,5 +67,22 @@ export const TASK_CHECKBOX = /^\s*[-*+]\s+\[[ xX]\]\s+(\d+(?:\.\d+)*)\\?[.)]\s+(
 export const TASK_BULLET =
   /^\s*[-*+]\s+[*_]{1,3}\s*(?:task|задача)\s+([A-Za-z0-9.-]+)\s*[:.—–-]\s*(.+)$/i;
 
+/**
+ * `- [ ] T001 [P] Title` — the lettered-checkbox shape the Spec-Kit methodology writes (D-316).
+ *
+ * The fourth recognised shape, added as tolerance after the Программа-А acceptance run: the
+ * customer's session ran the speckit pipeline, whose vendored tasks template records every task as
+ * a checkbox whose identifier is a letter-prefixed token (`T001`), with no dot after it — so all
+ * three shapes above missed, and a 37-KB plan mapped to zero tasks. The token is deliberately
+ * narrow (one letter, digits): a checkbox that merely starts with a word must not open an entry.
+ */
+export const TASK_CHECKBOX_LETTERED = /^\s*[-*+]\s+\[[ xX]\]\s+([A-Za-z]\d{1,4})\b\s*(.+)$/;
+
+/**
+ * `(depends on T006, T007)` — the inline dependency clause of the same Spec-Kit shape, written on
+ * the entry line itself rather than on a line of its own beneath it.
+ */
+export const DEPENDS_INLINE = /\(\s*depends\s+on\s+([^)]+)\)/i;
+
 /** A line that states an entry's dependencies, in either language of the product. */
 export const DEPENDS_LINE = new RegExp(`(${DEPENDENCY_LABELS.join('|')})\\s*:`, 'iu');

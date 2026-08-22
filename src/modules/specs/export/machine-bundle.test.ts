@@ -200,6 +200,64 @@ describe('deriveTasks on a document written in the canonical form (task 169)', (
   });
 });
 
+describe('the speckit methodology’s live documents — the lettered-checkbox shape (D-316)', () => {
+  /*
+   * The fourth golden pair, fixed byte-for-byte from the Программа-А acceptance run itself: the
+   * customer's session ran the speckit pipeline, whose tasks template records entries as
+   * `- [ ] T001 …` with an inline `(depends on …)` clause, and whose spec keeps «Functional
+   * Requirements» one level deeper than the classic baseline. The first mapping knew neither, so a
+   * 37-KB plan and a 28-KB spec exported as schema-valid empty JSON — and the loop's intake
+   * rightly refused the bundle after fifty-eight minutes of generation.
+   */
+  const SPECKIT_TASKS = () => read('fixtures/spec-bundle/golden/speckit-live.tasks.md');
+  const SPECKIT_SPEC = () => read('fixtures/spec-bundle/golden/speckit-live.requirements.md');
+
+  it('reads all forty-one lettered tasks with their inline dependency clauses', () => {
+    const derived = deriveTasks(SPECKIT_TASKS(), 'speckit-live', 'speckit-live');
+
+    expect(validTasks(derived), ajv.errorsText(validTasks.errors)).toBe(true);
+    expect(derived.tasks).toHaveLength(41);
+    expect(derived.tasks[0]?.taskId).toBe('T001');
+    expect(derived.tasks.at(-1)?.taskId).toBe('T041');
+
+    // The inline clause is metadata, not a name: it feeds dependsOn and leaves the title.
+    const t004 = derived.tasks.find((task) => task.taskId === 'T004');
+    expect(t004?.dependsOn).toEqual(['T006', 'T007']);
+    expect(t004?.title).not.toContain('depends on');
+    expect(t004?.title).toContain('Подготовить общие');
+
+    const ids = new Set(derived.tasks.map((task) => task.taskId));
+    for (const task of derived.tasks) {
+      for (const dependency of task.dependsOn) expect(ids).toContain(dependency);
+    }
+  });
+
+  it('slices the requirements out of a spec that keeps the heading one level deeper', () => {
+    const derived = deriveRequirements(SPECKIT_SPEC(), 'speckit-live');
+
+    expect(validRequirements(derived), ajv.errorsText(validRequirements.errors)).toBe(true);
+
+    // Thirteen FR rows, identifier-defined in the document; speckit has no non-functional
+    // section at all, so an empty NFR array is the honest answer rather than a defect.
+    expect(derived.functionalRequirements).toHaveLength(13);
+    expect(derived.nonFunctionalRequirements).toEqual([]);
+    expect(derived.functionalRequirements[0]?.title).toContain('index.html');
+  });
+
+  it('matches the committed goldens byte for byte', () => {
+    const tasks = `${JSON.stringify(deriveTasks(SPECKIT_TASKS(), 'speckit-live', 'speckit-live'), null, 2)}\n`;
+    const requirements = `${JSON.stringify(deriveRequirements(SPECKIT_SPEC(), 'speckit-live'), null, 2)}\n`;
+
+    expect(tasks).toBe(read('fixtures/spec-bundle/golden/speckit-live.tasks.json'));
+    expect(requirements).toBe(read('fixtures/spec-bundle/golden/speckit-live.requirements.json'));
+  });
+
+  it('parses lettered dependency tokens without double-counting their digits', () => {
+    expect(parseDependsOn('T006, T007')).toEqual(['T006', 'T007']);
+    expect(parseDependsOn('2, 3')).toEqual(['2', '3']);
+  });
+});
+
 describe('the canonical record and the mapping are one notation (task 169)', () => {
   /*
    * The mechanical half of task 169. `CANONICAL_TASK_RECORD` is quoted verbatim into the

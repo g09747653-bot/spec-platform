@@ -1,7 +1,14 @@
 import { strToU8, zipSync } from 'fflate';
 
 import { definedIdentifier, readLines } from '../lint/identifiers';
-import { DEPENDS_LINE, TASK_BULLET, TASK_CHECKBOX, TASK_HEADING } from '../model/task-notation';
+import {
+  DEPENDS_INLINE,
+  DEPENDS_LINE,
+  TASK_BULLET,
+  TASK_CHECKBOX,
+  TASK_CHECKBOX_LETTERED,
+  TASK_HEADING,
+} from '../model/task-notation';
 import type { ExportableFile } from '../repositories/spec-files';
 import { requirementSectionBodies } from '../validate-structure';
 
@@ -272,11 +279,12 @@ export interface MachineTasks {
 }
 
 /*
- * The three recognised entry shapes and the dependency clause live in `model/task-notation.ts` —
- * one notation, read here and rendered into the tasks-generation instruction (task 169). All three
- * stay recognised as **tolerance**: a bundle sealed before the instruction named a canonical form
- * must keep exporting, and forgetting one of them is how the loop received zero tasks from a
- * non-empty document at the M14а gate.
+ * The four recognised entry shapes and the two dependency clauses live in
+ * `model/task-notation.ts` — one notation, read here and rendered into the tasks-generation
+ * instruction (task 169). All four stay recognised as **tolerance**: a bundle sealed before the
+ * instruction named a canonical form must keep exporting, and forgetting one of them is how the
+ * loop received zero tasks from a non-empty document — at the M14а gate (bold bullets) and again
+ * at the Программа-А acceptance (the speckit methodology's lettered checkboxes, D-316).
  */
 
 /** A task token: `148`, `1.1`, `2.4` — not the digits inside `А-2.1` or `FR-003`. */
@@ -286,6 +294,9 @@ const TOKEN_OR_RANGE = new RegExp(
   'gu',
 );
 
+/** A lettered task token of the Spec-Kit shape: `T001`, `T012` (D-316). */
+const LETTERED_TOKEN = /\b([A-Za-z]\d{1,4})\b/g;
+
 /**
  * The task tokens a dependencies clause names, ranges expanded.
  *
@@ -293,11 +304,17 @@ const TOKEN_OR_RANGE = new RegExp(
  * _Requirements: А-2.1_` states two dependencies and no more, and reading past the closing `_`
  * would hand the requirement reference to the dependency list. `148–150` → 148, 149, 150; a range
  * between dotted tokens (`1.1–1.3`) has no defined walk, so it contributes its two endpoints. `—`,
- * `none` and prose contribute nothing: only tokens count.
+ * `none` and prose contribute nothing: only tokens count. Lettered tokens (`T006`, the Spec-Kit
+ * shape) count whole and never overlap the numeric scan — its lookbehind refuses a digit that
+ * follows a letter.
  */
 export function parseDependsOn(clause: string): string[] {
   const found: string[] = [];
   const own = clause.split(/[_·;|]/, 1)[0] ?? '';
+
+  for (const match of own.matchAll(LETTERED_TOKEN)) {
+    found.push(match[1] ?? '');
+  }
 
   for (const match of own.matchAll(TOKEN_OR_RANGE)) {
     const [, from = '', to] = match;
@@ -327,6 +344,8 @@ interface OpenTask {
   title: string;
   level: number | null;
   body: ScannedLine[];
+  /** Dependencies the entry line itself stated — the Spec-Kit inline clause (D-316). */
+  inlineDepends: string[];
 }
 
 /**
@@ -344,17 +363,26 @@ export function parseTaskEntries(tasksMarkdown: string): MachineTaskRow[] {
     if (open === null) return;
 
     const description = trimBlankEdges(open.body.map((line) => line.text));
-    const dependsClause = open.body
-      .filter((line) => !line.fenced)
+    const bodyLines = open.body.filter((line) => !line.fenced);
+    const dependsClause = bodyLines
       .map((line) => DEPENDS_LINE.exec(line.text))
       .filter((match) => match !== null)
       .map((match) => match.input.slice(match.index + match[0].length));
+    const inlineClause = bodyLines
+      .map((line) => DEPENDS_INLINE.exec(line.text))
+      .filter((match) => match !== null)
+      .map((match) => match[1] ?? '');
 
     rows.push({
       taskId: open.taskId,
       title: open.title,
       description,
-      dependsOn: dependsClause.flatMap((clause) => parseDependsOn(clause)),
+      dependsOn: [
+        ...new Set([
+          ...open.inlineDepends,
+          ...[...dependsClause, ...inlineClause].flatMap((clause) => parseDependsOn(clause)),
+        ]),
+      ],
       metadata: { expectedArtifacts: [] },
     });
     open = null;
@@ -370,6 +398,7 @@ export function parseTaskEntries(tasksMarkdown: string): MachineTaskRow[] {
           title: stripEmphasis(heading[3] ?? ''),
           level: (heading[1] ?? '').length,
           body: [],
+          inlineDepends: [],
         };
         continue;
       }
@@ -382,6 +411,29 @@ export function parseTaskEntries(tasksMarkdown: string): MachineTaskRow[] {
           title: stripEmphasis(checkbox[2] ?? ''),
           level: null,
           body: [],
+          inlineDepends: [],
+        };
+        continue;
+      }
+
+      /*
+       * The Spec-Kit lettered checkbox (D-316). Its dependency clause sits on the entry line
+       * itself — `- [ ] T004 (depends on T006, T007) Title…` — so it is read here and taken out
+       * of the title: the clause is the entry's metadata, not its name.
+       */
+      const lettered = TASK_CHECKBOX_LETTERED.exec(line.text);
+      if (lettered !== null) {
+        close();
+        const rest = lettered[2] ?? '';
+        const inline = DEPENDS_INLINE.exec(rest);
+        open = {
+          taskId: lettered[1] ?? '',
+          title: stripEmphasis(
+            (inline === null ? rest : rest.replace(inline[0], ' ')).replaceAll(/\s{2,}/g, ' '),
+          ),
+          level: null,
+          body: [],
+          inlineDepends: inline === null ? [] : parseDependsOn(inline[1] ?? ''),
         };
         continue;
       }
@@ -394,6 +446,7 @@ export function parseTaskEntries(tasksMarkdown: string): MachineTaskRow[] {
           title: stripEmphasis(bullet[2] ?? ''),
           level: null,
           body: [],
+          inlineDepends: [],
         };
         continue;
       }

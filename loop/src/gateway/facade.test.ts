@@ -27,11 +27,16 @@ function buildPlatform(steps: StepScript[]) {
   let exportStatus = 200;
   let stepIndex = 0;
 
-  const bundleZip = zipSync({
+  /* Полновесный бандл: смок фасада (D-316) режет пустые выжимки, и счастливый путь обязан их нести. */
+  let bundleZip = zipSync({
     'bundle/constitution.md': new TextEncoder().encode('# Конституция\n\nПравила.'),
     'bundle/architecture.md': new TextEncoder().encode('# Архитектура\n\nМодули.'),
-    'bundle/requirements.json': new TextEncoder().encode('{"requirements":[]}'),
-    'bundle/tasks.json': new TextEncoder().encode('{"tasks":[]}'),
+    'bundle/requirements.json': new TextEncoder().encode(
+      JSON.stringify({ functionalRequirements: [{ id: 'FR-1' }], nonFunctionalRequirements: [] }),
+    ),
+    'bundle/tasks.json': new TextEncoder().encode(
+      JSON.stringify({ tasks: [{ taskId: '1', title: 'Задача' }] }),
+    ),
   });
 
   const server: Server = createServer((request, response) => {
@@ -87,6 +92,17 @@ function buildPlatform(steps: StepScript[]) {
     calls,
     setExportStatus(status: number) {
       exportStatus = status;
+    },
+    /** Экспорт отдаёт бандл со схемо-валидными, но ПУСТЫМИ выжимками — сырьё кейса D-316. */
+    emptyExtractsBundle() {
+      bundleZip = zipSync({
+        'bundle/constitution.md': new TextEncoder().encode('# Конституция\n\nПравила.'),
+        'bundle/architecture.md': new TextEncoder().encode('# Архитектура\n\nМодули.'),
+        'bundle/requirements.json': new TextEncoder().encode(
+          JSON.stringify({ functionalRequirements: [], nonFunctionalRequirements: [] }),
+        ),
+        'bundle/tasks.json': new TextEncoder().encode(JSON.stringify({ tasks: [] })),
+      });
     },
     async listen(): Promise<string> {
       await new Promise<void>((ready) => server.listen(0, '127.0.0.1', ready));
@@ -245,6 +261,25 @@ describe('отказ любого звена — именованный алер
     expect(outcome.failedLink).toBe('платформа/машинный экспорт');
     expect(alerts.join('\n')).toContain('машинный экспорт');
     expect(alerts.join('\n')).toContain('EXPORT_BROKEN');
+    expect(loop.bodies).toHaveLength(0);
+  });
+
+  it('пустые выжимки при полновесных источниках — именованный отказ ДО «Бандл получен», контур не зван (D-316)', async () => {
+    /* Слепок финальной приёмки Программы А: 58 минут спецификации, полновесные constitution и
+       architecture — и схемо-валидные пустышки вместо requirements.json/tasks.json, потому что
+       маппинг не знал форму документов методологии. Отказ обязан прозвучать сразу после экспорта,
+       своим именем, а не через 400 интейка после ещё девяти минут. */
+    const platform = buildPlatform([done(5)]);
+    platform.emptyExtractsBundle();
+    const loop = buildLoop();
+
+    const outcome = await run(platform, loop);
+
+    expect(outcome.ok).toBe(false);
+    expect(outcome.failedLink).toBe('платформа/машинный экспорт');
+    expect(alerts.join('\n')).toContain('выжимка bundle/tasks.json пуста');
+    expect(alerts.join('\n')).toContain('маппинг не распознал форму');
+    expect(alerts.join('\n')).not.toContain('Бандл получен');
     expect(loop.bodies).toHaveLength(0);
   });
 
