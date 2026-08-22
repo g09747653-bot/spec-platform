@@ -354,7 +354,26 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
     JSON.parse(readFileSync(join(projectDirectory, HANDOFF.tasks, taskFileName(taskId)), 'utf8')),
   );
 
-  const acceptance = await acceptTask(task, commands, projectDirectory, {
+  /*
+   * Стек ПЕРЕПРОВЕРЯЕТСЯ перед самым судом (находка живого гейта M17а). Первый detect бежит на
+   * старте цикла — а итерация исполнителя длится минуты, и в параллельной вехе чужая задача 1
+   * успевает положить go.mod ПОСЛЕ старта соседних циклов: их приёмки, судившие по снимку старта,
+   * получали generic/debian и 127 на живом go-проекте — каскад заморозок одного класса. Приёмка
+   * судит против того, что проект ЕСТЬ на момент суда, — это её собственная доктрина (шаг 1), и
+   * перед судом она обходится тем же перечитыванием.
+   */
+  const { commands: commandsAtJudgment, rewritten: rewrittenAtJudgment } = detectAndRewrite(
+    projectDirectory,
+    taskId,
+  );
+  const stackRewritten = rewritten || rewrittenAtJudgment;
+  if (rewrittenAtJudgment || commandsAtJudgment.techStack !== commands.techStack) {
+    say(
+      `Стек к моменту приёмки: ${commandsAtJudgment.techStack} (на старте цикла был ${commands.techStack}).`,
+    );
+  }
+
+  const acceptance = await acceptTask(task, commandsAtJudgment, projectDirectory, {
     engine,
     ...(deps.acceptanceTimeoutMs === undefined ? {} : { timeoutMs: deps.acceptanceTimeoutMs }),
     ...(deps.acceptanceTestTimeoutMs === undefined
@@ -400,7 +419,7 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
       acceptance,
       reason: acceptance.reason,
       decisionId: recorded,
-      techStackRewritten: rewritten,
+      techStackRewritten: stackRewritten,
     };
   }
 
@@ -433,6 +452,6 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
     acceptance,
     reason: acceptance.reason,
     decisionId: recorded,
-    techStackRewritten: rewritten,
+    techStackRewritten: stackRewritten,
   };
 }

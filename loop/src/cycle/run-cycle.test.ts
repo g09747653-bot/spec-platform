@@ -332,6 +332,66 @@ describe('вердикт приёмки — исполнителю повтор�
     expect(hasRedVerdict(projectDirectory, TASK)).toBe(false);
   });
 
+  it('стек перепроверяется ПЕРЕД приёмкой: маркер, созданный исполнителем во время итерации, судится, а не снимок старта (находка гейта M17а)', async () => {
+    /* Задание без команд, workspace без манифеста: на старте цикла стек generic и приёмке было
+       бы «нечего запускать». Исполнитель кладёт package.json ВНУТРИ итерации — суд обязан видеть
+       уже nodejs и запустить npm test. До правки этот класс дал каскад 127/отказов в параллельной
+       вехе живого прогона. */
+    rmSync(join(projectDirectory, 'package.json'), { force: true });
+    writeFileSync(
+      join(projectDirectory, HANDOFF.tasks, taskFileName(TASK)),
+      `${JSON.stringify(
+        HandoffTask.parse({
+          taskId: TASK,
+          milestoneId: 'ms_01',
+          title: 'Задача без команд',
+          description: 'Сделать',
+          techStack: 'generic',
+          filesToEdit: [],
+          expectedArtifacts: [],
+          status: 'PENDING',
+        }),
+        null,
+        2,
+      )}\n`,
+      'utf8',
+    );
+
+    const engine = createFakeEngine({
+      onStart: ({ name }) => {
+        if (name.startsWith('delivery-executor-')) {
+          writeFileSync(
+            join(projectDirectory, HANDOFF.reports, `report_${TASK}.json`),
+            successReport(),
+            'utf8',
+          );
+          writeFileSync(
+            join(projectDirectory, 'package.json'),
+            JSON.stringify({ name: 'born-mid-cycle', scripts: { test: 'node -e 0' } }),
+            'utf8',
+          );
+          return { exitCode: 0 };
+        }
+        return { exitCode: 0 };
+      },
+    });
+
+    const result = await runCycle(
+      { projectId: PROJECT, taskId: TASK, projectDirectory },
+      {
+        database,
+        engine,
+        logger,
+        credential: { kind: 'ANTHROPIC_API_KEY', value: 'not-a-real-key' },
+        executorCommand: ['sh', '-c', 'true'],
+      },
+    );
+
+    expect(result.outcome).toBe('COMPLETED');
+    expect(result.techStackRewritten).toBe(true);
+    expect(engine.containers.some((c) => c.name.endsWith('-unit'))).toBe(true);
+  });
+
   it('приёмка гоняет команды через sh -c, не -lc: login-шелл терял toolchain-PATH (находка гейта M17а)', async () => {
     const green = cycle(0, true);
     await green.run();
