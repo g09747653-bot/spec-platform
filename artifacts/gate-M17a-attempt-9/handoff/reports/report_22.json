@@ -1,0 +1,15 @@
+{
+  "reportId": "report_22",
+  "taskId": "22",
+  "projectId": "unitconv",
+  "executorId": "claude-code",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 12,
+    "passed": 12,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "scripts/build-all.sh собирает набор целей по умолчанию, если аргументы не переданы",
+  "rationale": "Задание описывает scripts/build-all.sh как принимающий пары GOOS/GOARCH аргументами, но unitTestCmd в задаче вызывает его как `sh scripts/build-all.sh` без аргументов. Чтобы скрипт одновременно (а) принимал произвольные пары GOOS/GOARCH аргументами (используется в job cross-build workflow с явным списком из 5 целей) и (б) корректно отрабатывал unitTestCmd без аргументов, добавлено поведение по умолчанию: при отсутствии аргументов скрипт собирает те же 5 целей (windows/amd64, darwin/amd64, darwin/arm64, linux/amd64, linux/arm64), что и job cross-build. Скрипт использует `set -eu` и завершается ненулевым кодом как при ошибке go build, так и при некорректном формате цели (не GOOS/GOARCH). Локально проверено: `sh scripts/build-all.sh && go test ./...` завершается кодом 0, все 5 бинарников собираются в dist/, `go build ./...` и `go test ./...` проходят зелёным (12 пакетов, включая internal/depcheck из задачи 21). Go в окружении выполнения отсутствовал изначально — установлен golang-go (1.19.8) через apt-get, как и в предыдущей задаче 21."
+}

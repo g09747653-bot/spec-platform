@@ -1,0 +1,17 @@
+{
+  "taskId": "10",
+  "milestoneId": "ms_03",
+  "title": "Реализовать структуру Record и чтение истории internal/history",
+  "description": "1. В пакете `internal/history` определи структуру `Record` с полями `Category`, `Value`, `FromUnit`, `ToUnit`, `Result`, `Timestamp` — используй JSON-теги в snake_case (`category`, `value`, `from_unit`, `to_unit`, `result`, `timestamp`), значение `Timestamp` — строка в формате ISO 8601 UTC (например, через `time.Now().UTC().Format(time.RFC3339)`).\n2. Определи тип `Store` (хранит путь к файлу истории) и метод `Store.Load() ([]Record, error)`.\n3. Если файл истории не существует (`os.IsNotExist`), верни пустой срез `Record` и `nil`-ошибку — отсутствие файла не является ошибкой (FR-15).\n4. Если файл существует, но его содержимое не парсится как валидный JSON-массив записей, верни ошибку типа `EnvironmentError` (используй/создай тип в пакете `internal/apperr`, если он ещё не создан задачей 2) с понятным сообщением о повреждении файла истории (FR-16). Не паникуй и не глотай ошибку молча.\n5. Если файл читается и парсится успешно, верни срез `Record` в том порядке, в котором записи лежат в файле.\n6. Не реализуй в этой задаче запись/усечение истории (`Store.Save`/`Append`) — только структуру `Record` и `Store.Load()`.\n7. Напиши модульные тесты в `internal/history`, покрывающие: отсутствующий файл (пустая история, без ошибки), повреждённый JSON (ошибка `EnvironmentError`), корректный файл с несколькими записями (все записи возвращены в правильном порядке).",
+  "techStack": "go",
+  "filesToEdit": [
+    "internal/history/history.go",
+    "internal/history/history_test.go"
+  ],
+  "dependsOn": [
+    "2"
+  ],
+  "unitTestCmd": "go test ./internal/history/...",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

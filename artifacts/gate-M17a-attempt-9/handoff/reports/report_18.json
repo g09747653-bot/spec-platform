@@ -1,0 +1,15 @@
+{
+  "reportId": "report_18",
+  "taskId": "18",
+  "projectId": "unitconv",
+  "executorId": "claude-agent",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 66,
+    "passed": 66,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "Вынес формирование текста справки из cli.go в отдельный internal/cli/help.go; не трогал cmd/unitconv/main.go",
+  "rationale": "Функциональная реализация вывода справки (--help, -h, отсутствие аргументов) уже существовала внутри internal/cli/cli.go как часть задачи 15 (её filesToEdit покрывали cli.go, а справка была нужна, чтобы Run() компилировался и поддерживал грамматику команд из architecture.md ещё до реализации convert/history). Однако задача 18 явно требует отдельного файла internal/cli/help.go в filesToEdit, поэтому я перенёс printHelp()/helpText() из cli.go в новый help.go без изменения поведения, убрал ставший неиспользуемым импорт internal/units из cli.go и расширил текст справки явным перечислением порядка и назначения позиционных параметров convert (category, value, from_unit, to_unit) и явным упоминанием порядка вывода history (новые записи сверху), сверив формулировки с FR-23, FR-11 и разделом «API / Protocol Design» architecture.md. Список кодов единиц по категориям length/mass/temperature берётся из internal/units.Registry (единственный источник истины), а не задан отдельным литералом в help.go. Run() в cli.go по-прежнему вызывает printHelp() для всех трёх сценариев (--help, -h, пустые args) и возвращает 0 — эта диспетчеризация уже была подключена в задаче 15 и не потребовала изменений логики, только удаления перемещённого кода. go build ./..., go vet ./... и gofmt -l . чисты; go test ./... — 66 пройдено, 0 провалено, 2 пропущено (TestAppend_ReadOnlyDirectoryWrapsEnvironmentError в internal/history и internal/storage — пропускаются под root/в средах без ограничения прав на запись, не связаны с задачей 18). Тесты internal/cli/cli_test.go (TestRun_HelpScenarios, TestRun_HelpScenariosProduceIdenticalOutput) уже покрывали ровно то, что требует пункт 6 задания (одинаковый непустой вывод для трёх сценариев, наличие имён команд convert/history и кодов единиц, код завершения 0) — я их не менял, они прошли зелёными после переноса кода. e2eTestCmd из задания (сборка cmd/unitconv и вызов бинарника) технически возвращает код 0 для всех трёх сценариев, но не покажет текст справки в стандартном виде: cmd/unitconv/main.go — файл вне мандата задачи 18 (его filesToEdit — только internal/cli/help.go и internal/cli/cli.go) и сейчас является пустой заглушкой (func main() {}), не вызывающей internal/cli.Run(). Подключение main() к internal/cli.Run() и os.Exit() с кодом возврата — явный и единственный предмет отдельной задачи 19 (dependsOn: 16, 17, 18; status: PENDING на момент сдачи), которая не входит в scope задачи 18. Не архитектурное решение, а зафиксированный факт: до выполнения задачи 19 e2e-проверка через собранный бинарник не выявит регрессии в help.go, но и не подтвердит её работу по выводимому тексту — корректность проверена на уровне пакета internal/cli через go test, что и есть unitTestCmd задачи 18."
+}

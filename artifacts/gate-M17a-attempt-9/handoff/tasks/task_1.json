@@ -1,0 +1,21 @@
+{
+  "taskId": "1",
+  "milestoneId": "ms_01",
+  "title": "Инициализировать Go-модуль и структуру каталогов проекта",
+  "description": "1. В корне рабочей директории выполнить `go mod init unitconv` (или создать `go.mod` вручную) с директивой `go 1.21` (или новее, но без внешних зависимостей — `require` не должен содержать ничего). 2. Создать каталог `cmd/unitconv/` с файлом `main.go`, содержащим `package main` и функцию `func main() {}` — точку входа, пока без вызова логики CLI (это задача другого таска). 3. Создать каталог `internal/apperr/` с файлом `apperr.go`, содержащим `package apperr` — заготовку пакета без реализации функций (только объявление пакета, чтобы каталог был валидным Go-пакетом). 4. Аналогично создать `internal/units/units.go` с `package units`, `internal/format/format.go` с `package format`, `internal/convert/convert.go` с `package convert`, `internal/history/history.go` с `package history`, `internal/cli/cli.go` с `package cli` — каждый файл должен содержать только объявление пакета (`package X`), без бизнес-логики, типов и функций — это чистый каркас каталогов и пакетов, наполнение содержимым будет выполняться последующими задачами. 5. Убедиться, что `go.mod` не содержит директив `require` (нет внешних зависимостей), как того требует NFR-6. 6. Проверить, что проект собирается: `go build ./...` должен завершиться без ошибок, а `go vet ./...` — без предупреждений. Не добавлять тесты, реализацию логики конвертации, форматирования, хранения или разбора аргументов — это выходит за рамки данной задачи.",
+  "techStack": "go",
+  "filesToEdit": [
+    "go.mod",
+    "cmd/unitconv/main.go",
+    "internal/apperr/apperr.go",
+    "internal/units/units.go",
+    "internal/format/format.go",
+    "internal/convert/convert.go",
+    "internal/history/history.go",
+    "internal/cli/cli.go"
+  ],
+  "dependsOn": [],
+  "unitTestCmd": "go build ./... && go vet ./...",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

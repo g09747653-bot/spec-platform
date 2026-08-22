@@ -1,0 +1,15 @@
+{
+  "reportId": "report_6",
+  "taskId": "6",
+  "projectId": "unitconv",
+  "executorId": "claude-agent",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 4,
+    "passed": 4,
+    "failed": 0
+  },
+  "errors": [],
+  "decisionTitle": "Пакет internal/convert/mass как подпакет (mass/mass.go), тесты названы с 'Mass' для совместимости с unitTestCmd",
+  "rationale": "task_6.json допускал два варианта пути (internal/convert/mass.go либо internal/convert/mass/mass.go) и просил ориентироваться на стиль соседнего конвертера length, если он уже реализован. На момент выполнения internal/convert/length/length.go и internal/convert/temperature/temperature.go уже существовали как отдельные подпакеты (package length, package temperature) с функцией Convert(value float64, from, to string) (float64, error), а internal/convert/convert.go — пустой файл-заглушка (package convert) под будущий диспетчер задачи 8. Чтобы не создавать коллизию имени Convert в пакете convert и сохранить единообразие доменного слоя, реализовал internal/convert/mass/mass.go как package mass по образцу length: неэкспортируемая map коэффициентов пересчёта в базовую единицу (g: mg=0.001, g=1, kg=1000, lb=453.59237, oz=28.349523125), проверка value<0 и неизвестных from/to через apperr.NewInputError (тип, уже определённый в задаче 2), расчёт value*factor(from)/factor(to) без округления. Указанный в задаче unitTestCmd — `go test ./internal/convert/... -run Mass -v` — фильтрует по regexp имени функции, а не по имени пакета; поэтому тестовые функции названы TestMassConvert_Success/_NegativeValue/_UnknownFromUnit/_UnknownToUnit (а не TestConvert_*, как в length_test.go), иначе -run Mass не находил бы ни одного теста. TestMassConvert_Success — табличный тест с 13 подтестами: пары между всеми единицами (mg/g/kg/lb/oz), контрольная пара 16 oz = 1 lb, тождественная конвертация g→g и нулевое значение (валидно, не ошибка). Go в окружении отсутствовал, установлен golang-go 1.19.8 через apt (та же версия, что использовалась в задачах 2/3/5); go.mod указывает go 1.21 как минимальную версию, но пакет использует только fmt и стандартную арифметику, поэтому собирается и тестируется под 1.19 без изменений go.mod. go build ./..., go vet ./... и gofmt -l . по всему модулю чисты; go test ./... (весь репозиторий) проходит целиком."
+}
