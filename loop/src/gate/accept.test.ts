@@ -167,6 +167,39 @@ describe('the stack is the container’s listing, never the host’s view (D-314
     expect(engine.containers.some((container) => container.name.endsWith('-unit'))).toBe(false);
   });
 
+  it('runs stated commands in the observed stack’s image — the eighth run’s death, replayed (D-315)', async () => {
+    /* The assignment: intake's honest `generic` guess plus stated go commands — exactly task 1 of
+       the eighth live run. The copy holds a Go scaffold; the observation must pick the go image,
+       or the stated command answers 127 about the debian image instead of the code. */
+    const statedGo = HandoffTask.parse({
+      taskId: 'task_run8',
+      milestoneId: 'ms_01',
+      title: 'Инициализировать Go-модуль',
+      description: 'Сделать',
+      techStack: 'generic',
+      filesToEdit: [],
+      expectedArtifacts: [],
+      status: 'IN_PROGRESS',
+      unitTestCmd: 'go build ./... && go vet ./...',
+    });
+
+    const engine = createFakeEngine({
+      onStart: ({ name }) =>
+        name.endsWith('-observe')
+          ? { exitCode: 0, stdout: ['./go.mod', './cmd', '__LOOP_OBSERVE_MANIFEST__'] }
+          : { exitCode: 0, stdout: ['ok'] },
+    });
+
+    const verdict = await acceptTask(statedGo, workspace, { engine, testTimeoutMs: 1_000 });
+
+    expect(verdict.accepted).toBe(true);
+    expect(verdict.commands).toMatchObject({ techStack: 'go', fromAssignment: true });
+
+    const unit = engine.containers.find((container) => container.name.endsWith('-unit'));
+    expect(unit?.spec.image).toBe('golang:1.23-bookworm');
+    expect(unit?.spec.cmd?.[2]).toBe('go build ./... && go vet ./...');
+  });
+
   it('an empty listing meets no stated commands — the named «нечего запускать» refusal', async () => {
     const engine = createFakeEngine({
       onStart: ({ name }) =>

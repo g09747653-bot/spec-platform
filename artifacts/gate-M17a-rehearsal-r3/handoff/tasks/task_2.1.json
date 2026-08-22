@@ -1,0 +1,12 @@
+{
+  "taskId": "2.1",
+  "milestoneId": "ms_02",
+  "title": "Инициализация базы данных и схемы (clean_slate)",
+  "description": "* *Описание:* Реализовать проверку наличия файла базы данных `todo.db` в вычисленной рабочей директории. Если файл отсутствует, он должен создаваться автоматически с правами `0600` на POSIX-системах. При создании файла должна разворачиваться схема таблицы `tasks` и создаваться индексы `idx_tasks_due_date` на поле `due_date` и `idx_tasks_is_completed` на поле `is_completed`. Инициализация выполняется с чистого листа без использования исторических миграций.\n  * *Критерии приемки:* Файл `todo.db` создается автоматически строго внутри вычисленной `<WORK_DIR>`. Схема содержит таблицу `tasks` со столбцами: `id` (INTEGER PRIMARY KEY AUTOINCREMENT), `title` (TEXT NOT NULL), `due_date` (TEXT NOT NULL), `is_completed` (INTEGER NOT NULL DEFAULT 0), `created_at` (TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP). Индексы успешно созданы. На POSIX права файла равны `0600`.",
+  "techStack": "nodejs",
+  "filesToEdit": [],
+  "dependsOn": [],
+  "unitTestCmd": "npm test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

@@ -1,0 +1,14 @@
+{
+  "reportId": "r-stub-6.2",
+  "taskId": "6.2",
+  "projectId": "6325dcaf-b256-468a-9404-72fc957a0b09",
+  "executorId": "executor_stub",
+  "status": "SUCCESS",
+  "testsRun": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0
+  },
+  "decisionTitle": "Репетиция: содержательной правки не требуется",
+  "rationale": "Стабовый исполнитель проверяет бухгалтерию прогулки, а не саму задачу."
+}

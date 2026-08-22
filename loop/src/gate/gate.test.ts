@@ -205,6 +205,34 @@ describe('detecting the stack from an observation (task 157; D-314)', () => {
     expect(commands.unitTestCmd).toBe('pnpm --filter core test');
   });
 
+  it('takes the observed stack over the assignment’s label even for stated commands (D-315)', () => {
+    // The eighth live gate run: intake guessed `generic` over an empty workspace, the assignment
+    // stated go commands, the executor built the Go scaffold — and the stated branch still ran the
+    // commands in the debian image, five freezes in a row. The image must follow the observation.
+    const commands = resolveCommands(
+      {
+        techStack: 'generic',
+        unitTestCmd: 'go build ./... && go vet ./...',
+        e2eTestCmd: undefined,
+      },
+      observed(['go.mod']),
+    );
+
+    expect(commands.fromAssignment).toBe(true);
+    expect(commands.techStack).toBe('go');
+    expect(commands.unitTestCmd).toBe('go build ./... && go vet ./...');
+  });
+
+  it('keeps the assignment’s label when the observation saw nothing (generic)', () => {
+    // The marker files saw nothing — the assignment may still know better than an empty listing.
+    const commands = resolveCommands(
+      { techStack: 'python', unitTestCmd: 'pytest', e2eTestCmd: undefined },
+      observed([]),
+    );
+
+    expect(commands.techStack).toBe('python');
+  });
+
   it('refuses, by name, when generic meets no commands at all', () => {
     const refusal = commandsRefusal(
       resolveCommands(

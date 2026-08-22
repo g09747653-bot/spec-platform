@@ -1,0 +1,12 @@
+{
+  "taskId": "2.2",
+  "milestoneId": "ms_02",
+  "title": "Реализация репозитория задач (TaskRepository)",
+  "description": "* *Описание:* Написать класс репозитория для работы с SQLite. Все запросы на чтение и запись должны выполняться с использованием параметризованных запросов (placeholders `?`) во избежание SQL-инъекций. Реализовать методы: `insert_task(title, due_date)`, `get_task_by_id(task_id)`, `update_task_status(task_id, is_completed)`, `fetch_active_tasks(local_today)`, `fetch_all_tasks(local_today)`.\n  * *Критерии приемки:* Ни один запрос не использует прямую склейку строк. Операции изменения данных (`insert`, `update`) выполняются строго в рамках транзакций.",
+  "techStack": "nodejs",
+  "filesToEdit": [],
+  "dependsOn": [],
+  "unitTestCmd": "npm test",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

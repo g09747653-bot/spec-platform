@@ -137,9 +137,20 @@ export interface ResolvedCommands {
 /**
  * The commands this task's acceptance will actually run.
  *
- * **The assignment wins.** A task that names its own commands has been told something the marker
- * files cannot know — a monorepo's sub-package, a non-standard runner — and overriding it with a
- * guess would be the loop deciding it knows the project better than its plan does.
+ * **The assignment's commands win.** A task that names its own commands has been told something the
+ * marker files cannot know — a monorepo's sub-package, a non-standard runner — and overriding it
+ * with a guess would be the loop deciding it knows the project better than its plan does.
+ *
+ * **The observed stack wins over the assignment's label** (D-315; восьмой живой прогон). The stack
+ * picks the *image* the commands run in, and the eighth gate run died on exactly this seam: the
+ * intake honestly guessed `generic` over an empty workspace, the assignment stated
+ * `go build ./...`, the executor built the whole Go scaffold, the container observation duly saw
+ * `go.mod` — and the stated branch still took the assignment's `generic`, so the gate ran go
+ * commands in the debian image and got 127 five freezes in a row, until the executor blocked with
+ * «в приёмочном окружении отсутствует тулчейн Go». An observation that cannot reach the image
+ * choice is the D-314 defect wearing the assignment's label instead of the host's cache. A
+ * `generic` observation keeps the assignment's label: the marker files saw nothing, and the
+ * assignment may still know better.
  */
 export function resolveCommands(
   task: Pick<HandoffTask, 'unitTestCmd' | 'e2eTestCmd' | 'techStack'>,
@@ -149,7 +160,7 @@ export function resolveCommands(
 
   if (stated) {
     return {
-      techStack: task.techStack,
+      techStack: detected.techStack === 'generic' ? task.techStack : detected.techStack,
       unitTestCmd: (task.unitTestCmd ?? '').trim(),
       e2eTestCmd: (task.e2eTestCmd ?? '').trim(),
       fromAssignment: true,
