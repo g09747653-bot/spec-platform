@@ -405,6 +405,33 @@ describe('инструкция архитектора заданий требу�
       expect(prompt).toContain('PowerShell');
     }
   });
+
+  it('каждый промпт задания требует ОБЯЗАТЕЛЬНЫЙ unitTestCmd с честной проверкой результата (D-317)', async () => {
+    /* Урок финальной приёмки: «команда тестов, если применима» оставила 15 из 41 заданий без
+       команд, и конвейер замёрз волной отказов «нечего запускать» — приёмка не судила ни одного. */
+    const asked: string[] = [];
+    const recording: Chain = {
+      providers: [{ id: 'google', model: 'gemini', generate: () => Promise.resolve('') }],
+      generate: (request) => {
+        asked.push(request.prompt);
+        return Promise.resolve({
+          text: JSON.stringify({ description: 'Сделай', filesToEdit: [] }),
+          provider: 'google',
+        });
+      },
+    };
+
+    await run(recording);
+
+    const assignmentPrompts = asked.filter((prompt) => prompt.includes('Запись задачи из бандла'));
+    expect(assignmentPrompts.length).toBeGreaterThan(0);
+
+    for (const prompt of assignmentPrompts) {
+      expect(prompt).toContain('unitTestCmd ОБЯЗАТЕЛЕН');
+      expect(prompt).toContain('нечего запускать');
+      expect(prompt).toContain('test -f');
+    }
+  });
 });
 
 describe('who writes the assignment texts (task 156)', () => {
