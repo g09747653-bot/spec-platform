@@ -538,7 +538,8 @@ async function main(): Promise<number> {
     /* Реестр флейкает (попытка 4 умерла на TLS-таймауте auth.docker.io) — три захода с паузой. */
     let lastError = '';
     let pulledOk = false;
-    for (let attempt = 1; attempt <= 3 && !pulledOk; attempt += 1) {
+    /* Выход по успеху — break; условие цикла держит только счётчик заходов. */
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
       note(`Тяну приёмочный образ ${image} (заход ${String(attempt)}/3)…`);
       const pulled = spawnSync('docker', ['pull', image], { encoding: 'utf8' });
       if (pulled.status === 0) {
