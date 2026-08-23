@@ -322,7 +322,7 @@ describe('the researcher, reading the disk (task 161)', () => {
 
   it('adds the model’s brief when a chain answers, and survives one that does not', async () => {
     const answering: Chain = {
-      providers: [{ id: 'google', model: 'gemini', generate: () => Promise.resolve('') }],
+      providers: [{ id: 'google', model: 'gemini', supportsImages: true, generate: () => Promise.resolve('') }],
       generate: () =>
         Promise.resolve({
           text: 'Node-проект: игра в lib/, тесты node --test.',
@@ -335,7 +335,7 @@ describe('the researcher, reading the disk (task 161)', () => {
     expect(written.report).toContain('Node-проект');
 
     const failing: Chain = {
-      providers: [{ id: 'google', model: 'gemini', generate: () => Promise.resolve('') }],
+      providers: [{ id: 'google', model: 'gemini', supportsImages: true, generate: () => Promise.resolve('') }],
       generate: () => Promise.reject(new Error('провайдер ответил 429')),
     };
 

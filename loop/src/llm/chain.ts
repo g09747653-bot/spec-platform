@@ -2,6 +2,7 @@ import { buildProviders, type ProviderCredentials } from './providers.ts';
 import {
   AllProvidersFailedError,
   NoProviderConfiguredError,
+  NoVisionProviderError,
   type LlmProvider,
   type LlmProviderId,
   type LlmRequest,
@@ -40,9 +41,21 @@ export function createChain(options: ChainOptions): Chain {
     async generate(request) {
       if (providers.length === 0) throw new NoProviderConfiguredError();
 
+      /*
+       * Запрос с картинками идёт только по звеньям, которые видят (А-35 п.2б). Отбор здесь, а не у
+       * вызывающего, по той же причине, что и failover: звено, молча выбросившее изображение,
+       * ответило бы уверенным текстом о том, чего не смотрело, — а это и есть имитация суда.
+       */
+      const usable =
+        request.images === undefined || request.images.length === 0
+          ? providers
+          : providers.filter((provider) => provider.supportsImages);
+
+      if (usable.length === 0) throw new NoVisionProviderError(providers.length);
+
       let last: unknown;
 
-      for (const [index, provider] of providers.entries()) {
+      for (const [index, provider] of usable.entries()) {
         try {
           const text = await provider.generate(request);
           /*
@@ -63,7 +76,7 @@ export function createChain(options: ChainOptions): Chain {
         }
       }
 
-      throw new AllProvidersFailedError(providers.length, last);
+      throw new AllProvidersFailedError(usable.length, last);
     },
   };
 }

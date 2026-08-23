@@ -16,6 +16,20 @@ export const LLM_PROVIDERS = ['anthropic', 'openai', 'google', 'ollama', 'claude
 
 export type LlmProviderId = (typeof LLM_PROVIDERS)[number];
 
+/**
+ * Одно изображение во входе запроса (А-35 п.2б).
+ *
+ * Картинка приходит уже прочитанной — base64 без префикса `data:` — потому что путь на диске
+ * значил бы, что провайдер умеет читать файлы этой машины, а он умеет только принимать байты.
+ */
+export interface LlmImage {
+  /** `image/png`, `image/jpeg`, `image/webp`. */
+  mediaType: string;
+  data: string;
+  /** Чем эта картинка является для судьи — подпись уходит в промпт рядом с ней. */
+  label?: string;
+}
+
 export interface LlmRequest {
   /** The instruction, whole. */
   prompt: string;
@@ -23,11 +37,21 @@ export interface LlmRequest {
   system?: string;
   maxOutputTokens?: number;
   signal?: AbortSignal;
+  /**
+   * Глаза суда качества: скриншоты, которые модель обязана посмотреть, а не вообразить.
+   * Звенья без образного входа при таком запросе пропускаются цепочкой, а не портят вердикт.
+   */
+  images?: readonly LlmImage[];
 }
 
 export interface LlmProvider {
   readonly id: LlmProviderId;
   readonly model: string;
+  /**
+   * Принимает ли звено изображения. Свойство адаптера, а не догадка вызывающего: способность
+   * видеть — вендорское знание, и жить оно обязано там же, где URL и форма запроса.
+   */
+  readonly supportsImages: boolean;
   generate(request: LlmRequest): Promise<string>;
 }
 
@@ -40,6 +64,17 @@ export class AllProvidersFailedError extends Error {
     this.name = 'AllProvidersFailedError';
     this.attempts = attempts;
     this.cause = cause;
+  }
+}
+
+/** Ни одно из настроенных звеньев не умеет смотреть — суд с глазами не состоится. */
+export class NoVisionProviderError extends Error {
+  constructor(configured: number) {
+    super(
+      `ни одно из ${String(configured)} настроенных звеньев не принимает изображения: ` +
+        'суду качества нечем смотреть',
+    );
+    this.name = 'NoVisionProviderError';
   }
 }
 
