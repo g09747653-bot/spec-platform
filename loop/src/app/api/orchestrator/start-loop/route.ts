@@ -16,6 +16,7 @@ import { resolveEndpoint } from '../../../../docker/transport.ts';
 import { eventBus } from '../../../../events/bus.ts';
 import { ensureBlockWatcher } from '../../../../gate/blocked.ts';
 import { intakeBundle, IntakeRefused } from '../../../../intake/intake.ts';
+import { ensurePlanReviewed } from '../../../../intake/plan-review.ts';
 import { createRoleChain } from '../../../../llm/roles.ts';
 import { createLogger } from '../../../../observability/log.ts';
 import { driveProject } from '../../../../orchestrator/orchestrator.ts';
@@ -57,6 +58,12 @@ const StartLoop = z.object({
    * accepted, and the intake still refuses while any task is in progress or frozen.
    */
   regenerate: z.literal('rewrite-all-assignments').optional(),
+  /**
+   * Решение владельца по пробелам суда полноты (А-33 п.4б): «запустить как есть». Тот же приём,
+   * что у `regenerate`, — фраза, а не булево: продолжение мимо названных пробелов — это решение,
+   * которое печатают, а не флаг, который случайно остаётся истинным.
+   */
+  acceptPlan: z.literal('proceed-with-gaps').optional(),
 });
 
 export async function POST(request: Request): Promise<Response> {
@@ -129,6 +136,44 @@ export async function POST(request: Request): Promise<Response> {
       { error: message },
       { status: error instanceof IntakeRefused ? 422 : 400 },
     );
+  }
+
+  /*
+   * Суд полноты плана — между интейком и конвейером (А-33 п.4б). Пробелы без решения владельца
+   * останавливают запуск named-алертом; сам интейк состоялся, план и вердикт лежат на диске.
+   */
+  const say = (message: string, level: 'INFO' | 'WARN' | 'ERROR' = 'INFO') => {
+    logger.write({ projectId: intake.projectId, agentRole: 'ARCHITECT', logLevel: level, message });
+  };
+
+  const review = await ensurePlanReviewed({
+    projectDirectory: directory,
+    tasks: intake.tasks,
+    chain: architect.providers.length === 0 ? null : architect,
+    acceptPlan: parsed.data.acceptPlan !== undefined,
+    say,
+  });
+
+  if (!review.proceed) {
+    eventBus().publish({
+      type: 'plan-review',
+      projectId: intake.projectId,
+      gaps: review.gaps,
+    });
+
+    return Response.json({
+      status: 'PLAN_GAPS',
+      projectId: intake.projectId,
+      bundleId: intake.bundleId,
+      strategy: intake.strategy,
+      milestones: intake.milestones,
+      tasks: intake.tasks.length,
+      writtenByModel: intake.writtenByModel,
+      keptFromDisk: intake.keptFromDisk,
+      regenerated: intake.regenerated,
+      degradations: intake.degradations,
+      planGaps: review.gaps,
+    });
   }
 
   /*

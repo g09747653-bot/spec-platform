@@ -87,6 +87,39 @@ export function startGatewayFromEnv(
       },
 
       /*
+       * Решение владельца «запустить как есть» по пробелам суда полноты (А-33 п.4б): повторный
+       * вызов СОБСТВЕННОГО start-loop с acceptPlan — та же поверхность, тем же транспортом
+       * (httpCall, канон D-305). Интейк идемпотентен (kept from disk), вердикт суда уже на диске,
+       * так что повтор дописывает решение и ведёт конвейер, переживая любые рестарты между
+       * алертом и кнопкой.
+       */
+      async acceptPlan(_projectId, projectDirectory) {
+        const { httpCall } = await import('./facade.ts');
+        const answer = await httpCall(
+          'POST',
+          `http://127.0.0.1:${String(env.PORT)}/api/orchestrator/start-loop`,
+          { projectDirectory, acceptPlan: 'proceed-with-gaps' },
+          10 * 60_000,
+          'контур/start-loop (решение по плану)',
+        );
+
+        if (answer.status !== 200) {
+          throw new Error(
+            `start-loop ответил ${String(answer.status)}: ${answer.body.toString('utf8').slice(0, 200)}`,
+          );
+        }
+
+        const reply = JSON.parse(answer.body.toString('utf8')) as {
+          milestones?: number;
+          tasks?: number;
+        };
+        return (
+          `Конвейер ведёт план: вех ${String(reply.milestones ?? '?')}, задач ${String(reply.tasks ?? '?')}. ` +
+          'Названные пробелы остаются в handoff/PLAN_REVIEW.json.'
+        );
+      },
+
+      /*
        * Фасад задачи 166 — подключается присутствием SPEC_PLATFORM_API_BASE; без него подтверждённая
        * задумка получает именованный ответ, не молчание (опциональность M17а). Хук `transcribe`
        * сознательно НЕ подключён: голос отложен решением владельца (А-29 п.2), шов остаётся.

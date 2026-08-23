@@ -23,6 +23,7 @@ import { detectTechStack } from '../gate/tech-stack.ts';
 import type { TechStack } from '../intake/handoff.ts';
 
 import { freezePipeline, isFrozen, markProject } from './freeze.ts';
+import { findSelfCheckReport, verificationLine } from './self-check.ts';
 import {
   DEFAULT_MAX_EXECUTORS,
   schedule,
@@ -677,7 +678,14 @@ export async function driveProject(
 
     if (plan.tasks.length > 0 && count('COMPLETED') === plan.tasks.length) {
       markProject(database, projectId, 'COMPLETED');
-      say(`Проект завершён: принято задач ${String(plan.tasks.length)}.`);
+      /*
+       * Вершинный критерий (А-33 п.4а): финальная строка несёт сверку с задумкой, когда конвейер
+       * ею располагает. Галочка при существующем DEVIATIONS.md — дефект, не краткость.
+       */
+      say(
+        `Проект завершён: принято задач ${String(plan.tasks.length)}. ` +
+          verificationLine(findSelfCheckReport(projectDirectory)),
+      );
     } else {
       say(
         `Конвейер остановился: принято ${String(count('COMPLETED'))} из ` +

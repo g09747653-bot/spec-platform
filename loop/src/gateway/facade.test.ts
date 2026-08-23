@@ -111,7 +111,7 @@ function buildPlatform(steps: StepScript[]) {
   };
 }
 
-function buildLoop() {
+function buildLoop(reply?: Record<string, unknown>) {
   const bodies: unknown[] = [];
   const server: Server = createServer((request, response) => {
     const chunks: Buffer[] = [];
@@ -119,7 +119,9 @@ function buildLoop() {
     request.on('end', () => {
       bodies.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
       response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ projectId: 'loop-proj', milestones: 3, tasks: 12 }));
+      response.end(
+        JSON.stringify(reply ?? { projectId: 'loop-proj', milestones: 3, tasks: 12 }),
+      );
     });
   });
 
@@ -213,6 +215,11 @@ describe('фасад целиком: задумка → платформа → �
       projectTitle: 'Собери консольный планировщик дел',
     });
 
+    /* Задумка — дословно на диске рядом с бандлом: по ней суд полноты судит план (А-33 п.4б). */
+    expect(readFileSync(join(directory, 'SEED.md'), 'utf8').trim()).toBe(
+      'Собери консольный планировщик дел',
+    );
+
     /* Каждое звено доложилось владельцу; молчания нет. */
     const feed = alerts.join('\n---\n');
     expect(feed).toContain('Платформа приняла задумку');
@@ -220,6 +227,28 @@ describe('фасад целиком: задумка → платформа → �
     expect(feed).toContain('Бандл получен');
     expect(feed).toContain('Контур принял план');
     expect(feed).toContain('Вех: 3, задач: 12');
+  });
+
+  it('PLAN_GAPS от start-loop — суд остановил запуск: фасад называет исход, не «исполнители в работе»', async () => {
+    const platform = buildPlatform([done(2)]);
+    const loop = buildLoop({
+      status: 'PLAN_GAPS',
+      projectId: 'loop-proj',
+      milestones: 3,
+      tasks: 12,
+      planGaps: ['нет переноса контентной графики'],
+    });
+
+    const outcome = await run(platform, loop);
+
+    /* Машина работает как задумана — путь цел, звено не отказывало. */
+    expect(outcome.ok).toBe(true);
+    expect(outcome.failedLink).toBeNull();
+
+    const feed = alerts.join('\n---\n');
+    expect(feed).toContain('Суд полноты плана остановил запуск');
+    expect(feed).toContain('пробелов: 1');
+    expect(feed).not.toContain('Исполнители в работе');
   });
 
   it('409 на тике — гонка, не отказ: повтор доводит путь до конца', async () => {

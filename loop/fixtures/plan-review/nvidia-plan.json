@@ -1,0 +1,382 @@
+{
+    "seed":  "Сделай сайт — полную графическую копию nvidia.com: главная страница и страница видеокарт GeForce 50-й серии, пиксель в пиксель с оригиналом на мобильном, планшетном и десктопном разрешениях — вёрстка, типографика, все изображения и графика как на живом сайте; статикой, без бэкенда.",
+    "tasks":  [
+                  {
+                      "taskId":  "T001",
+                      "title":  "Создать структуру каталогов репозитория согласно plan.md: partials/, src/pages/, src/styles/, src/scripts/, assets/images/, assets/icons/, assets/fonts/, tools/visual-diff/",
+                      "description":  "Создай в корне рабочей директории следующую структуру каталогов согласно plan.md: `partials/`, `src/pages/`, `src/styles/`, `src/scripts/`, `assets/images/`, `assets/icons/`, `assets/fonts/`, `tools/visual-diff/`. Для каждого каталога создай пустой файл `.gitkeep`, чтобы пустая директория была зафи…",
+                      "filesToEdit":  [
+                                          "partials/.gitkeep",
+                                          "src/pages/.gitkeep",
+                                          "src/styles/.gitkeep",
+                                          "src/scripts/.gitkeep",
+                                          "assets/images/.gitkeep",
+                                          "assets/icons/.gitkeep",
+                                          "assets/fonts/.gitkeep",
+                                          "tools/visual-diff/.gitkeep"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T002",
+                      "title":  "Инициализировать package.json в корне репозитория с зависимостями только для tools/ (не для рантайма страниц): playwright 1.46.x, pixelmatch (ветка 5.x), pngjs",
+                      "description":  "Создай (или переинициализируй) файл package.json в корне репозитория. 1) Задай имя пакета, версию \u00270.0.0\u0027, \u0027private\u0027: true, отсутствие поля \u0027main\u0027 с рантайм-логикой (страницы клона не используют npm-модули). 2) Добавь секцию \u0027devDependencies\u0027 (не \u0027dependencies\u0027) со следующими точными записями: \"pla…",
+                      "filesToEdit":  [
+                                          "package.json"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T003",
+                      "title":  "[P] Установить браузерный движок Playwright (npx playwright install chromium) и убедиться, что headless-запуск работает локально",
+                      "description":  "1. Убедиться, что зависимость `playwright` версии 1.46.x уже объявлена в package.json (согласно архитектуре, используется только в tools/) и установлена командой `npm install`. Если package.json/lock отсутствуют — не создавать их в рамках этой задачи, а прервать выполнение с ошибкой, так как устано…",
+                      "filesToEdit":  [
+
+                                      ]
+                  },
+                  {
+                      "taskId":  "T004",
+                      "title":  "Подготовить общие для всех разделов ассеты (логотип NVIDIA, иконки меню/футера, файлы шрифтов) один раз вручную и сохранить в assets/images/, assets/icons/, assets/fonts/ (FR-008): SVG логотипа и иконок извлекаются из сохранённого исходного кода страницы (tools/visual-diff/baseline/source/index.html, tools/visual-diff/baseline/source/products.html) и из перехваченных сетевых ответов (tools/visual-diff/baseline/network/), полученных при съёмке baseline в T006/T007; файлы шрифтов извлекаются тем же способом — из уже сохранённых файлов tools/visual-diff/baseline/network/, сопоставленных с URL, указанными в правилах @font-face живой страницы, через манифест tools/visual-diff/baseline/network/manifest.json — без какого-либо повторного обращения к живому сайту, что соответствует запрету, зафиксированному в T007; если конкретный файл шрифта не попал в перехват T006 (например, загружался механизмом, не отражённым в сетевых ответах страницы), это оформляется как единственное явно разрешённое исключение из запрета T007: допускается один ручной точечный запрос к живому сайту исключительно за этим отсутствующим файлом шрифта, а факт и причина такого исключения фиксируются в DEVIATIONS.md; если и это невозможно, файл шрифта заменяется ближайшим открытым аналогом с фиксацией этого решения в DEVIATIONS.md",
+                      "description":  "Извлеки и сохрани в репозитории общие статические ассеты для всех разделов (логотип NVIDIA, иконки меню/футера, файлы шрифтов) — без единого нового обращения к живому сайту, кроме одного явно разрешённого исключения для отсутствующего шрифта. Порядок действий: 1) Прочитай tools/visual-diff/baseline…",
+                      "filesToEdit":  [
+                                          "assets/images/",
+                                          "assets/icons/",
+                                          "assets/fonts/",
+                                          "DEVIATIONS.md"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T005",
+                      "title":  "[P] Написать build-скрипт tools/build.js, инлайнящий partials/header.html и partials/footer.html в шаблоны src/pages/.src.html (плейсхолдеры {{header}}/{{footer}}) и генерирующий самодостаточные (в смысле, зафиксированном в Path Conventions) index.html и products.html в корне репозитория (FR-003, FR-009)",
+                      "description":  "Реализуй build-скрипт tools/build.js, инлайнящий общие фрагменты меню и футера в шаблоны страниц. Шаги: 1. Открой (или, если отсутствуют, создай минимальные заглушки с валидным HTML-каркасом) файлы partials/header.html и partials/footer.html — они содержат готовую разметку глобального меню и футера…",
+                      "filesToEdit":  [
+                                          "tools/build.js",
+                                          "partials/header.html",
+                                          "partials/footer.html",
+                                          "src/pages/index.src.html",
+                                          "src/pages/products.src.html"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T006",
+                      "title":  "[P] Написать tools/visual-diff/capture-baseline.js: разовая съёмка эталонных скриншотов https://www.nvidia.com/en-us и https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/ на ширинах 375/768/1440px через Playwright, с закрытием cookie-баннера, фиксацией видео-фона hero-секции на первом кадре, фиксацией ротации промо-баннеров на первом варианте, той же сегментацией по высоте вьюпорта, что и в capture.js (T008) — набор сегментов фиксированной высоты, равной высоте вьюпорта для каждой контрольной ширины (375×812px, 768×1024px, 1440×900px), начиная с scrollY=0 и далее с шагом, кратным высоте вьюпорта, до полной высоты страницы, при этом каждый PNG-сегмент подписывается значением scrollY, с которого он снят (используется в T009 для сопоставления сегментов по позиции, а не по порядковому индексу), и сохранением рядом с каждым PNG-сегментом JSON с числовыми координатами следующих ключевых блоков: шапка (header) — верхняя граница и высота от края вьюпорта; логотип NVIDIA в шапке — высота; hero-секция главной страницы — верхняя граница; секции главной страницы — вертикальные отступы между соседними секциями; основной контент — горизонтальный padding от края вьюпорта; карточки продуктов на products.html — ширина карточки и горизонтальный gap между карточками; футер (footer) — верхняя граница относительно конца последней секции контента (этот же перечень блоков используется при съёмке клона в T008 и при сравнении отступов в T009); дополнительно скрипт сохраняет page.content() каждой страницы в tools/visual-diff/baseline/source/index.html и tools/visual-diff/baseline/source/products.html, а тела всех сетевых ответов с типом image/ и font/ — в tools/visual-diff/baseline/network/ с именем каждого файла, производным от basename пути исходного URL; если для нескольких разных URL получается одинаковый basename (например, файлы с одинаковым именем из разных директорий или отличающиеся только query-параметрами cache-busting), скрипт разрешает коллизию, добавляя к имени файла числовой суффикс или короткий хэш полного URL, чтобы не допустить перезаписи и потери ранее сохранённого файла; скрипт сопровождает эти файлы манифестом tools/visual-diff/baseline/network/manifest.json со списком соответствий URL → локальный файл (включая имена, изменённые из-за коллизий), который остаётся единственным надёжным источником сопоставления URL и локального файла и упрощает ручной поиск нужного ассета в T004 (используется как источник исходной разметки и файлов логотипа/иконок/шрифтов в T004)",
+                      "description":  "Создай файл tools/visual-diff/capture-baseline.js — Node.js-скрipt (Node 20+) на Playwright 1.46.x для разовой съёмки эталонных скриншотов оригинального сайта nvidia.com. Действуй по шагам: 1. Импортируй Playwright (chromium) и модули fs/path/crypto (для хэшей коллизий). 2. Определи список целевых …",
+                      "filesToEdit":  [
+                                          "tools/visual-diff/capture-baseline.js"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T007",
+                      "title":  "Запустить capture-baseline.js один раз и закоммитить полученные PNG/JSON в tools/visual-diff/baseline/ (SC-001) — повторных обращений к живому сайту в дальнейшем не выполнять. Каталоги tools/visual-diff/baseline/source/ и tools/visual-diff/baseline/network/ являются временным кэшем, предназначенным только для ручного извлечения ассетов в T004: они добавляются в .gitignore и не коммитятся в репозиторий наравне с PNG/JSON; T004 MUST быть выполнена сразу после T007, в той же непрерывной рабочей сессии, до удаления или случайной потери этих временных файлов",
+                      "description":  "Выполнить T007: (1) Убедиться, что скрипт tools/visual-diff/capture-baseline.js уже существует в репозитории (создан в рамках более ранней задачи по настройке инструментов визуального сравнения); если он отсутствует, задача невыполнима — не пытаться писать его заново в рамках T007. (2) Обеспечить н…",
+                      "filesToEdit":  [
+                                          ".gitignore",
+                                          "tools/visual-diff/baseline/"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T008",
+                      "title":  "[P] Написать tools/visual-diff/capture.js: детерминированная съёмка скриншотов клона (ожидание события load, отключение CSS-анимаций и JS-таймеров, пауза 2000мс, сегментация по высоте вьюпорта) на тех же трёх ширинах и сохранение рядом с каждым PNG JSON с числовыми координатами тех же ключевых блоков клона (getBoundingClientRect()), аналогично capture-baseline.js (T006)",
+                      "description":  "Прочитай существующий tools/visual-diff/capture-baseline.js (T006), чтобы скопировать используемые в нём конфигурацию ширин (375/768/1440), deviceScaleFactor=1, список ключевых блоков-селекторов и формат JSON-файла с координатами. Напиши tools/visual-diff/capture.js — Node.js-скрипт на Playwright 1…",
+                      "filesToEdit":  [
+                                          "tools/visual-diff/capture.js"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T009",
+                      "title":  "[P] Написать tools/visual-diff/compare.js: сопоставление PNG-сегментов клона (T008) и baseline (T006) по значению scrollY, которым подписан каждый сегмент, а не по порядковому индексу; если полная высота страницы клона и оригинала не совпадает и набор сегментов с одной из сторон длиннее, сравнение выполняется только для сегментов с scrollY от 0 до min(maxScrollY_baseline, maxScrollY_clone), а несовпадение полной высоты страницы фиксируется скриптом как отдельное предупреждение (в консольном выводе и в отчёте сравнения) для последующей ручной документации в DEVIATIONS.md на шаге проверки соответствующего раздела (T021, T029); для сопоставленных сегментов — сравнение PNG клона с baseline через pixelmatch (threshold=0.1, includeAA=false), вычисление доли различающихся пикселей (diffPixelCount / totalPixelCount  100) и сравнение результата с порогом ≤1% (SC-001), а также сравнение ключевых отступов между JSON-координатами клона (сохранёнными capture.js в T008) и JSON-координатами оригинала (сохранёнными capture-baseline.js в T006) с порогом ≤2px (SC-002)",
+                      "description":  "Написать Node.js-скрипт tools/visual-diff/compare.js, реализующий сравнение сегментных PNG-скриншотов клона (созданных capture.js, T008) с baseline-скриншотами оригинала (созданных capture-baseline.js, T006). 1) Считать список сегментов клона и baseline для каждой из трёх ширин (375/768/1440) — каж…",
+                      "filesToEdit":  [
+                                          "tools/visual-diff/compare.js"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T010",
+                      "title":  "Создать базовые стили src/styles/base.css (сброс, типографика, цветовые/шрифтовые переменные, общая сетка контейнера), общие для всех страниц",
+                      "description":  "1. Создай каталог src/styles/ (если отсутствует) и файл src/styles/base.css — общий базовый стиль, подключаемый на всех страницах (index.html и products.html через partials/header.html или напрямую в \u003chead\u003e). 2. В начале файла добавь CSS-сброс (reset): обнули margin/padding у *, ::before, ::after; …",
+                      "filesToEdit":  [
+                                          "src/styles/base.css"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T011",
+                      "title":  "Создать пустой реестр расхождений DEVIATIONS.md в корне репозитория со столбцами: раздел, ширина вьюпорта, описание расхождения, принятое решение (FR-011)",
+                      "description":  "Создай в корне рабочей директории (там же, где будут лежать итоговые index.html и products.html) файл DEVIATIONS.md — реестр неустранённых визуальных расхождений между клоном и оригиналом (FR-011). Файл должен содержать: 1) заголовок верхнего уровня, например \u0027# Реестр расхождений\u0027; 2) краткую пояс…",
+                      "filesToEdit":  [
+                                          "DEVIATIONS.md"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T012",
+                      "title":  "[P] [US1] Зафиксировать по baseline-скриншотам и структуре оригинала список визуальных блоков глобального меню (Main Menu): пункты, выпадающие списки, состояния наведения — и сохранить перечень в partials/header.blocks.md",
+                      "description":  "1. Открой все PNG-файлы из tools/visual-diff/baseline/, относящиеся к глобальному меню сайта nvidia.com на ширинах 375, 768 и 1440px (для главной страницы https://www.nvidia.com/en-us и для страницы https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/ — меню на обеих страницах общее). Есл…",
+                      "filesToEdit":  [
+                                          "partials/header.blocks.md"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T013",
+                      "title":  "[P] [US1] Зафиксировать по baseline-скриншотам список визуальных блоков футера (Company Information / News and Events / Popular Links) — и сохранить перечень в partials/footer.blocks.md",
+                      "description":  "Открой baseline-скриншоты футера из tools/visual-diff/baseline/ (снимки страниц https://www.nvidia.com/en-us и .../geforce/graphics-cards/50-series/ на ширине 1440px, где футер виден целиком; при необходимости используй также ширины 768/375px для проверки адаптивного расположения блоков). Визуально…",
+                      "filesToEdit":  [
+                                          "partials/footer.blocks.md"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T014",
+                      "title":  "[US1] Свёрстать partials/header.html и src/styles/header.css по списку из T012",
+                      "description":  "1. Прочитай bundle/tasks.json (запись задачи T012) и bundle/architecture.md, чтобы получить итоговый перечень элементов глобального меню/шапки (логотип, основная навигация с выпадающими разделами, поиск, вход, локаль/регион, корзина и т.п.) и принятые в проекте соглашения по вёрстке и именованию CS…",
+                      "filesToEdit":  [
+                                          "partials/header.html",
+                                          "src/styles/header.css"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T015",
+                      "title":  "[US1] Свёрстать partials/footer.html и src/styles/footer.css по списку из T013",
+                      "description":  "Свёрстать глобальный футер сайта как переиспользуемый партиал. 1) Открой bundle/tasks.json и найди задачу T013 — использовать её результат (список секций/колонок/ссылок футера NVIDIA: колонки Shop/Products/Support/Company, блок соцсетей, блок юридических ссылок, копирайт, форма подписки-заглушка) к…",
+                      "filesToEdit":  [
+                                          "partials/footer.html",
+                                          "src/styles/footer.css"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T016",
+                      "title":  "[US1] Реализовать src/scripts/menu.js: переключение вкладок/выпадающих списков меню при наведении и клике без переходов на нереализованные страницы (FR-004)",
+                      "description":  "Реализуй файл src/scripts/menu.js — чистый vanilla JS (ES2020+, без сторонних библиотек), управляющий поведением глобального меню (header), которое подключается на обеих страницах (index.html и products.html) через инлайненный partials/header.html. 1. Найди в partials/header.html разметку меню и ег…",
+                      "filesToEdit":  [
+                                          "src/scripts/menu.js",
+                                          "partials/header.html"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T017",
+                      "title":  "[P] [US1] Зафиксировать по baseline-скриншотам список секций главной страницы (hero, категории продуктов, промо-блоки и т.д.) в порядке их появления в оригинале — и сохранить перечень в src/pages/index.blocks.md",
+                      "description":  "Открой baseline-скриншоты главной страницы NVIDIA, сохранённые ранее в tools/visual-diff/baseline/ (файлы для страницы https://www.nvidia.com/en-us на ширинах 375/768/1440px — например index-375.png, index-768.png, index-1440.png или аналогичные по факту существующих имён). Просмотри самый широкий …",
+                      "filesToEdit":  [
+                                          "src/pages/index.blocks.md"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T018",
+                      "title":  "[US1] Свёрстать src/pages/index.src.html с плейсхолдерами {{header}}/{{footer}} и всеми секциями по списку из T017",
+                      "description":  "Создай файл src/pages/index.src.html — исходный (добилдовый) шаблон главной страницы клона. 1) Открой bundle/tasks.json и найди задачу T017 — извлеки из неё точный перечень секций главной страницы (в порядке следования), которые нужно свёрстать; также прочти bundle/architecture.md, чтобы уточнить с…",
+                      "filesToEdit":  [
+                                          "src/pages/index.src.html"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T019",
+                      "title":  "[US1] Создать src/styles/home.css, воспроизводящий отступы, типографику и адаптивное поведение секций главной страницы на 375/768/1440px",
+                      "description":  "Создай файл src/styles/home.css с CSS-стилями для главной страницы (index.html), точно воспроизводящими отступы, типографику (шрифты, размеры, межстрочный интервал, начертания) и адаптивное поведение всех секций главной страницы NVIDIA на трёх контрольных ширинах вьюпорта: 375px (мобильный), 768px …",
+                      "filesToEdit":  [
+                                          "src/styles/home.css"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T020",
+                      "title":  "[US1] Собрать index.html через tools/build.js",
+                      "description":  "Реализуй/дополни Node.js-скрипт tools/build.js, который собирает главную страницу index.html из партиалов без сторонних зависимостей и без обращения к сети. Шаги: 1) В tools/build.js добавь функцию inline-сборки, которая читает partials/header.html и partials/footer.html (UTF-8) и подставляет их со…",
+                      "filesToEdit":  [
+                                          "tools/build.js",
+                                          "index.html"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T021",
+                      "title":  "[US1] Прогнать capture.js + compare.js для index.html на всех трёх ширинах и устранить расхождения до порога ≤1% пикселей и ≤2px по ключевым отступам (SC-001, SC-002, FR-001)",
+                      "description":  "1. Убедись, что baseline-скриншоты оригинала уже лежат в tools/visual-diff/baseline/ (для https://www.nvidia.com/en-us на ширинах 375/768/1440px, deviceScaleFactor=1) — не переснимай их заново и не обращайся к живому сайту nvidia.com. 2. Собери актуальный index.html: прогони build-скрипт, который и…",
+                      "filesToEdit":  [
+                                          "index.html",
+                                          "partials/header.html",
+                                          "partials/footer.html",
+                                          "DEVIATIONS.md"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T022",
+                      "title":  "[US1] Проверить, что index.html, открытый напрямую из файловой системы (file://), не выполняет ни одного сетевого запроса к внешним доменам (вкладка «Сеть» инструментов разработчика) (SC-003, FR-009)",
+                      "description":  "Создай автоматизированный скрипт `tools/checks/verify-no-network.js`, который средствами Playwright 1.46.x (chromium) открывает корневой `index.html` репозитория через протокол `file://` (вычисли абсолютный путь через `path.resolve(__dirname, \u0027../../index.html\u0027)` и преобразуй в file-URL) и убеждает…",
+                      "filesToEdit":  [
+                                          "tools/checks/verify-no-network.js",
+                                          "package.json"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T023",
+                      "title":  "[US1] Задокументировать оставшиеся неустранённые расхождения раздела «Главная страница» и раздела «Меню/Футер» в DEVIATIONS.md (FR-011)",
+                      "description":  "Открой корень репозитория и создай/обнови файл DEVIATIONS.md. 1) Запусти tools/visual-diff/compare.js для index.html на всех трёх контрольных ширинах (375/768/1440px) против baseline из tools/visual-diff/baseline/, отдельно для полной главной страницы и отдельно для глобального меню/футера (partial…",
+                      "filesToEdit":  [
+                                          "DEVIATIONS.md"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T024",
+                      "title":  "[P] [US2] Зафиксировать по baseline-скриншотам список визуальных блоков страницы продуктов: сетка карточек, характеристики, изображения, порядок карточек — и сохранить перечень в src/pages/products.blocks.md",
+                      "description":  "Задача документационная: по уже отснятым baseline-скриншотам страницы продуктов (GeForce RTX 50 Series) зафиксировать письменный перечень визуальных блоков в новом файле src/pages/products.blocks.md. Шаги: 1) Найти в каталоге tools/visual-diff/baseline/ PNG-файлы, относящиеся к странице продуктов (…",
+                      "filesToEdit":  [
+                                          "src/pages/products.blocks.md"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T025",
+                      "title":  "[US2] Свёрстать src/pages/products.src.html с плейсхолдерами {{header}}/{{footer}} и секциями по списку из T024",
+                      "description":  "1. Прочитай bundle/tasks.json и найди задачу T024 — возьми из неё точный список секций страницы товаров (GeForce RTX 50 Series) с их порядком и (если указаны) идентификаторами/именами секций. 2. Прочитай bundle/architecture.md и bundle/requirements.json на предмет требований к странице продуктов (U…",
+                      "filesToEdit":  [
+                                          "src/pages/products.src.html"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T026",
+                      "title":  "[US2] Создать src/styles/products.css для сетки карточек продуктов, адаптирующейся по числу колонок и отступам на 375/768/1440px",
+                      "description":  "Создай файл src/styles/products.css с CSS Grid-раскладкой карточек продуктов (используемой на странице products.html/geforce/50-series) для трёх контрольных ширин вьюпорта. 1) Определи базовый (mobile-first, ~375px) стиль контейнера сетки: `display: grid`, одна колонка (или согласно оригиналу — ком…",
+                      "filesToEdit":  [
+                                          "src/styles/products.css"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T027",
+                      "title":  "[US2] Реализовать src/scripts/slider.js: локальное переключение карточек/изображений слайдера (стрелки, точки навигации, свайп) без каких-либо сетевых запросов (FR-005)",
+                      "description":  "1. Создай файл src/scripts/slider.js как самостоятельный vanilla JS модуль (ES2020+), без импорта сторонних библиотек и без единого вызова fetch/XMLHttpRequest/WebSocket или иного сетевого API — весь функционал работает только с DOM, уже присутствующим в разметке. 2. Реализуй инициализацию слайдера…",
+                      "filesToEdit":  [
+                                          "src/scripts/slider.js"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T028",
+                      "title":  "[US2] Собрать products.html через tools/build.js и убедиться, что разметка меню и футера идентична index.html",
+                      "description":  "1. Изучи содержимое `tools/build.js`, `partials/header.html`, `partials/footer.html` и уже собранного `index.html`, чтобы понять текущий механизм инлайна фрагментов меню и футера. 2. При необходимости расширь `tools/build.js` так, чтобы он собирал не только `index.html`, но и `products.html` из соо…",
+                      "filesToEdit":  [
+                                          "tools/build.js",
+                                          "products.html",
+                                          "partials/header.html",
+                                          "partials/footer.html"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T029",
+                      "title":  "[US2] Прогнать capture.js + compare.js для products.html на всех трёх ширинах и устранить расхождения до порога ≤1% пикселей и ≤2px по ключевым отступам (SC-001, SC-002, FR-002)",
+                      "description":  "1. Убедиться, что baseline-скриншоты оригинала для products.html (https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/) уже лежат в tools/visual-diff/baseline/ для ширин 375/768/1440px (deviceScaleFactor=1); не перезапрашивать живой сайт. 2. Запустить `node tools/visual-diff/capture.js`, …",
+                      "filesToEdit":  [
+                                          "products.html",
+                                          "partials/header.html",
+                                          "partials/footer.html",
+                                          "DEVIATIONS.md"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T030",
+                      "title":  "[US2] Проверить офлайн-работоспособность products.html (отсутствие внешних сетевых запросов) и переход с главной страницы на страницу продуктов через меню за один клик (SC-003, SC-004)",
+                      "description":  "Написать и запустить проверочный скрипт офлайн-работоспособности и навигации в один клик для products.html (SC-003, SC-004). Шаги: 1) Убедиться, что билд уже выполнен и в корне репозитория существуют самодостаточные index.html и products.html (собранные из partials/header.html и partials/footer.htm…",
+                      "filesToEdit":  [
+                                          "tools/verify-offline-navigation.js"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T031",
+                      "title":  "[US2] Задокументировать оставшиеся неустранённые расхождения раздела «Страница продуктов» в DEVIATIONS.md (FR-011)",
+                      "description":  "1. Запусти `node tools/visual-diff/compare.js --page=products` (или эквивалентный вызов сравнения, если скрипт принимает страницу иначе — прогони его для `products.html` на всех трёх контрольных ширинах 375/768/1440px) и получи отчёт по расхождениям со скриншотами `tools/visual-diff/baseline/`. 2. …",
+                      "filesToEdit":  [
+                                          "DEVIATIONS.md"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T032",
+                      "title":  "[P] [US3] Составить полный перечень декоративных интерактивных точек на index.html и products.html (поиск, вход, подписка, ссылки меню/футера вне согласованного охвата) для последующей проверки покрытия и сохранить перечень в src/pages/decorative-points.md",
+                      "description":  "Составь полный перечень декоративных интерактивных точек, которые в оригинале nvidia.com требуют бэкенда, а в клоне реализуются как локальные заглушки без отправки/сохранения данных. Шаги: 1) Открой src/pages/index.html и src/pages/products.html (либо соответствующие HTML-файлы страниц, если они уж…",
+                      "filesToEdit":  [
+                                          "src/pages/decorative-points.md"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T033",
+                      "title":  "[US3] Реализовать src/scripts/decorative-stubs.js: обработчики клика/отправки для поиска, входа и подписки, показывающие статичное сообщение «Демо-версия, функция недоступна» без отправки, сохранения или логирования введённых данных (FR-006, FR-012, FR-013)",
+                      "description":  "1. Открыть/создать файл `src/scripts/decorative-stubs.js`, реализовать в нём чистый vanilla JS (без сторонних библиотек, без сетевых запросов) для трёх декоративных сценариев глобального меню и футера: (a) клик по иконке/полю поиска и отправка формы поиска, (b) клик по кнопке/ссылке входа (login), …",
+                      "filesToEdit":  [
+                                          "src/scripts/decorative-stubs.js"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T034",
+                      "title":  "[US3] В том же decorative-stubs.js реализовать нейтрализацию ссылок меню и футера вне согласованного охвата: href=\"#\" с обработчиком preventDefault, без перехода на несуществующие страницы и без ошибки 404 (FR-007)",
+                      "description":  "1. Открой assets/js/decorative-stubs.js (общий скрипт-заглушка, подключаемый и в header, и в footer). 2. В partials/header.html и partials/footer.html найди все пункты меню и ссылки футера, ведущие на разделы NVIDIA вне согласованного охвата клона (всё, кроме главной index.html и products.html — на…",
+                      "filesToEdit":  [
+                                          "assets/js/decorative-stubs.js",
+                                          "partials/header.html",
+                                          "partials/footer.html"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T035",
+                      "title":  "[US3] Подключить decorative-stubs.js, menu.js и slider.js в partials/header.html, partials/footer.html и src/pages/.src.html, пересобрать обе страницы через tools/build.js",
+                      "description":  "1. В файлах partials/header.html и partials/footer.html добавь теги \u003cscript src=\"...\"\u003e\u003c/script\u003e для трёх общих JS-модулей: decorative-stubs.js, menu.js и slider.js (используй уже существующие в репозитории файлы этих скриптов, не создавай их заново). 2. Найди в src/pages/ все файлы с расширением .s…",
+                      "filesToEdit":  [
+                                          "partials/header.html",
+                                          "partials/footer.html",
+                                          "src/pages/*.src.html",
+                                          "tools/build.js"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T036",
+                      "title":  "[US3] Вручную пройти по каждой точке из перечня T032 на index.html и products.html и подтвердить соответствие FR-004–FR-007 (SC-005)",
+                      "description":  "Открой оригинальный список контрольных точек из задачи T032 (артефакт этой задачи — файл ручного чек-листа, созданный при её выполнении, например specs/001-nvidia-clone/reviews/T032-checklist.md; если такого файла нет, восстанови перечень разделов из structure/spec: hero, навигационное меню, карточ…",
+                      "filesToEdit":  [
+                                          "specs/001-nvidia-clone/reviews/T036-manual-review.md",
+                                          "DEVIATIONS.md",
+                                          "index.html",
+                                          "products.html"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T037",
+                      "title":  "[US3] Повторно прогнать capture.js + compare.js для index.html и products.html, чтобы убедиться, что добавленные скрипты не нарушили пиксельную точность, достигнутую в US1/US2 (SC-001, SC-002)",
+                      "description":  "Повторно прогони визуальную сверку клона после добавления интерактивных JS-заглушек из US3 (поиск/вход/подписка), чтобы убедиться, что они не сломали пиксельную точность index.html и products.html, достигнутую в US1/US2. Шаги: 1) Запусти tools/visual-diff/capture.js — он должен сделать свежие скрин…",
+                      "filesToEdit":  [
+                                          "index.html",
+                                          "products.html",
+                                          "partials/header.html",
+                                          "partials/footer.html",
+                                          "DEVIATIONS.md"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T038",
+                      "title":  "[P] Финальная проверка отсутствия сетевых запросов к внешним доменам в инструментах разработчика для index.html и products.html (SC-003)",
+                      "description":  "1. Открыть корень репозитория и убедиться, что там уже существуют собранные `index.html` и `products.html` (результат build-скрипта, инлайнящего `partials/header.html` и `partials/footer.html`); если их нет — запустить существующий build-скрипт из `tools/`, чтобы их сгенерировать, но не писать buil…",
+                      "filesToEdit":  [
+                                          "tools/check-no-external-requests.js",
+                                          "index.html",
+                                          "products.html",
+                                          "partials/header.html",
+                                          "partials/footer.html"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T039",
+                      "title":  "Финальная сверка полноты DEVIATIONS.md: убедиться, что не осталось известных, но незадокументированных расхождений (SC-006)",
+                      "description":  "Проведи финальную сверку полноты DEVIATIONS.md по критерию SC-006. Шаги: 1) Прочитай текущий DEVIATIONS.md в корне репозитория и весь предшествующий контекст выполненных задач клона (partials/header.html, partials/footer.html, index.html, products.html, каталог assets/), а также отчёты сравнения из…",
+                      "filesToEdit":  [
+                                          "DEVIATIONS.md"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T040",
+                      "title":  "[P] Вручную проверить edge cases из spec.md: плавное изменение ширины окна между контрольными точками, прямое открытие products.html минуя index.html, поведение карточек продуктов при отключённом JavaScript, обработку отсутствующего локального ассета",
+                      "description":  "Собери актуальные index.html и products.html через build-скрипт (npm run build или node tools/build.js — используй тот, что реально определён в package.json/tools/), затем вручную (через Playwright headless или обычный браузер) проверь четыре edge case из spec.md и задокументируй результат каждого …",
+                      "filesToEdit":  [
+                                          "DEVIATIONS.md",
+                                          "index.html",
+                                          "products.html",
+                                          "partials/header.html",
+                                          "partials/footer.html"
+                                      ]
+                  },
+                  {
+                      "taskId":  "T041",
+                      "title":  "Финальный сквозной прогон tools/build.js → capture.js → compare.js для index.html и products.html на 375/768/1440px как итоговая приёмочная проверка перед завершением работы",
+                      "description":  "Выполни финальный сквозной прогон конвейера сборки и визуальной приёмки для обеих страниц клона. Шаги: 1) Запусти `node tools/build.js` — build-скрипт должен инлайнить `partials/header.html` и `partials/footer.html` в самодостаточные `index.html` и `products.html` в корне репозитория без ошибок и б…",
+                      "filesToEdit":  [
+                                          "DEVIATIONS.md"
+                                      ]
+                  }
+              ]
+}
