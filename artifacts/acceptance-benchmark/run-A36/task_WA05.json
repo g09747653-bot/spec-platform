@@ -1,0 +1,25 @@
+{
+  "taskId": "WA05",
+  "milestoneId": "ms_04",
+  "title": "Полировка 2: докраска деталей, edge cases и повторная сверка",
+  "description": "1. Докрасить оставшиеся визуальные детали (сетка карточек Shop, таблица Specs, промо/about-блоки главной) по эталонным координатам, используя assets/images/content по манифесту. 2. Вручную проверить и исправить edge cases: плавный ресайз окна между контрольными точками, прямое открытие products.html минуя index.html, поведение карточек продуктов при отключённом JavaScript, обработку отсутствующего локального ассета. 3. После подключения decorative-stubs.js/menu.js/slider.js повторно прогнать capture.js + compare.js на всех трёх ширинах, убедиться в отсутствии регрессий пиксельной точности. 4. Дополнить DEVIATIONS.md итоговым списком принятых отклонений.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "src/pages/index.src.html",
+    "src/pages/products.src.html",
+    "src/styles/home.css",
+    "src/styles/products.css",
+    "src/scripts/decorative-stubs.js",
+    "index.html",
+    "products.html",
+    "DEVIATIONS.md",
+    "tools/visual-diff/report.json"
+  ],
+  "dependsOn": [
+    "WA04"
+  ],
+  "unitTestCmd": "node tools/build.js && node tools/visual-diff/compare.js && test -s DEVIATIONS.md",
+  "iterationTimeoutSec": 3600,
+  "expectedArtifacts": [],
+  "status": "PENDING"
+}

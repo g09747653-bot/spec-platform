@@ -1,0 +1,32 @@
+{
+  "taskId": "WA03",
+  "milestoneId": "ms_02",
+  "title": "Собери сайт целиком: разметка, стили, поведение и бренд Neuro",
+  "description": "1. Свёрстать partials/header.html и partials/footer.html — единое глобальное меню и футер с нейтральным брендом: лого assets/images/brand/neuro-logo.svg, название «Neuro» во всех текстах, alt, aria-label и <title>/<meta> вместо NVIDIA. 2. Свёрстать src/pages/index.src.html (hero, категории продуктов, промо-блоки, about) и src/pages/products.src.html (hero-баннер видеокарты, сетка карточек, таблица характеристик) с плейсхолдерами {{header}}/{{footer}}, по координатам и пропорциям эталонных baseline-скриншотов (375/768/1440), используя assets/images/content и assets/icons — без файлов бренда NVIDIA. 3. Создать единую систему стилей: src/styles/base.css (токены цвета/типографики, сброс, сетка контейнера — общая для всех страниц), src/styles/header.css, src/styles/footer.css, src/styles/home.css, src/styles/products.css, с одинаковыми отступами/типографикой/адаптивом на трёх ширинах. 4. Реализовать поведение: src/scripts/menu.js (выпадающие списки меню по наведению/клику), src/scripts/slider.js (переключение карточек/слайдера без сетевых запросов), src/scripts/decorative-stubs.js (заглушки поиска/входа/подписки с локальным сообщением без отправки данных, нейтрализация внешних ссылок href=\"#\" через preventDefault). 5. Подключить скрипты в partials и .src.html, собрать корневые index.html и products.html через tools/build.js. 6. Убедиться, что ни в partials, ни в src/pages, ни в собранных index.html/products.html не осталось текста/атрибутов с NVIDIA/GeForce — только Neuro.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "serve.js",
+    "partials/header.html",
+    "partials/footer.html",
+    "src/pages/index.src.html",
+    "src/pages/products.src.html",
+    "src/styles/base.css",
+    "src/styles/header.css",
+    "src/styles/footer.css",
+    "src/styles/home.css",
+    "src/styles/products.css",
+    "src/scripts/menu.js",
+    "src/scripts/slider.js",
+    "src/scripts/decorative-stubs.js",
+    "index.html",
+    "products.html"
+  ],
+  "dependsOn": [
+    "WA01",
+    "WA02"
+  ],
+  "unitTestCmd": "node tools/build.js && test -f index.html && test -f products.html && ! grep -riE 'nvidia|geforce' index.html products.html partials/header.html partials/footer.html src/pages/index.src.html src/pages/products.src.html src/styles/base.css src/styles/header.css src/styles/footer.css src/styles/home.css src/styles/products.css src/scripts/menu.js src/scripts/slider.js src/scripts/decorative-stubs.js",
+  "iterationTimeoutSec": 5400,
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

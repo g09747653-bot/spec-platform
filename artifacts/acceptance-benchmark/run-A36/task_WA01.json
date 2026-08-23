@@ -1,0 +1,20 @@
+{
+  "taskId": "WA01",
+  "milestoneId": "ms_01",
+  "title": "Добыть материал: ассеты оригинала и нейтральный бренд Neuro",
+  "description": "1. Из tools/visual-diff/baseline/source/*.html и tools/visual-diff/baseline/network/ (по manifest.json) извлечь и сохранить: иконки меню/футера в assets/icons/, файлы шрифтов в assets/fonts/, контентную графику (не-логотипы) в assets/images/content/ с манифестом соответствия URL→файл assets/images/content/manifest.json. 2. Если конкретный файл шрифта не попал в перехват — сделать один точечный ручной запрос к живому сайту либо заменить открытым аналогом; в обоих случаях зафиксировать решение и причину в DEVIATIONS.md. 3. НЕ переносить assets/images/nvidia-logo.svg и любые файлы, содержащие товарный знак/название NVIDIA, в состав финальных активов сайта. 4. Создать собственный нейтральный знак и название: нарисовать assets/images/brand/neuro-logo.svg и assets/images/brand/neuro-favicon.svg — по силуэту, пропорциям и палитре достаточно похожие, чтобы сохранить композицию и вертикальный ритм шапки/футера оригинала, но без совпадения глифов, надписи или товарного знака NVIDIA.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "assets/icons/",
+    "assets/fonts/",
+    "assets/images/content/",
+    "assets/images/content/manifest.json",
+    "assets/images/brand/neuro-logo.svg",
+    "assets/images/brand/neuro-favicon.svg",
+    "DEVIATIONS.md"
+  ],
+  "dependsOn": [],
+  "unitTestCmd": "test -f assets/images/brand/neuro-logo.svg && test -f assets/images/brand/neuro-favicon.svg && test -f assets/images/content/manifest.json && ! find assets/images/brand -iname '*nvidia*' | grep -q . && ! find assets/images -maxdepth 1 -iname '*nvidia*' -newer package.json | grep -q .",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}
