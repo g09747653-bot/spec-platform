@@ -136,6 +136,7 @@ describe('гейт над вердиктом на диске — чистая ф
     judgedBy: 'claude-cli',
     at: '2026-08-23T10:00:00.000Z',
     decision: null,
+    artifactClass: 'unknown' as const,
   };
 
   it('файла нет → review; complete → run; gaps без решения → halt; с acceptPlan → accept', () => {
@@ -318,11 +319,15 @@ describe('весь суд одной точкой (ensurePlanReviewed)', () => {
   it('полный план: вердикт записан, конвейер едет, повтор не судит заново', async () => {
     writeSeed(directory, 'копия');
     let asked = 0;
+    /* Свежий суд — два вопроса модели: класс задумки и полнота охвата (А-35 п.2а). */
     const counting: Chain = {
       providers: [],
-      generate: () => {
+      generate: (request) => {
         asked += 1;
-        return Promise.resolve({ text: '{"verdict":"complete"}', provider: 'google' });
+        const answer = request.prompt.includes('"artifactClass"')
+          ? '{"artifactClass":"system"}'
+          : '{"verdict":"complete"}';
+        return Promise.resolve({ text: answer, provider: 'google' });
       },
     };
 
@@ -344,7 +349,8 @@ describe('весь суд одной точкой (ensurePlanReviewed)', () => {
       say: () => undefined,
     });
     expect(second.proceed).toBe(true);
-    expect(asked).toBe(1);
+    expect(asked).toBe(2);
+    expect(readPlanReview(directory)?.artifactClass).toBe('system');
   });
 
   it('суд недоступен (все звенья красные) — named-деградация, конвейер едет без вердикта', async () => {
@@ -412,5 +418,136 @@ describe('регрессия на слепке nvidia-плана (А-33 п.4б)'
       decision: null,
     });
     expect(planGate(readPlanReview(directory), false).action).toBe('halt');
+  });
+});
+
+describe('класс артефакта в суде плана (А-35 п.2а)', () => {
+  const collectFeed = () => {
+    const lines: { message: string; level: string }[] = [];
+    return {
+      lines,
+      write: (message: string, level: 'INFO' | 'WARN' | 'ERROR' = 'INFO') => {
+        lines.push({ message, level });
+      },
+    };
+  };
+
+  /** Отвечает по вопросу: класс — одним, полноту — другим. Полнота всегда «покрывает». */
+  const classifying = (artifactClass: string): Chain => ({
+    providers: [],
+    generate: (request) =>
+      Promise.resolve({
+        text: request.prompt.includes('"artifactClass"')
+          ? `{"artifactClass":"${artifactClass}"}`
+          : '{"verdict":"complete"}',
+        provider: 'claude-cli',
+      }),
+  });
+
+  /** Нарезка: три задачи, каждая со своим ломтем артефакта, целым не владеет никто. */
+  const SLICED: ReviewableTask[] = [
+    {
+      taskId: 'T001',
+      title: 'Шапка',
+      description: 'Собрать шапку.',
+      filesToEdit: ['partials/header.html', 'src/styles/header.css'],
+    },
+    {
+      taskId: 'T002',
+      title: 'Футер',
+      description: 'Собрать футер.',
+      filesToEdit: ['partials/footer.html', 'src/styles/footer.css'],
+    },
+    {
+      taskId: 'T003',
+      title: 'Главная',
+      description: 'Собрать главную.',
+      filesToEdit: ['index.html', 'src/styles/home.css'],
+    },
+  ];
+
+  it('связный артефакт с нарезанным планом останавливает конвейер, хоть полнота и зелёная', async () => {
+    writeSeed(directory, 'Сделай сайт — копию nvidia.com, две страницы.');
+    const feed = collectFeed();
+
+    const review = await ensurePlanReviewed({
+      projectDirectory: directory,
+      tasks: SLICED,
+      chain: classifying('coherent-artifact'),
+      acceptPlan: false,
+      say: feed.write,
+    });
+
+    expect(review.proceed).toBe(false);
+    expect(review.gaps.join('\n')).toContain('Заборы режут артефакт');
+
+    const record = readPlanReview(directory);
+    expect(record?.verdict).toBe('gaps');
+    expect(record?.artifactClass).toBe('coherent-artifact');
+    expect(feed.lines.some((line) => line.message.includes('связный визуальный артефакт'))).toBe(
+      true,
+    );
+  });
+
+  it('тот же план для класса «система» проходит: форма судится только под свой класс', async () => {
+    writeSeed(directory, 'Сервис с API и хранилищем.');
+
+    const review = await ensurePlanReviewed({
+      projectDirectory: directory,
+      tasks: SLICED,
+      chain: classifying('system'),
+      acceptPlan: false,
+      say: () => undefined,
+    });
+
+    expect(review.proceed).toBe(true);
+    expect(readPlanReview(directory)?.artifactClass).toBe('system');
+  });
+
+  it('несостоявшаяся полнота не отменяет забракованной формы — вердикт пишется и держит', async () => {
+    writeSeed(directory, 'Сделай лендинг.');
+    const feed = collectFeed();
+
+    const halfDead: Chain = {
+      providers: [],
+      generate: (request) =>
+        request.prompt.includes('"artifactClass"')
+          ? Promise.resolve({
+              text: '{"artifactClass":"coherent-artifact"}',
+              provider: 'claude-cli',
+            })
+          : Promise.reject(new Error('звено полноты красное')),
+    };
+
+    const review = await ensurePlanReviewed({
+      projectDirectory: directory,
+      tasks: SLICED,
+      chain: halfDead,
+      acceptPlan: false,
+      say: feed.write,
+    });
+
+    expect(review.proceed).toBe(false);
+    expect(readPlanReview(directory)?.judgedBy).toBe('код (форма плана)');
+    expect(feed.lines.some((line) => line.message.includes('не состоялся'))).toBe(true);
+  });
+
+  it('неопределимый класс не ужесточает правил: конвейер едет, причина названа', async () => {
+    writeSeed(directory, 'Сделай лендинг.');
+    const feed = collectFeed();
+
+    const review = await ensurePlanReviewed({
+      projectDirectory: directory,
+      tasks: SLICED,
+      chain: classifying('плакат'),
+      acceptPlan: false,
+      say: feed.write,
+    });
+
+    expect(review.proceed).toBe(true);
+    expect(readPlanReview(directory)?.artifactClass).toBe('unknown');
+    expect(feed.lines.some((line) => line.message.includes('Класс задумки не определён'))).toBe(
+      true,
+    );
   });
 });

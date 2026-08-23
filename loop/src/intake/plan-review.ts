@@ -5,6 +5,13 @@ import { z } from 'zod';
 
 import type { Chain } from '../llm/chain.ts';
 
+import {
+  ARTIFACT_CLASSES,
+  classifyArtifact,
+  judgeWholeArtifactPlan,
+  type ArtifactClass,
+} from './artifact-class.ts';
+
 /**
  * Суд полноты плана против задумки — на интейке, ДО конвейера (А-33 п.4б).
  *
@@ -63,9 +70,18 @@ const PlanReviewRecord = z.object({
   at: z.string(),
   /** Решение владельца по пробелам; null — ещё не принято. У полного плана решения не бывает. */
   decision: z.object({ action: z.literal('proceed'), at: z.string() }).nullable(),
+  /**
+   * Класс артефакта, под который судилась ФОРМА плана (А-35 п.2а). `unknown` — вердикт старого
+   * образца или несостоявшийся суд класса: вердикты прошлых прогонов остаются читаемыми.
+   */
+  artifactClass: z.enum([...ARTIFACT_CLASSES, 'unknown']).default('unknown'),
 });
 
 export type PlanReviewRecord = z.infer<typeof PlanReviewRecord>;
+
+/** Что принимает запись на диск: класс артефакта необязателен — умолчание проставит схема. */
+export type PlanReviewInput = Omit<PlanReviewRecord, 'artifactClass'> &
+  Partial<Pick<PlanReviewRecord, 'artifactClass'>>;
 
 /** Задумка владельца, дословно, или null — запуск без неё (ручной start-loop, старые прогоны). */
 export function readSeed(projectDirectory: string): string | null {
@@ -93,7 +109,7 @@ export function readPlanReview(projectDirectory: string): PlanReviewRecord | nul
   }
 }
 
-export function writePlanReview(projectDirectory: string, record: PlanReviewRecord): void {
+export function writePlanReview(projectDirectory: string, record: PlanReviewInput): void {
   const path = join(projectDirectory, PLAN_REVIEW_FILE);
   mkdirSync(join(projectDirectory, 'handoff'), { recursive: true });
   writeFileSync(path, `${JSON.stringify(PlanReviewRecord.parse(record), null, 2)}\n`, 'utf8');
@@ -275,40 +291,84 @@ export async function ensurePlanReviewed(args: {
     return { proceed: true, gaps: [] };
   }
 
+  /*
+   * Класс артефакта и годность ФОРМЫ плана под него (А-35 п.2а) — до суда полноты и независимо от
+   * него: полный по охвату план всё ещё может быть нарезкой, разрушающей связность по построению.
+   * Класс называет модель, форму судит код.
+   */
+  const classified = await classifyArtifact(seed, chain);
+  const artifactClass: ArtifactClass | 'unknown' =
+    classified.status === 'classified' ? classified.artifactClass : 'unknown';
+
+  const shapeGaps = artifactClass === 'coherent-artifact' ? judgeWholeArtifactPlan(tasks) : [];
+
+  if (classified.status === 'skipped') {
+    say(
+      `Класс задумки не определён: ${classified.reason}. Форма плана не судится — конвейер ` +
+        'продолжает по общему правилу (как для системы).',
+      'WARN',
+    );
+  } else {
+    const human =
+      classified.artifactClass === 'coherent-artifact'
+        ? 'связный визуальный артефакт одного контекста'
+        : 'система';
+    say(
+      `Класс задумки: ${human} (определил ${classified.judgedBy}).` +
+        (artifactClass === 'coherent-artifact' && shapeGaps.length === 0
+          ? ' Форма плана классу соответствует.'
+          : ''),
+    );
+  }
+
+  const halt = (
+    found: readonly string[],
+    judgedBy: string,
+  ): { proceed: boolean; gaps: string[] } => {
+    const gaps = [...found];
+    writePlanReview(projectDirectory, {
+      verdict: 'gaps',
+      gaps,
+      judgedBy,
+      at: at(),
+      decision: null,
+      artifactClass,
+    });
+    say(
+      `Суд плана нашёл пробелы (судил ${judgedBy}):\n` +
+        gaps.map((gap, index) => `${String(index + 1)}. ${gap}`).join('\n') +
+        '\nКонвейер не запущен; решение продолжать/дополнить — за владельцем.',
+      'ERROR',
+    );
+    return { proceed: false, gaps };
+  };
+
   const outcome = await reviewPlanCompleteness(seed, tasks, chain);
 
   if (outcome.status === 'skipped') {
-    say(
-      `Суд полноты плана не состоялся: ${outcome.reason}. Конвейер продолжает без вердикта.`,
-      'WARN',
-    );
-    return { proceed: true, gaps: [] };
+    say(`Суд полноты плана не состоялся: ${outcome.reason}.`, 'WARN');
+    /* Полнота не судилась — но форма уже забракована кодом, и это вердикт, который останавливает. */
+    if (shapeGaps.length === 0) {
+      say('Конвейер продолжает без вердикта полноты.', 'WARN');
+      return { proceed: true, gaps: [] };
+    }
+    return halt(shapeGaps, 'код (форма плана)');
   }
 
-  if (outcome.status === 'complete') {
+  const gaps = [...shapeGaps, ...(outcome.status === 'gaps' ? outcome.gaps : [])];
+
+  if (gaps.length === 0) {
     writePlanReview(projectDirectory, {
       verdict: 'complete',
       gaps: [],
       judgedBy: outcome.judgedBy,
       at: at(),
       decision: null,
+      artifactClass,
     });
     say(`Суд полноты плана: план покрывает задумку (судил ${outcome.judgedBy}).`);
     return { proceed: true, gaps: [] };
   }
 
-  writePlanReview(projectDirectory, {
-    verdict: 'gaps',
-    gaps: outcome.gaps,
-    judgedBy: outcome.judgedBy,
-    at: at(),
-    decision: null,
-  });
-  say(
-    `Суд полноты плана нашёл пробелы (судил ${outcome.judgedBy}):\n` +
-      outcome.gaps.map((gap, index) => `${String(index + 1)}. ${gap}`).join('\n') +
-      '\nКонвейер не запущен; решение продолжать/дополнить — за владельцем.',
-    'ERROR',
-  );
-  return { proceed: false, gaps: outcome.gaps };
+  return halt(gaps, outcome.judgedBy);
 }

@@ -110,6 +110,7 @@ function anthropic(key: string, model: string, timeoutMs: number): LlmProvider {
   return {
     id: 'anthropic',
     model,
+    supportsImages: true,
     async generate(request) {
       const reply = AnthropicReply.parse(
         await call(
@@ -125,7 +126,21 @@ function anthropic(key: string, model: string, timeoutMs: number): LlmProvider {
               model,
               max_tokens: request.maxOutputTokens ?? 4096,
               ...(request.system === undefined ? {} : { system: request.system }),
-              messages: [{ role: 'user', content: request.prompt }],
+              messages: [
+                {
+                  role: 'user',
+                  content: [
+                    ...(request.images ?? []).flatMap((image) => [
+                      ...(image.label === undefined ? [] : [{ type: 'text', text: image.label }]),
+                      {
+                        type: 'image',
+                        source: { type: 'base64', media_type: image.mediaType, data: image.data },
+                      },
+                    ]),
+                    { type: 'text', text: request.prompt },
+                  ],
+                },
+              ],
             }),
           },
           request,
@@ -148,10 +163,12 @@ function openAiCompatible(
   key: string | undefined,
   model: string,
   timeoutMs: number,
+  supportsImages = false,
 ): LlmProvider {
   return {
     id,
     model,
+    supportsImages,
     async generate(request) {
       const reply = OpenAiReply.parse(
         await call(
@@ -169,7 +186,24 @@ function openAiCompatible(
                 ...(request.system === undefined
                   ? []
                   : [{ role: 'system', content: request.system }]),
-                { role: 'user', content: request.prompt },
+                {
+                  role: 'user',
+                  content:
+                    request.images === undefined || request.images.length === 0
+                      ? request.prompt
+                      : [
+                          ...request.images.flatMap((image) => [
+                            ...(image.label === undefined
+                              ? []
+                              : [{ type: 'text', text: image.label }]),
+                            {
+                              type: 'image_url',
+                              image_url: { url: `data:${image.mediaType};base64,${image.data}` },
+                            },
+                          ]),
+                          { type: 'text', text: request.prompt },
+                        ],
+                },
               ],
             }),
           },
@@ -187,6 +221,7 @@ function google(key: string, model: string, timeoutMs: number): LlmProvider {
   return {
     id: 'google',
     model,
+    supportsImages: true,
     async generate(request) {
       const reply = GoogleReply.parse(
         await call(
@@ -195,7 +230,18 @@ function google(key: string, model: string, timeoutMs: number): LlmProvider {
             method: 'POST',
             headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
             body: JSON.stringify({
-              contents: [{ role: 'user', parts: [{ text: request.prompt }] }],
+              contents: [
+                {
+                  role: 'user',
+                  parts: [
+                    ...(request.images ?? []).flatMap((image) => [
+                      ...(image.label === undefined ? [] : [{ text: image.label }]),
+                      { inline_data: { mime_type: image.mediaType, data: image.data } },
+                    ]),
+                    { text: request.prompt },
+                  ],
+                },
+              ],
               ...(request.system === undefined
                 ? {}
                 : { systemInstruction: { parts: [{ text: request.system }] } }),
@@ -246,6 +292,7 @@ export function buildProviders(
           credentials.openaiApiKey,
           credentials.openaiModel ?? DEFAULT_MODELS.openai,
           timeoutMs,
+          true,
         ),
       );
     }
@@ -273,6 +320,13 @@ export function buildProviders(
     }
 
     if (id === 'claude-cli' && credentials.claudeCliApiBase !== undefined) {
+      /*
+       * Мост подписки картинок не носит, и это измерено, а не предположено: зонд 2026-08-23 послал
+       * ему PNG сплошного цвета в теле запроса и получил честное `{"seen":false}`. Причин две, и обе
+       * в его собственном устройстве — схема сообщения оставляет от `content` только текст, а CLI за
+       * ним работает с `--tools ''` и файлов не читает. Ставить тут `true` значило бы получать
+       * уверенные вердикты о кадрах, которых звено не видело.
+       */
       built.push(
         openAiCompatible(
           'claude-cli',

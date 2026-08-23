@@ -343,7 +343,14 @@ describe('the researcher’s report reaches the architect (task 161)', () => {
 
     const asked: string[] = [];
     const recording: Chain = {
-      providers: [{ id: 'google', model: 'gemini', generate: () => Promise.resolve('') }],
+      providers: [
+        {
+          id: 'google',
+          model: 'gemini',
+          supportsImages: true,
+          generate: () => Promise.resolve(''),
+        },
+      ],
       generate: (request) => {
         asked.push(request.prompt);
         return Promise.resolve({
@@ -384,7 +391,14 @@ describe('инструкция архитектора заданий требу�
   it('каждый промпт задания несёт строку про POSIX sh и `sh -c`', async () => {
     const asked: string[] = [];
     const recording: Chain = {
-      providers: [{ id: 'google', model: 'gemini', generate: () => Promise.resolve('') }],
+      providers: [
+        {
+          id: 'google',
+          model: 'gemini',
+          supportsImages: true,
+          generate: () => Promise.resolve(''),
+        },
+      ],
       generate: (request) => {
         asked.push(request.prompt);
         return Promise.resolve({
@@ -411,7 +425,14 @@ describe('инструкция архитектора заданий требу�
        команд, и конвейер замёрз волной отказов «нечего запускать» — приёмка не судила ни одного. */
     const asked: string[] = [];
     const recording: Chain = {
-      providers: [{ id: 'google', model: 'gemini', generate: () => Promise.resolve('') }],
+      providers: [
+        {
+          id: 'google',
+          model: 'gemini',
+          supportsImages: true,
+          generate: () => Promise.resolve(''),
+        },
+      ],
       generate: (request) => {
         asked.push(request.prompt);
         return Promise.resolve({

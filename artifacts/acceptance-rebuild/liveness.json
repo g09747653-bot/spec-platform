@@ -1,0 +1,47 @@
+{
+  "probes": [
+    {
+      "kind": "reveal",
+      "name": "карточка технологий",
+      "moved": true,
+      "detail": "прозрачность 0 → 1"
+    },
+    {
+      "kind": "reveal",
+      "name": "полоса диаграммы на странице линейки",
+      "moved": true,
+      "detail": "ширина 0 → 189 px"
+    },
+    {
+      "kind": "hover",
+      "name": "карточка в сетке",
+      "moved": true,
+      "detail": "вычисленный стиль изменился под курсором"
+    },
+    {
+      "kind": "hover",
+      "name": "основная кнопка",
+      "moved": true,
+      "detail": "вычисленный стиль изменился под курсором"
+    },
+    {
+      "kind": "motion",
+      "name": "витрина-слайдер перелистывается сама",
+      "moved": true,
+      "detail": "transform matrix(1, 0, 0, 1, -1184, 0) → matrix(1, 0, 0, 1, -2368, 0)"
+    },
+    {
+      "kind": "motion",
+      "name": "бегущая строка едет",
+      "moved": true,
+      "detail": "transform matrix(1, 0, 0, 1, -611.782, 0) → matrix(1, 0, 0, 1, -669.931, 0)"
+    },
+    {
+      "kind": "motion",
+      "name": "стрелка слайдера листает",
+      "moved": true,
+      "detail": "transform matrix(1, 0, 0, 1, -3552, 0) → matrix(1, 0, 0, 1, 0, 0)"
+    }
+  ],
+  "consoleErrors": []
+}

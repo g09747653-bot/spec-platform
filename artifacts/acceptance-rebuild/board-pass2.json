@@ -1,0 +1,87 @@
+{
+  "board": {
+    "coherence": {
+      "status": "judged",
+      "verdict": "coherent",
+      "findings": [],
+      "judgedBy": "google"
+    },
+    "liveness": {
+      "verdict": "alive",
+      "findings": [],
+      "evidence": {
+        "probes": [
+          {
+            "kind": "reveal",
+            "name": "карточка технологий",
+            "moved": true,
+            "detail": "прозрачность 0 → 1"
+          },
+          {
+            "kind": "reveal",
+            "name": "полоса диаграммы на странице линейки",
+            "moved": true,
+            "detail": "ширина 0 → 189 px"
+          },
+          {
+            "kind": "hover",
+            "name": "карточка в сетке",
+            "moved": true,
+            "detail": "вычисленный стиль изменился под курсором"
+          },
+          {
+            "kind": "hover",
+            "name": "основная кнопка",
+            "moved": true,
+            "detail": "вычисленный стиль изменился под курсором"
+          },
+          {
+            "kind": "motion",
+            "name": "витрина-слайдер перелистывается сама",
+            "moved": true,
+            "detail": "transform matrix(1, 0, 0, 1, -1184, 0) → matrix(1, 0, 0, 1, -2368, 0)"
+          },
+          {
+            "kind": "motion",
+            "name": "бегущая строка едет",
+            "moved": true,
+            "detail": "transform matrix(1, 0, 0, 1, -611.782, 0) → matrix(1, 0, 0, 1, -669.931, 0)"
+          },
+          {
+            "kind": "motion",
+            "name": "стрелка слайдера листает",
+            "moved": true,
+            "detail": "transform matrix(1, 0, 0, 1, -3552, 0) → matrix(1, 0, 0, 1, 0, 0)"
+          }
+        ],
+        "signals": [
+          "CSS-переходы (transition)",
+          "CSS-анимации (@keyframes)",
+          "состояния наведения (:hover)",
+          "появление по видимости (IntersectionObserver)",
+          "преобразования (transform)",
+          "уважение к prefers-reduced-motion",
+          "покадровая анимация (requestAnimationFrame)"
+        ]
+      }
+    },
+    "entry": {
+      "verdict": "single-entry",
+      "entry": "start.cmd",
+      "findings": [],
+      "unreachable": []
+    },
+    "green": true
+  },
+  "signals": [
+    "CSS-переходы (transition)",
+    "CSS-анимации (@keyframes)",
+    "состояния наведения (:hover)",
+    "появление по видимости (IntersectionObserver)",
+    "преобразования (transform)",
+    "уважение к prefers-reduced-motion",
+    "покадровая анимация (requestAnimationFrame)"
+  ],
+  "text": "Суд качества:\n1. Связность — связно (смотрел google).\n2. Живость — живой: 7 из 7 проверок увидели движение.\n3. Вход — один: start.cmd, вся работа открывается из него.\nИтог: зелено по всем трём осям.",
+  "at": "2026-08-23T12:43:12.327Z"
+}
