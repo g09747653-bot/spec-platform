@@ -1,0 +1,2204 @@
+{
+  "generatedAt": "2026-08-23T10:11:34.561Z",
+  "thresholds": {
+    "sc001MaxDiffPercent": 1,
+    "sc002MaxDiffPx": 2,
+    "pixelmatchThreshold": 0.1,
+    "pixelmatchIncludeAA": false
+  },
+  "combos": [
+    {
+      "page": "index",
+      "width": "375",
+      "segments": [
+        {
+          "scrollY": 0,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 129628,
+            "totalPixelCount": 304500,
+            "diffPercent": 42.57077175697865,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": 166,
+                "clone": 0,
+                "diffPx": 166,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 812,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 65676,
+            "totalPixelCount": 304500,
+            "diffPercent": 21.56847290640394,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -646,
+                "clone": -812,
+                "diffPx": 166,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 1624,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 98277,
+            "totalPixelCount": 304500,
+            "diffPercent": 32.27487684729064,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -1458,
+                "clone": -1624,
+                "diffPx": 166,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 2436,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 91958,
+            "totalPixelCount": 304500,
+            "diffPercent": 30.19967159277504,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -2270,
+                "clone": -2436,
+                "diffPx": 166,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 3248,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 141763,
+            "totalPixelCount": 304500,
+            "diffPercent": 46.555993431855505,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -3082,
+                "clone": -3248,
+                "diffPx": 166,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 4060,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 107843,
+            "totalPixelCount": 304500,
+            "diffPercent": 35.416420361247944,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -3894,
+                "clone": -4060,
+                "diffPx": 166,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 4872,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 160904,
+            "totalPixelCount": 304500,
+            "diffPercent": 52.842036124794745,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -4706,
+                "clone": -4872,
+                "diffPx": 166,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 5684,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 179694,
+            "totalPixelCount": 304500,
+            "diffPercent": 59.0128078817734,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -5518,
+                "clone": -5644,
+                "diffPx": 126,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        }
+      ],
+      "warnings": [
+        "WARNING: полная высота страницы клона и оригинала не совпадает для page=\"index\" width=375: maxScrollY(baseline)=11368, maxScrollY(clone)=5684. Сравниваются только сегменты со scrollY в диапазоне [0, 5684]. Расхождение требует ручной документации в DEVIATIONS.md (см. T021/T029)."
+      ],
+      "errors": [],
+      "pageHeightMismatch": {
+        "maxScrollYBaseline": 11368,
+        "maxScrollYClone": 5684,
+        "comparedUpToScrollY": 5684
+      }
+    },
+    {
+      "page": "index",
+      "width": "768",
+      "segments": [
+        {
+          "scrollY": 0,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 167092,
+            "totalPixelCount": 786432,
+            "diffPercent": 21.246846516927086,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": 126,
+                "clone": 0,
+                "diffPx": 126,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 1024,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 273428,
+            "totalPixelCount": 786432,
+            "diffPercent": 34.76816813151042,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -898,
+                "clone": -1024,
+                "diffPx": 126,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 2048,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 260910,
+            "totalPixelCount": 786432,
+            "diffPercent": 33.176422119140625,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -1922,
+                "clone": -2048,
+                "diffPx": 126,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 3072,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 191146,
+            "totalPixelCount": 786432,
+            "diffPercent": 24.30547078450521,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -2946,
+                "clone": -3072,
+                "diffPx": 126,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 4096,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 269054,
+            "totalPixelCount": 786432,
+            "diffPercent": 34.211985270182296,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -3790,
+                "clone": -4096,
+                "diffPx": 306,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 5120,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 445324,
+            "totalPixelCount": 786432,
+            "diffPercent": 56.625874837239586,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -4994,
+                "clone": -5120,
+                "diffPx": 126,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 6144,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 447186,
+            "totalPixelCount": 786432,
+            "diffPercent": 56.862640380859375,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -5838,
+                "clone": -5751,
+                "diffPx": 87,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        }
+      ],
+      "warnings": [
+        "WARNING: полная высота страницы клона и оригинала не совпадает для page=\"index\" width=768: maxScrollY(baseline)=8192, maxScrollY(clone)=6144. Сравниваются только сегменты со scrollY в диапазоне [0, 6144]. Расхождение требует ручной документации в DEVIATIONS.md (см. T021/T029)."
+      ],
+      "errors": [],
+      "pageHeightMismatch": {
+        "maxScrollYBaseline": 8192,
+        "maxScrollYClone": 6144,
+        "comparedUpToScrollY": 6144
+      }
+    },
+    {
+      "page": "index",
+      "width": "1440",
+      "segments": [
+        {
+          "scrollY": 0,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 292484,
+            "totalPixelCount": 1296000,
+            "diffPercent": 22.56820987654321,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": 108,
+                "clone": 0,
+                "diffPx": 108,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 900,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 227039,
+            "totalPixelCount": 1296000,
+            "diffPercent": 17.518441358024692,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -792,
+                "clone": -900,
+                "diffPx": 108,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 1800,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 486076,
+            "totalPixelCount": 1296000,
+            "diffPercent": 37.50586419753086,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -1692,
+                "clone": -1800,
+                "diffPx": 108,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 2700,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 416409,
+            "totalPixelCount": 1296000,
+            "diffPercent": 32.130324074074075,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -2487,
+                "clone": -2700,
+                "diffPx": 213,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 3600,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 361824,
+            "totalPixelCount": 1296000,
+            "diffPercent": 27.91851851851852,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -3492,
+                "clone": -3600,
+                "diffPx": 108,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 4500,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 411548,
+            "totalPixelCount": 1296000,
+            "diffPercent": 31.755246913580248,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -4392,
+                "clone": -4500,
+                "diffPx": 108,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 5400,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 773633,
+            "totalPixelCount": 1296000,
+            "diffPercent": 59.693904320987656,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -5292,
+                "clone": -5363,
+                "diffPx": 71,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"hero\" присутствует только в clone JSON",
+              "ключ \"sectionGaps\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        }
+      ],
+      "warnings": [
+        "WARNING: полная высота страницы клона и оригинала не совпадает для page=\"index\" width=1440: maxScrollY(baseline)=8100, maxScrollY(clone)=5400. Сравниваются только сегменты со scrollY в диапазоне [0, 5400]. Расхождение требует ручной документации в DEVIATIONS.md (см. T021/T029)."
+      ],
+      "errors": [],
+      "pageHeightMismatch": {
+        "maxScrollYBaseline": 8100,
+        "maxScrollYClone": 5400,
+        "comparedUpToScrollY": 5400
+      }
+    },
+    {
+      "page": "products",
+      "width": "375",
+      "segments": [
+        {
+          "scrollY": 0,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 132201,
+            "totalPixelCount": 304500,
+            "diffPercent": 43.41576354679803,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": 211,
+                "clone": 0,
+                "diffPx": 211,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"productCard\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 812,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 80871,
+            "totalPixelCount": 304500,
+            "diffPercent": 26.55862068965517,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -677,
+                "clone": -812,
+                "diffPx": 135,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"productCard\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 1624,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 47871,
+            "totalPixelCount": 304500,
+            "diffPercent": 15.721182266009853,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -1533,
+                "clone": -1624,
+                "diffPx": 91,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"productCard\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 2436,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 32325,
+            "totalPixelCount": 304500,
+            "diffPercent": 10.615763546798028,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -2345,
+                "clone": -2436,
+                "diffPx": 91,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"productCard\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 3248,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 75376,
+            "totalPixelCount": 304500,
+            "diffPercent": 24.754022988505746,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -3157,
+                "clone": -3103,
+                "diffPx": 54,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"productCard\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        }
+      ],
+      "warnings": [
+        "WARNING: полная высота страницы клона и оригинала не совпадает для page=\"products\" width=375: maxScrollY(baseline)=17864, maxScrollY(clone)=3248. Сравниваются только сегменты со scrollY в диапазоне [0, 3248]. Расхождение требует ручной документации в DEVIATIONS.md (см. T021/T029)."
+      ],
+      "errors": [],
+      "pageHeightMismatch": {
+        "maxScrollYBaseline": 17864,
+        "maxScrollYClone": 3248,
+        "comparedUpToScrollY": 3248
+      }
+    },
+    {
+      "page": "products",
+      "width": "768",
+      "segments": [
+        {
+          "scrollY": 0,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 259806,
+            "totalPixelCount": 786432,
+            "diffPercent": 33.036041259765625,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": 171,
+                "clone": 0,
+                "diffPx": 171,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"productCard\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 1024,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 79997,
+            "totalPixelCount": 786432,
+            "diffPercent": 10.172144571940105,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -839,
+                "clone": -1024,
+                "diffPx": 185,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"productCard\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 2048,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 88271,
+            "totalPixelCount": 786432,
+            "diffPercent": 11.22423807779948,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -1932,
+                "clone": -2048,
+                "diffPx": 116,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"productCard\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 3072,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 200518,
+            "totalPixelCount": 786432,
+            "diffPercent": 25.497182210286457,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -2956,
+                "clone": -2536,
+                "diffPx": 420,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"productCard\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        }
+      ],
+      "warnings": [
+        "WARNING: полная высота страницы клона и оригинала не совпадает для page=\"products\" width=768: maxScrollY(baseline)=13312, maxScrollY(clone)=3072. Сравниваются только сегменты со scrollY в диапазоне [0, 3072]. Расхождение требует ручной документации в DEVIATIONS.md (см. T021/T029)."
+      ],
+      "errors": [],
+      "pageHeightMismatch": {
+        "maxScrollYBaseline": 13312,
+        "maxScrollYClone": 3072,
+        "comparedUpToScrollY": 3072
+      }
+    },
+    {
+      "page": "products",
+      "width": "1440",
+      "segments": [
+        {
+          "scrollY": 0,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 535178,
+            "totalPixelCount": 1296000,
+            "diffPercent": 41.2945987654321,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": 167,
+                "clone": 0,
+                "diffPx": 167,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"productCard\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 900,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 188574,
+            "totalPixelCount": 1296000,
+            "diffPercent": 14.550462962962962,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -770,
+                "clone": -900,
+                "diffPx": 130,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"productCard\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 1800,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 89387,
+            "totalPixelCount": 1296000,
+            "diffPercent": 6.897145061728395,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -1670,
+                "clone": -1800,
+                "diffPx": 130,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"productCard\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        },
+        {
+          "scrollY": 2700,
+          "sc001": {
+            "status": "FAIL",
+            "diffPixelCount": 282188,
+            "totalPixelCount": 1296000,
+            "diffPercent": 21.773765432098767,
+            "threshold": 1
+          },
+          "sc002": {
+            "status": "FAIL",
+            "diffs": [
+              {
+                "path": "header.top",
+                "baseline": -2570,
+                "clone": -2229,
+                "diffPx": 341,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "header.height",
+                "baseline": 0,
+                "clone": 45,
+                "diffPx": 45,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "logo.height",
+                "baseline": 0,
+                "clone": 20,
+                "diffPx": 20,
+                "status": "FAIL",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.left",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              },
+              {
+                "path": "contentPadding.right",
+                "baseline": 0,
+                "clone": 0,
+                "diffPx": 0,
+                "status": "PASS",
+                "threshold": 2
+              }
+            ],
+            "warnings": [
+              "ключ \"productCard\" присутствует только в clone JSON",
+              "ключ \"footer\" присутствует только в clone JSON"
+            ]
+          }
+        }
+      ],
+      "warnings": [
+        "WARNING: полная высота страницы клона и оригинала не совпадает для page=\"products\" width=1440: maxScrollY(baseline)=13500, maxScrollY(clone)=2700. Сравниваются только сегменты со scrollY в диапазоне [0, 2700]. Расхождение требует ручной документации в DEVIATIONS.md (см. T021/T029)."
+      ],
+      "errors": [],
+      "pageHeightMismatch": {
+        "maxScrollYBaseline": 13500,
+        "maxScrollYClone": 2700,
+        "comparedUpToScrollY": 2700
+      }
+    }
+  ],
+  "warnings": [
+    "WARNING: полная высота страницы клона и оригинала не совпадает для page=\"index\" width=375: maxScrollY(baseline)=11368, maxScrollY(clone)=5684. Сравниваются только сегменты со scrollY в диапазоне [0, 5684]. Расхождение требует ручной документации в DEVIATIONS.md (см. T021/T029).",
+    "WARNING: полная высота страницы клона и оригинала не совпадает для page=\"index\" width=768: maxScrollY(baseline)=8192, maxScrollY(clone)=6144. Сравниваются только сегменты со scrollY в диапазоне [0, 6144]. Расхождение требует ручной документации в DEVIATIONS.md (см. T021/T029).",
+    "WARNING: полная высота страницы клона и оригинала не совпадает для page=\"index\" width=1440: maxScrollY(baseline)=8100, maxScrollY(clone)=5400. Сравниваются только сегменты со scrollY в диапазоне [0, 5400]. Расхождение требует ручной документации в DEVIATIONS.md (см. T021/T029).",
+    "WARNING: полная высота страницы клона и оригинала не совпадает для page=\"products\" width=375: maxScrollY(baseline)=17864, maxScrollY(clone)=3248. Сравниваются только сегменты со scrollY в диапазоне [0, 3248]. Расхождение требует ручной документации в DEVIATIONS.md (см. T021/T029).",
+    "WARNING: полная высота страницы клона и оригинала не совпадает для page=\"products\" width=768: maxScrollY(baseline)=13312, maxScrollY(clone)=3072. Сравниваются только сегменты со scrollY в диапазоне [0, 3072]. Расхождение требует ручной документации в DEVIATIONS.md (см. T021/T029).",
+    "WARNING: полная высота страницы клона и оригинала не совпадает для page=\"products\" width=1440: maxScrollY(baseline)=13500, maxScrollY(clone)=2700. Сравниваются только сегменты со scrollY в диапазоне [0, 2700]. Расхождение требует ручной документации в DEVIATIONS.md (см. T021/T029)."
+  ],
+  "fatalErrors": [],
+  "summary": {
+    "totalSegments": 35,
+    "passedSegments": 0,
+    "failedSegments": 35,
+    "warningsCount": 6,
+    "fatalErrorsCount": 0
+  }
+}
