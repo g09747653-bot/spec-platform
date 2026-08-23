@@ -711,7 +711,11 @@ describe('класс задумки решает, какой план писат
         title: 'Замерь результат',
         description: 'Сверь с эталоном и запиши RESULT.md.',
         filesToEdit: ['RESULT.md'],
-        unitTestCmd: 'test -f RESULT.md',
+        measurement: {
+          cmd: 'node tools/measure.js',
+          recordPath: 'RESULT.json',
+          divergenceKey: 'diffPercent',
+        },
       },
     ],
   });
@@ -742,11 +746,7 @@ describe('класс задумки решает, какой план писат
     const result = await intake(scripted(COHERENT, WHOLE_PLAN));
     const owner = result.tasks.find((task) => task.title === 'Собери артефакт целиком');
 
-    expect(owner?.filesToEdit).toEqual([
-      'index.html',
-      'products.html',
-      'src/styles/main.css',
-    ]);
+    expect(owner?.filesToEdit).toEqual(['index.html', 'products.html', 'src/styles/main.css']);
     expect(owner?.iterationTimeoutSec).toBe(5400);
     expect(result.tasks.at(-1)?.dependsOn).toEqual([owner?.taskId]);
   });

@@ -29,6 +29,10 @@ export default tseslint.config(
       '.gate-artifacts/**',
       // Round 5 diagnosis scratch: hand-run reproduction scripts and their output (gitignored).
       '.gate-tmp/**',
+      // Улики приёмок и разовые инструменты замера: продукт из них не собирается, и правилам
+      // продуктового кода они не подчиняются — как и вывод гейт-прогона выше. Судятся они тем,
+      // что показывают, а не тем, как написаны.
+      'artifacts/**',
       'next-env.d.ts',
       'migrations/**',
       // Deliberate violations, linted only by `pnpm test:boundaries`.

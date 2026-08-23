@@ -442,9 +442,7 @@ function countAssignments(projectDirectory: string): number {
 }
 
 /** Задача → её веха. Один индекс на обе ветки плана, чтобы «дефект нарезки» ловился одинаково. */
-function milestoneIndex(
-  milestones: readonly SlicedMilestone[],
-): Map<string, SlicedMilestone> {
+function milestoneIndex(milestones: readonly SlicedMilestone[]): Map<string, SlicedMilestone> {
   const index = new Map<string, SlicedMilestone>();
   for (const milestone of milestones) {
     for (const taskId of milestone.taskIds) index.set(taskId, milestone);

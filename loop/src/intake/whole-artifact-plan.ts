@@ -48,6 +48,8 @@ export interface PlannedTask {
   unitTestCmd?: string;
   e2eTestCmd?: string;
   iterationTimeoutSec?: number;
+  /** Измерение полировки и замера — приёмку по нему составляет код (А-37 п.1). */
+  measurement?: { cmd: string; recordPath: string; divergenceKey: string };
 }
 
 export interface WholeArtifactPlanResult {
@@ -82,6 +84,22 @@ function artifactFilesOf(files: readonly string[]): string[] {
     .filter((file) => PRESENTATIONAL.test(file) && !TOOLING_PREFIX.test(file));
 }
 
+/**
+ * Как задача полировки или замера ЗАПУСКАЕТ измерение и куда его КЛАДЁТ (А-37 п.1).
+ *
+ * Не «прошло ли» — «прогнано ли и записано ли». Числа приёмкой не распоряжаются.
+ */
+const Measurement = z.object({
+  /** Команда прогона измерения. Её собственный код возврата приёмкой НЕ считается. */
+  cmd: z.string().min(1),
+  /** Файл, куда измерение пишет свой отчёт: приёмка требует, чтобы он появился и был непуст. */
+  recordPath: z.string().min(1),
+  /** Ключ (через точку) внутри отчёта, под которым лежит ЧИСЛО расхождения. */
+  divergenceKey: z.string().min(1),
+});
+
+type Measurement = z.infer<typeof Measurement>;
+
 const ModelTask = z.object({
   role: z.enum(WHOLE_ARTIFACT_ROLES),
   title: z.string().min(1),
@@ -90,6 +108,7 @@ const ModelTask = z.object({
   unitTestCmd: z.string().nullish(),
   e2eTestCmd: z.string().nullish(),
   iterationTimeoutSec: z.number().int().positive().max(7_200).nullish().catch(undefined),
+  measurement: Measurement.nullish(),
 });
 
 const ModelPlan = z.object({ tasks: z.array(ModelTask).min(1) });
@@ -98,6 +117,58 @@ type ModelTask = z.infer<typeof ModelTask>;
 
 const text = (value: string | null | undefined): string | undefined =>
   value === null || value === undefined || value.trim() === '' ? undefined : value;
+
+/** Роли, чью приёмку составляет КОД, а не модель (А-37 п.1). */
+const MEASURED_ROLES: readonly WholeArtifactRole[] = ['polish', 'measure'];
+
+/** Куда кладётся предыдущее значение расхождения, чтобы сходимость было с чем сравнивать. */
+export const CONVERGENCE_LEDGER = '.loop-convergence.json';
+
+/**
+ * Приёмка полировки и замера — составляется КОДОМ (А-37 п.1).
+ *
+ * **Числовой порог не бывает воротами.** Урок стоил раунда: план написал себе приёмку
+ * «прогон сверки вернул 0», а сверка внутри держала порог «не больше 1% различающихся
+ * пикселей». Сборка с нуля такого не берёт по построению — задача не могла быть принята
+ * НИКОГДА, сколько бы честной работы в неё ни вложили, и конвейер встал не на плохой работе,
+ * а на невыполнимом определении готовности.
+ *
+ * Что приёмка спрашивает вместо этого — ровно три вещи, и все три о ФАКТЕ, а не об оценке:
+ *
+ * 1. **измерение прогнано** — команда исполнена; её собственный код возврата намеренно
+ *    проглатывается: он выражает мнение о качестве, а мнение воротами не бывает;
+ * 2. **измерение записано** — отчёт на диске существует и непуст, и число из него читается;
+ * 3. **расхождение не выросло** — сходимость против предыдущей итерации. Полировке позволено
+ *    не дойти до идеала; ей не позволено делать хуже.
+ *
+ * Сам порог никуда не девается — он становится ПУБЛИКУЕМОЙ МЕТРИКОЙ: число печатается на
+ * приёмке, уезжает в ленту и в алерт заказчику, и решает по нему человек.
+ */
+export function composeMeasuredAcceptance(measurement: Measurement): string {
+  const record = measurement.recordPath.replaceAll('\\', '/');
+  const key = measurement.divergenceKey;
+
+  /*
+   * Внутри — только двойные кавычки: вся вставка идёт в одинарных, а `sh -c` вложенных
+   * одинарных не прощает. Сообщения пишутся без апострофов по той же причине.
+   */
+  const check = [
+    'const fs=require("fs");',
+    `const r=JSON.parse(fs.readFileSync("${record}","utf8"));`,
+    `const v="${key}".split(".").reduce((o,k)=>(o==null?o:o[k]),r);`,
+    'if(typeof v!=="number"||!isFinite(v)){console.error("замер не записал число по ключу ' +
+      key +
+      '");process.exit(1)}',
+    `const p="${CONVERGENCE_LEDGER}";`,
+    'const prev=fs.existsSync(p)?JSON.parse(fs.readFileSync(p,"utf8")):null;',
+    'fs.writeFileSync(p,JSON.stringify({value:v}));',
+    'if(prev&&typeof prev.value==="number"&&v>prev.value+1e-9)' +
+      '{console.error("расхождение выросло: "+prev.value+" -> "+v);process.exit(1)}',
+    'console.log("замер зафиксирован: "+v+(prev?" (было "+prev.value+")":""));',
+  ].join('');
+
+  return `{ ${measurement.cmd} || true; } && test -s ${record} && node -e '${check}'`;
+}
 
 const SYSTEM = [
   'Ты — архитектор автономного контура доставки. Задумка владельца принадлежит классу',
@@ -182,7 +253,15 @@ export function wholeArtifactPrompt(
     '4. НЕ дели артефакт между задачами: «шапка», «футер», «секция героя», «страница товаров»',
     '   отдельными задачами — это запрещённая форма, ровно она разрушает связность.',
     '',
-    'unitTestCmd ОБЯЗАТЕЛЕН у каждой задачи: POSIX sh, исполняется через `sh -c` в Linux-контейнере',
+    'ПРИЁМКА ПОЛИРОВКИ И ЗАМЕРА — не число. Роли "polish" и "measure" unitTestCmd НЕ пишут:',
+    'вместо него дай объект "measurement" — чем мерить, куда кладётся отчёт и под каким ключом в',
+    'нём лежит число расхождения. Приёмку по нему составит код, и принимать он будет ФАКТ:',
+    'измерение прогнано, отчёт записан, расхождение не выросло против прошлой итерации.',
+    'Порог («не больше N процентов», «не больше N пикселей») воротами НЕ БЫВАЕТ: сборка с нуля',
+    'такого не берёт по построению, и задача не может быть принята никогда, сколько честной работы',
+    'в неё ни вложи. Сам порог никуда не девается — он публикуемая метрика, и решает по ней человек.',
+    '',
+    'unitTestCmd ОБЯЗАТЕЛЕН у остальных ролей: POSIX sh, исполняется через `sh -c` в Linux-контейнере',
     '(никакого PowerShell и cmd). Если своих тестов у задачи нет — назови честную проверку её',
     'результата: `test -f путь`, `node --check файл.js`, команду сборки. Проверка обязана проходить',
     'в чистом контейнере после честного выполнения задачи и падать без него.',
@@ -195,7 +274,12 @@ export function wholeArtifactPrompt(
     '   "filesToEdit":["assets/…"],"unitTestCmd":"test -d assets/images","e2eTestCmd":null,"iterationTimeoutSec":null},',
     '  {"role":"whole","title":"Собери артефакт целиком","description":"…",',
     '   "filesToEdit":["index.html","products.html","src/styles/main.css","src/scripts/main.js"],',
-    '   "unitTestCmd":"node tools/check.js","e2eTestCmd":null,"iterationTimeoutSec":5400}',
+    '   "unitTestCmd":"node tools/check.js","e2eTestCmd":null,"iterationTimeoutSec":5400},',
+    '  {"role":"polish","title":"Сверь с эталоном и отполируй","description":"…",',
+    '   "filesToEdit":["index.html","products.html","src/styles/main.css"],',
+    '   "measurement":{"cmd":"node tools/visual-diff/compare.js",',
+    '     "recordPath":"tools/visual-diff/report.json","divergenceKey":"summary.diffPercent"},',
+    '   "iterationTimeoutSec":3600}',
     ']}',
   ].join('\n');
 }
@@ -278,7 +362,20 @@ export function shapePlan(proposed: readonly ModelTask[]): PlannedTask[] {
         ? [...new Set([...union, ...row.files.filter((file) => !union.includes(file))])]
         : row.files;
 
-    const unit = text(row.unitTestCmd);
+    /*
+     * Приёмку полировки и замера код СОСТАВЛЯЕТ САМ и предложение модели для них не берёт
+     * (А-37 п.1): именно там числовой порог однажды стал воротами, которых сборка с нуля не
+     * возьмёт никогда. Для остальных ролей команда модели идёт как есть.
+     */
+    const measurement = row.measurement ?? undefined;
+
+    const unit =
+      MEASURED_ROLES.includes(role) && measurement != null
+        ? composeMeasuredAcceptance(measurement)
+        : MEASURED_ROLES.includes(role)
+          ? undefined
+          : text(row.unitTestCmd);
+
     const e2e = text(row.e2eTestCmd);
 
     const dependsOn = TOUCHES_ARTIFACT.includes(role)
@@ -300,6 +397,7 @@ export function shapePlan(proposed: readonly ModelTask[]): PlannedTask[] {
       dependsOn,
       ...(unit === undefined ? {} : { unitTestCmd: unit }),
       ...(e2e === undefined ? {} : { e2eTestCmd: e2e }),
+      ...(measurement == null ? {} : { measurement }),
       ...(row.iterationTimeoutSec === null || row.iterationTimeoutSec === undefined
         ? {}
         : { iterationTimeoutSec: row.iterationTimeoutSec }),
@@ -310,6 +408,29 @@ export function shapePlan(proposed: readonly ModelTask[]): PlannedTask[] {
   }
 
   return planned;
+}
+
+/**
+ * Есть ли у каждой полировки и замера ЗАПИСЫВАЕМОЕ измерение (А-37 п.1) — чистая функция.
+ *
+ * Пробел здесь того же рода, что заборы внутри артефакта: план, у которого полировка не
+ * называет, ЧЕМ она мерит и КУДА кладёт результат, не имеет определения готовности — и рано
+ * или поздно подставит вместо него чужое число.
+ */
+export function judgeMeasuredAcceptance(tasks: readonly PlannedTask[]): string[] {
+  const naked = tasks.filter(
+    (task) => MEASURED_ROLES.includes(task.role) && task.measurement === undefined,
+  );
+
+  if (naked.length === 0) return [];
+
+  return [
+    `Задачи полировки и замера без записываемого измерения: ${naked
+      .map((task) => task.taskId)
+      .join(', ')}. Приёмка такой задачи не может быть ни числом, ни мнением: назови команду ` +
+      'прогона, файл отчёта и ключ числа расхождения в нём — принимается ФАКТ прогона, записи и ' +
+      'сходимости, а сам порог публикуется метрикой.',
+  ];
 }
 
 /** Задачи плана в том виде, в каком их читает суд формы. */
@@ -451,7 +572,10 @@ export async function buildWholeArtifactPlan(
     }
 
     const shaped = shapePlan(parsed.data.tasks);
-    const found = judgeWholeArtifactPlan(asReviewable(shaped));
+    const found = [
+      ...judgeWholeArtifactPlan(asReviewable(shaped)),
+      ...judgeMeasuredAcceptance(shaped),
+    ];
 
     if (found.length === 0) {
       return {

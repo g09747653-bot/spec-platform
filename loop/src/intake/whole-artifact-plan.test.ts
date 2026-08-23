@@ -8,6 +8,9 @@ import { WHOLE_ARTIFACT_TASK_LIMIT, judgeWholeArtifactPlan } from './artifact-cl
 import {
   asReviewable,
   buildWholeArtifactPlan,
+  composeMeasuredAcceptance,
+  CONVERGENCE_LEDGER,
+  judgeMeasuredAcceptance,
   shapePlan,
   skeletonPlan,
   wholeArtifactPrompt,
@@ -196,7 +199,11 @@ describe('сборка плана: модель пишет, код приним�
         title: 'Замерь',
         description: 'Сверь и запиши отчёт.',
         filesToEdit: ['RESULT.md'],
-        unitTestCmd: 'test -f RESULT.md',
+        measurement: {
+          cmd: 'node tools/measure.js',
+          recordPath: 'RESULT.json',
+          divergenceKey: 'diffPercent',
+        },
       },
     ],
   });
@@ -322,5 +329,190 @@ describe('регрессия: слепок nvidia-плана, поданный �
     expect(judgeWholeArtifactPlan(asReviewable(result.tasks))).toEqual([]);
     expect(result.tasks.length).toBeLessThanOrEqual(WHOLE_ARTIFACT_TASK_LIMIT);
     expect(result.tasks.filter((task) => task.role === 'whole')).toHaveLength(1);
+  });
+});
+
+/**
+ * Приёмка полировки и замера — факт, а не число (А-37 п.1).
+ *
+ * Регрессия внизу гоняет слепок WA04 — ту самую задачу, чью приёмку план написал себе сам
+ * как «прогон сверки вернул 0», где сверка внутри держала порог «не больше 1% различающихся
+ * пикселей». Сборка с нуля такого не берёт по построению, и задача не могла быть принята
+ * никогда: конвейер встал не на плохой работе, а на невыполнимом определении готовности.
+ */
+describe('приёмка полировки и замера составляется кодом', () => {
+  const measurement = {
+    cmd: 'node tools/visual-diff/compare.js',
+    recordPath: 'tools/visual-diff/report.json',
+    divergenceKey: 'summary.diffPercent',
+  };
+
+  it('вердикт самого измерения проглатывается: мнение о качестве воротами не бывает', () => {
+    const accepted = composeMeasuredAcceptance(measurement);
+
+    expect(accepted).toContain('node tools/visual-diff/compare.js || true');
+  });
+
+  it('требуется ФАКТ записи: отчёт существует и непуст', () => {
+    expect(composeMeasuredAcceptance(measurement)).toContain(
+      'test -s tools/visual-diff/report.json',
+    );
+  });
+
+  it('требуется сходимость, а не порог: расхождение не выросло против прошлой итерации', () => {
+    const accepted = composeMeasuredAcceptance(measurement);
+
+    expect(accepted).toContain(CONVERGENCE_LEDGER);
+    expect(accepted).toContain('расхождение выросло');
+    /* Ни одного абсолютного порога в приёмке нет — он публикуемая метрика, а не ворота. */
+    expect(accepted).not.toMatch(/<=\s*\d/);
+    expect(accepted).toContain('замер зафиксирован');
+  });
+
+  it('число берётся по ключу, и нечисло — названный отказ, а не тихий пропуск', () => {
+    const accepted = composeMeasuredAcceptance(measurement);
+
+    expect(accepted).toContain('"summary.diffPercent".split(".")');
+    expect(accepted).toContain('замер не записал число по ключу');
+  });
+
+  it('вставка не ломает `sh -c`: внутри одинарных кавычек их больше нет', () => {
+    const accepted = composeMeasuredAcceptance(measurement);
+    const inner = accepted.slice(accepted.indexOf("node -e '") + 9, accepted.length - 1);
+
+    expect(inner).not.toContain("'");
+  });
+
+  it('полировка и замер без измерения — названный пробел формы', () => {
+    const shaped = shapePlan([
+      { role: 'whole', title: 'Целиком', description: '…', filesToEdit: ['index.html'] },
+      { role: 'polish', title: 'Полировка', description: '…', filesToEdit: ['index.html'] },
+    ]);
+
+    const gaps = judgeMeasuredAcceptance(shaped);
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0]).toContain('WA02');
+    expect(gaps[0]).toContain('публикуется метрикой');
+  });
+
+  it('измерение названо — пробелов нет, приёмку несёт задача', () => {
+    const shaped = shapePlan([
+      { role: 'whole', title: 'Целиком', description: '…', filesToEdit: ['index.html'] },
+      {
+        role: 'polish',
+        title: 'Полировка',
+        description: '…',
+        filesToEdit: ['index.html'],
+        measurement,
+      },
+    ]);
+
+    expect(judgeMeasuredAcceptance(shaped)).toEqual([]);
+    expect(shaped[1]?.unitTestCmd).toBe(composeMeasuredAcceptance(measurement));
+  });
+
+  it('промпт запрещает порог воротами и просит измерение', () => {
+    const prompt = wholeArtifactPrompt(SEED, context);
+
+    expect(prompt).toContain('ПРИЁМКА ПОЛИРОВКИ И ЗАМЕРА — не число');
+    expect(prompt).toContain('воротами НЕ БЫВАЕТ');
+    expect(prompt).toContain('"measurement"');
+    expect(prompt).toContain('divergenceKey');
+  });
+});
+
+describe('регрессия А-37: слепок WA04 — ворота «≤1%» больше не генерятся', () => {
+  /** Приёмка, которую план написал себе сам в раунде А-36 и на которой встал конвейер. */
+  const WA04_GATE =
+    'node tools/build.js && node tools/visual-diff/capture.js && node tools/visual-diff/compare.js';
+
+  it('команда модели для полировки НЕ становится приёмкой', () => {
+    const shaped = shapePlan([
+      { role: 'whole', title: 'Целиком', description: '…', filesToEdit: ['index.html'] },
+      {
+        role: 'polish',
+        title: 'Полировка 1: свести вёрстку к эталонным координатам',
+        description: '…',
+        filesToEdit: ['index.html'],
+        unitTestCmd: WA04_GATE,
+      },
+    ]);
+
+    expect(shaped[1]?.unitTestCmd).not.toBe(WA04_GATE);
+    expect(shaped[1]?.unitTestCmd).toBeUndefined();
+  });
+
+  it('и такой план не выходит наружу: пробел назван, переспрос, затем скелет', async () => {
+    const gated = JSON.stringify({
+      tasks: [
+        {
+          role: 'whole',
+          title: 'Собери сайт целиком',
+          description: '…',
+          filesToEdit: ['index.html', 'products.html'],
+          unitTestCmd: 'test -f index.html',
+        },
+        {
+          role: 'polish',
+          title: 'Полировка 1: свести вёрстку к эталонным координатам',
+          description: '…',
+          filesToEdit: ['index.html', 'products.html'],
+          unitTestCmd: WA04_GATE,
+        },
+      ],
+    });
+
+    const result = await buildWholeArtifactPlan({
+      seed: SEED,
+      context,
+      chain: stubChain(gated),
+      knownArtifactFiles: ['index.html', 'products.html'],
+    });
+
+    expect(result.retriedBecause.join(' ')).toContain('без записываемого измерения');
+    expect(result.writtenBy).toBeNull();
+    /* Наружу вышел скелет — и в нём ни одной приёмки, зависящей от порога. */
+    for (const task of result.tasks) {
+      expect(task.unitTestCmd ?? '').not.toContain('compare.js');
+    }
+  });
+
+  it('та же полировка с измерением вместо ворот принимается', async () => {
+    const measured = JSON.stringify({
+      tasks: [
+        {
+          role: 'whole',
+          title: 'Собери сайт целиком',
+          description: '…',
+          filesToEdit: ['index.html', 'products.html'],
+          unitTestCmd: 'test -f index.html',
+        },
+        {
+          role: 'polish',
+          title: 'Полировка 1: свести вёрстку к эталонным координатам',
+          description: '…',
+          filesToEdit: ['index.html', 'products.html'],
+          measurement: {
+            cmd: WA04_GATE,
+            recordPath: 'tools/visual-diff/report.json',
+            divergenceKey: 'summary.diffPercent',
+          },
+        },
+      ],
+    });
+
+    const result = await buildWholeArtifactPlan({
+      seed: SEED,
+      context,
+      chain: stubChain(measured),
+    });
+
+    expect(result.writtenBy).toBe('claude-cli');
+    expect(result.retriedBecause).toEqual([]);
+
+    const polish = result.tasks.find((task) => task.role === 'polish');
+    /* Прогон остался — воротами перестал быть. */
+    expect(polish?.unitTestCmd).toContain(`${WA04_GATE} || true`);
+    expect(polish?.unitTestCmd).toContain('расхождение выросло');
   });
 });
