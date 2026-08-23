@@ -1,0 +1,27 @@
+{
+  "taskId": "WA04",
+  "milestoneId": "ms_03",
+  "title": "Полировка 1: свести вёрстку к эталонным координатам",
+  "description": "1. Пересобрать сайт через tools/build.js и прогнать tools/visual-diff/capture.js + compare.js на 375/768/1440 для index.html и products.html. 2. Устранить расхождения сетки, типографики, отступов, размеров и положений блоков до ≤1% отличающихся пикселей и ≤2px по ключевым отступам, редактируя только стили и разметку страниц (не material/tooling файлы); зону логотипа/названия бренда считать намеренным, принятым отклонением (не устранять, а зафиксировать). 3. Пересобрать index.html/products.html и обновить tools/visual-diff/report.json. 4. Занести оставшиеся расхождения в DEVIATIONS.md.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "src/pages/index.src.html",
+    "src/pages/products.src.html",
+    "src/styles/base.css",
+    "src/styles/home.css",
+    "src/styles/products.css",
+    "src/styles/header.css",
+    "src/styles/footer.css",
+    "index.html",
+    "products.html",
+    "tools/visual-diff/report.json",
+    "DEVIATIONS.md"
+  ],
+  "dependsOn": [
+    "WA03"
+  ],
+  "unitTestCmd": "node tools/build.js && node tools/visual-diff/capture.js && node tools/visual-diff/compare.js",
+  "iterationTimeoutSec": 3600,
+  "expectedArtifacts": [],
+  "status": "BLOCKED"
+}

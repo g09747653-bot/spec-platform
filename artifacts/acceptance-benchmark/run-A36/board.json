@@ -1,0 +1,70 @@
+{
+  "board": {
+    "coherence": {
+      "status": "judged",
+      "verdict": "broken",
+      "findings": [
+        "кадр 2: под шапкой в левой части видны лишние полукруглые элементы, накладывающиеся на контент",
+        "кадр 3: над шапкой страницы присутствует пустая черная область, смещающая меню в центр экрана",
+        "кадр 5: в самом верху экрана блоки с текстом обрезаны по высоте без отступов",
+        "кадр 8: в верхней части экрана изображение обрезано горизонтальной навигацией без защитных полей"
+      ],
+      "judgedBy": "google"
+    },
+    "liveness": {
+      "verdict": "alive",
+      "findings": [],
+      "evidence": {
+        "probes": [
+          {
+            "kind": "motion",
+            "name": "что-то движется само (img.)",
+            "moved": true,
+            "detail": "transform matrix(1.06455, 0, 0, 1.06455, -1.30662, -0.754597) → matrix(1.07804, 0, 0, 1.07804, -5.25105, -3.03257)"
+          },
+          {
+            "kind": "reveal",
+            "name": "появление по видимости (div.stats reveal is-visible)",
+            "moved": true,
+            "detail": "прозрачность 0 → 1, transform matrix(1, 0, 0, 1, 0, 22) → none"
+          },
+          {
+            "kind": "hover",
+            "name": "карточка в сетке (article.card reveal is-visible)",
+            "moved": true,
+            "detail": "вычисленный стиль изменился под курсором"
+          },
+          {
+            "kind": "hover",
+            "name": "кнопка или ссылка навигации (a.)",
+            "moved": true,
+            "detail": "вычисленный стиль изменился под курсором"
+          }
+        ],
+        "signals": [
+          "CSS-переходы (transition)",
+          "CSS-анимации (@keyframes)",
+          "состояния наведения (:hover)",
+          "появление по видимости (IntersectionObserver)",
+          "преобразования (transform)",
+          "уважение к prefers-reduced-motion",
+          "покадровая анимация (requestAnimationFrame)"
+        ]
+      }
+    },
+    "entry": {
+      "verdict": "scattered",
+      "entry": "start.cmd",
+      "findings": [
+        "Из точки входа не открывается вся работа: 4 страниц достижимы только открытием файла руками (partials/footer.html, partials/header.html, src/pages/index.src.html, src/pages/products.src.html)."
+      ],
+      "unreachable": [
+        "partials/footer.html",
+        "partials/header.html",
+        "src/pages/index.src.html",
+        "src/pages/products.src.html"
+      ]
+    },
+    "green": false
+  }
+}

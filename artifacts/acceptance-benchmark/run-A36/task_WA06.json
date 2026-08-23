@@ -1,0 +1,18 @@
+{
+  "taskId": "WA06",
+  "milestoneId": "ms_05",
+  "title": "Итоговый замер: офлайн-изоляция, точка входа и полнота отклонений",
+  "description": "1. Прогнать полный цикл build → capture → compare для index.html и products.html на 375/768/1440 и сохранить итоговый tools/visual-diff/report.json. 2. Проверить tools/check-no-external-requests.js и tools/verify-offline-navigation.js — отсутствие внешних сетевых запросов при открытии страниц из file:// и через serve.js. 3. Проверить, что start.cmd поднимает локальный сервер и открывает главную страницу без ручных действий. 4. Сверить DEVIATIONS.md на полноту (нет известных, но незадокументированных расхождений) и оформить краткий итоговый отчёт.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "tools/visual-diff/report.json",
+    "DEVIATIONS.md",
+    "specs/001-nvidia-clone/reviews/final-report.md"
+  ],
+  "dependsOn": [
+    "WA05"
+  ],
+  "unitTestCmd": "node tools/build.js && node tools/check-no-external-requests.js && node tools/verify-offline-navigation.js && node tools/visual-diff/compare.js",
+  "expectedArtifacts": [],
+  "status": "PENDING"
+}

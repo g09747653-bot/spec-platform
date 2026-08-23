@@ -1,0 +1,23 @@
+{
+  "taskId": "WA02",
+  "milestoneId": "ms_01",
+  "title": "Инструменты сборки/сверки и единая точка входа start.cmd",
+  "description": "1. Написать tools/build.js: инлайнит partials/header.html и partials/footer.html в src/pages/*.src.html по плейсхолдерам {{header}}/{{footer}} и пишет самодостаточные index.html и products.html в корень. 2. Написать/довести tools/visual-diff/capture-baseline.js, tools/visual-diff/capture.js, tools/visual-diff/compare.js: сегментация по высоте вьюпорта на 375/768/1440, подпись сегментов scrollY, сравнение по pixelmatch (threshold=0.1, includeAA=false, порог ≤1% пикселей) и сравнение JSON-координат ключевых блоков (порог ≤2px). 3. Написать tools/check-no-external-requests.js и tools/verify-offline-navigation.js для проверки отсутствия сетевых запросов при открытии страниц из file://. 4. Написать serve.js — простой локальный статический сервер (только встроенные http/fs, без внешних зависимостей) для раздачи корня. 5. Написать start.cmd и start.sh — единая точка входа: поднимают serve.js локально, дожидаются готовности порта и открывают браузер на главной странице. 6. Настроить package.json: скрипты start/postinstall, зависимости playwright/pixelmatch/pngjs только для tools/.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "tools/build.js",
+    "tools/visual-diff/capture-baseline.js",
+    "tools/visual-diff/capture.js",
+    "tools/visual-diff/compare.js",
+    "tools/check-no-external-requests.js",
+    "tools/verify-offline-navigation.js",
+    "serve.js",
+    "start.cmd",
+    "start.sh",
+    "package.json"
+  ],
+  "dependsOn": [],
+  "unitTestCmd": "node --check tools/build.js && node --check serve.js && node --check tools/visual-diff/capture.js && node --check tools/visual-diff/compare.js && test -f start.cmd && test -f start.sh && grep -qi 'index.html' start.cmd",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}
