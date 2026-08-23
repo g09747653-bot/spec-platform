@@ -6,18 +6,26 @@ import type { Chain } from '../llm/chain.ts';
 import type { Logger } from '../observability/log.ts';
 import { research, researchForPrompt } from './researcher.ts';
 
+import { classifyArtifact, type ArtifactClass } from './artifact-class.ts';
 import { buildAssignment } from './assignments.ts';
 import {
   HANDOFF,
+  HandoffTask,
   importHandoff,
   readTaskFile,
   taskFileName,
   writeHandoff,
-  type HandoffTask,
   type TechStack,
 } from './handoff.ts';
-import { describeSlice, sliceMilestones } from './milestones.ts';
+import {
+  describeSlice,
+  sliceMilestones,
+  type SliceResult,
+  type SlicedMilestone,
+} from './milestones.ts';
+import { PLAN_REVIEW_FILE, readPlanReview, readSeed } from './plan-review.ts';
 import { readBundle, type Bundle } from './validate.ts';
+import { buildWholeArtifactPlan } from './whole-artifact-plan.ts';
 
 /**
  * Taking a bundle in and turning it into a runnable plan (task 156).
@@ -78,6 +86,13 @@ export interface IntakeResult {
   keptFromDisk: number;
   /** True when this intake threw the previous tree away first. */
   regenerated: boolean;
+  /**
+   * Класс задумки, под который писался план (А-36 п.1).
+   *
+   * Уезжает наружу, чтобы суд формы не спрашивал модель второй раз об уже решённом: интейк
+   * классифицирует, суд принимает класс готовым. `unknown` — суд класса не состоялся.
+   */
+  artifactClass: ArtifactClass | 'unknown';
   degradations: string[];
 }
 
@@ -132,19 +147,33 @@ export async function intakeBundle(
 
   say(`Принят бандл ${bundle.bundleId}: задач ${String(bundle.tasks.length)}.`);
 
+  /*
+   * Пробелы, названные суду ПРОШЛОГО плана, переживают его снос (А-36 п.1, находка прогона).
+   *
+   * Вердикт уходит вместе с деревом — он описывает план, которого больше нет, ровно по тому же
+   * закону, по которому уходят отчёты. Но его СОДЕРЖАНИЕ — единственное, что контур уже знает о
+   * том, чего плану не хватало, и оно едет в промпт нового плана. Иначе «перегенерировать» —
+   * подбрасывание монеты: суд назвал, автор не услышал, план вышел тот же.
+   */
+  const carriedGaps =
+    request.regenerate === true ? (readPlanReview(request.projectDirectory)?.gaps ?? []) : [];
+
   if (request.regenerate === true) {
     const wiped = wipeHandoffTree(request.projectDirectory);
     say(
       `Полная перегенерация по явной команде оператора: снесено заданий ${String(wiped)}, ` +
-        'отчёты удалены вместе с ними. Задания будут написаны заново.',
+        'отчёты и вердикт суда плана удалены вместе с ними. Задания будут написаны заново.',
       'WARN',
     );
+
+    if (carriedGaps.length > 0) {
+      say(
+        `Пробелы прошлого суда плана (${String(carriedGaps.length)}) переданы автору нового плана ` +
+          'как обязательное покрытие — названный пробел возвращается тому, кто его допустил.',
+        'WARN',
+      );
+    }
   }
-
-  const slice = sliceMilestones(bundle.tasks);
-  say(describeSlice(slice), slice.ok ? 'INFO' : 'ERROR');
-
-  if (!slice.ok) throw new IntakeRefused(describeSlice(slice));
 
   const techStack = request.techStack ?? guessTechStack(request.projectDirectory);
 
@@ -164,74 +193,215 @@ export async function intakeBundle(
         ? '. Справку писал не провайдер — только снимок диска.'
         : `. Справку написал провайдер ${surveyed.writtenBy}.`),
   );
-  const milestoneOf = new Map<string, (typeof slice.milestones)[number]>();
-  for (const milestone of slice.milestones) {
-    for (const taskId of milestone.taskIds) milestoneOf.set(taskId, milestone);
+
+  /*
+   * **Класс задумки — ДО плана, а не после него** (А-36 п.1).
+   *
+   * Суд формы (А-35 п.2а) стоит между интейком и конвейером и умеет одно: забраковать нарезку
+   * связного артефакта. Владельцу оставалось «продолжить с пробелами» — то есть исполнить ровно ту
+   * нарезку, из-за которой суд и появился. Класс, спрошенный здесь, решает не «годен ли план», а
+   * «КАКОЙ план писать»: под цельный артефакт пишется цельно-артефактная форма, под систему —
+   * прежняя, по записи на задачу бандла.
+   *
+   * Спрошено один раз за интейк: класс уезжает в `IntakeResult`, и суд полноты его больше не
+   * переспрашивает. Не определился — прежнее поведение, как для системы (именованная деградация).
+   */
+  const seed = readSeed(request.projectDirectory);
+  let artifactClass: ArtifactClass | 'unknown' = 'unknown';
+
+  if (seed === null) {
+    say('Класс задумки не определялся: SEED.md в рабочей директории нет.', 'WARN');
+  } else if (chain === null) {
+    say('Класс задумки не определялся: провайдер роли архитектора не настроен.', 'WARN');
+  } else {
+    const classified = await classifyArtifact(seed, chain);
+
+    if (classified.status === 'classified') {
+      artifactClass = classified.artifactClass;
+      say(
+        `Класс задумки: ${
+          classified.artifactClass === 'coherent-artifact'
+            ? 'связный визуальный артефакт одного контекста'
+            : 'система'
+        } (определил ${classified.judgedBy}).`,
+      );
+    } else {
+      say(
+        `Класс задумки не определён: ${classified.reason}. ` +
+          'План пишется по общему правилу (как для системы).',
+        'WARN',
+      );
+    }
   }
 
   const tasks: HandoffTask[] = [];
   const degradations: string[] = [];
   let writtenByModel = 0;
   let keptFromDisk = 0;
+  let slice: SliceResult;
 
-  for (const task of bundle.tasks) {
-    const milestone = milestoneOf.get(task.taskId);
-    if (milestone === undefined) {
-      throw new IntakeRefused(
-        `задача ${task.taskId} не попала ни в одну веху — это дефект нарезки`,
+  /*
+   * Ветка класса не переписывает план, уже лежащий на диске: по нему исполнитель мог начать
+   * работу, и замена плана под ним — это доклад о работе, которой никто не заказывал (тот же
+   * закон, что у `mergeWithDisk`). Замена плана — явный акт оператора: `regenerate` сносит дерево
+   * выше, и тогда ветка пишет заново.
+   */
+  const existingTree = countAssignments(request.projectDirectory);
+
+  if (artifactClass === 'coherent-artifact' && seed !== null && existingTree === 0) {
+    const plan = await buildWholeArtifactPlan({
+      seed,
+      context: {
+        architecture: bundle.architecture,
+        bundleTitles: bundle.tasks.map((task) => task.title),
+        research: researchForPrompt(surveyed.report),
+        techStack,
+        mustCover: carriedGaps,
+      },
+      chain,
+      knownArtifactFiles: surveyed.survey.tree,
+    });
+
+    slice = sliceMilestones(plan.tasks);
+    say(describeSlice(slice), slice.ok ? 'INFO' : 'ERROR');
+    if (!slice.ok) throw new IntakeRefused(describeSlice(slice));
+
+    const milestoneOf = milestoneIndex(slice.milestones);
+
+    for (const planned of plan.tasks) {
+      const milestone = milestoneOf.get(planned.taskId);
+      if (milestone === undefined) {
+        throw new IntakeRefused(
+          `задача ${planned.taskId} не попала ни в одну веху — это дефект нарезки`,
+        );
+      }
+
+      tasks.push(
+        HandoffTask.parse({
+          taskId: planned.taskId,
+          milestoneId: milestone.milestoneId,
+          title: planned.title,
+          description: planned.description,
+          techStack,
+          filesToEdit: planned.filesToEdit,
+          dependsOn: planned.dependsOn,
+          ...(planned.unitTestCmd === undefined ? {} : { unitTestCmd: planned.unitTestCmd }),
+          ...(planned.e2eTestCmd === undefined ? {} : { e2eTestCmd: planned.e2eTestCmd }),
+          ...(planned.iterationTimeoutSec === undefined
+            ? {}
+            : { iterationTimeoutSec: planned.iterationTimeoutSec }),
+          expectedArtifacts: [],
+          status: 'PENDING',
+        }),
       );
     }
 
-    /*
-     * **An assignment that already exists is not written again** (task 172).
-     *
-     * Not merely because rewriting it costs a model call per task on every resume — though it does,
-     * and the M15а gate spent a free tier discovering that — but because the file is what an executor
-     * may already be working from. `writeHandoff` keeps its prose whatever arrives here; skipping the
-     * call is the same rule applied one step earlier, where it also saves the money.
-     */
-    const onDisk = readTaskFile(
-      join(request.projectDirectory, HANDOFF.tasks, taskFileName(task.taskId)),
-    );
+    const owner = plan.tasks.find((planned) => planned.role === 'whole');
 
-    if (onDisk !== null) {
-      tasks.push(onDisk);
-      keptFromDisk += 1;
-      continue;
-    }
-
-    const built = await buildAssignment(
-      task,
-      milestone,
-      {
-        architecture: bundle.architecture,
-        techStack,
-        research: researchForPrompt(surveyed.report),
-      },
-      chain,
-    );
-
-    tasks.push(built.task);
-
-    if (built.writtenBy === null) {
-      const reason = built.degradedBecause ?? 'причина не названа';
-      degradations.push(`${task.taskId}: ${reason}`);
-      say(`Задание ${task.taskId} написано без модели (${reason}).`, 'WARN');
+    if (plan.writtenBy === null) {
+      const reason = plan.degradedBecause ?? 'причина не названа';
+      degradations.push(`цельно-артефактный план: ${reason}`);
+      say(`Цельно-артефактный план написан скелетом кода (${reason}).`, 'WARN');
     } else {
-      writtenByModel += 1;
-      say(`Задание ${task.taskId} написано провайдером ${built.writtenBy}.`);
+      writtenByModel = tasks.length;
+      say(
+        `Цельно-артефактный план написал провайдер ${plan.writtenBy}: задач ` +
+          `${String(tasks.length)}, артефактом целиком владеет ` +
+          `${owner?.taskId ?? '—'} («${owner?.title ?? '—'}»).`,
+      );
     }
-  }
 
-  if (keptFromDisk > 0) {
-    say(
-      `Заданий сохранено с диска без изменений: ${String(keptFromDisk)} — ` +
-        'по ним исполнитель уже мог начать работу, и модель их не переписывает.',
-    );
+    if (plan.retriedBecause.length > 0) {
+      say(
+        `План переспрошен с названными пробелами формы (${String(plan.retriedBecause.length)}): ` +
+          plan.retriedBecause.join(' / '),
+        'WARN',
+      );
+    }
+  } else {
+    if (artifactClass === 'coherent-artifact' && existingTree > 0) {
+      say(
+        `Класс задумки — цельный артефакт, но на диске уже лежат задания (${String(existingTree)}): ` +
+          'план не переписывается — по нему исполнитель мог начать работу. ' +
+          'Замена плана — явная команда оператора (regenerate).',
+        'WARN',
+      );
+    }
+
+    slice = sliceMilestones(bundle.tasks);
+    say(describeSlice(slice), slice.ok ? 'INFO' : 'ERROR');
+    if (!slice.ok) throw new IntakeRefused(describeSlice(slice));
+
+    const milestoneOf = milestoneIndex(slice.milestones);
+
+    for (const task of bundle.tasks) {
+      const milestone = milestoneOf.get(task.taskId);
+      if (milestone === undefined) {
+        throw new IntakeRefused(
+          `задача ${task.taskId} не попала ни в одну веху — это дефект нарезки`,
+        );
+      }
+
+      /*
+       * **An assignment that already exists is not written again** (task 172).
+       *
+       * Not merely because rewriting it costs a model call per task on every resume — though it does,
+       * and the M15а gate spent a free tier discovering that — but because the file is what an executor
+       * may already be working from. `writeHandoff` keeps its prose whatever arrives here; skipping the
+       * call is the same rule applied one step earlier, where it also saves the money.
+       */
+      const onDisk = readTaskFile(
+        join(request.projectDirectory, HANDOFF.tasks, taskFileName(task.taskId)),
+      );
+
+      if (onDisk !== null) {
+        tasks.push(onDisk);
+        keptFromDisk += 1;
+        continue;
+      }
+
+      const built = await buildAssignment(
+        task,
+        milestone,
+        {
+          architecture: bundle.architecture,
+          techStack,
+          research: researchForPrompt(surveyed.report),
+        },
+        chain,
+      );
+
+      tasks.push(built.task);
+
+      if (built.writtenBy === null) {
+        const reason = built.degradedBecause ?? 'причина не названа';
+        degradations.push(`${task.taskId}: ${reason}`);
+        say(`Задание ${task.taskId} написано без модели (${reason}).`, 'WARN');
+      } else {
+        writtenByModel += 1;
+        say(`Задание ${task.taskId} написано провайдером ${built.writtenBy}.`);
+      }
+    }
+
+    if (keptFromDisk > 0) {
+      say(
+        `Заданий сохранено с диска без изменений: ${String(keptFromDisk)} — ` +
+          'по ним исполнитель уже мог начать работу, и модель их не переписывает.',
+      );
+    }
   }
 
   mkdirSync(join(request.projectDirectory, HANDOFF.reports), { recursive: true });
   writeHandoff(request.projectDirectory, slice.milestones, tasks, projectId);
+
+  const pruned = pruneVanishedTasks(database, projectId, tasks);
+  if (pruned > 0) {
+    say(
+      `Индекс приведён к дереву: снято строк задач, которых на диске больше нет — ` +
+        `${String(pruned)}. Диск — источник правды.`,
+      'WARN',
+    );
+  }
 
   importHandoff(
     database,
@@ -256,8 +426,63 @@ export async function intakeBundle(
     writtenByModel,
     keptFromDisk,
     regenerated: request.regenerate === true,
+    artifactClass,
     degradations,
   };
+}
+
+/** Заданий на диске сейчас — по ним решается, переписывать ли план (А-36 п.1). */
+function countAssignments(projectDirectory: string): number {
+  const tasksDirectory = join(projectDirectory, HANDOFF.tasks);
+  if (!existsSync(tasksDirectory)) return 0;
+
+  return readdirSync(tasksDirectory).filter(
+    (name) => name.startsWith('task_') && name.endsWith('.json'),
+  ).length;
+}
+
+/** Задача → её веха. Один индекс на обе ветки плана, чтобы «дефект нарезки» ловился одинаково. */
+function milestoneIndex(
+  milestones: readonly SlicedMilestone[],
+): Map<string, SlicedMilestone> {
+  const index = new Map<string, SlicedMilestone>();
+  for (const milestone of milestones) {
+    for (const taskId of milestone.taskIds) index.set(taskId, milestone);
+  }
+  return index;
+}
+
+/**
+ * Строки индекса, которых в дереве больше нет, — вон (А-36 п.1).
+ *
+ * База — индекс диска, и до этой правки расхождение было невозможно: перегенерация писала
+ * задания с теми же идентификаторами, что снесла. Ветка цельного артефакта ЗАМЕЩАЕТ план целиком,
+ * и её `WA01…` не совпадают с `T001…` бандла — сорок пять строк прошлого плана остались бы в
+ * индексе исполнимыми задачами, которых нет на диске. Каскад по внешнему ключу уносит их итерации
+ * и отчёты вместе с ними; сами отчёты лежат в `handoff/reports` и не индексом хранятся.
+ */
+function pruneVanishedTasks(
+  database: DatabaseSync,
+  projectId: string,
+  tasks: readonly HandoffTask[],
+): number {
+  const alive = new Set(tasks.map((task) => task.taskId));
+
+  const rows = database
+    .prepare(
+      `SELECT t.task_id AS taskId FROM tasks t
+         JOIN milestones m ON m.milestone_id = t.milestone_id
+        WHERE m.project_id = ?`,
+    )
+    .all(projectId) as { taskId: string }[];
+
+  const vanished = rows.map((row) => row.taskId).filter((taskId) => !alive.has(taskId));
+  if (vanished.length === 0) return 0;
+
+  const remove = database.prepare('DELETE FROM tasks WHERE task_id = ?');
+  for (const taskId of vanished) remove.run(taskId);
+
+  return vanished.length;
 }
 
 /** Statuses that mean somebody is holding this task right now. */
@@ -296,6 +521,13 @@ function wipeHandoffTree(projectDirectory: string): number {
   for (const name of names) rmSync(join(tasksDirectory, name), { force: true });
   rmSync(join(projectDirectory, HANDOFF.milestones), { force: true });
   rmSync(join(projectDirectory, HANDOFF.reports), { recursive: true, force: true });
+
+  /*
+   * Вердикт суда плана уходит с планом — по тому же доводу, что и отчёты. Оставленный рядом с
+   * переписанным планом он и судил бы не его: гейт прочёл бы «пробелы без решения» и остановил бы
+   * запуск свежего плана, ни разу его не увидев.
+   */
+  rmSync(join(projectDirectory, PLAN_REVIEW_FILE), { force: true });
 
   return names.length;
 }

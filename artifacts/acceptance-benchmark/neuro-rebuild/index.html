@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NEURA 50 — графика, которая считает</title>
+    <meta
+      name="description"
+      content="Витрина поколения NEURA 50: архитектура, генерация кадров, трассировка лучей, ноутбуки и локальный ИИ. Одна страница входа во всю работу."
+    />
+    <link rel="icon" href="assets/icons/brand.svg" />
+    <link rel="preload" as="font" type="font/woff2" href="assets/fonts/nvidia-sans-variable.woff2" crossorigin />
+    <link rel="stylesheet" href="assets/css/site.css" />
+  </head>
+  <body>
+    <a class="btn btn--sm btn--ghost" href="#main" style="position: absolute; left: -9999px">К содержанию</a>
+
+    <!-- ── Шапка: одна на обе страницы ─────────────────────────────────── -->
+    <header class="header" data-header>
+      <div class="container header__inner">
+        <a class="brand" href="index.html" aria-label="NEURA — на главную">
+          <img src="assets/icons/brand.svg" alt="" width="24" height="24" />
+          <span>NEURA</span>
+        </a>
+
+        <button class="nav-toggle" data-nav-toggle aria-expanded="false" aria-controls="nav" aria-label="Меню">
+          <img src="assets/icons/n24-menu.svg" alt="" width="24" height="24" />
+        </button>
+
+        <nav class="nav" id="nav" data-nav aria-label="Основная навигация">
+          <a href="index.html" aria-current="page">Обзор</a>
+          <a href="products.html">Видеокарты</a>
+          <a href="index.html#technologies">Технологии</a>
+          <a href="index.html#news">Новости</a>
+        </nav>
+
+        <div class="header__cta">
+          <a class="btn btn--primary btn--sm" href="products.html">Выбрать видеокарту</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- ── Герой ─────────────────────────────────────────────────────── -->
+      <section class="hero">
+        <div class="hero__media">
+          <img
+            src="assets/images/content/geforce-rtx-50-series-games-bm-xl980-d.jpg"
+            alt="Сцена из игры, отрисованная на видеокарте нового поколения"
+            fetchpriority="high"
+          />
+        </div>
+        <div class="hero__aurora" aria-hidden="true"></div>
+
+        <div class="container">
+          <div class="hero__content reveal">
+            <p class="eyebrow">Поколение NEURA 50</p>
+            <h1>Графика, которая <em>считает</em>, а не только рисует</h1>
+            <p>
+              Нейронные блоки рендеринга взяли на себя то, что раньше стоило кадров: восстановление
+              разрешения, генерацию промежуточных кадров, трассировку света. Игра идёт быстрее, а
+              выглядит честнее — потому что часть картинки теперь предсказывается, а не перебирается.
+            </p>
+            <div class="btn-row">
+              <a class="btn btn--primary" href="products.html">Смотреть линейку</a>
+              <a class="btn btn--ghost" href="#technologies">Как это работает</a>
+            </div>
+            <a class="hero__scroll" href="#numbers">
+              Листайте вниз
+              <img src="assets/icons/n32-caret-down.svg" alt="" width="18" height="18" />
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Показатели: цифры считаются, когда полоса появилась ───────── -->
+      <section class="section section--tight" id="numbers">
+        <div class="container">
+          <div class="stats reveal">
+            <div class="stat">
+              <div class="stat__value"><span data-count-to="92" data-count-decimals="0">0</span><span>×</span></div>
+              <p class="stat__label">производительность на ватт против прошлого поколения</p>
+            </div>
+            <div class="stat">
+              <div class="stat__value"><span data-count-to="240" data-count-decimals="0">0</span><span> Гц</span></div>
+              <p class="stat__label">в 4K с генерацией кадров на флагманской модели</p>
+            </div>
+            <div class="stat">
+              <div class="stat__value"><span data-count-to="32" data-count-decimals="0">0</span><span> ГБ</span></div>
+              <p class="stat__label">памяти GDDR7 на старшей карте линейки</p>
+            </div>
+            <div class="stat">
+              <div class="stat__value"><span data-count-to="700" data-count-decimals="0">0</span><span>+</span></div>
+              <p class="stat__label">игр и приложений с поддержкой нейронного рендеринга</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Слайдер: едет сам, слушается рук ──────────────────────────── -->
+      <section class="section" aria-labelledby="showcase-title">
+        <div class="container">
+          <div class="section-head reveal">
+            <div class="section-head__text">
+              <p class="eyebrow">Витрина</p>
+              <h2 id="showcase-title">Четыре вещи, которые изменились разом</h2>
+              <p>
+                Одно поколение — и другой рендер, другая задержка, другой ноутбук, другой ИИ на
+                столе. Слайды меняются сами; можно перелистнуть стрелками или потянуть мышью.
+              </p>
+            </div>
+            <a class="link-arrow" href="products.html">
+              Вся линейка
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </a>
+          </div>
+
+          <div class="slider reveal" data-slider="4200" tabindex="0" aria-roledescription="карусель" aria-label="Витрина возможностей">
+            <div class="slider__viewport">
+              <div class="slider__track" data-slider-track>
+                <article class="slide">
+                  <img src="assets/images/content/geforce-rtx-5090-bm-xl770-d.jpg" alt="Флагманская видеокарта линейки" />
+                  <div class="slide__container"><div class="slide__body">
+                    <p class="eyebrow">Архитектура</p>
+                    <h3>Флагман, у которого хватает памяти на всё сразу</h3>
+                    <p>
+                      32 ГБ GDDR7 и широкая шина держат в памяти и сцену, и модель, и буферы
+                      генерации кадров — без выгрузки на диск посреди работы.
+                    </p>
+                    <div class="btn-row">
+                      <a class="btn btn--primary btn--sm" href="products.html">Характеристики</a>
+                    </div>
+                  </div></div>
+                </article>
+
+                <article class="slide">
+                  <img src="assets/images/content/geforce-dlss4-cyberpunk-2077-bm-xl770-d.jpg" alt="Кадр игры с включённой генерацией кадров" />
+                  <div class="slide__container"><div class="slide__body">
+                    <p class="eyebrow">Генерация кадров</p>
+                    <h3>Три кадра из одного — и картинка не рассыпается</h3>
+                    <p>
+                      Модель достраивает промежуточные кадры по векторам движения и глубине. Плавность
+                      растёт кратно, а артефакты остаются там, где их не видно глазом.
+                    </p>
+                    <div class="btn-row">
+                      <a class="btn btn--primary btn--sm" href="#technologies">Как считается</a>
+                    </div>
+                  </div></div>
+                </article>
+
+                <article class="slide">
+                  <img src="assets/images/content/geforce-rtx-50-series-laptops-creators-bm-xl770-d.jpg" alt="Ноутбук с открытым редактором видео" />
+                  <div class="slide__container"><div class="slide__body">
+                    <p class="eyebrow">Ноутбуки</p>
+                    <h3>Монтажная станция, которая помещается в сумку</h3>
+                    <p>
+                      Аппаратные кодеки и нейронные блоки снимают с процессора просчёт эффектов:
+                      таймлайн 8K крутится без прокси-файлов, а батарея живёт рабочий день.
+                    </p>
+                    <div class="btn-row">
+                      <a class="btn btn--primary btn--sm" href="#creators">Для авторов</a>
+                    </div>
+                  </div></div>
+                </article>
+
+                <article class="slide">
+                  <img src="assets/images/content/geforce-rtx-50-series-reflex-2-bm-xl770-d.jpg" alt="Соревновательная сцена с низкой задержкой ввода" />
+                  <div class="slide__container"><div class="slide__body">
+                    <p class="eyebrow">Задержка</p>
+                    <h3>Прицел успевает за рукой</h3>
+                    <p>
+                      Кадр перепроецируется под последнее движение мыши уже после отрисовки. Между
+                      щелчком и выстрелом остаются единицы миллисекунд.
+                    </p>
+                    <div class="btn-row">
+                      <a class="btn btn--primary btn--sm" href="#technologies">Подробнее</a>
+                    </div>
+                  </div></div>
+                </article>
+              </div>
+            </div>
+
+            <div class="slider__controls">
+              <button class="slider__arrow" data-slider-prev aria-label="Предыдущий слайд">
+                <img src="assets/icons/n32-caret-left.svg" alt="" width="20" height="20" />
+              </button>
+              <button class="slider__arrow" data-slider-next aria-label="Следующий слайд">
+                <img src="assets/icons/n32-caret-right.svg" alt="" width="20" height="20" />
+              </button>
+              <div class="slider__dots">
+                <button class="slider__dot is-active" data-slider-dot aria-label="Слайд 1"></button>
+                <button class="slider__dot" data-slider-dot aria-label="Слайд 2"></button>
+                <button class="slider__dot" data-slider-dot aria-label="Слайд 3"></button>
+                <button class="slider__dot" data-slider-dot aria-label="Слайд 4"></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Технологии: три карточки одной формы ──────────────────────── -->
+      <section class="section section--alt" id="technologies" aria-labelledby="tech-title">
+        <div class="container">
+          <div class="section-head reveal">
+            <div class="section-head__text">
+              <p class="eyebrow">Технологии</p>
+              <h2 id="tech-title">Три опоры нейронного рендеринга</h2>
+              <p>
+                Каждая закрывает свой участок конвейера: сколько пикселей считать, сколько кадров
+                показывать и когда именно показать тот, что уже готов.
+              </p>
+            </div>
+          </div>
+
+          <div class="grid" style="--cols: 3" data-stagger>
+            <article class="card reveal">
+              <div class="card__media">
+                <img
+                  src="assets/images/content/geforce-rtx-on-super-resolution-apex-2560x1440-3.png"
+                  alt="Сравнение чёткости изображения при масштабировании"
+                  loading="lazy"
+                />
+                <span class="badge">Разрешение</span>
+              </div>
+              <div class="card__body">
+                <h3>Восстановление разрешения</h3>
+                <p>
+                  Сцена считается в меньшем разрешении, а до нужного её доводит модель — с опорой на
+                  предыдущие кадры и векторы движения. Мелкие детали и тонкие линии остаются на месте.
+                </p>
+                <div class="card__foot">
+                  <a class="link-arrow" href="products.html">
+                    Где поддерживается
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </a>
+                </div>
+              </div>
+            </article>
+
+            <article class="card reveal">
+              <div class="card__media">
+                <img
+                  src="assets/images/content/geforce-dlss4-multi-frame-generation-cybperpunk-2077-1920x1080-video-renew.png"
+                  alt="Кадр с включённой многокадровой генерацией"
+                  loading="lazy"
+                />
+                <span class="badge">Плавность</span>
+              </div>
+              <div class="card__body">
+                <h3>Многокадровая генерация</h3>
+                <p>
+                  Между двумя рассчитанными кадрами модель достраивает ещё несколько. Частота растёт
+                  кратно, и высокогерцевый монитор наконец получает то, ради чего покупался.
+                </p>
+                <div class="card__foot">
+                  <a class="link-arrow" href="products.html">
+                    Требования
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </a>
+                </div>
+              </div>
+            </article>
+
+            <article class="card reveal">
+              <div class="card__media">
+                <img
+                  src="assets/images/content/geforce-reflex-2-on-off-ari.jpg"
+                  alt="Схема задержки ввода до и после перепроецирования кадра"
+                  loading="lazy"
+                />
+                <span class="badge">Отклик</span>
+              </div>
+              <div class="card__body">
+                <h3>Перепроецирование кадра</h3>
+                <p>
+                  Готовый кадр сдвигается под последнее положение прицела прямо перед выводом на
+                  экран. Задержка от движения руки до картинки падает почти вдвое.
+                </p>
+                <div class="card__foot">
+                  <a class="link-arrow" href="products.html">
+                    Список игр
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </a>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Сравнение: полоса тянется мышью ───────────────────────────── -->
+      <section class="section" aria-labelledby="compare-title">
+        <div class="container">
+          <div class="section-head reveal">
+            <div class="section-head__text">
+              <p class="eyebrow">Трассировка лучей</p>
+              <h2 id="compare-title">Свет, который считается, а не рисуется вручную</h2>
+              <p>
+                Слева — сцена с классическим освещением, справа — та же сцена с трассировкой путей.
+                Потяните полосу, чтобы увидеть разницу в тенях, отражениях и рассеянном свете.
+              </p>
+            </div>
+          </div>
+
+          <div class="compare reveal" data-compare style="--pos: 50%" role="img" aria-label="Сравнение сцены с трассировкой лучей и без неё">
+            <img src="assets/images/content/geforce-ray-tracing-half-life-2-rtx-off-2048.jpg" alt="" loading="lazy" />
+            <img class="compare__after" src="assets/images/content/geforce-ray-tracing-half-life-2-rtx-on-2048.jpg" alt="" loading="lazy" />
+            <span class="compare__tag compare__tag--left">Без трассировки</span>
+            <span class="compare__tag compare__tag--right">С трассировкой</span>
+            <span class="compare__handle" aria-hidden="true"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Сплиты: два разворота, чередование сторон ─────────────────── -->
+      <section class="section section--alt" id="creators" aria-labelledby="creators-title">
+        <div class="container">
+          <div class="split reveal">
+            <div class="split__media">
+              <img
+                src="assets/images/content/geforce-50-series-laptops-1920x1080.jpeg"
+                alt="Тонкий ноутбук с дискретной графикой"
+                loading="lazy"
+              />
+            </div>
+            <div class="split__text">
+              <p class="eyebrow">Ноутбуки</p>
+              <h3 id="creators-title">Мощность настольной машины в корпусе на полтора килограмма</h3>
+              <p>
+                Динамическое распределение питания между процессором и графикой отдаёт ватты тому,
+                кто в этот момент считает. Под нагрузкой ноутбук не превращается в фен.
+              </p>
+              <ul class="tick-list">
+                <li>Ускоренные кодеки для монтажа без прокси-файлов</li>
+                <li>Экраны до 240 Гц с переменной частотой обновления</li>
+                <li>Локальные модели ИИ без обращения к облаку</li>
+              </ul>
+              <div class="btn-row">
+                <a class="btn btn--primary" href="products.html">Подобрать модель</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="split split--flip reveal">
+            <div class="split__media">
+              <img
+                src="assets/images/content/geforce-bts26-nv-app-hero-1920x1080-enus-2x.png"
+                alt="Панель управления графикой на экране компьютера"
+                loading="lazy"
+              />
+            </div>
+            <div class="split__text">
+              <p class="eyebrow">Локальный ИИ</p>
+              <h3>Модель работает на вашем столе, а не на чужом сервере</h3>
+              <p>
+                Языковые и графические модели умещаются в память карты целиком. Данные не покидают
+                машину, ответ приходит без сетевой задержки, а счёт за токены не приходит вовсе.
+              </p>
+              <ul class="tick-list">
+                <li>Локальный помощник для настроек и разгона</li>
+                <li>Шумоподавление и замена фона в реальном времени</li>
+                <li>Генерация изображений и апскейл без очереди</li>
+              </ul>
+              <div class="btn-row">
+                <a class="btn btn--ghost" href="#news">Что нового</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Бегущая строка: движение само по себе ─────────────────────── -->
+      <div class="marquee" aria-hidden="true">
+        <div class="marquee__track">
+          <span class="marquee__item"><img src="assets/images/content/m48-render-ffffff.svg" alt="" />Рендеринг</span>
+          <span class="marquee__item"><img src="assets/images/content/m48-accuracy-ffffff.svg" alt="" />Точность кадра</span>
+          <span class="marquee__item"><img src="assets/images/content/m48-3d-manipulation-ffffff.svg" alt="" />Трёхмерные сцены</span>
+          <span class="marquee__item"><img src="assets/images/content/m48-digital-person-ffffff.svg" alt="" />Цифровые персонажи</span>
+          <span class="marquee__item"><img src="assets/images/content/m48-nvidia-gpu-cloud-ngc-catalog-ffffff.svg" alt="" />Каталог моделей</span>
+          <span class="marquee__item"><img src="assets/images/content/m48-live-talk-on-demand-ffffff.svg" alt="" />Трансляции</span>
+          <span class="marquee__item"><img src="assets/images/content/m48-render-ffffff.svg" alt="" />Рендеринг</span>
+          <span class="marquee__item"><img src="assets/images/content/m48-accuracy-ffffff.svg" alt="" />Точность кадра</span>
+          <span class="marquee__item"><img src="assets/images/content/m48-3d-manipulation-ffffff.svg" alt="" />Трёхмерные сцены</span>
+          <span class="marquee__item"><img src="assets/images/content/m48-digital-person-ffffff.svg" alt="" />Цифровые персонажи</span>
+          <span class="marquee__item"><img src="assets/images/content/m48-nvidia-gpu-cloud-ngc-catalog-ffffff.svg" alt="" />Каталог моделей</span>
+          <span class="marquee__item"><img src="assets/images/content/m48-live-talk-on-demand-ffffff.svg" alt="" />Трансляции</span>
+        </div>
+      </div>
+
+      <!-- ── Новости: та же карточка, что и в технологиях ──────────────── -->
+      <section class="section" id="news" aria-labelledby="news-title">
+        <div class="container">
+          <div class="section-head reveal">
+            <div class="section-head__text">
+              <p class="eyebrow">Что происходит</p>
+              <h2 id="news-title">Из мастерской</h2>
+              <p>Короткие заметки о том, куда уходит вычислительная графика за пределами игр.</p>
+            </div>
+            <a class="link-arrow" href="#news">
+              Все материалы
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </a>
+          </div>
+
+          <div class="grid" style="--cols: 3" data-stagger>
+            <article class="card reveal">
+              <div class="card__media">
+                <img src="assets/images/content/gtc26-pregame-ari.jpeg" alt="Зал конференции перед началом доклада" loading="lazy" />
+              </div>
+              <div class="card__body">
+                <span class="badge">Событие</span>
+                <h3>Конференция разработчиков: расписание докладов</h3>
+                <p>Три дня о рендеринге, симуляции и обучении моделей — с разбором рабочих конвейеров.</p>
+                <div class="card__foot"><a class="link-arrow" href="#news">Читать</a></div>
+              </div>
+            </article>
+
+            <article class="card reveal">
+              <div class="card__media">
+                <img src="assets/images/content/nvidia-vera-rubin-dsx-ai-factory-sfg.jpeg" alt="Ряды вычислительных стоек в машинном зале" loading="lazy" />
+              </div>
+              <div class="card__body">
+                <span class="badge">Инфраструктура</span>
+                <h3>Как машинный зал превращается в одну большую видеокарту</h3>
+                <p>О связности стоек, памяти на весь кластер и о том, почему это касается настольных карт.</p>
+                <div class="card__foot"><a class="link-arrow" href="#news">Читать</a></div>
+              </div>
+            </article>
+
+            <article class="card reveal">
+              <div class="card__media">
+                <img src="assets/images/content/robotics-workflow-1920x1080.jpeg" alt="Роботизированная рука на производственной линии" loading="lazy" />
+              </div>
+              <div class="card__body">
+                <span class="badge">Робототехника</span>
+                <h3>Симуляция, в которой робот учится до первого включения</h3>
+                <p>Физический движок гоняет тысячи попыток в параллель, а на железо приезжает готовая политика.</p>
+                <div class="card__foot"><a class="link-arrow" href="#news">Читать</a></div>
+              </div>
+            </article>
+
+            <article class="card reveal">
+              <div class="card__media">
+                <img src="assets/images/content/cuda-kv-1920x1080.jpeg" alt="Визуализация параллельных вычислений" loading="lazy" />
+              </div>
+              <div class="card__body">
+                <span class="badge">Инструменты</span>
+                <h3>Профилировщик, который показывает, где кадр теряет миллисекунды</h3>
+                <p>Разбор одного узкого места: почему копирование буфера стоило больше, чем сам рендер.</p>
+                <div class="card__foot"><a class="link-arrow" href="#news">Читать</a></div>
+              </div>
+            </article>
+
+            <article class="card reveal">
+              <div class="card__media">
+                <img src="assets/images/content/agentic-ai-switchyard-sfg-1920x1080.png" alt="Схема взаимодействия программных агентов" loading="lazy" />
+              </div>
+              <div class="card__body">
+                <span class="badge">Модели</span>
+                <h3>Небольшая модель, которая помещается в память карты целиком</h3>
+                <p>Замеры скорости и качества на настольной машине — без облака и без очереди.</p>
+                <div class="card__foot"><a class="link-arrow" href="#news">Читать</a></div>
+              </div>
+            </article>
+
+            <article class="card reveal">
+              <div class="card__media">
+                <img src="assets/images/content/gears-of-war-nv-sfg-1920x1080.jpeg" alt="Кадр из игрового движка с объёмным освещением" loading="lazy" />
+              </div>
+              <div class="card__body">
+                <span class="badge">Игры</span>
+                <h3>Что даёт трассировка путей в тесных помещениях</h3>
+                <p>Сравнение сцен: мягкие тени, честные отражения и свет, который заходит за угол.</p>
+                <div class="card__foot"><a class="link-arrow" href="#news">Читать</a></div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Призыв ────────────────────────────────────────────────────── -->
+      <section class="section">
+        <div class="container">
+          <div class="cta reveal">
+            <img src="assets/images/content/geforce-rtx-ai-pc-banner-xl-offset-desktop.jpg" alt="" loading="lazy" />
+            <h2>Готовы выбрать карту?</h2>
+            <p>
+              Пять моделей линейки, честная таблица характеристик и ответы на вопросы, которые
+              обычно задают после покупки.
+            </p>
+            <div class="btn-row">
+              <a class="btn btn--primary" href="products.html">Перейти к линейке</a>
+              <a class="btn btn--ghost" href="#technologies">Сначала о технологиях</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ── Подвал: один на обе страницы ───────────────────────────────── -->
+    <footer class="footer">
+      <div class="container">
+        <div class="footer__grid">
+          <div class="footer__about">
+            <a class="brand" href="index.html">
+              <img src="assets/icons/brand.svg" alt="" width="24" height="24" />
+              <span>NEURA</span>
+            </a>
+            <p>
+              Витрина поколения NEURA 50. Демонстрационная страница: материалы и изображения собраны
+              для показа вёрстки, ссылки ведут внутрь этого же сайта.
+            </p>
+          </div>
+
+          <div>
+            <h4>Продукты</h4>
+            <ul>
+              <li><a href="products.html">Настольные карты</a></li>
+              <li><a href="products.html#specs">Характеристики</a></li>
+              <li><a href="index.html#creators">Ноутбуки</a></li>
+              <li><a href="products.html#faq">Вопросы</a></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4>Технологии</h4>
+            <ul>
+              <li><a href="index.html#technologies">Восстановление разрешения</a></li>
+              <li><a href="index.html#technologies">Генерация кадров</a></li>
+              <li><a href="index.html#technologies">Отклик и задержка</a></li>
+              <li><a href="index.html#creators">Локальные модели</a></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4>Материалы</h4>
+            <ul>
+              <li><a href="index.html#news">Из мастерской</a></li>
+              <li><a href="index.html#numbers">Цифры поколения</a></li>
+              <li><a href="index.html#showcase-title">Витрина</a></li>
+              <li><a href="products.html">Сравнение моделей</a></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="footer__bottom">
+          <span>© <span data-year>2026</span> — демонстрационная витрина. Собрано одним контекстом.</span>
+          <span>Все изображения — материал витрины, использован для показа вёрстки.</span>
+        </div>
+      </div>
+    </footer>
+
+    <script src="assets/js/site.js" defer></script>
+  </body>
+</html>

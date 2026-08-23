@@ -151,6 +151,8 @@ export async function POST(request: Request): Promise<Response> {
     tasks: intake.tasks,
     chain: architect.providers.length === 0 ? null : architect,
     acceptPlan: parsed.data.acceptPlan !== undefined,
+    /* Класс уже определён интейком (А-36 п.1) — суд не платит за тот же ответ второй раз. */
+    artifactClass: intake.artifactClass,
     say,
   });
 

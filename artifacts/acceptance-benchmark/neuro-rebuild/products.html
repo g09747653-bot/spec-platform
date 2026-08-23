@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Линейка NEURA 50 — характеристики и сравнение</title>
+    <meta
+      name="description"
+      content="Пять моделей поколения NEURA 50: производительность, память, энергопотребление и ответы на частые вопросы."
+    />
+    <link rel="icon" href="assets/icons/brand.svg" />
+    <link rel="preload" as="font" type="font/woff2" href="assets/fonts/nvidia-sans-variable.woff2" crossorigin />
+    <link rel="stylesheet" href="assets/css/site.css" />
+  </head>
+  <body>
+    <a class="btn btn--sm btn--ghost" href="#main" style="position: absolute; left: -9999px">К содержанию</a>
+
+    <!-- ── Шапка: та же разметка, что на главной ───────────────────────── -->
+    <header class="header" data-header>
+      <div class="container header__inner">
+        <a class="brand" href="index.html" aria-label="NEURA — на главную">
+          <img src="assets/icons/brand.svg" alt="" width="24" height="24" />
+          <span>NEURA</span>
+        </a>
+
+        <button class="nav-toggle" data-nav-toggle aria-expanded="false" aria-controls="nav" aria-label="Меню">
+          <img src="assets/icons/n24-menu.svg" alt="" width="24" height="24" />
+        </button>
+
+        <nav class="nav" id="nav" data-nav aria-label="Основная навигация">
+          <a href="index.html">Обзор</a>
+          <a href="products.html" aria-current="page">Видеокарты</a>
+          <a href="products.html#specs">Характеристики</a>
+          <a href="products.html#faq">Вопросы</a>
+        </nav>
+
+        <div class="header__cta">
+          <a class="btn btn--primary btn--sm" href="#lineup">К линейке</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- ── Герой страницы ────────────────────────────────────────────── -->
+      <section class="hero hero--compact">
+        <div class="hero__media">
+          <img
+            src="assets/images/content/geforce-rtx-5090-bm-xl770-d.jpg"
+            alt="Видеокарта нового поколения на фоне волнового узора"
+            fetchpriority="high"
+          />
+        </div>
+        <div class="hero__aurora" aria-hidden="true"></div>
+
+        <div class="container">
+          <div class="hero__content reveal">
+            <p class="eyebrow">Настольные карты</p>
+            <h1>Пять карт. Одна архитектура.</h1>
+            <p>
+              От флагмана с 32 ГБ памяти до модели, которая честно тянет 1440p. Ниже — диаграммы
+              относительной скорости, полная таблица характеристик и ответы на вопросы, которые
+              обычно возникают уже после покупки.
+            </p>
+            <div class="btn-row">
+              <a class="btn btn--primary" href="#lineup">Сравнить модели</a>
+              <a class="btn btn--ghost" href="index.html#technologies">Что такое нейронный рендеринг</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Линейка: пять карточек одной формы ────────────────────────── -->
+      <section class="section" id="lineup" aria-labelledby="lineup-title">
+        <div class="container">
+          <div class="section-head reveal">
+            <div class="section-head__text">
+              <p class="eyebrow">Линейка</p>
+              <h2 id="lineup-title">Относительная скорость в играх, 4K</h2>
+              <p>
+                Тёмная полоса — сопоставимая карта прошлого поколения, зелёная — текущая. Значения
+                нормированы к базовой модели линейки и приведены для наглядности сравнения.
+              </p>
+            </div>
+            <a class="link-arrow" href="#specs">
+              Таблица характеристик
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </a>
+          </div>
+
+          <div class="grid" style="--cols: 3" data-stagger>
+            <!-- 1 -->
+            <article class="card reveal">
+              <div class="card__media perfchart">
+                <p class="perfchart__title">Относительная скорость, 4K</p>
+                <div class="perfbar">
+                  <span class="perfbar__label">Текущее</span>
+                  <span class="perfbar__rail"><span class="perfbar__fill" style="--fill: 100%"></span></span>
+                  <span class="perfbar__value">3,4×</span>
+                </div>
+                <div class="perfbar perfbar--past">
+                  <span class="perfbar__label">Прошлое</span>
+                  <span class="perfbar__rail"><span class="perfbar__fill" style="--fill: 56%"></span></span>
+                  <span class="perfbar__value">1,9×</span>
+                </div>
+                <p class="perfchart__note">Относительно базовой модели линейки</p>
+              </div>
+              <div class="card__body">
+                <span class="badge">Флагман</span>
+                <h3>Модель 90</h3>
+                <p>Для 4K с максимальными настройками, тяжёлого 3D и локальных моделей целиком в памяти.</p>
+                <dl class="speclist">
+                  <dt>Память</dt><dd>32 ГБ GDDR7</dd>
+                  <dt>Шина</dt><dd>512 бит</dd>
+                  <dt>Потребление</dt><dd>575 Вт</dd>
+                </dl>
+                <div class="card__foot">
+                  <div class="price">от 1 999 $ <small>рекомендованная</small></div>
+                  <div class="btn-row" style="margin-top: var(--s-4)">
+                    <a class="btn btn--primary btn--sm" href="#specs">Характеристики</a>
+                    <a class="btn btn--ghost btn--sm" href="#faq">Вопросы</a>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <!-- 2 -->
+            <article class="card reveal">
+              <div class="card__media perfchart">
+                <p class="perfchart__title">Относительная скорость, 4K</p>
+                <div class="perfbar">
+                  <span class="perfbar__label">Текущее</span>
+                  <span class="perfbar__rail"><span class="perfbar__fill" style="--fill: 74%"></span></span>
+                  <span class="perfbar__value">2,5×</span>
+                </div>
+                <div class="perfbar perfbar--past">
+                  <span class="perfbar__label">Прошлое</span>
+                  <span class="perfbar__rail"><span class="perfbar__fill" style="--fill: 44%"></span></span>
+                  <span class="perfbar__value">1,5×</span>
+                </div>
+                <p class="perfchart__note">Относительно базовой модели линейки</p>
+              </div>
+              <div class="card__body">
+                <span class="badge">Выбор редакции</span>
+                <h3>Модель 80</h3>
+                <p>Разумный потолок для 4K: почти флагманский кадр при заметно меньшем счёте за электричество.</p>
+                <dl class="speclist">
+                  <dt>Память</dt><dd>16 ГБ GDDR7</dd>
+                  <dt>Шина</dt><dd>256 бит</dd>
+                  <dt>Потребление</dt><dd>360 Вт</dd>
+                </dl>
+                <div class="card__foot">
+                  <div class="price">от 999 $ <small>рекомендованная</small></div>
+                  <div class="btn-row" style="margin-top: var(--s-4)">
+                    <a class="btn btn--primary btn--sm" href="#specs">Характеристики</a>
+                    <a class="btn btn--ghost btn--sm" href="#faq">Вопросы</a>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <!-- 3 -->
+            <article class="card reveal">
+              <div class="card__media perfchart">
+                <p class="perfchart__title">Относительная скорость, 4K</p>
+                <div class="perfbar">
+                  <span class="perfbar__label">Текущее</span>
+                  <span class="perfbar__rail"><span class="perfbar__fill" style="--fill: 62%"></span></span>
+                  <span class="perfbar__value">2,1×</span>
+                </div>
+                <div class="perfbar perfbar--past">
+                  <span class="perfbar__label">Прошлое</span>
+                  <span class="perfbar__rail"><span class="perfbar__fill" style="--fill: 38%"></span></span>
+                  <span class="perfbar__value">1,3×</span>
+                </div>
+                <p class="perfchart__note">Относительно базовой модели линейки</p>
+              </div>
+              <div class="card__body">
+                <span class="badge">1440p+</span>
+                <h3>Модель 70 Ti</h3>
+                <p>Уверенные 1440p на высоких частотах и запас на 4K с восстановлением разрешения.</p>
+                <dl class="speclist">
+                  <dt>Память</dt><dd>16 ГБ GDDR7</dd>
+                  <dt>Шина</dt><dd>256 бит</dd>
+                  <dt>Потребление</dt><dd>300 Вт</dd>
+                </dl>
+                <div class="card__foot">
+                  <div class="price">от 749 $ <small>рекомендованная</small></div>
+                  <div class="btn-row" style="margin-top: var(--s-4)">
+                    <a class="btn btn--primary btn--sm" href="#specs">Характеристики</a>
+                    <a class="btn btn--ghost btn--sm" href="#faq">Вопросы</a>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <!-- 4 -->
+            <article class="card reveal">
+              <div class="card__media perfchart">
+                <p class="perfchart__title">Относительная скорость, 4K</p>
+                <div class="perfbar">
+                  <span class="perfbar__label">Текущее</span>
+                  <span class="perfbar__rail"><span class="perfbar__fill" style="--fill: 50%"></span></span>
+                  <span class="perfbar__value">1,7×</span>
+                </div>
+                <div class="perfbar perfbar--past">
+                  <span class="perfbar__label">Прошлое</span>
+                  <span class="perfbar__rail"><span class="perfbar__fill" style="--fill: 32%"></span></span>
+                  <span class="perfbar__value">1,1×</span>
+                </div>
+                <p class="perfchart__note">Относительно базовой модели линейки</p>
+              </div>
+              <div class="card__body">
+                <span class="badge">Баланс</span>
+                <h3>Модель 70</h3>
+                <p>Точка, где цена и кадр сходятся: 1440p с запасом, 4K — с генерацией кадров.</p>
+                <dl class="speclist">
+                  <dt>Память</dt><dd>12 ГБ GDDR7</dd>
+                  <dt>Шина</dt><dd>192 бита</dd>
+                  <dt>Потребление</dt><dd>250 Вт</dd>
+                </dl>
+                <div class="card__foot">
+                  <div class="price">от 549 $ <small>рекомендованная</small></div>
+                  <div class="btn-row" style="margin-top: var(--s-4)">
+                    <a class="btn btn--primary btn--sm" href="#specs">Характеристики</a>
+                    <a class="btn btn--ghost btn--sm" href="#faq">Вопросы</a>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <!-- 5 -->
+            <article class="card reveal">
+              <div class="card__media perfchart">
+                <p class="perfchart__title">Относительная скорость, 4K</p>
+                <div class="perfbar">
+                  <span class="perfbar__label">Текущее</span>
+                  <span class="perfbar__rail"><span class="perfbar__fill" style="--fill: 34%"></span></span>
+                  <span class="perfbar__value">1,0×</span>
+                </div>
+                <div class="perfbar perfbar--past">
+                  <span class="perfbar__label">Прошлое</span>
+                  <span class="perfbar__rail"><span class="perfbar__fill" style="--fill: 22%"></span></span>
+                  <span class="perfbar__value">0,7×</span>
+                </div>
+                <p class="perfchart__note">Базовая модель линейки — точка отсчёта</p>
+              </div>
+              <div class="card__body">
+                <span class="badge">Старт</span>
+                <h3>Модель 60</h3>
+                <p>Честные 1080p и 1440p в большинстве игр, тихая система охлаждения, обычный корпус.</p>
+                <dl class="speclist">
+                  <dt>Память</dt><dd>8 ГБ GDDR7</dd>
+                  <dt>Шина</dt><dd>128 бит</dd>
+                  <dt>Потребление</dt><dd>145 Вт</dd>
+                </dl>
+                <div class="card__foot">
+                  <div class="price">от 299 $ <small>рекомендованная</small></div>
+                  <div class="btn-row" style="margin-top: var(--s-4)">
+                    <a class="btn btn--primary btn--sm" href="#specs">Характеристики</a>
+                    <a class="btn btn--ghost btn--sm" href="#faq">Вопросы</a>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <!-- 6: карточка-подсказка той же формы, чтобы ряд не оборвался -->
+            <article class="card reveal">
+              <div class="card__media">
+                <img
+                  src="assets/images/content/geforce-rtx-50-series-architecture-ari.jpeg"
+                  alt="Схема архитектуры графического процессора"
+                  loading="lazy"
+                />
+                <span class="badge">Как выбрать</span>
+              </div>
+              <div class="card__body">
+                <h3>Не знаете, какую брать?</h3>
+                <p>
+                  Считайте от монитора: 1080p — базовая модель, 1440p — семидесятая, 4K — восьмидесятая
+                  и выше. Память важнее частоты, если работаете с 3D или моделями.
+                </p>
+                <div class="card__foot">
+                  <div class="btn-row">
+                    <a class="btn btn--ghost btn--sm" href="#faq">Читать вопросы</a>
+                  </div>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Таблица характеристик ─────────────────────────────────────── -->
+      <section class="section section--alt" id="specs" aria-labelledby="specs-title">
+        <div class="container">
+          <div class="section-head reveal">
+            <div class="section-head__text">
+              <p class="eyebrow">Характеристики</p>
+              <h2 id="specs-title">Вся линейка одной таблицей</h2>
+              <p>Значения приведены для эталонных версий; у партнёрских плат частоты и габариты отличаются.</p>
+            </div>
+          </div>
+
+          <div class="table-wrap reveal">
+            <table>
+              <caption class="visually-hidden" style="position: absolute; left: -9999px">
+                Сравнение характеристик пяти моделей линейки
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Модель</th>
+                  <th scope="col">Память</th>
+                  <th scope="col">Шина</th>
+                  <th scope="col">Потребление</th>
+                  <th scope="col">Разъёмы питания</th>
+                  <th scope="col">Целевое разрешение</th>
+                  <th scope="col">Цена от</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Модель 90</th>
+                  <td class="is-accent">32 ГБ GDDR7</td>
+                  <td>512 бит</td>
+                  <td>575 Вт</td>
+                  <td>1 × 16-контактный</td>
+                  <td>4K / 5K</td>
+                  <td>1 999 $</td>
+                </tr>
+                <tr>
+                  <th scope="row">Модель 80</th>
+                  <td>16 ГБ GDDR7</td>
+                  <td>256 бит</td>
+                  <td>360 Вт</td>
+                  <td>1 × 16-контактный</td>
+                  <td>4K</td>
+                  <td>999 $</td>
+                </tr>
+                <tr>
+                  <th scope="row">Модель 70 Ti</th>
+                  <td>16 ГБ GDDR7</td>
+                  <td>256 бит</td>
+                  <td>300 Вт</td>
+                  <td>1 × 16-контактный</td>
+                  <td>1440p / 4K</td>
+                  <td>749 $</td>
+                </tr>
+                <tr>
+                  <th scope="row">Модель 70</th>
+                  <td>12 ГБ GDDR7</td>
+                  <td>192 бита</td>
+                  <td>250 Вт</td>
+                  <td>1 × 16-контактный</td>
+                  <td>1440p</td>
+                  <td>549 $</td>
+                </tr>
+                <tr>
+                  <th scope="row">Модель 60</th>
+                  <td>8 ГБ GDDR7</td>
+                  <td>128 бит</td>
+                  <td class="is-accent">145 Вт</td>
+                  <td>1 × 8-контактный</td>
+                  <td>1080p / 1440p</td>
+                  <td>299 $</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Разворот про ноутбуки ─────────────────────────────────────── -->
+      <section class="section" aria-labelledby="mobile-title">
+        <div class="container">
+          <div class="split reveal">
+            <div class="split__media">
+              <img
+                src="assets/images/content/geforce-rtx-50-series-laptops-creators-bm-af360-p.jpg"
+                alt="Ноутбук с открытым проектом видеомонтажа"
+                loading="lazy"
+              />
+            </div>
+            <div class="split__text">
+              <p class="eyebrow">Мобильные версии</p>
+              <h3 id="mobile-title">Та же архитектура, другой бюджет питания</h3>
+              <p>
+                В ноутбуках работают те же нейронные блоки, но потолок мощности задаёт производитель
+                корпуса. Смотрите не только на индекс модели, но и на заявленные ватты.
+              </p>
+              <ul class="tick-list">
+                <li>Индекс модели говорит об архитектуре, ватты — о реальной скорости</li>
+                <li>Память в мобильной версии обычно на ступень ниже настольной</li>
+                <li>Экран на 240 Гц имеет смысл только с генерацией кадров</li>
+              </ul>
+              <div class="btn-row">
+                <a class="btn btn--primary" href="index.html#creators">Подробнее на главной</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Вопросы: гармошка ─────────────────────────────────────────── -->
+      <section class="section section--alt" id="faq" aria-labelledby="faq-title">
+        <div class="container">
+          <div class="section-head reveal">
+            <div class="section-head__text">
+              <p class="eyebrow">Вопросы</p>
+              <h2 id="faq-title">То, что спрашивают после покупки</h2>
+              <p>Нажмите на вопрос, чтобы раскрыть ответ.</p>
+            </div>
+          </div>
+
+          <div class="faq reveal" data-faq data-stagger>
+            <div class="faq__item">
+              <button class="faq__q" aria-expanded="false">
+                Хватит ли моего блока питания?
+                <img src="assets/icons/n32-caret-down.svg" alt="" width="20" height="20" />
+              </button>
+              <div class="faq__a">
+                <div>
+                  <p>
+                    Считайте пиковое потребление карты плюс сто пятьдесят ватт на остальную систему и
+                    добавьте запас в двадцать процентов на просадки. Для старших моделей нужен
+                    отдельный 16-контактный кабель от блока, а не переходник от двух восьмиконтактных.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="faq__item">
+              <button class="faq__q" aria-expanded="false">
+                Генерация кадров добавляет задержку?
+                <img src="assets/icons/n32-caret-down.svg" alt="" width="20" height="20" />
+              </button>
+              <div class="faq__a">
+                <div>
+                  <p>
+                    Сама по себе — да, потому что кадр нужно придержать. Поэтому она работает в паре с
+                    перепроецированием, которое возвращает отклик обратно. В сумме задержка остаётся
+                    на уровне обычного рендера, а плавность вырастает кратно.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="faq__item">
+              <button class="faq__q" aria-expanded="false">
+                Восемь гигабайт памяти — это мало?
+                <img src="assets/icons/n32-caret-down.svg" alt="" width="20" height="20" />
+              </button>
+              <div class="faq__a">
+                <div>
+                  <p>
+                    Для 1080p и большинства игр в 1440p — достаточно. Упрётесь в память раньше, чем в
+                    вычислительную мощность, если работаете с 3D-сценами, редактируете видео в высоком
+                    разрешении или держите языковую модель локально.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="faq__item">
+              <button class="faq__q" aria-expanded="false">
+                Нужно ли менять процессор вместе с картой?
+                <img src="assets/icons/n32-caret-down.svg" alt="" width="20" height="20" />
+              </button>
+              <div class="faq__a">
+                <div>
+                  <p>
+                    В 4K процессор почти не ограничивает картинку. В 1080p с высокой частотой —
+                    ограничивает заметно: если целитесь в 240 кадров, смотреть надо на обе половины
+                    системы сразу.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="faq__item">
+              <button class="faq__q" aria-expanded="false">
+                Поместится ли карта в корпус?
+                <img src="assets/icons/n32-caret-down.svg" alt="" width="20" height="20" />
+              </button>
+              <div class="faq__a">
+                <div>
+                  <p>
+                    Измерьте длину от задней стенки до корзины дисков и высоту до бокового стекла:
+                    трёхслотовые версии старших моделей упираются чаще в толщину, чем в длину.
+                    Партнёрские платы бывают на два сантиметра длиннее эталонных.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Призыв ────────────────────────────────────────────────────── -->
+      <section class="section">
+        <div class="container">
+          <div class="cta reveal">
+            <img src="assets/images/content/geforce-rtx-ai-pc-banner-xl-offset-desktop.jpg" alt="" loading="lazy" />
+            <h2>Осталось выбрать монитор</h2>
+            <p>
+              Карта решает, сколько кадров посчитается. Монитор решает, сколько из них вы увидите.
+              Вернитесь на главную — там разобрано, как это связано.
+            </p>
+            <div class="btn-row">
+              <a class="btn btn--primary" href="index.html">На главную</a>
+              <a class="btn btn--ghost" href="#lineup">Ещё раз к линейке</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ── Подвал: та же разметка, что на главной ─────────────────────── -->
+    <footer class="footer">
+      <div class="container">
+        <div class="footer__grid">
+          <div class="footer__about">
+            <a class="brand" href="index.html">
+              <img src="assets/icons/brand.svg" alt="" width="24" height="24" />
+              <span>NEURA</span>
+            </a>
+            <p>
+              Витрина поколения NEURA 50. Демонстрационная страница: материалы и изображения собраны
+              для показа вёрстки, ссылки ведут внутрь этого же сайта.
+            </p>
+          </div>
+
+          <div>
+            <h4>Продукты</h4>
+            <ul>
+              <li><a href="products.html">Настольные карты</a></li>
+              <li><a href="products.html#specs">Характеристики</a></li>
+              <li><a href="index.html#creators">Ноутбуки</a></li>
+              <li><a href="products.html#faq">Вопросы</a></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4>Технологии</h4>
+            <ul>
+              <li><a href="index.html#technologies">Восстановление разрешения</a></li>
+              <li><a href="index.html#technologies">Генерация кадров</a></li>
+              <li><a href="index.html#technologies">Отклик и задержка</a></li>
+              <li><a href="index.html#creators">Локальные модели</a></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4>Материалы</h4>
+            <ul>
+              <li><a href="index.html#news">Из мастерской</a></li>
+              <li><a href="index.html#numbers">Цифры поколения</a></li>
+              <li><a href="index.html">Витрина</a></li>
+              <li><a href="products.html">Сравнение моделей</a></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="footer__bottom">
+          <span>© <span data-year>2026</span> — демонстрационная витрина. Собрано одним контекстом.</span>
+          <span>Все изображения — материал витрины, использован для показа вёрстки.</span>
+        </div>
+      </div>
+    </footer>
+
+    <script src="assets/js/site.js" defer></script>
+  </body>
+</html>

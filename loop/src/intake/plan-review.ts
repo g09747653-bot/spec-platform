@@ -10,6 +10,7 @@ import {
   classifyArtifact,
   judgeWholeArtifactPlan,
   type ArtifactClass,
+  type ClassificationOutcome,
 } from './artifact-class.ts';
 
 /**
@@ -246,6 +247,14 @@ export async function ensurePlanReviewed(args: {
   tasks: readonly ReviewableTask[];
   chain: Chain | null;
   acceptPlan: boolean;
+  /**
+   * Класс задумки, уже определённый интейком (А-36 п.1) — тогда суд его не переспрашивает.
+   *
+   * Класс решает форму плана, а форму пишет интейк; спрашивать модель второй раз о том же — это
+   * второй счёт за один ответ и вторая возможность получить другой. Не передан — суд спрашивает
+   * сам, как и до ветки: старые вызовы этой точки продолжают работать без изменений.
+   */
+  artifactClass?: ArtifactClass | 'unknown';
   now?: () => number;
   say: (message: string, level?: 'INFO' | 'WARN' | 'ERROR') => void;
 }): Promise<{ proceed: boolean; gaps: string[] }> {
@@ -296,7 +305,13 @@ export async function ensurePlanReviewed(args: {
    * него: полный по охвату план всё ещё может быть нарезкой, разрушающей связность по построению.
    * Класс называет модель, форму судит код.
    */
-  const classified = await classifyArtifact(seed, chain);
+  const classified: ClassificationOutcome =
+    args.artifactClass === undefined
+      ? await classifyArtifact(seed, chain)
+      : args.artifactClass === 'unknown'
+        ? { status: 'skipped', reason: 'интейк класс не определил' }
+        : { status: 'classified', artifactClass: args.artifactClass, judgedBy: 'интейк' };
+
   const artifactClass: ArtifactClass | 'unknown' =
     classified.status === 'classified' ? classified.artifactClass : 'unknown';
 

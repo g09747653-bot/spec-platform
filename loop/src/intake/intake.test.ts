@@ -19,6 +19,7 @@ import { openMigratedDatabase } from '../db/migrate.ts';
 import type { Chain } from '../llm/chain.ts';
 import { createLogger } from '../observability/log.ts';
 
+import { WHOLE_ARTIFACT_TASK_LIMIT, judgeWholeArtifactPlan } from './artifact-class.ts';
 import { pathsMentionedIn } from './assignments.ts';
 import { HandoffTask, MilestonesFile } from './handoff.ts';
 import { intakeBundle, IntakeRefused } from './intake.ts';
@@ -647,5 +648,210 @@ describe('bundles the intake refuses (task 156 AC-2/AC-3)', () => {
 
     await expect(run()).rejects.toThrow(IntakeRefused);
     await expect(run()).rejects.toThrow(/Цикл/);
+  });
+});
+
+/**
+ * Класс задумки решает, КАКОЙ план писать (А-36 п.1).
+ *
+ * Обе стороны развилки — на одном и том же бандле гейта: класс меняет форму плана и не меняет
+ * ничего больше. Цепочка сценарная, потому что интейк спрашивает модель дважды и о разном: сперва
+ * класс задумки, затем — план под класс. Исследователю провайдер не дан намеренно: снимок диска
+ * детерминирован, и порядок вызовов остаётся читаемым.
+ */
+describe('класс задумки решает, какой план писать (А-36 п.1)', () => {
+  const scripted = (...answers: string[]): Chain => {
+    let call = 0;
+    return {
+      providers: [],
+      generate: () => {
+        const answer = answers[Math.min(call, answers.length - 1)] ?? '';
+        call += 1;
+        return Promise.resolve({ text: answer, provider: 'claude-cli' });
+      },
+    };
+  };
+
+  const seedFile = (text: string) => {
+    writeFileSync(join(directory, 'project', 'SEED.md'), text, 'utf8');
+  };
+
+  const intake = (chain: Chain, regenerate = false) =>
+    intakeBundle(
+      {
+        projectDirectory: join(directory, 'project'),
+        projectTitle: 'Гейтовый бандл',
+        ...(regenerate ? { regenerate: true } : {}),
+      },
+      { database, logger: createLogger(database), chain, researchChain: null },
+    );
+
+  const COHERENT = '{"artifactClass":"coherent-artifact","reason":"сайт"}';
+  const SYSTEM = '{"artifactClass":"system","reason":"сервис"}';
+
+  const WHOLE_PLAN = JSON.stringify({
+    tasks: [
+      {
+        role: 'material',
+        title: 'Добудь материал',
+        description: 'Скачай изображения и шрифты в assets/.',
+        filesToEdit: [],
+        unitTestCmd: 'test -d assets',
+      },
+      {
+        role: 'whole',
+        title: 'Собери артефакт целиком',
+        description: 'Собери обе страницы одним заходом, едиными токенами.',
+        filesToEdit: ['index.html', 'products.html', 'src/styles/main.css'],
+        unitTestCmd: 'test -f index.html',
+        iterationTimeoutSec: 5400,
+      },
+      {
+        role: 'measure',
+        title: 'Замерь результат',
+        description: 'Сверь с эталоном и запиши RESULT.md.',
+        filesToEdit: ['RESULT.md'],
+        unitTestCmd: 'test -f RESULT.md',
+      },
+    ],
+  });
+
+  /* База пересоздаётся на каждый тест и держит ровно один проект — фильтр по нему избыточен. */
+  const indexedTaskIds = (): string[] =>
+    (
+      database.prepare('SELECT task_id AS taskId FROM tasks ORDER BY task_id').all() as {
+        taskId: string;
+      }[]
+    ).map((row) => row.taskId);
+
+  it('цельный артефакт: план пишется цельно-артефактной формой, а не разбиением бандла', async () => {
+    seedFile('Сделай сайт — графическую копию, две страницы, статикой, без бэкенда.');
+
+    const result = await intake(scripted(COHERENT, WHOLE_PLAN));
+
+    expect(result.artifactClass).toBe('coherent-artifact');
+    expect(result.tasks.length).toBeLessThanOrEqual(WHOLE_ARTIFACT_TASK_LIMIT);
+    expect(result.tasks.map((task) => task.taskId)).toEqual(['WA01', 'WA02', 'WA03']);
+    /* Форма, которую суд А-35 бракует у нарезки, здесь проходит: план написан под класс. */
+    expect(judgeWholeArtifactPlan(result.tasks)).toEqual([]);
+  });
+
+  it('владелец целого владеет артефактом целиком, и его ждут полировка с замером', async () => {
+    seedFile('Сделай лендинг в одну страницу.');
+
+    const result = await intake(scripted(COHERENT, WHOLE_PLAN));
+    const owner = result.tasks.find((task) => task.title === 'Собери артефакт целиком');
+
+    expect(owner?.filesToEdit).toEqual([
+      'index.html',
+      'products.html',
+      'src/styles/main.css',
+    ]);
+    expect(owner?.iterationTimeoutSec).toBe(5400);
+    expect(result.tasks.at(-1)?.dependsOn).toEqual([owner?.taskId]);
+  });
+
+  it('план цельной ветки уезжает на диск и в индекс тем же деревом', async () => {
+    seedFile('Сделай сайт-визитку.');
+
+    await intake(scripted(COHERENT, WHOLE_PLAN));
+
+    const onDisk = readdirSync(join(directory, 'project', 'handoff', 'tasks')).filter((name) =>
+      name.startsWith('task_'),
+    );
+
+    expect(onDisk.sort()).toEqual(['task_WA01.json', 'task_WA02.json', 'task_WA03.json']);
+    expect(indexedTaskIds()).toEqual(['WA01', 'WA02', 'WA03']);
+  });
+
+  it('система: план по-прежнему режется по бандлу — те же 16 задач, теми же фазами', async () => {
+    seedFile('Сделай сервис с API, хранилищем и очередью обработки.');
+
+    const result = await intake(scripted(SYSTEM));
+
+    expect(result.artifactClass).toBe('system');
+    expect(result.strategy).toBe('phases');
+    expect(result.tasks).toHaveLength(16);
+    expect(result.tasks.every((task) => !task.taskId.startsWith('WA'))).toBe(true);
+  });
+
+  it('класс не определился — прежнее поведение, как для системы', async () => {
+    seedFile('Задумка, о которой модель ответила прозой.');
+
+    const result = await intake(scripted('не знаю, что это'));
+
+    expect(result.artifactClass).toBe('unknown');
+    expect(result.tasks).toHaveLength(16);
+  });
+
+  it('задумки нет — класс не спрашивается, план прежний', async () => {
+    const result = await intake(scripted(COHERENT, WHOLE_PLAN));
+
+    expect(result.artifactClass).toBe('unknown');
+    expect(result.tasks).toHaveLength(16);
+  });
+
+  it('дерево на диске цельная ветка не переписывает без команды оператора', async () => {
+    seedFile('Сделай сайт — графическую копию.');
+
+    await intake(scripted(SYSTEM));
+    const second = await intake(scripted(COHERENT, WHOLE_PLAN));
+
+    expect(second.artifactClass).toBe('coherent-artifact');
+    expect(second.tasks).toHaveLength(16);
+    expect(second.keptFromDisk).toBe(16);
+  });
+
+  it('перегенерация уносит вердикт прошлого плана, но не его пробелы', async () => {
+    seedFile('Сделай сайт — графическую копию под своим знаком.');
+    await intake(scripted(COHERENT, WHOLE_PLAN));
+
+    /* Суд полноты назвал пробел этому плану — так, как назвал бы его живой прогон. */
+    writeFileSync(
+      join(directory, 'project', 'handoff', 'PLAN_REVIEW.json'),
+      JSON.stringify({
+        verdict: 'gaps',
+        gaps: ['Нет задачи, заменяющей бренд на нейтральный знак'],
+        judgedBy: 'claude-cli',
+        at: new Date().toISOString(),
+        decision: null,
+        artifactClass: 'coherent-artifact',
+      }),
+      'utf8',
+    );
+
+    const asked: string[] = [];
+    const recording: Chain = {
+      providers: [],
+      generate: (call: { prompt: string }) => {
+        asked.push(call.prompt);
+        return Promise.resolve({
+          text: asked.length === 1 ? COHERENT : WHOLE_PLAN,
+          provider: 'claude-cli',
+        });
+      },
+    };
+
+    await intake(recording, true);
+
+    /* Вердикт ушёл вместе с планом — иначе гейт остановил бы свежий план, не увидев его. */
+    expect(existsSync(join(directory, 'project', 'handoff', 'PLAN_REVIEW.json'))).toBe(false);
+    /* А названный пробел вернулся автору плана. */
+    expect(asked.at(-1)).toContain('Нет задачи, заменяющей бренд на нейтральный знак');
+    expect(asked.at(-1)).toContain('обязан быть покрыт задачей нового плана');
+  });
+
+  it('перегенерация цельным планом уносит из индекса задачи, которых на диске больше нет', async () => {
+    seedFile('Сделай сайт — графическую копию.');
+
+    await intake(scripted(SYSTEM));
+    expect(indexedTaskIds()).toHaveLength(16);
+
+    const regenerated = await intake(scripted(COHERENT, WHOLE_PLAN), true);
+
+    expect(regenerated.regenerated).toBe(true);
+    expect(regenerated.tasks).toHaveLength(3);
+    /* Сорок пять строк прошлого плана не остаются исполнимыми задачами без файлов на диске. */
+    expect(indexedTaskIds()).toEqual(['WA01', 'WA02', 'WA03']);
   });
 });
