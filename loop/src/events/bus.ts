@@ -42,7 +42,13 @@ export type LoopEvent =
   | { type: 'log'; log: LogEvent }
   | { type: 'task-status'; projectId: string; taskId: string; status: string }
   | { type: 'milestone-status'; projectId: string; milestoneId: string; status: string }
-  | { type: 'project-status'; projectId: string; status: string };
+  | { type: 'project-status'; projectId: string; status: string }
+  /**
+   * Суд полноты плана нашёл пробелы и конвейер не запущен (А-33 п.4б): шлюз превращает это в
+   * алерт с перечнем и кнопкой решения. Дашборду событие безвредно — любой не-log перерисовывает
+   * дерево, полезной нагрузки страница не читает.
+   */
+  | { type: 'plan-review'; projectId: string; gaps: string[] };
 
 export type Subscriber = (event: LoopEvent) => void;
 

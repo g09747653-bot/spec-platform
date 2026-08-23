@@ -6,6 +6,7 @@ import type { EventBus, LoopEvent } from '../events/bus.ts';
 import { blockedPath } from '../gate/blocked.ts';
 import { readFreeze } from '../orchestrator/freeze.ts';
 import { livePipeline } from '../orchestrator/orchestrator.ts';
+import { findSelfCheckReport, verificationLine } from '../orchestrator/self-check.ts';
 
 import type { TelegramClient, TelegramUpdate } from './telegram-api.ts';
 
@@ -41,6 +42,11 @@ export interface GatewayActions {
   launch?: ((idea: string, notify: (text: string) => Promise<void>) => Promise<void>) | undefined;
   /** Зонд/транскрибация задачи 165: голосовое → текст. */
   transcribe?: ((voice: { fileId: string; mimeType?: string }) => Promise<string>) | undefined;
+  /**
+   * Решение владельца по пробелам суда полноты (А-33 п.4б): «запустить как есть». Продакшен-
+   * обвязка зовёт собственный start-loop с acceptPlan; возвращает строку для ответа владельцу.
+   */
+  acceptPlan?: ((projectId: string, projectDirectory: string) => Promise<string>) | undefined;
 }
 
 export interface GatewayDeps {
@@ -166,14 +172,53 @@ export function createTelegramGateway(deps: GatewayDeps): TelegramGateway {
       }
 
       if (event.status === 'COMPLETED') {
+        /*
+         * Вершинный критерий (А-33 п.4а): успех обязан нести сверку с задумкой, когда конвейер ею
+         * располагает, — число принятых задач, главный замер самопроверки и путь к отчёту
+         * расхождений. Голая галочка при существующем DEVIATIONS.md — дефект: финальная приёмка
+         * Программы А прочла её как «продукт готов», пока в той же директории лежал реестр
+         * расхождений на 125 КБ, снятый самим же конвейером.
+         */
+        const board = readBoard(database, event.projectId);
+        const tasks = board?.milestones.flatMap((milestone) => milestone.tasks) ?? [];
+        const accepted = tasks.filter((task) => task.status === 'COMPLETED').length;
+        const counted =
+          board === null
+            ? 'Все задачи приняты независимым перепрогоном.'
+            : `Принято задач: ${String(accepted)} из ${String(tasks.length)} независимым перепрогоном.`;
+
+        const directory = projectDirectory(event.projectId);
         void send(
           alertText(
             '✅ Проект завершён',
             projectLabel(event.projectId),
-            'Все задачи приняты независимым перепрогоном. Готовый продукт — в рабочей директории проекта.',
+            `${counted}\n${verificationLine(directory === null ? null : findSelfCheckReport(directory))}\n\nГотовый продукт — в рабочей директории проекта${directory === null ? '' : `: ${directory}`}.`,
           ),
         );
       }
+      return;
+    }
+
+    if (event.type === 'plan-review') {
+      /*
+       * Суд полноты остановил запуск (А-33 п.4б): перечень — поимённо, решение — за владельцем.
+       * Кнопка «Запустить как есть» намеренно не одноразовая: она несёт projectId, а не номер из
+       * pendingIdeas, — решение по плану можно принять и завтра, пережив рестарт процесса.
+       */
+      const gaps = event.gaps.map((gap, index) => `${String(index + 1)}. ${gap}`).join('\n');
+      void send(
+        alertText(
+          '⚖️ План не покрывает задумку — конвейер не запущен',
+          projectLabel(event.projectId),
+          `Суд полноты плана нашёл пробелы:\n${trimTo(gaps, 2500)}\n\nЗапустить как есть — пробелы останутся named-строками; дополнить — пришлите задумку заново.`,
+        ),
+        [
+          [
+            { text: '▶️ Запустить как есть', callback_data: `plan:go:${event.projectId}` },
+            { text: '✖️ Не запускать', callback_data: 'plan:no' },
+          ],
+        ],
+      );
       return;
     }
 
@@ -373,6 +418,44 @@ export function createTelegramGateway(deps: GatewayDeps): TelegramGateway {
       await send('🚀 Принято. Запускаю: платформа → бандл → контур. Алерты будут здесь.');
       try {
         await actions.launch(idea, (text) => send(text));
+      } catch (error) {
+        await send(
+          `Запуск не удался: ${error instanceof Error ? trimTo(error.message, 400) : 'ошибка'}`,
+        );
+      }
+      return;
+    }
+
+    if (data.startsWith('plan:')) {
+      await client.answerCallbackQuery(callback.id).catch(() => undefined);
+
+      if (!data.startsWith('plan:go:')) {
+        await send(
+          'Конвейер не запущен — план и вердикт суда остаются на диске (handoff/PLAN_REVIEW.json). ' +
+            'Дополнить — пришлите задумку заново; запустить как есть можно кнопкой под алертом суда.',
+        );
+        return;
+      }
+
+      const projectId = data.slice('plan:go:'.length);
+      const directory = projectDirectory(projectId);
+      if (directory === null) {
+        await send('Проект не найден или у него нет рабочей директории.');
+        return;
+      }
+      if (actions.acceptPlan === undefined) {
+        await send('Продолжение из чата не подключено (нет acceptPlan).');
+        return;
+      }
+
+      await send(
+        '▶️ Принято: запускаю конвейер с названными пробелами — они остаются в вердикте суда.',
+      );
+      try {
+        const outcome = await actions.acceptPlan(projectId, directory);
+        await send(
+          alertText('🔁 Конвейер запущен по решению владельца', projectLabel(projectId), outcome),
+        );
       } catch (error) {
         await send(
           `Запуск не удался: ${error instanceof Error ? trimTo(error.message, 400) : 'ошибка'}`,

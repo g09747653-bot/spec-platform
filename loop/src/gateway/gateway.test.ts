@@ -208,6 +208,7 @@ function task(taskId: string, status: HandoffTask['status']): HandoffTask {
 async function startGateway(overrides?: {
   launch?: (idea: string, notify: (text: string) => Promise<void>) => Promise<void>;
   transcribe?: (voice: { fileId: string }) => Promise<string>;
+  acceptPlan?: (projectId: string, projectDirectory: string) => Promise<string>;
 }): Promise<void> {
   const base = await api.listen();
   bus = privateBus();
@@ -229,6 +230,7 @@ async function startGateway(overrides?: {
           return Promise.resolve();
         }),
       ...(overrides?.transcribe === undefined ? {} : { transcribe: overrides.transcribe }),
+      ...(overrides?.acceptPlan === undefined ? {} : { acceptPlan: overrides.acceptPlan }),
     },
     log: (line) => logLines.push(line),
     longPollSec: 1,
@@ -461,6 +463,115 @@ describe('алерты по событиям шины — по каждому с
       expect(alert.chat_id).toBe(OWNER);
       expect(alert.text).toContain('Проект: Планировщик дел');
     }
+  });
+});
+
+describe('финальный алерт — сверка с задумкой, обе формы (А-33 п.4а)', () => {
+  it('при существующем DEVIATIONS.md успех несёт замер, счёт задач и путь — не голую галочку', async () => {
+    const projectDirectory = seedProject();
+    writeFileSync(
+      join(projectDirectory, 'DEVIATIONS.md'),
+      [
+        '# Реестр расхождений',
+        '',
+        '| Раздел | Описание | Решение |',
+        '|---|---|---|',
+        '| Главная | SC-001=34% | named-строка |',
+        '| Products | SC-002 diff=108px | named-строка |',
+      ].join('\n'),
+      'utf8',
+    );
+    await startGateway();
+
+    bus.publish({ type: 'project-status', projectId: PROJECT, status: 'COMPLETED' });
+    await until(() => api.sent.some((entry) => entry.text.includes('Проект завершён')));
+
+    const alert = api.sent.find((entry) => entry.text.includes('Проект завершён'));
+    expect(alert?.text).toContain('Принято задач: 1 из 3');
+    expect(alert?.text).toContain('Сверка с задумкой');
+    expect(alert?.text).toContain('зафиксировано расхождений: 2');
+    expect(alert?.text).toContain('DEVIATIONS.md');
+  });
+
+  it('без отчёта расхождений успех говорит «план самопроверку не снимал» — явным словом', async () => {
+    seedProject();
+    await startGateway();
+
+    bus.publish({ type: 'project-status', projectId: PROJECT, status: 'COMPLETED' });
+    await until(() => api.sent.some((entry) => entry.text.includes('Проект завершён')));
+
+    const alert = api.sent.find((entry) => entry.text.includes('Проект завершён'));
+    expect(alert?.text).toContain('Принято задач: 1 из 3');
+    expect(alert?.text).toContain('план самопроверку не снимал');
+  });
+});
+
+describe('суд полноты плана — алерт с перечнем и решение кнопкой (А-33 п.4б)', () => {
+  it('событие plan-review — алерт с пробелами поимённо и двумя кнопками', async () => {
+    seedProject();
+    await startGateway();
+
+    bus.publish({
+      type: 'plan-review',
+      projectId: PROJECT,
+      gaps: ['нет переноса контентной графики', 'нет задач по фотографиям продуктов'],
+    });
+    await until(() => api.sent.some((entry) => entry.text.includes('не покрывает задумку')));
+
+    const alert = api.sent.find((entry) => entry.text.includes('не покрывает задумку'));
+    expect(alert?.text).toContain('1. нет переноса контентной графики');
+    expect(alert?.text).toContain('2. нет задач по фотографиям продуктов');
+
+    const buttons = alert?.reply_markup?.inline_keyboard.flat() ?? [];
+    expect(buttons.map((button) => button.text)).toEqual([
+      '▶️ Запустить как есть',
+      '✖️ Не запускать',
+    ]);
+    expect(buttons[0]?.callback_data).toBe(`plan:go:${PROJECT}`);
+  });
+
+  it('«Запустить как есть» зовёт решение с projectId и директорией; ответ — владельцу', async () => {
+    const projectDirectory = seedProject();
+    const acceptCalls: { projectId: string; directory: string }[] = [];
+    await startGateway({
+      acceptPlan: (projectId, dir) => {
+        acceptCalls.push({ projectId, directory: dir });
+        return Promise.resolve('Конвейер ведёт план: вех 1, задач 3.');
+      },
+    });
+
+    api.push({
+      callback_query: {
+        id: 'cb-plan-1',
+        data: `plan:go:${PROJECT}`,
+        message: { message_id: 20, chat: { id: OWNER } },
+      },
+    });
+
+    await until(() => acceptCalls.length > 0);
+    expect(acceptCalls[0]?.projectId).toBe(PROJECT);
+    expect(acceptCalls[0]?.directory).toBe(projectDirectory);
+    await until(() =>
+      api.sent.some((entry) => entry.text.includes('Конвейер запущен по решению владельца')),
+    );
+    expect(api.answeredCallbacks).toContain('cb-plan-1');
+  });
+
+  it('«Не запускать» оставляет конвейер стоять и называет, где вердикт', async () => {
+    seedProject();
+    await startGateway();
+
+    api.push({
+      callback_query: {
+        id: 'cb-plan-2',
+        data: 'plan:no',
+        message: { message_id: 21, chat: { id: OWNER } },
+      },
+    });
+
+    await until(() => api.sent.some((entry) => entry.text.includes('Конвейер не запущен')));
+    expect(api.sent.some((entry) => entry.text.includes('PLAN_REVIEW.json'))).toBe(true);
+    expect(stopCalls).toHaveLength(0);
   });
 });
 

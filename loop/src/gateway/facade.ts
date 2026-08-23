@@ -1,9 +1,11 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+﻿import { mkdirSync, writeFileSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 
 import { unzipSync } from 'fflate';
 import { z } from 'zod';
+
+import { writeSeed } from '../intake/plan-review.ts';
 
 /**
  * Фасад: задумка → платформа → бандл → контур (задача 166; бандл A0 Task 4.3; А-20 п.3в).
@@ -75,7 +77,14 @@ const StepReply = z.object({
 });
 
 const StartLoopReply = z
-  .object({ projectId: z.string(), milestones: z.number().int(), tasks: z.number().int() })
+  .object({
+    projectId: z.string(),
+    milestones: z.number().int(),
+    tasks: z.number().int(),
+    /** `PLAN_GAPS` — суд полноты остановил запуск (А-33 п.4б); прочее — конвейер поехал. */
+    status: z.string().optional(),
+    planGaps: z.array(z.string()).optional(),
+  })
   .loose();
 
 interface HttpAnswer {
@@ -83,8 +92,12 @@ interface HttpAnswer {
   body: Buffer;
 }
 
-/** Один HTTP-вызов с именованным пределом. `node:http` — см. шапку модуля. */
-function call(
+/**
+ * Один HTTP-вызов с именованным пределом. `node:http` — см. шапку модуля. Экспортирован: обвязка
+ * шлюза зовёт им собственный start-loop (кнопка «Запустить как есть»), чтобы канон D-305 жил в
+ * одном месте, а не копией.
+ */
+export function httpCall(
   method: 'GET' | 'POST',
   url: string,
   payload: unknown,
@@ -248,7 +261,7 @@ export async function runFacade(
   let projectId: string;
   let sessionId: string;
   try {
-    const created = await call(
+    const created = await httpCall(
       'POST',
       `${config.platformBase}/api/projects`,
       { prompt: idea, autonomous: true },
@@ -287,7 +300,7 @@ export async function runFacade(
 
     let report: z.infer<typeof StepReply>;
     try {
-      const answer = await call(
+      const answer = await httpCall(
         'POST',
         `${config.platformBase}/api/sessions/${sessionId}/autonomous/step`,
         {},
@@ -339,7 +352,7 @@ export async function runFacade(
   /* ------------------------------------------------- 3. машинный бандл → workspace-каталог */
   let projectDirectory: string;
   try {
-    const exported = await call(
+    const exported = await httpCall(
       'GET',
       `${config.platformBase}/api/projects/${projectId}/export/machine`,
       undefined,
@@ -359,6 +372,13 @@ export async function runFacade(
       mkdirSync(dirname(target), { recursive: true });
       writeFileSync(target, Buffer.from(content));
     }
+
+    /*
+     * Задумка — на диск рядом с бандлом (А-33 п.4б): суд полноты плана на интейке судит план
+     * ПРОТИВ НЕЁ, и файл — единственная форма, которая переживает рестарты и перезаборы. Фасад —
+     * единственное звено, которое держит её дословно в руках.
+     */
+    writeSeed(projectDirectory, idea);
 
     /*
      * Смок выжимок ДО алерта «Бандл получен» (D-316; вердикт fix-раунда п.3). Финальная приёмка
@@ -383,7 +403,7 @@ export async function runFacade(
 
   /* ------------------------------------------------- 4. контур: интейк и конвейер */
   try {
-    const started = await call(
+    const started = await httpCall(
       'POST',
       `${config.loopBase}/api/orchestrator/start-loop`,
       { projectDirectory, projectTitle: idea.slice(0, 60) },
@@ -393,6 +413,21 @@ export async function runFacade(
     if (started.status !== 200) throw failed('контур/start-loop', started);
 
     const plan = StartLoopReply.parse(JSON.parse(started.body.toString('utf8')));
+
+    /*
+     * Суд полноты остановил запуск (А-33 п.4б) — это не отказ звена, а машина, работающая как
+     * задумано: перечень пробелов и кнопка решения уже ушли отдельным алертом шлюза по событию
+     * шины. Фасад лишь называет исход пути, не выдавая «исполнители в работе» за правду.
+     */
+    if (plan.status === 'PLAN_GAPS') {
+      const gaps = plan.planGaps ?? [];
+      log(`фасад: суд полноты остановил запуск — пробелов ${String(gaps.length)}`);
+      await notify(
+        `⚖️ Суд полноты плана остановил запуск\nПлан (вех: ${String(plan.milestones)}, задач: ${String(plan.tasks)}) не покрывает задумку — пробелов: ${String(gaps.length)}. Перечень и кнопка решения — в алерте суда выше; конвейер не запущен.`,
+      );
+      return { ok: true, failedLink: null, projectId, sessionId, steps, projectDirectory };
+    }
+
     log(`фасад: контур принял план — вех ${String(plan.milestones)}, задач ${String(plan.tasks)}`);
     await notify(
       `🔁 Контур принял план\nВех: ${String(plan.milestones)}, задач: ${String(plan.tasks)}. Исполнители в работе — дальше алерты конвейера: блокировки, красный CI, успех.`,
