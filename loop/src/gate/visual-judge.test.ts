@@ -49,7 +49,12 @@ const probe = (
   kind: (typeof LIVENESS_KINDS)[number],
   moved: boolean,
   name = kind,
-): LivenessProbe => ({ kind, name, moved, detail: moved ? 'значение изменилось' : 'без изменений' });
+): LivenessProbe => ({
+  kind,
+  name,
+  moved,
+  detail: moved ? 'значение изменилось' : 'без изменений',
+});
 
 const ALIVE: LivenessProbe[] = LIVENESS_KINDS.map((kind) => probe(kind, true));
 
@@ -135,9 +140,9 @@ describe('цепочка отбирает звенья по способност
     expect(chain.providers).toHaveLength(1);
     expect(chain.providers[0]?.supportsImages).toBe(false);
 
-    await expect(
-      chain.generate({ prompt: 'посмотри', images: IMAGES }),
-    ).rejects.toBeInstanceOf(NoVisionProviderError);
+    await expect(chain.generate({ prompt: 'посмотри', images: IMAGES })).rejects.toBeInstanceOf(
+      NoVisionProviderError,
+    );
   });
 
   it('тот же чейн без картинок работает как прежде', () => {
@@ -262,7 +267,14 @@ describe('регрессия на кадрах отклонённого прод
    * Суд обязан увидеть то, что увидели его глаза, и назвать место.
    */
   const liveVerdict = readFileSync(
-    join(import.meta.dirname, '..', '..', 'fixtures', 'visual-judge', 'rejected-product-verdict.txt'),
+    join(
+      import.meta.dirname,
+      '..',
+      '..',
+      'fixtures',
+      'visual-judge',
+      'rejected-product-verdict.txt',
+    ),
     'utf8',
   );
 

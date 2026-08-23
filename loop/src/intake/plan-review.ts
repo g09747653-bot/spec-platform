@@ -321,7 +321,10 @@ export async function ensurePlanReviewed(args: {
     );
   }
 
-  const halt = (found: readonly string[], judgedBy: string): { proceed: boolean; gaps: string[] } => {
+  const halt = (
+    found: readonly string[],
+    judgedBy: string,
+  ): { proceed: boolean; gaps: string[] } => {
     const gaps = [...found];
     writePlanReview(projectDirectory, {
       verdict: 'gaps',

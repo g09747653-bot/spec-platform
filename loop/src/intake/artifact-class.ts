@@ -199,7 +199,10 @@ export async function classifyArtifact(seed: string, chain: Chain): Promise<Clas
 
   const parsed = ModelClass.safeParse(extractJson(answer.text));
   if (!parsed.success) {
-    return { status: 'skipped', reason: `ответ модели не разобран: ${z.prettifyError(parsed.error)}` };
+    return {
+      status: 'skipped',
+      reason: `ответ модели не разобран: ${z.prettifyError(parsed.error)}`,
+    };
   }
 
   return {

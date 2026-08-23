@@ -158,7 +158,10 @@ export async function reviewCoherence(args: {
 
   const parsed = ModelCoherence.safeParse(extractJson(answer.text));
   if (!parsed.success) {
-    return { status: 'skipped', reason: `ответ модели не разобран: ${z.prettifyError(parsed.error)}` };
+    return {
+      status: 'skipped',
+      reason: `ответ модели не разобран: ${z.prettifyError(parsed.error)}`,
+    };
   }
 
   return {
@@ -218,9 +221,7 @@ const MOTION_SIGNALS: readonly { name: string; pattern: RegExp }[] = [
 ];
 
 /** Признаки движения в исходниках — чистая функция над уже прочитанными текстами. */
-export function scanMotionSignals(
-  sources: readonly { file: string; text: string }[],
-): string[] {
+export function scanMotionSignals(sources: readonly { file: string; text: string }[]): string[] {
   return MOTION_SIGNALS.filter((signal) =>
     sources.some((source) => signal.pattern.test(source.text)),
   ).map((signal) => signal.name);
@@ -292,8 +293,7 @@ export function assembleBoard(args: {
   };
 }
 
-const bullet = (lines: readonly string[]): string[] =>
-  lines.map((line) => `   • ${line}`);
+const bullet = (lines: readonly string[]): string[] => lines.map((line) => `   • ${line}`);
 
 /** Доска одним текстом — то, что уходит в ленту и в алерт. Формат один, читателей двое. */
 export function renderQualityBoard(board: QualityBoard): string {
@@ -312,9 +312,13 @@ export function renderQualityBoard(board: QualityBoard): string {
   const total = board.liveness.evidence.probes.length;
 
   if (board.liveness.verdict === 'alive') {
-    lines.push(`2. Живость — живой: ${String(moved)} из ${String(total)} проверок увидели движение.`);
+    lines.push(
+      `2. Живость — живой: ${String(moved)} из ${String(total)} проверок увидели движение.`,
+    );
   } else {
-    lines.push(`2. Живость — СТАТИЧНЫЙ (${String(moved)} из ${String(total)} проверок сдвинулись):`);
+    lines.push(
+      `2. Живость — СТАТИЧНЫЙ (${String(moved)} из ${String(total)} проверок сдвинулись):`,
+    );
     lines.push(...bullet(board.liveness.findings));
   }
 
