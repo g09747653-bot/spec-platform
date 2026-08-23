@@ -205,9 +205,7 @@ export function createTelegramGateway(deps: GatewayDeps): TelegramGateway {
        * Кнопка «Запустить как есть» намеренно не одноразовая: она несёт projectId, а не номер из
        * pendingIdeas, — решение по плану можно принять и завтра, пережив рестарт процесса.
        */
-      const gaps = event.gaps
-        .map((gap, index) => `${String(index + 1)}. ${gap}`)
-        .join('\n');
+      const gaps = event.gaps.map((gap, index) => `${String(index + 1)}. ${gap}`).join('\n');
       void send(
         alertText(
           '⚖️ План не покрывает задумку — конвейер не запущен',
@@ -450,10 +448,14 @@ export function createTelegramGateway(deps: GatewayDeps): TelegramGateway {
         return;
       }
 
-      await send('▶️ Принято: запускаю конвейер с названными пробелами — они остаются в вердикте суда.');
+      await send(
+        '▶️ Принято: запускаю конвейер с названными пробелами — они остаются в вердикте суда.',
+      );
       try {
         const outcome = await actions.acceptPlan(projectId, directory);
-        await send(alertText('🔁 Конвейер запущен по решению владельца', projectLabel(projectId), outcome));
+        await send(
+          alertText('🔁 Конвейер запущен по решению владельца', projectLabel(projectId), outcome),
+        );
       } catch (error) {
         await send(
           `Запуск не удался: ${error instanceof Error ? trimTo(error.message, 400) : 'ошибка'}`,

@@ -126,7 +126,9 @@ export function planGate(existing: PlanReviewRecord | null, acceptPlan: boolean)
   if (existing === null) return { action: 'review' };
   if (existing.verdict === 'complete' || existing.decision !== null) return { action: 'run' };
 
-  return acceptPlan ? { action: 'accept', gaps: existing.gaps } : { action: 'halt', gaps: existing.gaps };
+  return acceptPlan
+    ? { action: 'accept', gaps: existing.gaps }
+    : { action: 'halt', gaps: existing.gaps };
 }
 
 const SYSTEM = [
@@ -149,7 +151,9 @@ export function completenessPrompt(seed: string, tasks: readonly ReviewableTask[
   const plan = tasks.map((task, index) => {
     const lines = [
       `${String(index + 1)}. ${task.taskId} — ${task.title}`,
-      ...(task.description.trim() === '' ? [] : [`   Суть: ${trimTo(task.description, DESCRIPTION_LIMIT)}`]),
+      ...(task.description.trim() === ''
+        ? []
+        : [`   Суть: ${trimTo(task.description, DESCRIPTION_LIMIT)}`]),
       ...(task.filesToEdit.length === 0 ? [] : [`   Файлы: ${task.filesToEdit.join(', ')}`]),
     ];
     return lines.join('\n');
@@ -206,7 +210,10 @@ export async function reviewPlanCompleteness(
 
   const parsed = ModelVerdict.safeParse(extractJson(answer.text));
   if (!parsed.success) {
-    return { status: 'skipped', reason: `ответ модели не разобран: ${z.prettifyError(parsed.error)}` };
+    return {
+      status: 'skipped',
+      reason: `ответ модели не разобран: ${z.prettifyError(parsed.error)}`,
+    };
   }
 
   return parsed.data.verdict === 'complete'
@@ -271,7 +278,10 @@ export async function ensurePlanReviewed(args: {
   const outcome = await reviewPlanCompleteness(seed, tasks, chain);
 
   if (outcome.status === 'skipped') {
-    say(`Суд полноты плана не состоялся: ${outcome.reason}. Конвейер продолжает без вердикта.`, 'WARN');
+    say(
+      `Суд полноты плана не состоялся: ${outcome.reason}. Конвейер продолжает без вердикта.`,
+      'WARN',
+    );
     return { proceed: true, gaps: [] };
   }
 

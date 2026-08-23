@@ -82,7 +82,11 @@ describe('промпт суда — полнота ВХОДА', () => {
 
 describe('разбор вердикта', () => {
   it('complete — полон', async () => {
-    const outcome = await reviewPlanCompleteness('seed', TASKS, stubChain('{"verdict":"complete"}'));
+    const outcome = await reviewPlanCompleteness(
+      'seed',
+      TASKS,
+      stubChain('{"verdict":"complete"}'),
+    );
     expect(outcome).toEqual({ status: 'complete', judgedBy: 'anthropic' });
   });
 
@@ -244,7 +248,8 @@ describe('весь суд одной точкой (ensurePlanReviewed)', () => {
     expect(readPlanReview(directory)?.verdict).toBe('gaps');
     expect(
       feed.lines.some(
-        (line) => line.level === 'ERROR' && line.message.includes('нет переноса контентной графики'),
+        (line) =>
+          line.level === 'ERROR' && line.message.includes('нет переноса контентной графики'),
       ),
     ).toBe(true);
   });

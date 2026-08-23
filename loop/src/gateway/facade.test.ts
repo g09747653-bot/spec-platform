@@ -119,9 +119,7 @@ function buildLoop(reply?: Record<string, unknown>) {
     request.on('end', () => {
       bodies.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
       response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(
-        JSON.stringify(reply ?? { projectId: 'loop-proj', milestones: 3, tasks: 12 }),
-      );
+      response.end(JSON.stringify(reply ?? { projectId: 'loop-proj', milestones: 3, tasks: 12 }));
     });
   });
 

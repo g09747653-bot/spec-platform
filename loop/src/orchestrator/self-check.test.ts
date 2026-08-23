@@ -4,11 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import {
-  countRegistryEntries,
-  findSelfCheckReport,
-  verificationLine,
-} from './self-check.ts';
+import { countRegistryEntries, findSelfCheckReport, verificationLine } from './self-check.ts';
 
 /**
  * Вершинный критерий (А-33 п.4а): сверка финального сообщения с задумкой. Тестируются обе формы —
