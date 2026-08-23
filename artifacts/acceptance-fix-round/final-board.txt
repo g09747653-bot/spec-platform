@@ -1,0 +1,41 @@
+T001 COMPLETED [ms_01] Создать структуру каталогов репозитория согласно plan.md: partials/, s
+T002 COMPLETED [ms_01] Инициализировать package.json в корне репозитория с зависимостями толь
+T003 COMPLETED [ms_01] [P] Установить браузерный движок Playwright (npx playwright install ch
+T004 COMPLETED [ms_03] Подготовить общие для всех разделов ассеты (логотип NVIDIA, иконки мен
+T005 COMPLETED [ms_02] [P] Написать build-скрипт tools/build.js, инлайнящий partials/header.h
+T006 COMPLETED [ms_02] [P] Написать tools/visual-diff/capture-baseline.js: разовая съёмка эта
+T007 COMPLETED [ms_02] Запустить capture-baseline.js один раз и закоммитить полученные PNG/JS
+T008 COMPLETED [ms_02] [P] Написать tools/visual-diff/capture.js: детерминированная съёмка ск
+T009 COMPLETED [ms_02] [P] Написать tools/visual-diff/compare.js: сопоставление PNG-сегментов
+T010 COMPLETED [ms_02] Создать базовые стили src/styles/base.css (сброс, типографика, цветовы
+T011 COMPLETED [ms_02] Создать пустой реестр расхождений DEVIATIONS.md в корне репозитория со
+T012 COMPLETED [ms_04] [P] [US1] Зафиксировать по baseline-скриншотам и структуре оригинала с
+T013 COMPLETED [ms_04] [P] [US1] Зафиксировать по baseline-скриншотам список визуальных блоко
+T014 COMPLETED [ms_05] [US1] Свёрстать partials/header.html и src/styles/header.css по списку
+T015 COMPLETED [ms_05] [US1] Свёрстать partials/footer.html и src/styles/footer.css по списку
+T016 COMPLETED [ms_04] [US1] Реализовать src/scripts/menu.js: переключение вкладок/выпадающих
+T017 COMPLETED [ms_04] [P] [US1] Зафиксировать по baseline-скриншотам список секций главной с
+T018 COMPLETED [ms_05] [US1] Свёрстать src/pages/index.src.html с плейсхолдерами {{header}}/{
+T019 COMPLETED [ms_04] [US1] Создать src/styles/home.css, воспроизводящий отступы, типографик
+T020 COMPLETED [ms_06] [US1] Собрать index.html через tools/build.js
+T021 COMPLETED [ms_04] [US1] Прогнать capture.js + compare.js для index.html на всех трёх шир
+T022 COMPLETED [ms_04] [US1] Проверить, что index.html, открытый напрямую из файловой системы
+T023 COMPLETED [ms_04] [US1] Задокументировать оставшиеся неустранённые расхождения раздела «
+T024 COMPLETED [ms_07] [P] [US2] Зафиксировать по baseline-скриншотам список визуальных блоко
+T025 COMPLETED [ms_08] [US2] Свёрстать src/pages/products.src.html с плейсхолдерами {{header}
+T026 COMPLETED [ms_07] [US2] Создать src/styles/products.css для сетки карточек продуктов, ад
+T027 COMPLETED [ms_07] [US2] Реализовать src/scripts/slider.js: локальное переключение карточ
+T028 COMPLETED [ms_09] [US2] Собрать products.html через tools/build.js и убедиться, что разм
+T029 COMPLETED [ms_07] [US2] Прогнать capture.js + compare.js для products.html на всех трёх 
+T030 COMPLETED [ms_07] [US2] Проверить офлайн-работоспособность products.html (отсутствие вне
+T031 COMPLETED [ms_07] [US2] Задокументировать оставшиеся неустранённые расхождения раздела «
+T032 COMPLETED [ms_10] [P] [US3] Составить полный перечень декоративных интерактивных точек н
+T033 COMPLETED [ms_10] [US3] Реализовать src/scripts/decorative-stubs.js: обработчики клика/о
+T034 COMPLETED [ms_10] [US3] В том же decorative-stubs.js реализовать нейтрализацию ссылок ме
+T035 COMPLETED [ms_10] [US3] Подключить decorative-stubs.js, menu.js и slider.js в partials/h
+T036 COMPLETED [ms_10] [US3] Вручную пройти по каждой точке из перечня T032 на index.html и p
+T037 COMPLETED [ms_10] [US3] Повторно прогнать capture.js + compare.js для index.html и produ
+T038 COMPLETED [ms_11] [P] Финальная проверка отсутствия сетевых запросов к внешним доменам в
+T039 COMPLETED [ms_11] Финальная сверка полноты DEVIATIONS.md: убедиться, что не осталось изв
+T040 COMPLETED [ms_11] [P] Вручную проверить edge cases из spec.md: плавное изменение ширины 
+T041 COMPLETED [ms_11] Финальный сквозной прогон tools/build.js → capture.js → compare.js для
