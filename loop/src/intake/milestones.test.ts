@@ -167,3 +167,67 @@ describe('what the slice says for the feed (task 156)', () => {
     expect(describeSlice(byPhases)).toContain('консервативно');
   });
 });
+
+/**
+ * Область идентификаторов вех (D-324).
+ *
+ * Дефект был скрытым ровно до второго проекта: `milestone_id` — первичный ключ индекса, а нарезка
+ * выдавала `ms_01` от единицы каждому проекту. Второй проект не завёл свои вехи, а переписал чужие
+ * через `ON CONFLICT`; его задачи оказались на вехах первого, доска показала ноль задач, и конвейер
+ * честно сказал «запускать нечего» — при шести заданиях на диске.
+ */
+describe('область идентификаторов вех — второй проект не переписывает первый (D-324)', () => {
+  const plan = [task('1'), task('2', ['1']), task('3', ['2'])];
+
+  it('без области нумерация прежняя: деревья, записанные раньше, читаются как читались', () => {
+    const result = sliceMilestones(plan);
+    if (!result.ok) expect.unreachable('план разрезаем');
+
+    expect(result.milestones.map((m) => m.milestoneId)).toEqual(['ms_01', 'ms_02', 'ms_03']);
+  });
+
+  it('с областью идентификаторы несут её, а порядок остаётся лексическим', () => {
+    const result = sliceMilestones(plan, '9c57b180');
+    if (!result.ok) expect.unreachable('план разрезаем');
+
+    expect(result.milestones.map((m) => m.milestoneId)).toEqual([
+      'ms_9c57b180_01',
+      'ms_9c57b180_02',
+      'ms_9c57b180_03',
+    ]);
+    expect([...result.milestones.map((m) => m.milestoneId)].sort()).toEqual(
+      result.milestones.map((m) => m.milestoneId),
+    );
+  });
+
+  it('ожидание вехи ссылается на предыдущую В ТОЙ ЖЕ области, а не в чужой', () => {
+    const result = sliceMilestones(plan, 'aaaaaaaa');
+    if (!result.ok) expect.unreachable('план разрезаем');
+
+    expect(result.milestones[0]?.dependsOn).toEqual([]);
+    expect(result.milestones[1]?.dependsOn).toEqual(['ms_aaaaaaaa_01']);
+    expect(result.milestones[2]?.description).toContain('ms_aaaaaaaa_02');
+  });
+
+  it('два проекта в одном индексе не делят ни одного идентификатора', () => {
+    const first = sliceMilestones(plan, 'aaaaaaaa');
+    const second = sliceMilestones(plan, 'bbbbbbbb');
+    if (!first.ok || !second.ok) expect.unreachable('оба плана разрезаемы');
+
+    const mine = new Set(first.milestones.map((m) => m.milestoneId));
+    const theirs = second.milestones.map((m) => m.milestoneId);
+
+    expect(theirs.some((id) => mine.has(id))).toBe(false);
+  });
+
+  it('фазовая нарезка несёт область тем же порядком', () => {
+    const result = sliceMilestones([task('1.1'), task('1.2'), task('2.1')], 'cccccccc');
+    if (!result.ok) expect.unreachable('план разрезаем');
+
+    expect(result.strategy).toBe('phases');
+    expect(result.milestones.map((m) => m.milestoneId)).toEqual([
+      'ms_cccccccc_01',
+      'ms_cccccccc_02',
+    ]);
+  });
+});

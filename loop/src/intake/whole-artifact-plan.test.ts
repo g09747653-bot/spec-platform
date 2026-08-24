@@ -516,3 +516,48 @@ describe('регрессия А-37: слепок WA04 — ворота «≤1%»
     expect(polish?.unitTestCmd).toContain('расхождение выросло');
   });
 });
+
+/**
+ * Область идентификаторов задач (D-325, продолжение D-324).
+ *
+ * Дефект стоил прогона молча: второй проект с теми же `WA01…` перехватывал строки первого, а
+ * `ON CONFLICT` намеренно не трогает `status` — и свежий план вступал в прогон с ЧУЖИМИ статусами
+ * («три приняты, одна заблокирована»), при пяти PENDING на диске и без единого контейнера.
+ */
+describe('область идентификаторов задач — второй проект не перехватывает первый (D-325)', () => {
+  const proposal: Parameters<typeof shapePlan>[0] = [
+    { role: 'whole', title: 'Целиком', description: '…', filesToEdit: ['index.html'] },
+    {
+      role: 'polish',
+      title: 'Полировка',
+      description: '…',
+      filesToEdit: ['index.html'],
+      measurement: { cmd: 'node m.js', recordPath: 'r.json', divergenceKey: 'diff' },
+    },
+  ];
+
+  it('без области нумерация прежняя', () => {
+    expect(shapePlan(proposal).map((t) => t.taskId)).toEqual(['WA01', 'WA02']);
+  });
+
+  it('с областью идентификаторы несут её, и ожидания ссылаются внутрь области', () => {
+    const shaped = shapePlan(proposal, '9c57b180');
+
+    expect(shaped.map((t) => t.taskId)).toEqual(['WA_9c57b180_01', 'WA_9c57b180_02']);
+    expect(shaped[1]?.dependsOn).toEqual(['WA_9c57b180_01']);
+  });
+
+  it('два проекта в одном индексе не делят ни одного идентификатора задачи', () => {
+    const mine = new Set(shapePlan(proposal, 'aaaaaaaa').map((t) => t.taskId));
+    const theirs = shapePlan(proposal, 'bbbbbbbb').map((t) => t.taskId);
+
+    expect(theirs.some((id) => mine.has(id))).toBe(false);
+  });
+
+  it('скелет несёт область тем же порядком', () => {
+    const skeleton = skeletonPlan(SEED, ['index.html'], 'cccccccc');
+
+    expect(skeleton.every((t) => t.taskId.startsWith('WA_cccccccc_'))).toBe(true);
+    expect(judgeWholeArtifactPlan(asReviewable(skeleton))).toEqual([]);
+  });
+});

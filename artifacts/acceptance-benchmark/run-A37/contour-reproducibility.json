@@ -1,0 +1,167 @@
+{
+  "meta": {
+    "generatedAt": "2026-08-24T01:25:11.209Z",
+    "threshold": 0.1
+  },
+  "run1": {
+    "diffPercent": 25.018925181352607,
+    "passed": false,
+    "errorCount": 0
+  },
+  "run2": {
+    "diffPercent": 25.018925181352607,
+    "passed": false,
+    "errorCount": 0
+  },
+  "perScenarioDeltas": [
+    {
+      "slug": "index-375-scroll0",
+      "run1DiffPercent": 85.33136288998358,
+      "run2DiffPercent": 85.33136288998358,
+      "delta": 0
+    },
+    {
+      "slug": "index-375-scroll812",
+      "run1DiffPercent": 22.236124794745486,
+      "run2DiffPercent": 22.236124794745486,
+      "delta": 0
+    },
+    {
+      "slug": "index-375-scroll1624",
+      "run1DiffPercent": 60.827586206896555,
+      "run2DiffPercent": 60.827586206896555,
+      "delta": 0
+    },
+    {
+      "slug": "index-375-scroll2436",
+      "run1DiffPercent": 30.316584564860428,
+      "run2DiffPercent": 30.316584564860428,
+      "delta": 0
+    },
+    {
+      "slug": "index-375-scroll3248",
+      "run1DiffPercent": 62.04794745484401,
+      "run2DiffPercent": 62.04794745484401,
+      "delta": 0
+    },
+    {
+      "slug": "index-375-scroll4060",
+      "run1DiffPercent": 4.7261083743842365,
+      "run2DiffPercent": 4.7261083743842365,
+      "delta": 0
+    },
+    {
+      "slug": "index-375-scroll4872",
+      "run1DiffPercent": 4.31559934318555,
+      "run2DiffPercent": 4.31559934318555,
+      "delta": 0
+    },
+    {
+      "slug": "index-375-scroll5684",
+      "run1DiffPercent": 4.714285714285714,
+      "run2DiffPercent": 4.714285714285714,
+      "delta": 0
+    },
+    {
+      "slug": "index-375-scroll6496",
+      "run1DiffPercent": 4.324137931034483,
+      "run2DiffPercent": 4.324137931034483,
+      "delta": 0
+    },
+    {
+      "slug": "index-375-scroll7308",
+      "run1DiffPercent": 3.9047619047619047,
+      "run2DiffPercent": 3.9047619047619047,
+      "delta": 0
+    },
+    {
+      "slug": "index-768-scroll0",
+      "run1DiffPercent": 60.738627115885414,
+      "run2DiffPercent": 60.738627115885414,
+      "delta": 0
+    },
+    {
+      "slug": "index-768-scroll1024",
+      "run1DiffPercent": 38.102467854817704,
+      "run2DiffPercent": 38.102467854817704,
+      "delta": 0
+    },
+    {
+      "slug": "index-768-scroll2048",
+      "run1DiffPercent": 63.35016886393229,
+      "run2DiffPercent": 63.35016886393229,
+      "delta": 0
+    },
+    {
+      "slug": "index-768-scroll3072",
+      "run1DiffPercent": 28.51880391438802,
+      "run2DiffPercent": 28.51880391438802,
+      "delta": 0
+    },
+    {
+      "slug": "index-768-scroll4096",
+      "run1DiffPercent": 4.175313313802084,
+      "run2DiffPercent": 4.175313313802084,
+      "delta": 0
+    },
+    {
+      "slug": "index-768-scroll5120",
+      "run1DiffPercent": 3.4271240234375,
+      "run2DiffPercent": 3.4271240234375,
+      "delta": 0
+    },
+    {
+      "slug": "index-768-scroll6144",
+      "run1DiffPercent": 1.9583384195963542,
+      "run2DiffPercent": 1.9583384195963542,
+      "delta": 0
+    },
+    {
+      "slug": "index-1440-scroll0",
+      "run1DiffPercent": 14.154475308641976,
+      "run2DiffPercent": 14.154475308641976,
+      "delta": 0
+    },
+    {
+      "slug": "index-1440-scroll900",
+      "run1DiffPercent": 36.59336419753087,
+      "run2DiffPercent": 36.59336419753087,
+      "delta": 0
+    },
+    {
+      "slug": "index-1440-scroll1800",
+      "run1DiffPercent": 61.35223765432099,
+      "run2DiffPercent": 61.35223765432099,
+      "delta": 0
+    },
+    {
+      "slug": "index-1440-scroll2700",
+      "run1DiffPercent": 33.622376543209874,
+      "run2DiffPercent": 33.622376543209874,
+      "delta": 0
+    },
+    {
+      "slug": "index-1440-scroll3600",
+      "run1DiffPercent": 3.5328703703703703,
+      "run2DiffPercent": 3.5328703703703703,
+      "delta": 0
+    },
+    {
+      "slug": "index-1440-scroll4500",
+      "run1DiffPercent": 1.9305555555555556,
+      "run2DiffPercent": 1.9305555555555556,
+      "delta": 0
+    },
+    {
+      "slug": "index-1440-scroll5400",
+      "run1DiffPercent": 1.043287037037037,
+      "run2DiffPercent": 1.043287037037037,
+      "delta": 0
+    }
+  ],
+  "summary": {
+    "deltaPercent": 0,
+    "threshold": 0.1,
+    "passed": true
+  }
+}

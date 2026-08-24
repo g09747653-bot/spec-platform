@@ -48,6 +48,15 @@ const OUT = resolve(flag('--out', join(WORKSPACE, '.judge')));
 /* Механику драйвера можно проверить без глаз: ось связности тогда честно «не состоялась». */
 const NO_EYES = argv.includes('--no-eyes');
 
+/** Задумка может лежать выше корня подачи: сайт в подкаталоге — обычная раскладка плана. */
+const SEED_PATH = resolve(flag('--seed', join(WORKSPACE, 'SEED.md')));
+
+/** Страницы артефакта, через запятую. По умолчанию — одностраничник. */
+const PAGES = flag('--pages', 'index.html')
+  .split(',')
+  .map((name) => name.trim())
+  .filter((name) => name !== '');
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -86,20 +95,38 @@ function serve(root) {
   });
 }
 
-/** Кадры для оси связности: обе страницы, рабочий стол и телефон, первый экран и глубина. */
-const SHOTS = [
-  { label: 'главная, 1440, первый экран', page: 'index.html', width: 1440, height: 900, scrollY: 0 },
-  { label: 'главная, 1440, середина', page: 'index.html', width: 1440, height: 900, scrollY: 2000 },
-  { label: 'главная, 1440, глубина', page: 'index.html', width: 1440, height: 900, scrollY: 4600 },
-  { label: 'главная, 375, первый экран', page: 'index.html', width: 375, height: 812, scrollY: 0 },
-  { label: 'главная, 375, середина', page: 'index.html', width: 375, height: 812, scrollY: 1200 },
-  { label: 'страница линейки, 1440, первый экран', page: 'products.html', width: 1440, height: 900, scrollY: 0 },
-  { label: 'страница линейки, 1440, сетка', page: 'products.html', width: 1440, height: 900, scrollY: 2100 },
-  { label: 'страница линейки, 375, сетка', page: 'products.html', width: 375, height: 812, scrollY: 900 },
+/**
+ * Кадры для оси связности — по фактическим страницам и той же линейке ширин, что судит замер.
+ *
+ * Глубина берётся долями экрана, а не пикселями: страница копии не обязана совпасть по высоте с
+ * эталоном, и кадр «на 4600 px» на короткой странице был бы кадром подвала, выданным за середину.
+ */
+const BREAKPOINTS = [
+  { width: 1440, height: 900, label: 'рабочий стол' },
+  { width: 768, height: 1024, label: 'планшет' },
+  { width: 375, height: 812, label: 'телефон' },
 ];
 
+const DEPTHS = [
+  { fraction: 0, label: 'первый экран' },
+  { fraction: 0.35, label: 'середина' },
+  { fraction: 0.7, label: 'глубина' },
+];
+
+const SHOTS = PAGES.flatMap((page) =>
+  BREAKPOINTS.flatMap(({ width, height, label }) =>
+    DEPTHS.map(({ fraction, label: depth }) => ({
+      label: `${page.replace(/\.html?$/i, '')}, ${label} ${String(width)}, ${depth}`,
+      page,
+      width,
+      height,
+      fraction,
+    })),
+  ),
+);
+
 /** Прокрутка со страницы, а не действиями Playwright: вечная анимация не бывает «стабильной». */
-const settle = async (page, scrollY) => {
+const settle = async (page, fraction) => {
   await page.evaluate(async () => {
     const step = window.innerHeight;
     for (let y = 0; y < document.body.scrollHeight; y += step) {
@@ -109,8 +136,11 @@ const settle = async (page, scrollY) => {
     window.scrollTo(0, 0);
   });
   await page.waitForTimeout(200);
-  await page.evaluate((y) => window.scrollTo(0, y), scrollY);
-  await page.waitForTimeout(400);
+  await page.evaluate((share) => {
+    const reach = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    window.scrollTo(0, Math.round(reach * share));
+  }, fraction);
+  await page.waitForTimeout(450);
 };
 
 /**
@@ -295,7 +325,7 @@ function artifactSources(root) {
 async function main() {
   mkdirSync(OUT, { recursive: true });
 
-  const seed = readFileSync(join(WORKSPACE, 'SEED.md'), 'utf8').trim();
+  const seed = readFileSync(SEED_PATH, 'utf8').trim();
   const { server, port } = await serve(WORKSPACE);
   const browser = await chromium.launch();
 
@@ -311,11 +341,11 @@ async function main() {
       const page = await context.newPage();
 
       await page.goto(`http://127.0.0.1:${port}/${shot.page}`, { waitUntil: 'load', timeout: 30_000 });
-      await settle(page, shot.scrollY);
+      await settle(page, shot.fraction);
 
       const file = join(
         OUT,
-        `${shot.page.replace('.html', '')}-${String(shot.width)}-scroll${String(shot.scrollY)}.png`,
+        `${shot.page.replace('.html', '')}-${String(shot.width)}-d${String(Math.round(shot.fraction * 100))}.png`,
       );
       await page.screenshot({ path: file });
       shots.push({ label: shot.label, path: file });
@@ -326,7 +356,10 @@ async function main() {
     /* Пробы живости — на рабочем столе, на главной: там и наведение, и появление, и движение. */
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await context.newPage();
-    await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'load', timeout: 30_000 });
+    await page.goto(`http://127.0.0.1:${port}/${PAGES[0] ?? 'index.html'}`, {
+      waitUntil: 'load',
+      timeout: 30_000,
+    });
     await page.waitForTimeout(500);
 
     probes.push(await motionProbe(page, 'что-то движется само'));

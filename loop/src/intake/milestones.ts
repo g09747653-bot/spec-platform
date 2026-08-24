@@ -43,9 +43,21 @@ export type SliceResult =
   | { ok: false; reason: 'dangling'; taskId: string; missing: string }
   | { ok: false; reason: 'duplicate'; taskId: string };
 
-/** `ms_01`, `ms_02`, … — zero-padded so a lexical sort is the execution order. */
-export function milestoneId(index: number): string {
-  return `ms_${String(index + 1).padStart(2, '0')}`;
+/**
+ * `ms_01`, `ms_02`, … — zero-padded so a lexical sort is the execution order.
+ *
+ * **С областью проекта, когда она известна** (D-324). Идентификатор вехи — первичный ключ в
+ * индексе, а нарезка выдавала его от единицы КАЖДОМУ проекту. Пока проект в контуре жил один,
+ * это было незаметно; второй проект в том же индексе попал в `ON CONFLICT` и не завёл свои вехи,
+ * а ПЕРЕПИСАЛ чужие: его задачи прицепились к вехам другого проекта, доска нового показала ноль
+ * задач, и конвейер честно сказал «запускать нечего» — при шести заданиях на диске.
+ *
+ * Область без неё сохраняется прежней (`ms_01`): деревья, записанные до этой правки, читаются
+ * как читались — формат идентификатора нигде не разбирается, он только сравнивается.
+ */
+export function milestoneId(index: number, scope?: string): string {
+  const number = String(index + 1).padStart(2, '0');
+  return scope === undefined || scope === '' ? `ms_${number}` : `ms_${scope}_${number}`;
 }
 
 /** `1.1` → `1`; `task_3.2` → `task_3`; a dotless id is its own phase. */
@@ -54,7 +66,11 @@ export function phaseOf(taskId: string): string {
   return dot === -1 ? taskId : taskId.slice(0, dot);
 }
 
-export function sliceMilestones(tasks: readonly SliceableTask[]): SliceResult {
+export function sliceMilestones(
+  tasks: readonly SliceableTask[],
+  /** Область идентификаторов вех — обычно проект. Без неё нумерация прежняя (D-324). */
+  scope?: string,
+): SliceResult {
   if (tasks.length === 0) return { ok: false, reason: 'empty' };
 
   const seen = new Set<string>();
@@ -65,10 +81,14 @@ export function sliceMilestones(tasks: readonly SliceableTask[]): SliceResult {
 
   const stated = tasks.some((task) => task.dependsOn.length > 0);
 
-  return stated ? byDependencies(tasks, seen) : byPhases(tasks);
+  return stated ? byDependencies(tasks, seen, scope) : byPhases(tasks, scope);
 }
 
-function byDependencies(tasks: readonly SliceableTask[], known: ReadonlySet<string>): SliceResult {
+function byDependencies(
+  tasks: readonly SliceableTask[],
+  known: ReadonlySet<string>,
+  scope?: string,
+): SliceResult {
   for (const task of tasks) {
     for (const dependency of task.dependsOn) {
       if (!known.has(dependency)) {
@@ -99,10 +119,14 @@ function byDependencies(tasks: readonly SliceableTask[], known: ReadonlySet<stri
     remaining.splice(0, remaining.length, ...remaining.filter((task) => !placed.has(task.taskId)));
   }
 
-  return { ok: true, strategy: 'dependencies', milestones: asMilestones(layers, 'Веха') };
+  return {
+    ok: true,
+    strategy: 'dependencies',
+    milestones: asMilestones(layers, 'Веха', [], scope),
+  };
 }
 
-function byPhases(tasks: readonly SliceableTask[]): SliceResult {
+function byPhases(tasks: readonly SliceableTask[], scope?: string): SliceResult {
   const order: string[] = [];
   const grouped = new Map<string, string[]>();
 
@@ -125,6 +149,7 @@ function byPhases(tasks: readonly SliceableTask[]): SliceResult {
       order.map((phase) => grouped.get(phase) ?? []),
       'Фаза',
       order,
+      scope,
     ),
   };
 }
@@ -133,15 +158,16 @@ function asMilestones(
   groups: readonly string[][],
   label: string,
   names: readonly string[] = [],
+  scope?: string,
 ): SlicedMilestone[] {
   return groups.map((taskIds, index) => ({
-    milestoneId: milestoneId(index),
+    milestoneId: milestoneId(index, scope),
     title: `${label} ${names[index] ?? String(index + 1)}`,
     description:
       index === 0
         ? `Задач в вехе: ${String(taskIds.length)}. Начальная веха — ничего не ждёт.`
-        : `Задач в вехе: ${String(taskIds.length)}. Ждёт завершения ${milestoneId(index - 1)}.`,
-    dependsOn: index === 0 ? [] : [milestoneId(index - 1)],
+        : `Задач в вехе: ${String(taskIds.length)}. Ждёт завершения ${milestoneId(index - 1, scope)}.`,
+    dependsOn: index === 0 ? [] : [milestoneId(index - 1, scope)],
     taskIds: [...taskIds],
   }));
 }

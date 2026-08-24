@@ -1,0 +1,24 @@
+{
+  "taskId": "WA_9c57b180_05",
+  "milestoneId": "ms_9c57b180_04",
+  "title": "Сверь поведение и офлайн-работу с требованиями и устрани расхождения",
+  "description": "Запусти tools/checks/behavior-check.js против поднятого site/ и устрани все найденные нарушения: полную высоту страницы на 375/768/1440 относительно fullHeight из manifest.json; корректное однократное открытие/закрытие лайтбокса для всех 12 пар миниатюр; отсутствие сетевого запроса/навигации/консольных ошибок при отправке контактной формы; воспроизведение анимаций баннера и каждого спота ровно один раз (без повтора при скролле вверх/вниз, возврате к началу, ресайзе); полную офлайн-работу без обращений к внешним хостам. Правь site/assets/js/*.js, site/index.html и при необходимости site/server.ps1 (Content-Type, path traversal), не нарушая уже достигнутое визуальное соответствие.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "site/assets/js/banner.js",
+    "site/assets/js/spotlight.js",
+    "site/assets/js/gallery-lightbox.js",
+    "site/assets/js/contact-form.js",
+    "site/assets/js/nav.js",
+    "site/assets/js/main.js",
+    "site/index.html",
+    "site/server.ps1"
+  ],
+  "dependsOn": [
+    "WA_9c57b180_04"
+  ],
+  "unitTestCmd": "{ node tools/checks/behavior-check.js || true; } && test -s tools/checks/behavior-report.json && node -e 'const fs=require(\"fs\");const r=JSON.parse(fs.readFileSync(\"tools/checks/behavior-report.json\",\"utf8\"));const v=\"summary.violationCount\".split(\".\").reduce((o,k)=>(o==null?o:o[k]),r);if(typeof v!==\"number\"||!isFinite(v)){console.error(\"замер не записал число по ключу summary.violationCount\");process.exit(1)}const p=\".loop-convergence.json\";const prev=fs.existsSync(p)?JSON.parse(fs.readFileSync(p,\"utf8\")):null;fs.writeFileSync(p,JSON.stringify({value:v}));if(prev&&typeof prev.value===\"number\"&&v>prev.value+1e-9){console.error(\"расхождение выросло: \"+prev.value+\" -> \"+v);process.exit(1)}console.log(\"замер зафиксирован: \"+v+(prev?\" (было \"+prev.value+\")\":\"\"));'",
+  "iterationTimeoutSec": 3600,
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}
