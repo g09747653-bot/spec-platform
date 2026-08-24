@@ -86,9 +86,9 @@ beforeEach(() => {
     .run();
   database
     .prepare(
-      `INSERT INTO tasks (task_id, milestone_id, title, description, tech_stack, files_to_edit,
-                          expected_artifacts, status)
-       VALUES ('task_1', 'ms_01', 'Задача', 'Сделать', 'generic', '[]', '[]', 'PENDING')`,
+      `INSERT INTO tasks (project_id, task_id, milestone_id, title, description, tech_stack,
+                          files_to_edit, expected_artifacts, status)
+       VALUES ('p1', 'task_1', 'ms_01', 'Задача', 'Сделать', 'generic', '[]', '[]', 'PENDING')`,
     )
     .run();
 });
@@ -282,20 +282,22 @@ describe('the blocking protocol (task 157)', () => {
 
   it('writes the file and blocks the task on disk and in the index', () => {
     writeTask();
-    raiseBlock(database, directory, details);
+    raiseBlock(database, 'p1', directory, details);
 
     expect(readTask().status).toBe('BLOCKED');
     expect(
-      database.prepare('SELECT status FROM tasks WHERE task_id = ?').get(TASK.taskId)?.status,
+      database
+        .prepare('SELECT status FROM tasks WHERE project_id = ? AND task_id = ?')
+        .get('p1', TASK.taskId)?.status,
     ).toBe('BLOCKED');
   });
 
   it('returns the task to PENDING within a second of the file being deleted', async () => {
     writeTask();
-    raiseBlock(database, directory, details);
+    raiseBlock(database, 'p1', directory, details);
 
     const unblocked: string[] = [];
-    const watcher = watchBlocks(database, directory, (taskId) => unblocked.push(taskId));
+    const watcher = watchBlocks(database, 'p1', directory, (taskId) => unblocked.push(taskId));
     await watcher.ready;
 
     const started = Date.now();
@@ -318,7 +320,7 @@ describe('the blocking protocol (task 157)', () => {
     writeFileSync(join(directory, 'README.md'), 'привет', 'utf8');
 
     const unblocked: string[] = [];
-    const watcher = watchBlocks(database, directory, (taskId) => unblocked.push(taskId));
+    const watcher = watchBlocks(database, 'p1', directory, (taskId) => unblocked.push(taskId));
     await watcher.ready;
 
     rmSync(join(directory, 'README.md'));
@@ -337,11 +339,11 @@ describe('the blocking protocol (task 157)', () => {
    */
   it('ensureBlockWatcher: снятие работает через реестр, второй вызов возвращает тот же вотчер', async () => {
     writeTask();
-    raiseBlock(database, directory, details);
+    raiseBlock(database, 'p1', directory, details);
 
     const unblocked: string[] = [];
-    const first = ensureBlockWatcher(database, directory, (taskId) => unblocked.push(taskId));
-    const second = ensureBlockWatcher(database, directory, () => undefined);
+    const first = ensureBlockWatcher(database, 'p1', directory, (taskId) => unblocked.push(taskId));
+    const second = ensureBlockWatcher(database, 'p1', directory, () => undefined);
     expect(second).toBe(first);
 
     await first.ready;

@@ -508,6 +508,135 @@ describe('красный CI: the whole orchestration stops (task 160)', () => {
   }, 30_000);
 });
 
+/**
+ * «Без нажатий»: конвейер переходит между вехами сам (А-38 п.1).
+ *
+ * Регрессия дословно на форму живого раунда А-37.1, где перехода не было четыре раза подряд. Диагноз
+ * из рапорта («не переходит между вехами») был симптомом; механизм нашёлся в ленте прогона:
+ * `allowed_warning` семидневного окна — предупреждение, при котором вызов РАЗРЕШЁН и состоялся, —
+ * читался как отказ и запирал новые старты на 216 162 секунды. Поэтому кейс не про планировщик: он
+ * гонит две вехи и подкладывает исполнителю ровно то предупреждение, что пришло живьём.
+ */
+describe('конвейер переходит между вехами сам (А-38 п.1)', () => {
+  /** Точная полезная нагрузка из ленты А-37.1 — 77% семидневного окна, вызов разрешён. */
+  const ALLOWED_WARNING = JSON.stringify({
+    type: 'rate_limit_event',
+    rate_limit_info: {
+      status: 'allowed_warning',
+      resetsAt: 1_787_734_800,
+      rateLimitType: 'seven_day',
+      utilization: 0.77,
+      isUsingOverage: false,
+      surpassedThreshold: 0.75,
+    },
+  });
+
+  it('вторая веха разблокируется завершением первой — ни одного внешнего хода', async () => {
+    writeTree([task('1', ['lib/a.js']), task('2', ['lib/b.js']), task('4', ['lib/d.js'], 'ms_02')]);
+
+    const engine = createFakeEngine({
+      onStart: ({ name }) => {
+        if (!name.startsWith('delivery-executor-')) return observerStubOutcome(name) ?? {};
+        writeReport(name.replace('delivery-executor-', ''));
+        return {};
+      },
+    });
+
+    const results = await driveProject(PROJECT, projectDirectory, {
+      database,
+      engine,
+      logger,
+      credential: { kind: 'ANTHROPIC_API_KEY', value: 'x' },
+      maxExecutors: 2,
+    });
+
+    expect(results, 'один вызов довёз обе вехи').toHaveLength(3);
+    expect(statuses()).toEqual({ '1': 'COMPLETED', '2': 'COMPLETED', '4': 'COMPLETED' });
+    expect(readBoard(database, PROJECT)?.status).toBe('COMPLETED');
+  }, 30_000);
+
+  it('предупреждение тарифа НЕ запирает старты: доска доходит до конца сама', async () => {
+    writeTree([task('1', ['lib/a.js']), task('4', ['lib/d.js'], 'ms_02')]);
+
+    const engine = createFakeEngine({
+      onStart: ({ name }) => {
+        if (!name.startsWith('delivery-executor-')) return observerStubOutcome(name) ?? {};
+        const taskId = name.replace('delivery-executor-', '');
+        writeReport(taskId);
+        /* Первая волна получает предупреждение — ровно как живьём, через секунды после старта. */
+        return { stdout: [ALLOWED_WARNING] };
+      },
+    });
+
+    const slept: number[] = [];
+    const results = await driveProject(PROJECT, projectDirectory, {
+      database,
+      engine,
+      logger,
+      credential: { kind: 'ANTHROPIC_API_KEY', value: 'x' },
+      maxExecutors: 1,
+      /* Часы стоят: если предупреждение всё же запрёт старты, кейс встанет насмерть, а не «подождёт». */
+      now: () => 1_000_000,
+      sleep: (ms: number) => {
+        slept.push(ms);
+        return Promise.resolve();
+      },
+    });
+
+    expect(results.map((entry) => entry.outcome)).toEqual(['COMPLETED', 'COMPLETED']);
+    expect(statuses()).toEqual({ '1': 'COMPLETED', '4': 'COMPLETED' });
+    expect(readBoard(database, PROJECT)?.status).toBe('COMPLETED');
+
+    const feed = logger.tail(PROJECT, 300).map((line) => line.message);
+    expect(
+      feed.some((line) => line.includes('Тариф предупреждает') && line.includes('seven_day')),
+      'предупреждение сказано — молчать о конце окна тоже нельзя',
+    ).toBe(true);
+    expect(
+      feed.some((line) => line.includes('Новые исполнители не запускаются')),
+      'но остановкой оно не объявлялось',
+    ).toBe(false);
+  }, 30_000);
+
+  it('второй проход по тому же проекту не заводится — водитель один', async () => {
+    writeTree([task('1', ['lib/a.js'])]);
+
+    const release = new Map<string, () => void>();
+    const engine = createFakeEngine({
+      onStart: ({ name }) => {
+        if (!name.startsWith('delivery-executor-')) return observerStubOutcome(name) ?? {};
+        const taskId = name.replace('delivery-executor-', '');
+        writeReport(taskId);
+        return {
+          until: new Promise<void>((resolve) => {
+            release.set(taskId, resolve);
+          }),
+        };
+      },
+    });
+
+    const deps = {
+      database,
+      engine,
+      logger,
+      credential: { kind: 'ANTHROPIC_API_KEY' as const, value: 'x' },
+      maxExecutors: 1,
+    };
+
+    const first = driveProject(PROJECT, projectDirectory, deps);
+    await waitFor(() => release.size === 1);
+
+    const second = await driveProject(PROJECT, projectDirectory, deps);
+    expect(second, 'нажатие поверх идущего конвейера не заводит второго').toEqual([]);
+
+    for (const stop of release.values()) stop();
+    expect(await first).toHaveLength(1);
+
+    const feed = logger.tail(PROJECT, 200).map((line) => line.message);
+    expect(feed.some((line) => line.includes('уже идёт в этом процессе'))).toBe(true);
+  }, 30_000);
+});
+
 /** Waits for a condition the pipeline reaches on its own, without a fixed sleep. */
 async function waitFor(condition: () => boolean, timeoutMs = 10_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;

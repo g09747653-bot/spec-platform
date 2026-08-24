@@ -119,7 +119,7 @@ export async function POST(request: Request): Promise<Response> {
         .prepare(
           `INSERT INTO milestones (milestone_id, project_id, title, depends_on, position, status)
            VALUES (?, ?, ?, ?, ?, 'PENDING')
-           ON CONFLICT (milestone_id) DO UPDATE SET title = excluded.title`,
+           ON CONFLICT (project_id, milestone_id) DO UPDATE SET title = excluded.title`,
         )
         .run(
           milestone.milestoneId,
@@ -132,12 +132,13 @@ export async function POST(request: Request): Promise<Response> {
       for (const [position, task] of milestone.tasks.entries()) {
         database
           .prepare(
-            `INSERT INTO tasks (task_id, milestone_id, title, description, tech_stack,
+            `INSERT INTO tasks (project_id, task_id, milestone_id, title, description, tech_stack,
                                 files_to_edit, expected_artifacts, depends_on, position, status)
-             VALUES (?, ?, ?, '', 'nodejs', '[]', '[]', ?, ?, 'PENDING')
-             ON CONFLICT (task_id) DO UPDATE SET title = excluded.title`,
+             VALUES (?, ?, ?, ?, '', 'nodejs', '[]', '[]', ?, ?, 'PENDING')
+             ON CONFLICT (project_id, task_id) DO UPDATE SET title = excluded.title`,
           )
           .run(
+            body.projectId,
             task.taskId,
             milestone.milestoneId,
             task.title,

@@ -108,9 +108,9 @@ function seedTask(overrides: Partial<HandoffTask> = {}): HandoffTask {
     .run();
   database
     .prepare(
-      `INSERT INTO tasks (task_id, milestone_id, title, description, tech_stack, files_to_edit,
-                          expected_artifacts, status)
-       VALUES (?, 'ms_01', ?, ?, 'generic', '[]', '[]', 'PENDING')`,
+      `INSERT INTO tasks (project_id, task_id, milestone_id, title, description, tech_stack,
+                          files_to_edit, expected_artifacts, status)
+       VALUES ('p1', ?, 'ms_01', ?, ?, 'generic', '[]', '[]', 'PENDING')`,
     )
     .run(task.taskId, task.title, task.description);
 

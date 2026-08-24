@@ -33,7 +33,9 @@ import {
 } from './schedule.ts';
 import {
   describeThrottle,
+  describeWindowWarning,
   IDLE_THROTTLE,
+  isWindowWarning,
   observeRateLimit,
   remainingMs,
   throttled,
@@ -225,7 +227,9 @@ export function recoverFromDisk(
       .map((task) => task.taskId);
 
     for (const taskId of resumed) {
-      database.prepare("UPDATE tasks SET status = 'PENDING' WHERE task_id = ?").run(taskId);
+      database
+        .prepare("UPDATE tasks SET status = 'PENDING' WHERE project_id = ? AND task_id = ?")
+        .run(tree.projectId, taskId);
       setStatusOnDisk(projectDirectory, taskId, 'PENDING');
     }
 
@@ -323,7 +327,8 @@ export function nextRunnableTask(
   const rows = database
     .prepare(
       `SELECT t.task_id, t.milestone_id
-       FROM tasks t JOIN milestones m ON m.milestone_id = t.milestone_id
+       FROM tasks t JOIN milestones m
+         ON m.project_id = t.project_id AND m.milestone_id = t.milestone_id
        WHERE m.project_id = ? AND t.status = 'PENDING'
        ORDER BY m.position, t.position, t.task_id`,
     )
@@ -340,8 +345,19 @@ export function nextRunnableTask(
   return null;
 }
 
-/** A milestone is complete when every task in it is. */
-export function refreshMilestoneStatus(database: DatabaseSync, milestoneId: string): void {
+/**
+ * A milestone is complete when every task in it is.
+ *
+ * Проект — параметр, а не находка (А-38 п.3). До составного ключа веха адресовалась одним именем, и
+ * счёт «сколько задач в вехе принято» шёл по всем проектам разом: у двух проектов с `ms_01` веха
+ * первого завершалась задачами второго. Это тот же класс, что D-324, и в самой чувствительной точке —
+ * ровно здесь решается, разблокирована ли следующая веха.
+ */
+export function refreshMilestoneStatus(
+  database: DatabaseSync,
+  projectId: string,
+  milestoneId: string,
+): void {
   const counts = z
     .object({ total: z.coerce.number(), done: z.coerce.number(), running: z.coerce.number() })
     .parse(
@@ -350,9 +366,9 @@ export function refreshMilestoneStatus(database: DatabaseSync, milestoneId: stri
           `SELECT count(*) AS total,
                   sum(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) AS done,
                   sum(CASE WHEN status IN ('IN_PROGRESS') THEN 1 ELSE 0 END) AS running
-           FROM tasks WHERE milestone_id = ?`,
+           FROM tasks WHERE project_id = ? AND milestone_id = ?`,
         )
-        .get(milestoneId) ?? { total: 0, done: 0, running: 0 },
+        .get(projectId, milestoneId) ?? { total: 0, done: 0, running: 0 },
     );
 
   const status =
@@ -363,21 +379,10 @@ export function refreshMilestoneStatus(database: DatabaseSync, milestoneId: stri
         : 'PENDING';
 
   database
-    .prepare('UPDATE milestones SET status = ? WHERE milestone_id = ?')
-    .run(status, milestoneId);
+    .prepare('UPDATE milestones SET status = ? WHERE project_id = ? AND milestone_id = ?')
+    .run(status, projectId, milestoneId);
 
-  const owner = database
-    .prepare('SELECT project_id FROM milestones WHERE milestone_id = ?')
-    .get(milestoneId);
-
-  if (owner !== undefined) {
-    eventBus().publish({
-      type: 'milestone-status',
-      projectId: z.object({ project_id: z.string() }).parse(owner).project_id,
-      milestoneId,
-      status,
-    });
-  }
+  eventBus().publish({ type: 'milestone-status', projectId, milestoneId, status });
 }
 
 /**
@@ -414,7 +419,8 @@ export function readPlan(database: DatabaseSync, projectId: string): SchedulePla
   const tasks = database
     .prepare(
       `SELECT t.task_id, t.milestone_id, t.status, t.position, t.files_to_edit, t.depends_on
-       FROM tasks t JOIN milestones m ON m.milestone_id = t.milestone_id
+       FROM tasks t JOIN milestones m
+         ON m.project_id = t.project_id AND m.milestone_id = t.milestone_id
        WHERE m.project_id = ? ORDER BY t.position, t.task_id`,
     )
     .all(projectId)
@@ -550,16 +556,56 @@ export async function driveProject(
    * another event or simply the clock passing the reset time, which nothing announces. One flag
    * covers both and cannot produce two «resumed» lines for one pause.
    */
-  const hold = { announced: false };
+  const hold = { announced: false, warned: false };
 
   const onRateLimit = (signal: RateLimitSignal) => {
     throttle = observeRateLimit(throttle, signal, now());
 
-    if (throttled(throttle, now()) && !hold.announced) {
-      hold.announced = true;
-      say(describeThrottle(throttle, now()), 'WARN');
+    if (throttled(throttle, now())) {
+      if (!hold.announced) {
+        hold.announced = true;
+        say(describeThrottle(throttle, now()), 'WARN');
+      }
+      return;
+    }
+
+    /*
+     * Предупреждение о конце окна — сказать один раз за прогон и НЕ держать (А-38 п.1).
+     *
+     * CLI повторяет его на каждом вызове, поэтому без флага лента получила бы одну и ту же строку
+     * десятками. Один раз — потому что содержание её не меняется, а изменится (окно кончится) —
+     * придёт уже отказ, и он говорится своей строкой.
+     */
+    if (isWindowWarning(throttle.status) && !hold.warned) {
+      hold.warned = true;
+      say(describeWindowWarning(throttle), 'WARN');
     }
   };
+
+  /*
+   * **Один проект — один водитель** (А-38 п.1).
+   *
+   * Раунд А-37.1 показал, чем это кончается без правила: конвейер стоял на ложном тарифе, оператор
+   * четырежды жал «запустить», и каждое нажатие заводило ВТОРОЙ проход по той же доске. Карта
+   * живых конвейеров ключуется проектом, поэтому второй молча вытеснял первого из неё: «Возобновить»
+   * после этого разговаривал с новым проходом, а старый оставался спать, держа свои итерации. Два
+   * планировщика над одной доской — это и двойной старт одной задачи, и заморозка, которую видит не
+   * тот, кто её ждёт.
+   *
+   * Отказ здесь, а не в маршруте, потому что маршрутов два (`start-loop` и `retry`) и правило одно.
+   * Он не ошибка: разблокированные задачи подхватывает тот проход, что уже идёт, — и строка ленты
+   * говорит человеку ровно это.
+   */
+  const already = livePipelines().get(projectId);
+  if (already !== undefined) {
+    const inFlight = already.running();
+    say(
+      `Конвейер этого проекта уже идёт в этом процессе (в работе задач ${String(inFlight.length)}` +
+        `${inFlight.length === 0 ? '' : `: ${inFlight.join(', ')}`}). ` +
+        'Второй проход не запускается: разблокированные задачи подхватит идущий.',
+    );
+    return results;
+  }
 
   const pipeline: LivePipeline = { projectDirectory, running: () => [...running.keys()] };
   livePipelines().set(projectId, pipeline);
@@ -570,7 +616,7 @@ export async function driveProject(
       for (const settled of done.splice(0, done.length)) {
         running.delete(settled.taskId);
         results.push(settled.result);
-        refreshMilestoneStatus(database, settled.milestoneId);
+        refreshMilestoneStatus(database, projectId, settled.milestoneId);
 
         if (settled.result.outcome === 'FAILED') await freeze(settled);
 
@@ -687,15 +733,42 @@ export async function driveProject(
           verificationLine(findSelfCheckReport(projectDirectory)),
       );
     } else {
+      /*
+       * **Проход не заканчивается там, где очередь не пуста — а если закончился, он называет чем**
+       * (А-38 п.1).
+       *
+       * Причин уйти при непустой очереди ровно три, и каждая — решение, а не молчание: заблокированная
+       * задача ждёт человека, замороженный конвейер ждёт «Возобновить», потолок прохода — заказанный
+       * предел вызова. Четвёртой быть не должно; если планировщик всё же отдаёт задачу, которую
+       * никто не взял, это дефект управляющего потока, и он обязан быть громким, а не выглядеть
+       * тихим финалом. Ровно такой тихий финал стоил раунду А-37.1 четырёх внешних ходов.
+       */
+      const stillRunnable = schedule({ plan, running: [], limit }).start.length;
+      const ceiling = started >= maxCycles;
+
+      const named = blocked || isFrozen(projectDirectory) || ceiling || count('FAILED') > 0;
+      const unnamed = !named && stillRunnable > 0;
+
+      const why = blocked
+        ? 'Заблокированная задача ждёт человека — снимите блокировку и запустите конвейер снова.'
+        : count('FAILED') > 0
+          ? 'Красные задачи держат свои вехи — «Возобновить» отправит их на повторный прогон.'
+          : isFrozen(projectDirectory)
+            ? 'Конвейер заморожен — продолжение только «Возобновить».'
+            : ceiling
+              ? `Достигнут потолок прохода: запущено итераций ${String(started)} из ${String(maxCycles)}. ` +
+                'Это заказанный предел вызова, а не конец плана — запустите конвейер снова.'
+              : unnamed
+                ? `ДЕФЕКТ УПРАВЛЯЮЩЕГО ПОТОКА: задач, готовых идти прямо сейчас, ${String(stillRunnable)}, ` +
+                  'а проход завершился. Останавливаться было не на чем.'
+                : 'Запускать больше нечего.';
+
       say(
         `Конвейер остановился: принято ${String(count('COMPLETED'))} из ` +
           `${String(plan.tasks.length)}; красных ${String(count('FAILED'))}, ` +
           `заблокированных ${String(count('BLOCKED'))}, приостановленных ${String(count('PAUSED'))}, ` +
-          `ожидают ${String(count('PENDING'))}. ` +
-          (count('FAILED') > 0
-            ? 'Красные задачи держат свои вехи — «Возобновить» отправит их на повторный прогон.'
-            : 'Запускать больше нечего.'),
-        count('FAILED') > 0 ? 'WARN' : 'INFO',
+          `ожидают ${String(count('PENDING'))}. ${why}`,
+        unnamed ? 'ERROR' : count('FAILED') > 0 ? 'WARN' : 'INFO',
       );
     }
 

@@ -127,7 +127,7 @@ export function readBoard(database: DatabaseSync, projectId: string): Board | nu
     .prepare(
       `SELECT t.task_id, t.milestone_id, t.title, t.tech_stack, t.depends_on, t.position, t.status
        FROM tasks t
-       JOIN milestones m ON m.milestone_id = t.milestone_id
+       JOIN milestones m ON m.project_id = t.project_id AND m.milestone_id = t.milestone_id
        WHERE m.project_id = ?
        ORDER BY t.position, t.task_id`,
     )

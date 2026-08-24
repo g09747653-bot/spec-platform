@@ -46,9 +46,9 @@ describe('the dashboard board (task 153)', () => {
     milestone.run('ms_01', 'p1', 'Каркас', '[]', 0, 'IN_PROGRESS');
 
     const task = database.prepare(
-      `INSERT INTO tasks (task_id, milestone_id, title, description, tech_stack, files_to_edit,
-                          expected_artifacts, depends_on, position, status)
-       VALUES (?, ?, ?, '', 'nodejs', '[]', '[]', ?, ?, ?)`,
+      `INSERT INTO tasks (project_id, task_id, milestone_id, title, description, tech_stack,
+                          files_to_edit, expected_artifacts, depends_on, position, status)
+       VALUES ('p1', ?, ?, ?, '', 'nodejs', '[]', '[]', ?, ?, ?)`,
     );
     task.run('task_2', 'ms_01', 'Схема базы', '["task_1"]', 1, 'PENDING');
     task.run('task_1', 'ms_01', 'Инициализация', '[]', 0, 'COMPLETED');

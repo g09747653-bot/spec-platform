@@ -128,7 +128,10 @@ function setStatus(
     );
   }
 
-  database.prepare('UPDATE tasks SET status = ? WHERE task_id = ?').run(status, taskId);
+  /* Пара `(project_id, task_id)` — адрес строки после А-38 п.3; одного имени задачи мало. */
+  database
+    .prepare('UPDATE tasks SET status = ? WHERE project_id = ? AND task_id = ?')
+    .run(status, projectId, taskId);
   eventBus().publish({ type: 'task-status', projectId, taskId, status });
 }
 

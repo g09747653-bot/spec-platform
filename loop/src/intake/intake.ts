@@ -534,18 +534,15 @@ function pruneVanishedTasks(
   const alive = new Set(tasks.map((task) => task.taskId));
 
   const rows = database
-    .prepare(
-      `SELECT t.task_id AS taskId FROM tasks t
-         JOIN milestones m ON m.milestone_id = t.milestone_id
-        WHERE m.project_id = ?`,
-    )
+    .prepare('SELECT task_id AS taskId FROM tasks WHERE project_id = ?')
     .all(projectId) as { taskId: string }[];
 
   const vanished = rows.map((row) => row.taskId).filter((taskId) => !alive.has(taskId));
   if (vanished.length === 0) return 0;
 
-  const remove = database.prepare('DELETE FROM tasks WHERE task_id = ?');
-  for (const taskId of vanished) remove.run(taskId);
+  /* Пара `(project_id, task_id)` — иначе чистка своего плана унесла бы одноимённую задачу соседа. */
+  const remove = database.prepare('DELETE FROM tasks WHERE project_id = ? AND task_id = ?');
+  for (const taskId of vanished) remove.run(projectId, taskId);
 
   return vanished.length;
 }
