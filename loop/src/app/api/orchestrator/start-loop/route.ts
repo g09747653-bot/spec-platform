@@ -190,7 +190,7 @@ export async function POST(request: Request): Promise<Response> {
    * becomes drivable, so «удалите файл — контур увидит» is true from the first block on. Idempotent
    * across re-intakes of the same directory.
    */
-  ensureBlockWatcher(database, directory, (taskId) => {
+  ensureBlockWatcher(database, intake.projectId, directory, (taskId) => {
     logger.write({
       projectId: intake.projectId,
       taskId,

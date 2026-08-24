@@ -54,7 +54,7 @@ export async function register(): Promise<void> {
        * promises «контур увидит удаление» — this is where the seeing is wired in. The unblock
        * repairs the status; restarting the pipeline stays the operator's start-loop.
        */
-      ensureBlockWatcher(database, project.projectDirectory, (taskId) => {
+      ensureBlockWatcher(database, project.projectId, project.projectDirectory, (taskId) => {
         logger.write({
           projectId: project.projectId,
           taskId,

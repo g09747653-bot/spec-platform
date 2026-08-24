@@ -686,6 +686,10 @@ describe('класс задумки решает, какой план писат
       { database, logger: createLogger(database), chain, researchChain: null },
     );
 
+  /** Область идентификаторов — хвост projectId гейтового бандла (D-324, D-325). */
+  const SCOPE = '6325dcaf';
+  const WA = (n: number) => `WA_${SCOPE}_0${String(n)}`;
+
   const COHERENT = '{"artifactClass":"coherent-artifact","reason":"сайт"}';
   const SYSTEM = '{"artifactClass":"system","reason":"сервис"}';
 
@@ -735,7 +739,7 @@ describe('класс задумки решает, какой план писат
 
     expect(result.artifactClass).toBe('coherent-artifact');
     expect(result.tasks.length).toBeLessThanOrEqual(WHOLE_ARTIFACT_TASK_LIMIT);
-    expect(result.tasks.map((task) => task.taskId)).toEqual(['WA01', 'WA02', 'WA03']);
+    expect(result.tasks.map((task) => task.taskId)).toEqual([WA(1), WA(2), WA(3)]);
     /* Форма, которую суд А-35 бракует у нарезки, здесь проходит: план написан под класс. */
     expect(judgeWholeArtifactPlan(result.tasks)).toEqual([]);
   });
@@ -760,8 +764,12 @@ describe('класс задумки решает, какой план писат
       name.startsWith('task_'),
     );
 
-    expect(onDisk.sort()).toEqual(['task_WA01.json', 'task_WA02.json', 'task_WA03.json']);
-    expect(indexedTaskIds()).toEqual(['WA01', 'WA02', 'WA03']);
+    expect(onDisk.sort()).toEqual([
+      `task_${WA(1)}.json`,
+      `task_${WA(2)}.json`,
+      `task_${WA(3)}.json`,
+    ]);
+    expect(indexedTaskIds()).toEqual([WA(1), WA(2), WA(3)]);
   });
 
   it('система: план по-прежнему режется по бандлу — те же 16 задач, теми же фазами', async () => {
@@ -800,6 +808,36 @@ describe('класс задумки решает, какой план писат
     expect(second.artifactClass).toBe('coherent-artifact');
     expect(second.tasks).toHaveLength(16);
     expect(second.keptFromDisk).toBe(16);
+  });
+
+  it('возобновление по цельному плану не режет бандл и не спрашивает модель (D-326)', async () => {
+    seedFile('Сделай сайт — графическую копию, две страницы, статикой.');
+    const first = await intake(scripted(COHERENT, WHOLE_PLAN));
+    expect(first.tasks.map((task) => task.taskId)).toEqual([WA(1), WA(2), WA(3)]);
+
+    /* Второй заход: считаем КАЖДЫЙ вопрос к модели. */
+    let asked = 0;
+    const counting: Chain = {
+      providers: [],
+      generate: () => {
+        asked += 1;
+        return Promise.resolve({ text: COHERENT, provider: 'claude-cli' });
+      },
+    };
+
+    const second = await intake(counting);
+
+    /* Спрошен ровно класс задумки — и ничего больше: задания взяты с диска дословно. */
+    expect(asked).toBe(1);
+    expect(second.keptFromDisk).toBe(3);
+    expect(second.tasks.map((task) => task.taskId)).toEqual([WA(1), WA(2), WA(3)]);
+
+    /* И ни одной задачи бандла рядом с цельным планом — ровно та нарезка, против которой класс. */
+    expect(second.tasks).toHaveLength(3);
+    const onDisk = readdirSync(join(directory, 'project', 'handoff', 'tasks')).filter((name) =>
+      name.startsWith('task_'),
+    );
+    expect(onDisk).toHaveLength(3);
   });
 
   it('перегенерация уносит вердикт прошлого плана, но не его пробелы', async () => {
@@ -852,6 +890,6 @@ describe('класс задумки решает, какой план писат
     expect(regenerated.regenerated).toBe(true);
     expect(regenerated.tasks).toHaveLength(3);
     /* Сорок пять строк прошлого плана не остаются исполнимыми задачами без файлов на диске. */
-    expect(indexedTaskIds()).toEqual(['WA01', 'WA02', 'WA03']);
+    expect(indexedTaskIds()).toEqual([WA(1), WA(2), WA(3)]);
   });
 });

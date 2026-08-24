@@ -1,0 +1,198 @@
+{
+  "reference": {
+    "name": "Story",
+    "author": "HTML5 UP (@ajlkn)",
+    "url": "https://html5up.net/story",
+    "licence": "Creative Commons Attribution 3.0 Unported (CC BY 3.0)",
+    "licenceUrl": "http://creativecommons.org/licenses/by/3.0/",
+    "licenceDeclaredIn": "LICENSE.txt дистрибутива и https://html5up.net/license",
+    "page": "index.html",
+    "note": "Демо-изображения — Unsplash (CC0), иконки — Font Awesome."
+  },
+  "capturedAt": "2026-08-23T17:56:30.636Z",
+  "breakpoints": [
+    {
+      "width": 375,
+      "viewportHeight": 812
+    },
+    {
+      "width": 768,
+      "viewportHeight": 1024
+    },
+    {
+      "width": 1440,
+      "viewportHeight": 900
+    }
+  ],
+  "frames": [
+    {
+      "frame": "index-375-scroll0.png",
+      "width": 375,
+      "scrollY": 0,
+      "viewportHeight": 812,
+      "fullHeight": 7476
+    },
+    {
+      "frame": "index-375-scroll812.png",
+      "width": 375,
+      "scrollY": 812,
+      "viewportHeight": 812,
+      "fullHeight": 7476
+    },
+    {
+      "frame": "index-375-scroll1624.png",
+      "width": 375,
+      "scrollY": 1624,
+      "viewportHeight": 812,
+      "fullHeight": 7476
+    },
+    {
+      "frame": "index-375-scroll2436.png",
+      "width": 375,
+      "scrollY": 2436,
+      "viewportHeight": 812,
+      "fullHeight": 7476
+    },
+    {
+      "frame": "index-375-scroll3248.png",
+      "width": 375,
+      "scrollY": 3248,
+      "viewportHeight": 812,
+      "fullHeight": 7476
+    },
+    {
+      "frame": "index-375-scroll4060.png",
+      "width": 375,
+      "scrollY": 4060,
+      "viewportHeight": 812,
+      "fullHeight": 7476
+    },
+    {
+      "frame": "index-375-scroll4872.png",
+      "width": 375,
+      "scrollY": 4872,
+      "viewportHeight": 812,
+      "fullHeight": 7476
+    },
+    {
+      "frame": "index-375-scroll5684.png",
+      "width": 375,
+      "scrollY": 5684,
+      "viewportHeight": 812,
+      "fullHeight": 7476
+    },
+    {
+      "frame": "index-375-scroll6496.png",
+      "width": 375,
+      "scrollY": 6496,
+      "viewportHeight": 812,
+      "fullHeight": 7476
+    },
+    {
+      "frame": "index-375-scroll7308.png",
+      "width": 375,
+      "scrollY": 7308,
+      "viewportHeight": 812,
+      "fullHeight": 7476
+    },
+    {
+      "frame": "index-768-scroll0.png",
+      "width": 768,
+      "scrollY": 0,
+      "viewportHeight": 1024,
+      "fullHeight": 6333
+    },
+    {
+      "frame": "index-768-scroll1024.png",
+      "width": 768,
+      "scrollY": 1024,
+      "viewportHeight": 1024,
+      "fullHeight": 6333
+    },
+    {
+      "frame": "index-768-scroll2048.png",
+      "width": 768,
+      "scrollY": 2048,
+      "viewportHeight": 1024,
+      "fullHeight": 6333
+    },
+    {
+      "frame": "index-768-scroll3072.png",
+      "width": 768,
+      "scrollY": 3072,
+      "viewportHeight": 1024,
+      "fullHeight": 6333
+    },
+    {
+      "frame": "index-768-scroll4096.png",
+      "width": 768,
+      "scrollY": 4096,
+      "viewportHeight": 1024,
+      "fullHeight": 6333
+    },
+    {
+      "frame": "index-768-scroll5120.png",
+      "width": 768,
+      "scrollY": 5120,
+      "viewportHeight": 1024,
+      "fullHeight": 6333
+    },
+    {
+      "frame": "index-768-scroll6144.png",
+      "width": 768,
+      "scrollY": 6144,
+      "viewportHeight": 1024,
+      "fullHeight": 6333
+    },
+    {
+      "frame": "index-1440-scroll0.png",
+      "width": 1440,
+      "scrollY": 0,
+      "viewportHeight": 900,
+      "fullHeight": 5832
+    },
+    {
+      "frame": "index-1440-scroll900.png",
+      "width": 1440,
+      "scrollY": 900,
+      "viewportHeight": 900,
+      "fullHeight": 5832
+    },
+    {
+      "frame": "index-1440-scroll1800.png",
+      "width": 1440,
+      "scrollY": 1800,
+      "viewportHeight": 900,
+      "fullHeight": 5832
+    },
+    {
+      "frame": "index-1440-scroll2700.png",
+      "width": 1440,
+      "scrollY": 2700,
+      "viewportHeight": 900,
+      "fullHeight": 5832
+    },
+    {
+      "frame": "index-1440-scroll3600.png",
+      "width": 1440,
+      "scrollY": 3600,
+      "viewportHeight": 900,
+      "fullHeight": 5832
+    },
+    {
+      "frame": "index-1440-scroll4500.png",
+      "width": 1440,
+      "scrollY": 4500,
+      "viewportHeight": 900,
+      "fullHeight": 5832
+    },
+    {
+      "frame": "index-1440-scroll5400.png",
+      "width": 1440,
+      "scrollY": 5400,
+      "viewportHeight": 900,
+      "fullHeight": 5832
+    }
+  ],
+  "frameCount": 24
+}

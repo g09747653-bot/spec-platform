@@ -1,0 +1,23 @@
+{
+  "taskId": "WA_9c57b180_04",
+  "milestoneId": "ms_9c57b180_03",
+  "title": "Сверь вёрстку и стили с эталонными кадрами на 375/768/1440 px и устрани попиксельные расхождения",
+  "description": "Запусти site/start.cmd (или эквивалент подъёма site/ на localhost:8080), прогоняй tools/visual-diff/compare.js по manifest.json на всех 24 сценариях, сравнивай с reference/*.png для header/nav, баннера, трёх спотов, галереи, сетки карточек и подвала на всех трёх ширинах. Правь site/index.html и CSS-файлы site/assets/css/*.css так, чтобы устранить найденные расхождения (отступы, размеры, типографика, чередование ориентации спотов, сетка галереи и карточек), сохраняя единую связность стилей и сетки по всему сайту. Также убедись, что на промежуточных ширинах между 375, 768 и 1440 px нет наложений, обрезаний и непредусмотренного горизонтального скролла.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "site/index.html",
+    "site/assets/css/main.css",
+    "site/assets/css/banner.css",
+    "site/assets/css/spotlights.css",
+    "site/assets/css/gallery.css",
+    "site/assets/css/elements.css",
+    "site/assets/css/footer.css"
+  ],
+  "dependsOn": [
+    "WA_9c57b180_03"
+  ],
+  "unitTestCmd": "{ node tools/visual-diff/compare.js || true; } && test -s tools/visual-diff/report.json && node -e 'const fs=require(\"fs\");const r=JSON.parse(fs.readFileSync(\"tools/visual-diff/report.json\",\"utf8\"));const v=\"summary.diffPercent\".split(\".\").reduce((o,k)=>(o==null?o:o[k]),r);if(typeof v!==\"number\"||!isFinite(v)){console.error(\"замер не записал число по ключу summary.diffPercent\");process.exit(1)}const p=\".loop-convergence.json\";const prev=fs.existsSync(p)?JSON.parse(fs.readFileSync(p,\"utf8\")):null;fs.writeFileSync(p,JSON.stringify({value:v}));if(prev&&typeof prev.value===\"number\"&&v>prev.value+1e-9){console.error(\"расхождение выросло: \"+prev.value+\" -> \"+v);process.exit(1)}console.log(\"замер зафиксирован: \"+v+(prev?\" (было \"+prev.value+\")\":\"\"));'",
+  "iterationTimeoutSec": 3600,
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

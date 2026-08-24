@@ -209,7 +209,9 @@ export async function freezePipeline(
 
   for (const task of request.inFlight) {
     setTaskStatusOnDisk(request.projectDirectory, task.taskId, 'PAUSED');
-    database.prepare('UPDATE tasks SET status = ? WHERE task_id = ?').run('PAUSED', task.taskId);
+    database
+      .prepare('UPDATE tasks SET status = ? WHERE project_id = ? AND task_id = ?')
+      .run('PAUSED', request.projectId, task.taskId);
     eventBus().publish({
       type: 'task-status',
       projectId: request.projectId,
@@ -281,7 +283,9 @@ export async function liftFreeze(
     const status: HandoffTaskStatus = live ? (task.previousStatus as HandoffTaskStatus) : 'PENDING';
 
     setTaskStatusOnDisk(input.projectDirectory, task.taskId, status);
-    database.prepare('UPDATE tasks SET status = ? WHERE task_id = ?').run(status, task.taskId);
+    database
+      .prepare('UPDATE tasks SET status = ? WHERE project_id = ? AND task_id = ?')
+      .run(status, input.projectId, task.taskId);
     eventBus().publish({
       type: 'task-status',
       projectId: input.projectId,
@@ -314,7 +318,9 @@ export async function liftFreeze(
     if (resumed.includes(taskId)) continue;
 
     setTaskStatusOnDisk(input.projectDirectory, taskId, 'PENDING');
-    database.prepare('UPDATE tasks SET status = ? WHERE task_id = ?').run('PENDING', taskId);
+    database
+      .prepare('UPDATE tasks SET status = ? WHERE project_id = ? AND task_id = ?')
+      .run('PENDING', input.projectId, taskId);
     eventBus().publish({
       type: 'task-status',
       projectId: input.projectId,
@@ -348,10 +354,7 @@ function tasksInStatus(
   status: string,
 ): { taskId: string; previousStatus: string }[] {
   return database
-    .prepare(
-      `SELECT t.task_id FROM tasks t JOIN milestones m ON m.milestone_id = t.milestone_id
-       WHERE m.project_id = ? AND t.status = ?`,
-    )
+    .prepare('SELECT task_id FROM tasks WHERE project_id = ? AND status = ?')
     .all(projectId, status)
     .map((row) => ({
       taskId: z.object({ task_id: z.string() }).parse(row).task_id,

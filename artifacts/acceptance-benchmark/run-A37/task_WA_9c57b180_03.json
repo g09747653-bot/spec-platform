@@ -1,0 +1,34 @@
+{
+  "taskId": "WA_9c57b180_03",
+  "milestoneId": "ms_9c57b180_02",
+  "title": "Собери сайт целиком: разметка, стили, поведение, локальный сервер запуска",
+  "description": "Построй весь артефакт site/ как единое связное целое по эталонным кадрам reference/ (375/768/1440 px) и manifest.json, используя материалы, подготовленные материальной задачей (site/assets/media/, site/gallery-pairs.json, site/assets/css/vendor/font-awesome.css). 1. Размести в site/index.html по порядку: header/nav с якорными ссылками на секции (и переключателем мобильного меню, если это подтверждается кадрами на 375 px); полноэкранный баннер (изображение справа, контент слева); три спота с чередующейся ориентацией справа/слева/справа и spotlight01-03.jpg; галерею из 12 пар миниатюра/полноразмерное по site/gallery-pairs.json; сетку из 12 карточек-элементов (pic01-03.jpg и/или иконки Font Awesome по кадрам); подвал с контактной формой и ссылками (href=\"#\" там, где кадр не задаёт цели). 2. Напиши CSS одним связным набором токенов/сетки/типографики под брейкпоинты 375/768/1440: site/assets/css/main.css (reset, типографика, контейнеры, сетка, header/nav), site/assets/css/banner.css, site/assets/css/spotlights.css, site/assets/css/gallery.css (включая оверлей-лайтбокс), site/assets/css/elements.css (карточки), site/assets/css/footer.css. 3. Реализуй поведенческие модули vanilla JS: site/assets/js/banner.js (одноразовый fade-in/выезд через transform/opacity, завершение по transitionend, диспатч CustomEvent('story:banner-revealed')); site/assets/js/spotlight.js (IntersectionObserver threshold:0, unobserve() после первого пересечения, диспатч CustomEvent('story:spotlight-revealed',{detail:{index}}) по transitionend); site/assets/js/gallery-lightbox.js (оверлей через document.createElement, src/alt свойствами, закрытие по клику вне/кнопке/Escape); site/assets/js/contact-form.js (submit с preventDefault, без сети/навигации, addEventListener, без eval и inline-атрибутов); site/assets/js/nav.js (мобильное меню, addEventListener, синхронизация aria-expanded — только если меню предусмотрено разметкой); site/assets/js/main.js (точка входа, инициализация модулей в фиксированном порядке banner→spotlight→gallery-lightbox→contact-form→nav, установка class=\"is-ready\" на body по готовности всех видимых на момент событий). 4. Подключи все CSS/JS (включая vendor font-awesome.css) в index.html прямыми тегами link/script в правильном порядке. 5. Реализуй site/server.ps1 (System.Net.HttpListener на http://localhost:8080/, сопоставление Content-Type по расширению, защита от path traversal, при занятом порте — сообщение с номером порта и инструкцией и ненулевой код завершения без смены порта) и site/start.cmd (запуск server.ps1 и открытие http://localhost:8080/ в браузере по умолчанию). 6. Напиши site/README.md со строкой атрибуции: оригинал «Story by HTML5 UP» (html5up.net/story), лицензия CC BY 3.0, производная и изменённая работа.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "site/assets/css/vendor/font-awesome.css",
+    "site/index.html",
+    "site/assets/css/main.css",
+    "site/assets/css/banner.css",
+    "site/assets/css/spotlights.css",
+    "site/assets/css/gallery.css",
+    "site/assets/css/elements.css",
+    "site/assets/css/footer.css",
+    "site/assets/js/main.js",
+    "site/assets/js/banner.js",
+    "site/assets/js/spotlight.js",
+    "site/assets/js/gallery-lightbox.js",
+    "site/assets/js/contact-form.js",
+    "site/assets/js/nav.js",
+    "site/server.ps1",
+    "site/start.cmd",
+    "site/README.md"
+  ],
+  "dependsOn": [
+    "WA_9c57b180_01",
+    "WA_9c57b180_02"
+  ],
+  "unitTestCmd": "test -f site/index.html && test -f site/server.ps1 && test -f site/start.cmd && test -f site/README.md && for f in site/assets/css/*.css; do test -f $f; done && for f in site/assets/js/*.js; do node --check $f; done",
+  "iterationTimeoutSec": 7200,
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

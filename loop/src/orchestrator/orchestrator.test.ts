@@ -207,7 +207,7 @@ describe('choosing what runs next (task 158)', () => {
 
   it('moves on once the milestone before it is complete', () => {
     seed([task('1.1', 'ms_01', 'COMPLETED'), task('2.1', 'ms_02', 'PENDING')]);
-    refreshMilestoneStatus(database, 'ms_01');
+    refreshMilestoneStatus(database, 'toy', 'ms_01');
 
     expect(nextRunnableTask(database, 'toy')).toEqual({ taskId: '2.1', milestoneId: 'ms_02' });
   });
@@ -221,13 +221,15 @@ describe('choosing what runs next (task 158)', () => {
   it('marks a milestone complete only when every task in it is', () => {
     seed([task('1.1', 'ms_01', 'COMPLETED'), task('1.2', 'ms_01', 'PENDING')]);
 
-    refreshMilestoneStatus(database, 'ms_01');
+    refreshMilestoneStatus(database, 'toy', 'ms_01');
     expect(
       database.prepare("SELECT status FROM milestones WHERE milestone_id = 'ms_01'").get()?.status,
     ).toBe('IN_PROGRESS');
 
-    database.prepare("UPDATE tasks SET status = 'COMPLETED' WHERE task_id = '1.2'").run();
-    refreshMilestoneStatus(database, 'ms_01');
+    database
+      .prepare("UPDATE tasks SET status = 'COMPLETED' WHERE project_id = 'toy' AND task_id = '1.2'")
+      .run();
+    refreshMilestoneStatus(database, 'toy', 'ms_01');
     expect(
       database.prepare("SELECT status FROM milestones WHERE milestone_id = 'ms_01'").get()?.status,
     ).toBe('COMPLETED');

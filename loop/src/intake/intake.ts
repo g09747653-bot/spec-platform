@@ -260,9 +260,10 @@ export async function intakeBundle(
       },
       chain,
       knownArtifactFiles: surveyed.survey.tree,
+      scope: milestoneScope(projectId),
     });
 
-    slice = sliceMilestones(plan.tasks);
+    slice = sliceMilestones(plan.tasks, milestoneScope(projectId));
     say(describeSlice(slice), slice.ok ? 'INFO' : 'ERROR');
     if (!slice.ok) throw new IntakeRefused(describeSlice(slice));
 
@@ -318,17 +319,44 @@ export async function intakeBundle(
         'WARN',
       );
     }
-  } else {
-    if (artifactClass === 'coherent-artifact' && existingTree > 0) {
-      say(
-        `Класс задумки — цельный артефакт, но на диске уже лежат задания (${String(existingTree)}): ` +
-          'план не переписывается — по нему исполнитель мог начать работу. ' +
-          'Замена плана — явная команда оператора (regenerate).',
-        'WARN',
-      );
+  } else if (artifactClass === 'coherent-artifact' && existingTree > 0) {
+    /*
+     * **Возобновление цельного плана: план на диске И ЕСТЬ план** (D-326, находка живого прогона).
+     *
+     * Прежде здесь стояло только предупреждение, а дальше шла общая ветка — и она резала БАНДЛ,
+     * дописывая сорок шесть заданий нарезки рядом с шестью цельными. Сторож защищал цельный план
+     * от перезаписи и не защищал от ДОБАВЛЕНИЯ поверх него ровно той нарезки, против которой класс
+     * заведён; каждое такое задание к тому же стоило модельного вызова.
+     *
+     * Возобновление не спрашивает модель ни о чём: задания читаются с диска дословно, вехи
+     * пересчитываются кодом из их же зависимостей. Это и есть «диск — источник правды», доведённое
+     * до конца: перезаход по готовому плану обязан быть дешёвым и не иметь мнения.
+     */
+    const onDisk = readPlannedTree(request.projectDirectory);
+
+    slice = sliceMilestones(onDisk, milestoneScope(projectId));
+    say(describeSlice(slice), slice.ok ? 'INFO' : 'ERROR');
+    if (!slice.ok) throw new IntakeRefused(describeSlice(slice));
+
+    const milestoneOf = milestoneIndex(slice.milestones);
+
+    for (const task of onDisk) {
+      const milestone = milestoneOf.get(task.taskId);
+      if (milestone === undefined) {
+        throw new IntakeRefused(
+          `задача ${task.taskId} не попала ни в одну веху — это дефект нарезки`,
+        );
+      }
+      tasks.push(task);
     }
 
-    slice = sliceMilestones(bundle.tasks);
+    keptFromDisk = onDisk.length;
+    say(
+      `Возобновление по цельному плану с диска: заданий ${String(onDisk.length)}, ` +
+        'модель не спрошена ни разу — бандл при живом цельном плане не режется.',
+    );
+  } else {
+    slice = sliceMilestones(bundle.tasks, milestoneScope(projectId));
     say(describeSlice(slice), slice.ok ? 'INFO' : 'ERROR');
     if (!slice.ok) throw new IntakeRefused(describeSlice(slice));
 
@@ -431,6 +459,45 @@ export async function intakeBundle(
   };
 }
 
+/**
+ * Область идентификаторов вех — короткий хвост проекта (D-324).
+ *
+ * Короткий намеренно: идентификатор вехи читает человек в ленте и в доске, и `ms_9c57b180_01`
+ * ещё читаемо, а полный UUID — уже нет. Восьми знаков хватает: столкнуться должны два проекта
+ * одного контура, а не два проекта на свете.
+ */
+function milestoneScope(projectId: string): string {
+  return projectId.replace(/[^A-Za-z0-9]/g, '').slice(0, 8);
+}
+
+/**
+ * Задания, уже лежащие на диске, дословно (D-326).
+ *
+ * Нечитаемый файл — не «пустая задача», а названный отказ: молча потерять задание значит вернуть
+ * конвейеру план, которого никто не писал.
+ */
+function readPlannedTree(projectDirectory: string): HandoffTask[] {
+  const tasksDirectory = join(projectDirectory, HANDOFF.tasks);
+  const names = readdirSync(tasksDirectory)
+    .filter((name) => name.startsWith('task_') && name.endsWith('.json'))
+    .sort();
+
+  const tasks: HandoffTask[] = [];
+
+  for (const name of names) {
+    const task = readTaskFile(join(tasksDirectory, name));
+    if (task === null) {
+      throw new IntakeRefused(
+        `задание ${name} на диске не читается — возобновлять по нему нельзя; ` +
+          'перепишите план явной командой оператора (regenerate)',
+      );
+    }
+    tasks.push(task);
+  }
+
+  return tasks;
+}
+
 /** Заданий на диске сейчас — по ним решается, переписывать ли план (А-36 п.1). */
 function countAssignments(projectDirectory: string): number {
   const tasksDirectory = join(projectDirectory, HANDOFF.tasks);
@@ -467,18 +534,15 @@ function pruneVanishedTasks(
   const alive = new Set(tasks.map((task) => task.taskId));
 
   const rows = database
-    .prepare(
-      `SELECT t.task_id AS taskId FROM tasks t
-         JOIN milestones m ON m.milestone_id = t.milestone_id
-        WHERE m.project_id = ?`,
-    )
+    .prepare('SELECT task_id AS taskId FROM tasks WHERE project_id = ?')
     .all(projectId) as { taskId: string }[];
 
   const vanished = rows.map((row) => row.taskId).filter((taskId) => !alive.has(taskId));
   if (vanished.length === 0) return 0;
 
-  const remove = database.prepare('DELETE FROM tasks WHERE task_id = ?');
-  for (const taskId of vanished) remove.run(taskId);
+  /* Пара `(project_id, task_id)` — иначе чистка своего плана унесла бы одноимённую задачу соседа. */
+  const remove = database.prepare('DELETE FROM tasks WHERE project_id = ? AND task_id = ?');
+  for (const taskId of vanished) remove.run(projectId, taskId);
 
   return vanished.length;
 }

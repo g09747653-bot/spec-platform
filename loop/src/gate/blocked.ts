@@ -71,9 +71,16 @@ export function renderBlockedFile(details: BlockedDetails): string {
   ].join('\n');
 }
 
-/** Writes the file and puts the task into `BLOCKED`, on disk first and in the index after. */
+/**
+ * Writes the file and puts the task into `BLOCKED`, on disk first and in the index after.
+ *
+ * `projectId` — не украшение подписи: с составным ключом `(project_id, task_id)` (А-38 п.3) строка
+ * задачи адресуется только парой, и функция, знающая лишь `task_id`, обновила бы задачу соседа с
+ * тем же именем — ровно D-325, только в другую сторону.
+ */
 export function raiseBlock(
   database: DatabaseSync,
+  projectId: string,
   projectDirectory: string,
   details: BlockedDetails,
 ): string {
@@ -81,7 +88,9 @@ export function raiseBlock(
   writeFileSync(path, renderBlockedFile(details), 'utf8');
 
   setTaskStatusOnDisk(projectDirectory, details.taskId, 'BLOCKED');
-  database.prepare('UPDATE tasks SET status = ? WHERE task_id = ?').run('BLOCKED', details.taskId);
+  database
+    .prepare('UPDATE tasks SET status = ? WHERE project_id = ? AND task_id = ?')
+    .run('BLOCKED', projectId, details.taskId);
 
   return path;
 }
@@ -146,6 +155,7 @@ function watcherRegistry(): Map<string, BlockWatcher> {
 
 export function ensureBlockWatcher(
   database: DatabaseSync,
+  projectId: string,
   projectDirectory: string,
   onUnblocked: (taskId: string) => void,
 ): BlockWatcher {
@@ -153,13 +163,14 @@ export function ensureBlockWatcher(
   const existing = registry.get(projectDirectory);
   if (existing !== undefined) return existing;
 
-  const watcher = watchBlocks(database, projectDirectory, onUnblocked);
+  const watcher = watchBlocks(database, projectId, projectDirectory, onUnblocked);
   registry.set(projectDirectory, watcher);
   return watcher;
 }
 
 export function watchBlocks(
   database: DatabaseSync,
+  projectId: string,
   projectDirectory: string,
   onUnblocked: (taskId: string) => void,
 ): BlockWatcher {
@@ -177,8 +188,11 @@ export function watchBlocks(
 
     setTaskStatusOnDisk(projectDirectory, taskId, 'PENDING');
     database
-      .prepare("UPDATE tasks SET status = 'PENDING' WHERE task_id = ? AND status = 'BLOCKED'")
-      .run(taskId);
+      .prepare(
+        "UPDATE tasks SET status = 'PENDING' " +
+          "WHERE project_id = ? AND task_id = ? AND status = 'BLOCKED'",
+      )
+      .run(projectId, taskId);
 
     onUnblocked(taskId);
   };

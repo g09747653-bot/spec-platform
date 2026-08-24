@@ -1,0 +1,17 @@
+{
+  "taskId": "WA_9c57b180_06",
+  "milestoneId": "ms_9c57b180_05",
+  "title": "Замерь воспроизводимость сборки и зафиксируй итоговый отчёт",
+  "description": "Прогони tools/checks/reproducibility-check.js: запусти site/start.cmd, дважды прогони попиксельное сравнение по manifest.json в одном и том же окружении headless Chromium/Chrome и запиши разницу между прогонами. Дополнительно зафиксируй в отчёте: результат проверки запуска start.cmd в один клик и корректность сообщения при занятом порте 8080; итог смоук-проверки в Firefox и Edge (структура секций, лайтбокс, контактная форма); финальную сверку site/README.md и site/assets/media/LICENSE-html5up-story.txt на наличие строки атрибуции CC BY 3.0. Сведи всё в reports/final-verification.md.",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "reports/final-verification.md"
+  ],
+  "dependsOn": [
+    "WA_9c57b180_05"
+  ],
+  "unitTestCmd": "{ node tools/checks/reproducibility-check.js || true; } && test -s tools/checks/reproducibility-report.json && node -e 'const fs=require(\"fs\");const r=JSON.parse(fs.readFileSync(\"tools/checks/reproducibility-report.json\",\"utf8\"));const v=\"summary.deltaPercent\".split(\".\").reduce((o,k)=>(o==null?o:o[k]),r);if(typeof v!==\"number\"||!isFinite(v)){console.error(\"замер не записал число по ключу summary.deltaPercent\");process.exit(1)}const p=\".loop-convergence.json\";const prev=fs.existsSync(p)?JSON.parse(fs.readFileSync(p,\"utf8\")):null;fs.writeFileSync(p,JSON.stringify({value:v}));if(prev&&typeof prev.value===\"number\"&&v>prev.value+1e-9){console.error(\"расхождение выросло: \"+prev.value+\" -> \"+v);process.exit(1)}console.log(\"замер зафиксирован: \"+v+(prev?\" (было \"+prev.value+\")\":\"\"));'",
+  "iterationTimeoutSec": 3600,
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

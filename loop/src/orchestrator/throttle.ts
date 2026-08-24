@@ -2,8 +2,9 @@
  * The plan's own budget signal, treated as a working state rather than an error (task 159; А-24 §2).
  *
  * The loop runs on the customer's subscription, and a subscription is a rolling window of turns. The
- * CLI says so out loud in its `stream-json`: a `rate_limit_event` whose status is not `allowed` means
- * «this window is spent». That is **not** a failure of the iteration, of the plan or of the model —
+ * CLI says so out loud in its `stream-json`: a `rate_limit_event` whose status is neither `allowed`
+ * nor `allowed_warning` means «this window is spent». That is **not** a failure of the iteration, of
+ * the plan or of the model —
  * it is the pipeline being told to wait, and the correct response is to stop *starting* containers,
  * let the running ones finish, say so in the feed with the time it will resume, and resume.
  *
@@ -50,8 +51,28 @@ export const IDLE_THROTTLE: ThrottleState = Object.freeze({
  */
 export const BLIND_THROTTLE_MS = 5 * 60_000;
 
-/** The one status that means «carry on». Everything else holds new starts. */
-const ALLOWED = 'allowed';
+/**
+ * Статусы, при которых вызов СОСТОЯЛСЯ — то есть держать старты не из-за чего.
+ *
+ * `allowed_warning` здесь потому, что это предупреждение и ничего больше: окно на исходе, вызов
+ * разрешён и прошёл. Живой раунд А-37.1 замерил цену обратного прочтения. CLI прислал
+ * `{"status":"allowed_warning","rateLimitType":"seven_day","utilization":0.77,"surpassedThreshold":0.75,
+ * "resetsAt":1787734800}` через десять секунд после старта первой волны; контур прочитал его как
+ * отказ и запер новые старты на 216 162 секунды — двое с половиной суток. Дальше каждая веха
+ * требовала внешнего хода, и это и был диагноз «конвейер не переходит между вехами сам»: перехода
+ * не было не потому, что планировщик его не умеет, а потому, что старты стояли на ложном тарифе, а
+ * проход не заканчивался — он спал. Четыре нажатия оператора были четырьмя новыми конвейерами,
+ * каждый из которых успевал завести ровно одну волну до того же предупреждения.
+ *
+ * **Неизвестный статус по-прежнему держит.** Осторожность верна там, где мы не знаем; здесь мы
+ * знаем — и знание записано в перечень поимённо, а не в догадку по префиксу.
+ */
+const ALLOWED = new Set(['allowed', 'allowed_warning']);
+
+/** Предупреждение о конце окна: старты продолжаются, но ленте есть что сказать. */
+export function isWindowWarning(status: string | null): boolean {
+  return status !== null && status !== 'allowed' && ALLOWED.has(status);
+}
 
 export function observeRateLimit(
   state: ThrottleState,
@@ -62,7 +83,7 @@ export function observeRateLimit(
 
   if (status === null) return state;
 
-  if (status === ALLOWED) {
+  if (ALLOWED.has(status)) {
     /*
      * The window is open. The hold is released **immediately** rather than left to expire: the CLI
      * has just told us the truth about the budget, and honouring a stale deadline over it would be
@@ -101,5 +122,21 @@ export function describeThrottle(state: ThrottleState, now: number): string {
     `Лимит тарифа${window}: ${state.status ?? 'не allowed'}. ` +
     `Новые исполнители не запускаются, уже запущенные доигрывают. ` +
     `Возобновление через ${String(seconds)} с.`
+  );
+}
+
+/**
+ * Строка предупреждения — и в ней главное слово «продолжаются».
+ *
+ * Сказать надо: окно на исходе, и человеку это полезно знать заранее. Но сказать надо так, чтобы
+ * строка не читалась как остановка: ровно из-за смешения этих двух сообщений раунд А-37.1 стоял
+ * после каждой волны, а лента при этом выглядела осмысленной.
+ */
+export function describeWindowWarning(state: ThrottleState): string {
+  const window = state.window === null ? '' : ` (${state.window})`;
+
+  return (
+    `Тариф предупреждает${window}: ${state.status ?? 'allowed_warning'} — окно на исходе, ` +
+    'но вызов разрешён. Старты исполнителей продолжаются.'
   );
 }

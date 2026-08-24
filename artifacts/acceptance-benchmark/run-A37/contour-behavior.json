@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "generatedAt": "2026-08-24T01:22:08.466Z",
+    "siteUrl": "http://localhost:8080/",
+    "widths": [
+      375,
+      768,
+      1440
+    ]
+  },
+  "violations": [
+    {
+      "type": "full-height-mismatch",
+      "message": "scrollHeight=9900 отличается от fullHeight=7476 больше чем на 2px (width=375)",
+      "scrollHeight": 9900,
+      "expectedFullHeight": 7476,
+      "delta": 2424
+    },
+    {
+      "type": "full-height-mismatch",
+      "message": "scrollHeight=6938 отличается от fullHeight=6333 больше чем на 2px (width=768)",
+      "scrollHeight": 6938,
+      "expectedFullHeight": 6333,
+      "delta": 605
+    },
+    {
+      "type": "full-height-mismatch",
+      "message": "scrollHeight=5740 отличается от fullHeight=5832 больше чем на 2px (width=1440)",
+      "scrollHeight": 5740,
+      "expectedFullHeight": 5832,
+      "delta": 92
+    }
+  ],
+  "summary": {
+    "violationCount": 3,
+    "passed": false
+  }
+}

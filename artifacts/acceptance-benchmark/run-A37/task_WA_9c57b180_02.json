@@ -1,0 +1,16 @@
+{
+  "taskId": "WA_9c57b180_02",
+  "milestoneId": "ms_9c57b180_01",
+  "title": "Собери инструменты попиксельной, поведенческой и офлайн-проверки, а также проверки воспроизводимости",
+  "description": "1. Реализуй tools/visual-diff/compare.js — headless-Chromium-инструмент, читающий reference/manifest.json, снимающий скриншоты запущенного сайта (http://localhost:8080/) на 375/768/1440 px по всем 24 сценариям scrollY, сравнивающий попиксельно с reference/*.png и записывающий отчёт tools/visual-diff/report.json с ключом summary.diffPercent (доля отличающихся пикселей). 2. Реализуй tools/checks/behavior-check.js — headless-браузерный скрипт, проверяющий: соответствие document.documentElement.scrollHeight значениям fullHeight из manifest.json (±2px) на трёх ширинах; открытие/закрытие лайтбокса для всех 12 миниатюр (клик, кнопка закрытия, клик вне, Escape); отсутствие сетевых запросов/навигации/ошибок консоли при отправке контактной формы; однократность анимаций баннера и спотов при скролле вниз/вверх/ресайзе; отсутствие запросов к внешним хостам (офлайн-режим); отчёт tools/checks/behavior-report.json с ключом summary.violationCount (число нарушений). 3. Реализуй tools/checks/reproducibility-check.js — дважды прогоняет compare.js в одном и том же окружении сравнения и записывает tools/checks/reproducibility-report.json с ключом summary.deltaPercent (разница diffPercent между двумя прогонами).",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "tools/visual-diff/compare.js",
+    "tools/checks/behavior-check.js",
+    "tools/checks/reproducibility-check.js"
+  ],
+  "dependsOn": [],
+  "unitTestCmd": "node --check tools/visual-diff/compare.js && node --check tools/checks/behavior-check.js && node --check tools/checks/reproducibility-check.js",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

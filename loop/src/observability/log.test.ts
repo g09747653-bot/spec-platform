@@ -110,9 +110,9 @@ describe('the loop logger (task 153)', () => {
       .run('ms_1', 'p1', 'Веха');
     database
       .prepare(
-        `INSERT INTO tasks (task_id, milestone_id, title, description, tech_stack, files_to_edit,
-                            expected_artifacts, status)
-         VALUES (?, ?, ?, '', 'nodejs', '[]', '[]', 'PENDING')`,
+        `INSERT INTO tasks (project_id, task_id, milestone_id, title, description, tech_stack,
+                            files_to_edit, expected_artifacts, status)
+         VALUES ('p1', ?, ?, ?, '', 'nodejs', '[]', '[]', 'PENDING')`,
       )
       .run('task_1', 'ms_1', 'Задача');
 

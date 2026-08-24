@@ -68,9 +68,19 @@ export interface WholeArtifactPlanResult {
  * Не украшение: план этой ветки ЗАМЕЩАЕТ разбиение бандла, и одинаковые идентификаторы означали бы
  * молчаливое переписывание чужой задачи вместо честной замены плана. С разными префиксами индекс
  * видит, что старых задач в дереве больше нет, и чистит их (см. интейк).
+ *
+ * **С областью проекта, когда она известна** (D-325, продолжение D-324). `task_id` — первичный ключ
+ * индекса, и второй проект с такими же `WA01…` не заводил свои строки, а перехватывал чужие. Хуже
+ * того, `ON CONFLICT` намеренно не трогает `status` (D-261: статус живёт на диске) — поэтому свежий
+ * план ВСТУПАЛ В ПРОГОН С ЧУЖИМИ СТАТУСАМИ: три задачи «уже приняты», одна «заблокирована», и
+ * конвейер за тридцать секунд честно сообщал, что запускать нечего. Ни одного контейнера при этом
+ * не поднималось, и на диске все пять задач стояли в PENDING.
+ *
+ * Область без неё сохраняется прежней (`WA01`): деревья, записанные раньше, читаются как читались.
  */
-export function plannedTaskId(index: number): string {
-  return `WA${String(index + 1).padStart(2, '0')}`;
+export function plannedTaskId(index: number, scope?: string): string {
+  const number = String(index + 1).padStart(2, '0');
+  return scope === undefined || scope === '' ? `WA${number}` : `WA_${scope}_${number}`;
 }
 
 const PRESENTATIONAL = /\.(html?|css|scss|sass|less|m?jsx?|tsx?|vue|svelte|astro)$/i;
@@ -313,7 +323,7 @@ function extractJson(value: string): unknown {
  * 3. **Артефакт в один момент времени трогает один исполнитель.** Владелец и полировки — строгая
  *    цепь; материал и обвязка идут впереди слоем, замер — последним.
  */
-export function shapePlan(proposed: readonly ModelTask[]): PlannedTask[] {
+export function shapePlan(proposed: readonly ModelTask[], scope?: string): PlannedTask[] {
   const rows = proposed.map((task) => ({
     ...task,
     files: task.filesToEdit.map((file) => file.replaceAll('\\', '/').replace(/^\.\//, '')),
@@ -355,7 +365,7 @@ export function shapePlan(proposed: readonly ModelTask[]): PlannedTask[] {
 
   for (const [index, row] of ordered.entries()) {
     const role = roleOf(row);
-    const taskId = plannedTaskId(index);
+    const taskId = plannedTaskId(index, scope);
 
     const files =
       role === 'whole'
@@ -450,70 +460,79 @@ export function asReviewable(tasks: readonly PlannedTask[]): ReviewableTask[] {
  * дословно тому единственному исполнителю, который увидит вещь целиком. Форму проходит по
  * построению — делить тут нечего.
  */
-export function skeletonPlan(seed: string, artifactFiles: readonly string[]): PlannedTask[] {
+export function skeletonPlan(
+  seed: string,
+  artifactFiles: readonly string[],
+  scope?: string,
+): PlannedTask[] {
   const files = [...new Set(artifactFilesOf(artifactFiles))];
 
   /* Проверка скелета честна и в пустой директории: якорь есть — ищем файл, нет — только каталог. */
   const anchor = files[0];
   const check = anchor === undefined ? 'test -d .' : `test -f ${anchor}`;
 
-  return shapePlan([
-    {
-      role: 'material',
-      title: 'Собери материал для артефакта',
-      description:
-        'Подготовь весь материал, который артефакт использует: изображения, шрифты, данные, ' +
-        'эталоны для сверки. Сложи их в рабочую директорию так, чтобы сборка ссылалась на ' +
-        'локальные файлы, а не на сеть.\n\nЗадумка владельца, дословно:\n' +
-        seed,
-      filesToEdit: [],
-      unitTestCmd: 'test -d assets',
-      e2eTestCmd: null,
-      iterationTimeoutSec: null,
-    },
-    {
-      role: 'whole',
-      title: 'Собери артефакт целиком',
-      description:
-        'Собери артефакт ЦЕЛИКОМ, один, в одном заходе: единые токены, одна сетка, одна ' +
-        'типографика, общая шапка и подвал. Связность — твоя ответственность и мера качества: ' +
-        'части, корректные по отдельности и расходящиеся между собой, — это провал задачи.' +
-        '\n\nЗадумка владельца, дословно:\n' +
-        seed,
-      filesToEdit: [...files],
-      unitTestCmd: check,
-      e2eTestCmd: null,
-      iterationTimeoutSec: 5_400,
-    },
-    {
-      role: 'polish',
-      title: 'Сверь целое с задумкой и отполируй итерациями',
-      description:
-        'Пройди артефакт целиком и исправь расхождения с задумкой: вёрстку, типографику, ' +
-        'отступы, поведение. Работай итерациями по всему артефакту, а не по одному куску.' +
-        '\n\nЗадумка владельца, дословно:\n' +
-        seed,
-      filesToEdit: [...files],
-      unitTestCmd: check,
-      e2eTestCmd: null,
-      iterationTimeoutSec: 3_600,
-    },
-    {
-      role: 'measure',
-      title: 'Замерь результат и напиши отчёт',
-      description:
-        'Замерь готовый артефакт против задумки и запиши отчёт в RESULT.md: что сделано, чем ' +
-        'замерено, где расхождения остались и почему.',
-      filesToEdit: ['RESULT.md'],
-      unitTestCmd: 'test -f RESULT.md',
-      e2eTestCmd: null,
-      iterationTimeoutSec: null,
-    },
-  ]);
+  return shapePlan(
+    [
+      {
+        role: 'material',
+        title: 'Собери материал для артефакта',
+        description:
+          'Подготовь весь материал, который артефакт использует: изображения, шрифты, данные, ' +
+          'эталоны для сверки. Сложи их в рабочую директорию так, чтобы сборка ссылалась на ' +
+          'локальные файлы, а не на сеть.\n\nЗадумка владельца, дословно:\n' +
+          seed,
+        filesToEdit: [],
+        unitTestCmd: 'test -d assets',
+        e2eTestCmd: null,
+        iterationTimeoutSec: null,
+      },
+      {
+        role: 'whole',
+        title: 'Собери артефакт целиком',
+        description:
+          'Собери артефакт ЦЕЛИКОМ, один, в одном заходе: единые токены, одна сетка, одна ' +
+          'типографика, общая шапка и подвал. Связность — твоя ответственность и мера качества: ' +
+          'части, корректные по отдельности и расходящиеся между собой, — это провал задачи.' +
+          '\n\nЗадумка владельца, дословно:\n' +
+          seed,
+        filesToEdit: [...files],
+        unitTestCmd: check,
+        e2eTestCmd: null,
+        iterationTimeoutSec: 5_400,
+      },
+      {
+        role: 'polish',
+        title: 'Сверь целое с задумкой и отполируй итерациями',
+        description:
+          'Пройди артефакт целиком и исправь расхождения с задумкой: вёрстку, типографику, ' +
+          'отступы, поведение. Работай итерациями по всему артефакту, а не по одному куску.' +
+          '\n\nЗадумка владельца, дословно:\n' +
+          seed,
+        filesToEdit: [...files],
+        unitTestCmd: check,
+        e2eTestCmd: null,
+        iterationTimeoutSec: 3_600,
+      },
+      {
+        role: 'measure',
+        title: 'Замерь результат и напиши отчёт',
+        description:
+          'Замерь готовый артефакт против задумки и запиши отчёт в RESULT.md: что сделано, чем ' +
+          'замерено, где расхождения остались и почему.',
+        filesToEdit: ['RESULT.md'],
+        unitTestCmd: 'test -f RESULT.md',
+        e2eTestCmd: null,
+        iterationTimeoutSec: null,
+      },
+    ],
+    scope,
+  );
 }
 
 export interface WholeArtifactPlanRequest {
   seed: string;
+  /** Область идентификаторов — обычно проект (D-325). Без неё нумерация прежняя. */
+  scope?: string;
   context: WholeArtifactContext;
   chain: Chain | null;
   /** Файлы артефакта, известные до плана (снимок диска) — материал скелета. */
@@ -529,12 +548,12 @@ export interface WholeArtifactPlanRequest {
 export async function buildWholeArtifactPlan(
   request: WholeArtifactPlanRequest,
 ): Promise<WholeArtifactPlanResult> {
-  const { seed, context, chain } = request;
+  const { seed, context, chain, scope } = request;
   const known = request.knownArtifactFiles ?? [];
 
   if (chain === null) {
     return {
-      tasks: skeletonPlan(seed, known),
+      tasks: skeletonPlan(seed, known, scope),
       writtenBy: null,
       degradedBecause: 'провайдер роли архитектора не настроен',
       retriedBecause: [],
@@ -554,7 +573,7 @@ export async function buildWholeArtifactPlan(
       });
     } catch (error) {
       return {
-        tasks: skeletonPlan(seed, known),
+        tasks: skeletonPlan(seed, known, scope),
         writtenBy: null,
         degradedBecause: `звенья архитектора красные: ${
           error instanceof Error ? error.message : String(error)
@@ -571,7 +590,7 @@ export async function buildWholeArtifactPlan(
       continue;
     }
 
-    const shaped = shapePlan(parsed.data.tasks);
+    const shaped = shapePlan(parsed.data.tasks, scope);
     const found = [
       ...judgeWholeArtifactPlan(asReviewable(shaped)),
       ...judgeMeasuredAcceptance(shaped),
@@ -590,7 +609,7 @@ export async function buildWholeArtifactPlan(
   }
 
   return {
-    tasks: skeletonPlan(seed, known),
+    tasks: skeletonPlan(seed, known, scope),
     writtenBy: null,
     degradedBecause: lastFailure,
     retriedBecause: gaps,

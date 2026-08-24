@@ -1,0 +1,25 @@
+{
+  "taskId": "WA_9c57b180_01",
+  "milestoneId": "ms_9c57b180_01",
+  "title": "Подготовь материалы: медиа-ассеты, сопоставление галереи, вендор Font Awesome",
+  "description": "1. Создай site/assets/media/ и скопируй в него media/images/ (banner.jpg, spotlight01-03.jpg, pic01-03.jpg, gallery/) и media/webfonts/ (все 15 файлов eot/svg/ttf/woff/woff2 трёх наборов fa-brands/fa-regular/fa-solid) без переименования и перекодирования. 2. Скопируй media/LICENSE-html5up-story.txt в site/assets/media/LICENSE-html5up-story.txt без изменений. 3. Прочитай фактическое содержимое media/images/gallery/, определи для всех файлов пары «миниатюра → полноразмерное изображение» по совпадающему базовому имени; если структура каталога иная — примени резервный алгоритм сортировки и позиционного сопоставления. Если после фильтрации по расширениям число миниатюр и полноразмерных файлов не совпадает 1:1 или соответствие неоднозначно — останови работу и запроси у пользователя подтверждение, приложив полный список файлов и предполагаемые пары; не продолжай на основе непроверенного предположения. Результат сопоставления запиши в site/gallery-pairs.json (массив объектов {thumb, full}). 4. Создай site/assets/css/vendor/font-awesome.css — локальный CSS-файл сопоставления классов Font Awesome 5 с глифами, ссылающийся относительными путями на site/assets/media/webfonts/ (без CDN, без внешних URL).",
+  "techStack": "nodejs",
+  "filesToEdit": [
+    "site/assets/media/images/banner.jpg",
+    "site/assets/media/images/spotlight01.jpg",
+    "site/assets/media/images/spotlight02.jpg",
+    "site/assets/media/images/spotlight03.jpg",
+    "site/assets/media/images/pic01.jpg",
+    "site/assets/media/images/pic02.jpg",
+    "site/assets/media/images/pic03.jpg",
+    "site/assets/media/images/gallery",
+    "site/assets/media/webfonts",
+    "site/assets/media/LICENSE-html5up-story.txt",
+    "site/assets/css/vendor/font-awesome.css",
+    "site/gallery-pairs.json"
+  ],
+  "dependsOn": [],
+  "unitTestCmd": "test -f site/assets/media/LICENSE-html5up-story.txt && test -f site/assets/css/vendor/font-awesome.css && test -d site/assets/media/webfonts && test -d site/assets/media/images/gallery && node -e \"JSON.parse(require('fs').readFileSync('site/gallery-pairs.json','utf8'))\"",
+  "expectedArtifacts": [],
+  "status": "COMPLETED"
+}

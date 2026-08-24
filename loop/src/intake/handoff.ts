@@ -243,10 +243,14 @@ export function importHandoff(
       );
 
     // Step 1 — the milestones.
+    /*
+     * Конфликт разрешается по СОСТАВНОМУ ключу (А-38 п.3): веха принадлежит проекту, и одинаковый
+     * `ms_01` двух проектов — две разные вехи, а не одна переписанная (D-324).
+     */
     const milestone = database.prepare(
       `INSERT INTO milestones (milestone_id, project_id, title, description, depends_on, position, status)
        VALUES (?, ?, ?, ?, ?, ?, 'PENDING')
-       ON CONFLICT (milestone_id) DO UPDATE SET
+       ON CONFLICT (project_id, milestone_id) DO UPDATE SET
          title = excluded.title, description = excluded.description,
          depends_on = excluded.depends_on, position = excluded.position`,
     );
@@ -263,11 +267,17 @@ export function importHandoff(
     }
 
     // Step 2 — the tasks, only once their milestones exist.
+    /*
+     * То же и для задач, и здесь это стоило дороже (D-325): `ON CONFLICT` намеренно не трогает
+     * `status` — статус живёт на диске (D-261), — поэтому перехваченная строка отдавала новому плану
+     * ЧУЖОЙ статус. Составной ключ снимает саму возможность перехвата.
+     */
     const task = database.prepare(
-      `INSERT INTO tasks (task_id, milestone_id, title, description, tech_stack, files_to_edit,
-                          unit_test_cmd, e2e_test_cmd, expected_artifacts, depends_on, position, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (task_id) DO UPDATE SET
+      `INSERT INTO tasks (project_id, task_id, milestone_id, title, description, tech_stack,
+                          files_to_edit, unit_test_cmd, e2e_test_cmd, expected_artifacts,
+                          depends_on, position, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (project_id, task_id) DO UPDATE SET
          milestone_id = excluded.milestone_id, title = excluded.title,
          description = excluded.description, tech_stack = excluded.tech_stack,
          files_to_edit = excluded.files_to_edit, unit_test_cmd = excluded.unit_test_cmd,
@@ -282,6 +292,7 @@ export function importHandoff(
 
     for (const entry of tasks) {
       task.run(
+        projectId,
         entry.taskId,
         entry.milestoneId,
         entry.title,

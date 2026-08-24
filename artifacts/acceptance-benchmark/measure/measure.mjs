@@ -23,11 +23,48 @@ import { createServer } from 'node:http';
 import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 
-const WORKSPACE = String.raw`C:\Users\Bob\Desktop\F\Fmyspec-clone-spec-platform\loop\.data\workspace\tg-20260822-235200`;
-const BASELINE = join(WORKSPACE, 'tools', 'visual-diff', 'baseline');
+const argv = process.argv.slice(2);
+const flag = (name, fallback) => {
+  const index = argv.indexOf(name);
+  return index === -1 ? fallback : argv[index + 1];
+};
 
-/* pixelmatch и pngjs берём из node_modules рабочей директории — единственное, что оттуда берётся. */
-const requireFromWorkspace = createRequire(join(WORKSPACE, 'package.json'));
+const WORKSPACE = resolve(
+  flag(
+    '--workspace',
+    String.raw`C:\Users\Bob\Desktop\F\Fmyspec-clone-spec-platform\loop\.data\workspace\tg-20260822-235200`,
+  ),
+);
+
+const BASELINE = resolve(flag('--baseline', join(WORKSPACE, 'tools', 'visual-diff', 'baseline')));
+
+/**
+ * Маска знака — НЕ всегда уместна, и это решает раунд, а не инструмент (А-37.1 п.4).
+ *
+ * Там, где клон несёт СВОЙ нейтральный знак, пиксели знака обязаны отличаться, и мерить их значило
+ * бы мерить не то. Там, где знак копируется как есть (он часть лицензированного произведения),
+ * вычитать нечего: маска молча съела бы площадь, которую замер обязан судить.
+ */
+const BRAND_MASK = !argv.includes('--no-brand-mask');
+
+/** Префикс пути к странице внутри корня: план вправе положить сайт в подкаталог. */
+const PAGE_PREFIX = flag('--page-prefix', '');
+
+/*
+ * pixelmatch и pngjs — библиотеки, а не улики: берутся из директории, где они установлены, и на
+ * измеряемый артефакт не влияют.
+ */
+const requireFromWorkspace = createRequire(
+  join(
+    resolve(
+      flag(
+        '--deps',
+        String.raw`C:\Users\Bob\Desktop\F\Fmyspec-clone-spec-platform\loop\.data\workspace\tg-20260822-235200`,
+      ),
+    ),
+    'package.json',
+  ),
+);
 const { PNG } = requireFromWorkspace('pngjs');
 const pixelmatch = requireFromWorkspace('pixelmatch').default ?? requireFromWorkspace('pixelmatch');
 
@@ -35,12 +72,6 @@ const requireFromRepo = createRequire(
   String.raw`C:\Users\Bob\Desktop\F\Fmyspec-clone-spec-platform\package.json`,
 );
 const { chromium } = requireFromRepo('@playwright/test');
-
-const argv = process.argv.slice(2);
-const flag = (name, fallback) => {
-  const index = argv.indexOf(name);
-  return index === -1 ? fallback : argv[index + 1];
-};
 
 const OUT = flag('--out', join(process.cwd(), 'result'));
 const LIMIT = Number(flag('--limit', '0'));
@@ -221,7 +252,8 @@ function maskedArea(width, height, rects) {
   return area;
 }
 
-const PAGE_URL = { index: '/index.html', products: '/products.html' };
+/** Страница кадра — из его же спутника: карта имён в инструменте была бы лишним знанием. */
+const pageUrlOf = (slug) => `/${PAGE_PREFIX}${slug}.html`.replace(/\/{2,}/g, '/');
 
 async function main() {
   mkdirSync(OUT, { recursive: true });
@@ -248,12 +280,7 @@ async function main() {
   try {
     for (const [index, frame] of chosen.entries()) {
       const { slug, width, viewportHeight, scrollY, fullHeight } = frame.meta;
-      const path = PAGE_URL[slug];
-
-      if (path === undefined) {
-        results.push({ frame: frame.name, status: 'skipped', reason: `неизвестная страница ${slug}` });
-        continue;
-      }
+      const path = pageUrlOf(slug);
 
       const context = await browser.newContext({
         viewport: { width, height: viewportHeight },
@@ -289,7 +316,7 @@ async function main() {
         await page.waitForTimeout(300);
 
         const reached = await page.evaluate(() => Math.round(window.scrollY));
-        const brand = await page.evaluate(brandRects);
+        const brand = BRAND_MASK ? await page.evaluate(brandRects) : { rects: [], words: [] };
         const rects = brand.rects;
 
         const shot = await page.screenshot({ type: 'png' });
