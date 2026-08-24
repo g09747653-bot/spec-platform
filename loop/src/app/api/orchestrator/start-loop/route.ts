@@ -14,12 +14,13 @@ import { getDatabase } from '../../../../db/client.ts';
 import { createDockerEngine } from '../../../../docker/engine.ts';
 import { resolveEndpoint } from '../../../../docker/transport.ts';
 import { eventBus } from '../../../../events/bus.ts';
+import { describeFeasibility } from '../../../../intake/feasibility.ts';
 import { ensureBlockWatcher } from '../../../../gate/blocked.ts';
 import { intakeBundle, IntakeRefused } from '../../../../intake/intake.ts';
 import { ensurePlanReviewed } from '../../../../intake/plan-review.ts';
 import { createRoleChain } from '../../../../llm/roles.ts';
 import { createLogger } from '../../../../observability/log.ts';
-import { driveProject } from '../../../../orchestrator/orchestrator.ts';
+import { driveProject, resumeAfterUnblock } from '../../../../orchestrator/orchestrator.ts';
 import { withinWorkspace } from '../workspace.ts';
 
 /**
@@ -139,6 +140,22 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   /*
+   * **Суждение о выполнимости — первым, что владелец услышит об этом проекте** (А-42 п.2а).
+   *
+   * Раньше суда полноты и раньше «конвейер запущен»: расхождения объявляются ДО сборки, а не после
+   * показа продукта (А-39). Публикуется здесь, а не в интейке, по тому же правилу, что и
+   * `plan-review`, — шину со стороны маршрута трогает маршрут; интейк отдаёт готовую запись.
+   */
+  if (intake.feasibility !== null) {
+    eventBus().publish({
+      type: 'feasibility',
+      projectId: intake.projectId,
+      verdict: intake.feasibility.verdict,
+      text: describeFeasibility(intake.feasibility),
+    });
+  }
+
+  /*
    * Суд полноты плана — между интейком и конвейером (А-33 п.4б). Пробелы без решения владельца
    * останавливают запуск named-алертом; сам интейк состоялся, план и вердикт лежат на диске.
    */
@@ -173,6 +190,7 @@ export async function POST(request: Request): Promise<Response> {
       writtenByModel: intake.writtenByModel,
       keptFromDisk: intake.keptFromDisk,
       regenerated: intake.regenerated,
+      feasibility: intake.feasibility,
       degradations: intake.degradations,
       planGaps: review.gaps,
     });
@@ -190,6 +208,18 @@ export async function POST(request: Request): Promise<Response> {
    * becomes drivable, so «удалите файл — контур увидит» is true from the first block on. Idempotent
    * across re-intakes of the same directory.
    */
+  const driveDeps = {
+    database,
+    engine,
+    logger,
+    credential: executorCredential(env),
+    maxExecutors: env.LOOP_MAX_EXECUTORS,
+    acceptanceTestTimeoutMs: env.ACCEPTANCE_TEST_TIMEOUT_MS,
+    researchChain: researcher.providers.length === 0 ? null : researcher,
+    ...(env.LOOP_ANTHROPIC_MODEL === undefined ? {} : { model: env.LOOP_ANTHROPIC_MODEL }),
+    ...(executorStubEnabled() ? { executorCommand: executorStubCommand } : {}),
+  };
+
   ensureBlockWatcher(database, intake.projectId, directory, (taskId) => {
     logger.write({
       projectId: intake.projectId,
@@ -198,7 +228,7 @@ export async function POST(request: Request): Promise<Response> {
       logLevel: 'WARN',
       message:
         `Блокировка задачи ${taskId} снята оператором (файл удалён) — задача снова PENDING. ` +
-        'Запустите конвейер снова (start-loop), чтобы продолжить.',
+        'Конвейер продолжает сам.',
     });
     eventBus().publish({
       type: 'task-status',
@@ -206,35 +236,24 @@ export async function POST(request: Request): Promise<Response> {
       taskId,
       status: 'PENDING',
     });
+    /* А-42 п.3: человек уже принял решение — второе нажатие было бы дефектом, а не безопасностью. */
+    resumeAfterUnblock(intake.projectId, directory, driveDeps);
   });
 
   /*
    * The pipeline runs on after the answer. Errors reach the feed rather than a caller who has
    * already been told the plan was accepted — which is what an autonomous loop means.
    */
-  void driveProject(
-    intake.projectId,
-    directory,
-    {
-      database,
-      engine,
-      logger,
-      credential: executorCredential(env),
-      maxExecutors: env.LOOP_MAX_EXECUTORS,
-      acceptanceTestTimeoutMs: env.ACCEPTANCE_TEST_TIMEOUT_MS,
-      researchChain: researcher.providers.length === 0 ? null : researcher,
-      ...(env.LOOP_ANTHROPIC_MODEL === undefined ? {} : { model: env.LOOP_ANTHROPIC_MODEL }),
-      ...(executorStubEnabled() ? { executorCommand: executorStubCommand } : {}),
+  void driveProject(intake.projectId, directory, driveDeps, parsed.data.maxCycles).catch(
+    (error: unknown) => {
+      logger.write({
+        projectId: intake.projectId,
+        agentRole: 'ORCHESTRATOR',
+        logLevel: 'ERROR',
+        message: `Конвейер остановлен ошибкой: ${error instanceof Error ? error.message : String(error)}`,
+      });
     },
-    parsed.data.maxCycles,
-  ).catch((error: unknown) => {
-    logger.write({
-      projectId: intake.projectId,
-      agentRole: 'ORCHESTRATOR',
-      logLevel: 'ERROR',
-      message: `Конвейер остановлен ошибкой: ${error instanceof Error ? error.message : String(error)}`,
-    });
-  });
+  );
 
   return Response.json({
     status: 'IN_PROGRESS',
@@ -246,6 +265,7 @@ export async function POST(request: Request): Promise<Response> {
     writtenByModel: intake.writtenByModel,
     keptFromDisk: intake.keptFromDisk,
     regenerated: intake.regenerated,
+    feasibility: intake.feasibility,
     degradations: intake.degradations,
   });
 }

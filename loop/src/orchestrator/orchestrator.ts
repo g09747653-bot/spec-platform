@@ -546,6 +546,7 @@ export async function driveProject(
   const returns = new Map<string, number>();
   let throttle: ThrottleState = IDLE_THROTTLE;
   let started = 0;
+  /** Последнее, что проход знал о блокировке: только для финальной строки (см. шаг 3). */
   let blocked = false;
 
   /**
@@ -661,10 +662,14 @@ export async function driveProject(
            */
           say(
             `Задача ${settled.taskId} заблокирована. Новые исполнители не запускаются; ` +
-              'запущенные доигрывают. Снимите блокировку и запустите конвейер снова.',
+              'запущенные доигрывают. Снимите блокировку — конвейер продолжит сам.',
             'WARN',
           );
-          blocked = true;
+          /*
+           * Флага здесь больше нет намеренно (А-42 п.3): статус BLOCKED уже записан на диск и в
+           * индекс, а шаг 3 читает доску заново каждым проходом. Защёлка в переменной пережила бы
+           * снятие блокировки человеком и была бы вторым источником правды рядом с доской.
+           */
         }
       }
 
@@ -682,10 +687,22 @@ export async function driveProject(
         say('Окно тарифа снова открыто — запуск исполнителей возобновляется.');
       }
 
-      /* 3. Fill the free slots, unless the tariff or a block says otherwise. */
+      /*
+       * 3. Fill the free slots, unless the tariff or a block says otherwise.
+       *
+       * **Блокировка — факт ДОСКИ, а не защёлка прохода** (А-42 п.3). Раньше первая же BLOCKED
+       * задача взводила флаг на весь проход, и снятие блокировки человеком не могло его снять:
+       * даже идущий конвейер, у которого доигрывали соседние задачи, разблокированную не брал.
+       * Перечитанная каждым проходом доска делает снятие самоисполняющимся — человек удалил файл,
+       * вотчер починил статус, следующий проход это увидел. Правило «конвейер не идёт мимо
+       * заблокированной задачи» сохранено дословно, изменился только источник ответа.
+       */
+      const plan = readPlan(database, projectId);
+      blocked = plan.tasks.some((task) => task.status === 'BLOCKED');
+
       if (!holding && !blocked && started < maxCycles) {
         const { start } = schedule({
-          plan: readPlan(database, projectId),
+          plan,
           running: [...running.keys()],
           limit,
         });
@@ -836,6 +853,37 @@ export async function driveProject(
       inFlight,
     });
   }
+}
+
+/**
+ * Снятие блокировки возвращает конвейер в строй само (А-42 п.3).
+ *
+ * Тот же класс, что «без нажатий» (А-38 п.1): человек УЖЕ принял решение — прочитал `BLOCKED_*.md`,
+ * сделал, что там просили, и удалил файл. Требовать после этого второго действия — дефект, а не
+ * безопасность. Само снятие остаётся человеческим по определению: файл удаляет человек.
+ *
+ * Идущему проходу этого вызова не нужно — доска перечитывается каждым проходом, и разблокированную
+ * задачу он возьмёт сам; отказ «один водитель на проект» (D-329) отработает молча. Вызов нужен для
+ * обычного случая, когда проход уже закончился: заблокированная задача ждала человека, а ждать
+ * больше нечего.
+ */
+export function resumeAfterUnblock(
+  projectId: string,
+  projectDirectory: string,
+  deps: OrchestratorDeps,
+): void {
+  if (livePipelines().has(projectId)) return;
+
+  void driveProject(projectId, projectDirectory, deps).catch((error: unknown) => {
+    deps.logger.write({
+      projectId,
+      agentRole: 'ORCHESTRATOR',
+      logLevel: 'ERROR',
+      message:
+        'Продолжение после снятия блокировки упало: ' +
+        (error instanceof Error ? error.message : String(error)),
+    });
+  });
 }
 
 /** How often a frozen or throttled pipeline looks up to see whether the world has changed. */

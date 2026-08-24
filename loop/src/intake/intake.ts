@@ -23,6 +23,12 @@ import {
   type SliceResult,
   type SlicedMilestone,
 } from './milestones.ts';
+import {
+  describeCensus,
+  judgeFeasibility,
+  planConditions,
+  type FeasibilityRecord,
+} from './feasibility.ts';
 import { PLAN_REVIEW_FILE, readPlanReview, readSeed } from './plan-review.ts';
 import { readBundle, type Bundle } from './validate.ts';
 import { buildWholeArtifactPlan } from './whole-artifact-plan.ts';
@@ -93,6 +99,14 @@ export interface IntakeResult {
    * классифицирует, суд принимает класс готовым. `unknown` — суд класса не состоялся.
    */
   artifactClass: ArtifactClass | 'unknown';
+  /**
+   * Суждение о выполнимости задумки, вынесенное ДО плана (А-42 п.2).
+   *
+   * Уезжает наружу, потому что объявить его владельцу обязан маршрут, а не интейк: расхождения
+   * называются ДО сборки, первым сообщением (А-39), и алерт — дело шлюза. `null` — суждение не
+   * состоялось, причина уже названа в ленте.
+   */
+  feasibility: FeasibilityRecord | null;
   degradations: string[];
 }
 
@@ -207,6 +221,7 @@ export async function intakeBundle(
    * переспрашивает. Не определился — прежнее поведение, как для системы (именованная деградация).
    */
   const seed = readSeed(request.projectDirectory);
+  const degradations: string[] = [];
   let artifactClass: ArtifactClass | 'unknown' = 'unknown';
 
   if (seed === null) {
@@ -234,8 +249,51 @@ export async function intakeBundle(
     }
   }
 
+  /*
+   * **Суждение о выполнимости — здесь, между классом и планом** (А-42 п.2).
+   *
+   * Место выбрано не по удобству: суждение обязано родиться ДО плана, потому что план обязан нести
+   * его условиями (иначе полировка погонится за недостижимым — урок D-323), и ДО сборки, потому что
+   * расхождения называются заранее, а не после показа продукта (А-39). Между классом и планом —
+   * единственная точка, где выполнены оба.
+   *
+   * Оно ничего не останавливает: невыполнимость части задумки не ошибка, а факт, который называют и
+   * обходят. Не состоялось — именованная деградация, как у всякой модельной роли (D-229).
+   */
+  const judged = await judgeFeasibility({
+    projectDirectory: request.projectDirectory,
+    seed,
+    chain,
+  });
+  const feasibility = judged.status === 'judged' ? judged.record : null;
+
+  if (judged.status === 'skipped') {
+    say(`Суждение о выполнимости не вынесено: ${judged.reason}. План пишется без условий.`, 'WARN');
+    /*
+     * Запуск БЕЗ задумки деградацией не считается — как и у класса артефакта: судить не по чему,
+     * а не «судили хуже обычного». Деградация — это когда задумка есть, а суждения по ней нет.
+     */
+    if (seed !== null) degradations.push(`суждение о выполнимости: ${judged.reason}`);
+  } else {
+    const feasibility = judged.record;
+    say(
+      `Суждение о выполнимости (судил ${feasibility.judgedBy}): ${feasibility.verdict}. ` +
+        `Воспроизводимо пунктов: ${String(feasibility.reproducible.length)}, ` +
+        `недостижимо: ${String(feasibility.outOfReach.length)}. ` +
+        describeCensus(feasibility.material) +
+        ' Перечень целиком — в handoff/FEASIBILITY.json и в алерте владельцу.',
+      feasibility.verdict === 'полностью' ? 'INFO' : 'WARN',
+    );
+
+    /* Каждое недостижимое — своей строкой: перечень, читаемый в ленте, а не сноска к числу. */
+    for (const entry of feasibility.outOfReach) {
+      say(`Не воспроизводится: ${entry.what} (${entry.why}). Взамен: ${entry.instead}`, 'WARN');
+    }
+  }
+
+  const conditions = feasibility === null ? [] : planConditions(feasibility);
+
   const tasks: HandoffTask[] = [];
-  const degradations: string[] = [];
   let writtenByModel = 0;
   let keptFromDisk = 0;
   let slice: SliceResult;
@@ -257,6 +315,7 @@ export async function intakeBundle(
         research: researchForPrompt(surveyed.report),
         techStack,
         mustCover: carriedGaps,
+        conditions,
       },
       chain,
       knownArtifactFiles: surveyed.survey.tree,
@@ -455,6 +514,7 @@ export async function intakeBundle(
     keptFromDisk,
     regenerated: request.regenerate === true,
     artifactClass,
+    feasibility,
     degradations,
   };
 }

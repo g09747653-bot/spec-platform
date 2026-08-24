@@ -9,13 +9,14 @@ import { readBoard } from '../db/board.ts';
 import { openMigratedDatabase } from '../db/migrate.ts';
 import { createFakeEngine, type FakeEngine } from '../docker/testing/fake-engine.ts';
 import { acceptanceContainerName } from '../gate/accept.ts';
+import { blockedPath, setTaskStatusOnDisk } from '../gate/blocked.ts';
 import { observerStubOutcome } from '../gate/testing/observer-stub.ts';
 import { executorContainerName } from '../executor/run.ts';
 import { HANDOFF, HandoffTask, importHandoff, taskFileName } from '../intake/handoff.ts';
 import { createLogger, type Logger } from '../observability/log.ts';
 
 import { freezePipeline, isFrozen, liftFreeze, readFreeze } from './freeze.ts';
-import { driveProject, livePipeline } from './orchestrator.ts';
+import { driveProject, livePipeline, resumeAfterUnblock } from './orchestrator.ts';
 
 /**
  * The pipeline: many executors, a tariff that closes, and a red verdict that stops the world
@@ -646,6 +647,99 @@ describe('конвейер переходит между вехами сам (А
 
     const feed = logger.tail(PROJECT, 200).map((line) => line.message);
     expect(feed.some((line) => line.includes('уже идёт в этом процессе'))).toBe(true);
+  }, 30_000);
+});
+
+/**
+ * Снятие блокировки возвращает конвейер в строй само (А-42 п.3).
+ *
+ * Тот же класс, что «без нажатий»: человек уже принял решение — прочитал `BLOCKED_*.md`, сделал, что
+ * там просили, и удалил файл. Второе действие после этого — дефект, а не безопасность. Само снятие
+ * остаётся человеческим: файл в кейсе удаляет кейс, а не конвейер.
+ */
+describe('снятая блокировка не требует второго нажатия (А-42 п.3)', () => {
+  /** Исполнитель, который блокируется, пока на диске стоит отметка сценария. */
+  function blockingEngine(blockUntilLifted: { on: boolean }): FakeEngine {
+    return createFakeEngine({
+      onStart: ({ name }) => {
+        if (!name.startsWith('delivery-executor-')) return observerStubOutcome(name) ?? {};
+        const taskId = name.replace('delivery-executor-', '');
+
+        if (taskId === '1' && blockUntilLifted.on) {
+          writeFileSync(
+            blockedPath(projectDirectory, taskId),
+            '# BLOCKED: task_1\n\nнужен человек\n',
+            'utf8',
+          );
+          return {};
+        }
+
+        writeReport(taskId);
+        return {};
+      },
+    });
+  }
+
+  it('идущий проход берёт разблокированную задачу сам — защёлки в переменной нет', async () => {
+    writeTree([task('1', ['lib/a.js']), task('2', ['lib/b.js'])]);
+
+    const blocking = { on: true };
+    const engine = blockingEngine(blocking);
+
+    /* Первый проход: задача 1 блокируется, задача 2 доигрывает, конвейер честно встаёт. */
+    await driveProject(PROJECT, projectDirectory, {
+      database,
+      engine,
+      logger,
+      credential: { kind: 'ANTHROPIC_API_KEY', value: 'x' },
+      maxExecutors: 1,
+    });
+
+    expect(statuses()['1']).toBe('BLOCKED');
+    expect(statusOnDisk('1')).toBe('BLOCKED');
+
+    /* Человек снимает блокировку: файл удалён, статус починен вотчером — здесь его роль играет кейс. */
+    blocking.on = false;
+    rmSync(blockedPath(projectDirectory, '1'), { force: true });
+    setTaskStatusOnDisk(projectDirectory, '1', 'PENDING');
+    database
+      .prepare("UPDATE tasks SET status = 'PENDING' WHERE project_id = ? AND task_id = ?")
+      .run(PROJECT, '1');
+
+    const resumed = await driveProject(PROJECT, projectDirectory, {
+      database,
+      engine,
+      logger,
+      credential: { kind: 'ANTHROPIC_API_KEY', value: 'x' },
+      maxExecutors: 1,
+    });
+
+    expect(resumed.map((entry) => entry.outcome)).toContain('COMPLETED');
+    expect(statuses()).toEqual({ '1': 'COMPLETED', '2': 'COMPLETED' });
+  }, 30_000);
+
+  it('resumeAfterUnblock ведёт проект, когда живого прохода нет, и молчит, когда есть', async () => {
+    writeTree([task('1', ['lib/a.js'])]);
+
+    const engine = createFakeEngine({
+      onStart: ({ name }) => {
+        if (!name.startsWith('delivery-executor-')) return observerStubOutcome(name) ?? {};
+        writeReport(name.replace('delivery-executor-', ''));
+        return {};
+      },
+    });
+
+    const deps = {
+      database,
+      engine,
+      logger,
+      credential: { kind: 'ANTHROPIC_API_KEY' as const, value: 'x' },
+      maxExecutors: 1,
+    };
+
+    resumeAfterUnblock(PROJECT, projectDirectory, deps);
+    await waitFor(() => statuses()['1'] === 'COMPLETED');
+    expect(statuses()['1']).toBe('COMPLETED');
   }, 30_000);
 });
 

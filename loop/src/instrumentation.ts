@@ -21,10 +21,13 @@ export async function register(): Promise<void> {
     { getEnv },
     { getDatabase },
     { createLogger },
-    { recoverFromDisk },
+    { recoverFromDisk, resumeAfterUnblock },
     { startGatewayFromEnv },
     { ensureBlockWatcher },
     { eventBus },
+    { executorCredential },
+    { createDockerEngine },
+    { resolveEndpoint },
   ] = await Promise.all([
     import('./config/env.ts'),
     import('./db/client.ts'),
@@ -33,6 +36,9 @@ export async function register(): Promise<void> {
     import('./gateway/start-gateway.ts'),
     import('./gate/blocked.ts'),
     import('./events/bus.ts'),
+    import('./config/env.ts'),
+    import('./docker/engine.ts'),
+    import('./docker/transport.ts'),
   ]);
 
   const env = getEnv();
@@ -51,8 +57,9 @@ export async function register(): Promise<void> {
 
       /*
        * The block watcher, armed per recovered project (task 167's finding): the BLOCKED file
-       * promises «контур увидит удаление» — this is where the seeing is wired in. The unblock
-       * repairs the status; restarting the pipeline stays the operator's start-loop.
+       * promises «контур увидит удаление» — this is where the seeing is wired in. Снятие чинит
+       * статус И ВОЗВРАЩАЕТ КОНВЕЙЕР В СТРОЙ (А-42 п.3): человек уже принял решение, второе
+       * нажатие было бы дефектом.
        */
       ensureBlockWatcher(database, project.projectId, project.projectDirectory, (taskId) => {
         logger.write({
@@ -62,13 +69,31 @@ export async function register(): Promise<void> {
           logLevel: 'WARN',
           message:
             `Блокировка задачи ${taskId} снята оператором (файл удалён) — задача снова PENDING. ` +
-            'Запустите конвейер снова (start-loop), чтобы продолжить.',
+            'Конвейер продолжает сам.',
         });
         eventBus().publish({
           type: 'task-status',
           projectId: project.projectId,
           taskId,
           status: 'PENDING',
+        });
+        resumeAfterUnblock(project.projectId, project.projectDirectory, {
+          database,
+          engine: createDockerEngine(
+            resolveEndpoint(process.platform, {
+              ...(env.DOCKER_ENGINE_PIPE === undefined
+                ? {}
+                : { DOCKER_ENGINE_PIPE: env.DOCKER_ENGINE_PIPE }),
+              ...(env.DOCKER_ENGINE_SOCKET === undefined
+                ? {}
+                : { DOCKER_ENGINE_SOCKET: env.DOCKER_ENGINE_SOCKET }),
+            }),
+          ),
+          logger,
+          credential: executorCredential(env),
+          maxExecutors: env.LOOP_MAX_EXECUTORS,
+          acceptanceTestTimeoutMs: env.ACCEPTANCE_TEST_TIMEOUT_MS,
+          ...(env.LOOP_ANTHROPIC_MODEL === undefined ? {} : { model: env.LOOP_ANTHROPIC_MODEL }),
         });
       });
     }

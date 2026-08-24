@@ -48,7 +48,13 @@ export type LoopEvent =
    * алерт с перечнем и кнопкой решения. Дашборду событие безвредно — любой не-log перерисовывает
    * дерево, полезной нагрузки страница не читает.
    */
-  | { type: 'plan-review'; projectId: string; gaps: string[] };
+  | { type: 'plan-review'; projectId: string; gaps: string[] }
+  /**
+   * Суждение о выполнимости, вынесенное на интейке (А-42 п.2): шлюз превращает его в алерт ДО
+   * сборки. Текст готов на стороне интейка — шине незачем знать форму суждения, ей хватает того,
+   * что это сообщение владельцу и вердикт одним словом.
+   */
+  | { type: 'feasibility'; projectId: string; verdict: string; text: string };
 
 export type Subscriber = (event: LoopEvent) => void;
 
