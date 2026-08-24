@@ -1,0 +1,83 @@
+{
+  "generatedAt": "2026-08-24T13:20:54.363Z",
+  "summary": {
+    "diffPercent": 52.5925435555148,
+    "maxSpacingDeltaPx": 165,
+    "comparedSegments": 47,
+    "totalPixels": 34939548,
+    "totalDiffPixels": 18375597
+  },
+  "perPage": [
+    {
+      "slug": "index",
+      "width": 375,
+      "comparedSegments": 11,
+      "totalPixels": 3349500,
+      "diffPixels": 1437793,
+      "maxSpacingDeltaPx": 35
+    },
+    {
+      "slug": "index",
+      "width": 768,
+      "comparedSegments": 6,
+      "totalPixels": 4718592,
+      "diffPixels": 1477246,
+      "maxSpacingDeltaPx": 35
+    },
+    {
+      "slug": "index",
+      "width": 1440,
+      "comparedSegments": 7,
+      "totalPixels": 9072000,
+      "diffPixels": 3702855,
+      "maxSpacingDeltaPx": 9
+    },
+    {
+      "slug": "products",
+      "width": 375,
+      "comparedSegments": 8,
+      "totalPixels": 2436000,
+      "diffPixels": 1614083,
+      "maxSpacingDeltaPx": 165
+    },
+    {
+      "slug": "products",
+      "width": 768,
+      "comparedSegments": 8,
+      "totalPixels": 6291456,
+      "diffPixels": 3525225,
+      "maxSpacingDeltaPx": 125
+    },
+    {
+      "slug": "products",
+      "width": 1440,
+      "comparedSegments": 7,
+      "totalPixels": 9072000,
+      "diffPixels": 6618395,
+      "maxSpacingDeltaPx": 107
+    }
+  ],
+  "offlineCheck": {
+    "checkedAt": "2026-08-24T13:20:48.502Z",
+    "pages": [
+      "index.html",
+      "products.html"
+    ],
+    "widths": [
+      375,
+      768,
+      1440
+    ],
+    "offline": true,
+    "externalRequests": []
+  },
+  "warnings": [
+    "полная высота страницы не совпадает для index@375: baseline maxScrollY=11368, клон maxScrollY=8120 — сравнение ограничено min(maxScrollY)",
+    "полная высота страницы не совпадает для index@768: baseline maxScrollY=5120, клон maxScrollY=7168 — сравнение ограничено min(maxScrollY)",
+    "полная высота страницы не совпадает для index@1440: baseline maxScrollY=5400, клон maxScrollY=6300 — сравнение ограничено min(maxScrollY)",
+    "полная высота страницы не совпадает для products@375: baseline maxScrollY=17052, клон maxScrollY=5684 — сравнение ограничено min(maxScrollY)",
+    "полная высота страницы не совпадает для products@768: baseline maxScrollY=9216, клон maxScrollY=7168 — сравнение ограничено min(maxScrollY)",
+    "полная высота страницы не совпадает для products@1440: baseline maxScrollY=9900, клон maxScrollY=5400 — сравнение ограничено min(maxScrollY)"
+  ],
+  "errors": []
+}
