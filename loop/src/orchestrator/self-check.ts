@@ -18,11 +18,48 @@ import { join, relative } from 'node:path';
  * фиксируются с обоснованием»); служебные деревья контура и продукта в поиск не входят.
  */
 
+/**
+ * Реестр расхождений — ДВА РАЗДЕЛА, и числа называются раздельно (А-44 п.3).
+ *
+ * **Почему их два.** Расхождения бывают двух родов, и они не равны:
+ *
+ * - **I. Замены по материалу** — прошли суждение о выполнимости, причина из закрытого перечня
+ *   (`feasibility.ts`), объявлены владельцу ДО сборки. Это честный обход невозможного;
+ * - **II. Сокращения объёма** — решение исполнителя: материал есть, работа не сделана. Род
+ *   законный (макет вправе быть макетом, ссылка вправе быть декоративной), но своим именем.
+ *
+ * Второй род в одной колонке с первым превращает реестр в место, где недоделанное легализуется
+ * задним числом: «сокращений 74» читается как «замен по материалу 74», то есть как «мы не могли».
+ * Раздельные числа — единственное, что этому мешает.
+ *
+ * **Воротами не делается ни то, ни другое.** Реестр публикуется, а решает по нему человек.
+ */
+
+/** Заголовки разделов — один источник правды: их же требует промпт плана от исполнителя. */
+export const REGISTRY_SECTIONS = Object.freeze({
+  material: 'Замены по материалу',
+  scope: 'Сокращения объёма',
+} as const);
+
+export interface RegistryCount {
+  /** Раздел I — замены, у которых названа причина невозможности. */
+  material: number;
+  /** Раздел II — сокращения объёма: материал был, работа не сделана. */
+  scope: number;
+  /**
+   * Строки вне обоих разделов — старая форма реестра, одной кучей.
+   *
+   * Считаются отдельно и называются вслух: молча приписать их к первому разделу значило бы выдать
+   * сокращения за замены, то есть сделать ровно то, ради чего разделы и заведены.
+   */
+  unfiled: number;
+}
+
 export interface SelfCheckReport {
   /** Путь отчёта относительно рабочей директории — то, что алерт называет владельцу. */
   relativePath: string;
-  /** Строк-записей в таблицах реестра — главный агрегат отчёта, посчитанный кодом. */
-  entries: number;
+  /** Строк-записей в таблицах реестра, раздельно по разделам. */
+  entries: RegistryCount;
   sizeKb: number;
 }
 
@@ -34,22 +71,47 @@ const SKIPPED_DIRECTORIES = new Set(['node_modules', '.git', '.next', 'bundle', 
 const SEARCH_DEPTH = 2;
 
 /**
- * Счёт записей реестра: строки-данные markdown-таблиц.
+ * Счёт записей реестра по разделам: строки-данные markdown-таблиц под своим заголовком.
  *
  * Строка данных начинается с `|` и не является ни разделителем (`|---|`), ни шапкой. Шапок ровно
  * столько, сколько разделителей — по одной над каждым, так что арифметика не требует разбора
  * структуры: данные = все pipe-строки − 2 × разделители. Модельный текст вокруг таблиц счёту не
  * мешает и в него не входит.
+ *
+ * Раздел определяется по ближайшему заголовку выше: он опознаётся по ВХОЖДЕНИЮ имени раздела, а не
+ * по точному совпадению строки, — «## II. Сокращения объёма (решение исполнителя)» есть тот же
+ * раздел, и придираться к его оформлению значило бы считать ноль там, где записи есть.
  */
-export function countRegistryEntries(markdown: string): number {
-  const pipeRows = markdown
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith('|'));
+export function countRegistryEntries(markdown: string): RegistryCount {
+  const buckets: Record<keyof RegistryCount, string[]> = { material: [], scope: [], unfiled: [] };
+  let current: keyof RegistryCount = 'unfiled';
 
-  const separators = pipeRows.filter((line) => /^\|[\s:|-]+\|?$/.test(line)).length;
+  for (const raw of markdown.split('\n')) {
+    const line = raw.trim();
 
-  return Math.max(pipeRows.length - 2 * separators, 0);
+    if (line.startsWith('#')) {
+      const heading = line.toLowerCase();
+      current = heading.includes(REGISTRY_SECTIONS.material.toLowerCase())
+        ? 'material'
+        : heading.includes(REGISTRY_SECTIONS.scope.toLowerCase())
+          ? 'scope'
+          : 'unfiled';
+      continue;
+    }
+
+    if (line.startsWith('|')) buckets[current].push(line);
+  }
+
+  const rows = (lines: readonly string[]): number => {
+    const separators = lines.filter((line) => /^\|[\s:|-]+\|?$/.test(line)).length;
+    return Math.max(lines.length - 2 * separators, 0);
+  };
+
+  return {
+    material: rows(buckets.material),
+    scope: rows(buckets.scope),
+    unfiled: rows(buckets.unfiled),
+  };
 }
 
 function findReportPath(directory: string, depth: number): string | null {
@@ -101,8 +163,17 @@ export function verificationLine(report: SelfCheckReport | null): string {
     );
   }
 
+  const { material, scope, unfiled } = report.entries;
+
+  const filed =
+    `замен по материалу ${String(material)}, сокращений объёма ${String(scope)}` +
+    (unfiled === 0
+      ? ''
+      : `; записей вне разделов ${String(unfiled)} — реестр старой формы, ` +
+        'род расхождения по ним не назван');
+
   return (
-    `Сверка с задумкой: план снимал самопроверку — зафиксировано расхождений: ${String(report.entries)} ` +
+    `Сверка с задумкой: план снимал самопроверку — зафиксировано расхождений: ${filed} ` +
     `(${report.relativePath}, ${String(report.sizeKb)} КБ). Оценка «похоже/не похоже» — за владельцем.`
   );
 }

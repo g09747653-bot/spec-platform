@@ -4,11 +4,21 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { countRegistryEntries, findSelfCheckReport, verificationLine } from './self-check.ts';
+import {
+  countRegistryEntries,
+  findSelfCheckReport,
+  REGISTRY_SECTIONS,
+  verificationLine,
+} from './self-check.ts';
 
 /**
- * Вершинный критерий (А-33 п.4а): сверка финального сообщения с задумкой. Тестируются обе формы —
- * с отчётом самопроверки и без — и арифметика счёта записей, на которой сверка стоит.
+ * Вершинный критерий (А-33 п.4а) и реестр расхождений в ДВУХ разделах (А-44 п.3).
+ *
+ * Раздельность — не оформление. Замена по материалу («видео-фонов hero не воспроизвести — материала
+ * нет, вместо них статичный кадр») прошла суждение о выполнимости и объявлена ДО сборки; сокращение
+ * объёма («74 ссылки оставлены декоративными») — решение исполнителя при наличном материале. Одна
+ * колонка на оба рода превращает реестр в место, где недоделанное легализуется задним числом: число
+ * 74 читается как «мы не могли», хотя оно означает «мы не стали».
  */
 
 let directory: string;
@@ -26,26 +36,58 @@ const REGISTRY = [
   '',
   'Преамбула о том, как читать файл.',
   '',
+  `## I. ${REGISTRY_SECTIONS.material}`,
+  '',
+  '| Что | Причина | Взамен |',
+  '|---|---|---|',
+  '| Видео-фоны hero | материал | статичный кадр той же композиции |',
+  '| Начертание NVIDIA Sans | лицензия | Inter той же метрики |',
+  '',
+  `## II. ${REGISTRY_SECTIONS.scope} (решение исполнителя)`,
+  '',
+  '| Что | Почему не доведено |',
+  '|---|---|',
+  '| Раздел «Драйверы» | оставлен декоративной ссылкой |',
+  '| Карточки блога | три из двенадцати |',
+  '| Форма подписки | без отправки |',
+].join('\n');
+
+/** Реестр старой формы — одной кучей, без разделов. Ровно то, что писали до этой правки. */
+const FLAT = [
+  '# Реестр расхождений',
+  '',
   '| Раздел | Ширина | Описание | Решение |',
   '|---|---|---|---|',
   '| Главная | 375px | SC-001=34% | named-строка |',
-  '| Главная | 768px | SC-001=41% | named-строка |',
   '| Products | 1440px | SC-002 diff=108px | named-строка |',
-  '',
-  '## Вторая таблица',
-  '',
-  '| Задача | Статус |',
-  '|---|---|',
-  '| T037 | зафиксировано |',
 ].join('\n');
 
-describe('счёт записей реестра', () => {
-  it('считает строки данных всех таблиц, не считая шапок и разделителей', () => {
-    expect(countRegistryEntries(REGISTRY)).toBe(4);
+describe('счёт записей реестра по разделам', () => {
+  it('считает строки данных РАЗДЕЛЬНО, не считая шапок и разделителей', () => {
+    expect(countRegistryEntries(REGISTRY)).toEqual({ material: 2, scope: 3, unfiled: 0 });
   });
 
-  it('файл без таблиц — ноль записей, не мусорное число', () => {
-    expect(countRegistryEntries('# Отчёт\n\nПросто текст без таблиц.')).toBe(0);
+  it('файл без таблиц — нули по всем разделам, не мусорное число', () => {
+    expect(countRegistryEntries('# Отчёт\n\nПросто текст без таблиц.')).toEqual({
+      material: 0,
+      scope: 0,
+      unfiled: 0,
+    });
+  });
+
+  it('РЕГРЕССИЯ: реестр без разделов не приписывается к первому — он «вне разделов»', () => {
+    expect(countRegistryEntries(FLAT)).toEqual({ material: 0, scope: 0, unfiled: 2 });
+  });
+
+  it('заголовок раздела узнаётся по имени, а не по точному совпадению строки', () => {
+    const decorated = [
+      `### I. ${REGISTRY_SECTIONS.material} — прошли суждение о выполнимости`,
+      '| Что | Причина | Взамен |',
+      '|---|---|---|',
+      '| Видео | материал | кадр |',
+    ].join('\n');
+
+    expect(countRegistryEntries(decorated).material).toBe(1);
   });
 });
 
@@ -56,7 +98,7 @@ describe('поиск отчёта самопроверки', () => {
     const report = findSelfCheckReport(directory);
     expect(report).not.toBeNull();
     expect(report?.relativePath).toBe('DEVIATIONS.md');
-    expect(report?.entries).toBe(4);
+    expect(report?.entries).toEqual({ material: 2, scope: 3, unfiled: 0 });
   });
 
   it('находит отчёт на уровень глубже, но не заглядывает в служебные деревья', () => {
@@ -75,13 +117,24 @@ describe('поиск отчёта самопроверки', () => {
 });
 
 describe('строка сверки — две формы, обе явные (А-33 п.4а)', () => {
-  it('с отчётом: замер, путь и размер — не голая галочка', () => {
+  it('РЕГРЕССИЯ: числа двух родов называются раздельно, а не одной суммой', () => {
     writeFileSync(join(directory, 'DEVIATIONS.md'), REGISTRY, 'utf8');
 
     const line = verificationLine(findSelfCheckReport(directory));
     expect(line).toContain('план снимал самопроверку');
-    expect(line).toContain('расхождений: 4');
+    expect(line).toContain('замен по материалу 2');
+    expect(line).toContain('сокращений объёма 3');
+    /* Суммы нет нигде: «расхождений 5» — ровно та строка, которая легализует недоделанное. */
+    expect(line).not.toContain('расхождений: 5');
     expect(line).toContain('DEVIATIONS.md');
+  });
+
+  it('реестр старой формы называется старым, а не выдаётся за раздельный', () => {
+    writeFileSync(join(directory, 'DEVIATIONS.md'), FLAT, 'utf8');
+
+    const line = verificationLine(findSelfCheckReport(directory));
+    expect(line).toContain('записей вне разделов 2');
+    expect(line).toContain('род расхождения по ним не назван');
   });
 
   it('без отчёта: сверка не снималась — сказано словом, не отсутствием слова', () => {
