@@ -42,7 +42,7 @@ export interface ContainerSpan {
 
 const KIND_OF: readonly { kind: ContainerKind; test: (name: string) => boolean }[] = [
   { kind: 'executor', test: (name) => name.startsWith('delivery-executor-') },
-  { kind: 'probe', test: (name) => name === 'quality-probe' },
+  { kind: 'probe', test: (name) => name.startsWith('quality-probe') },
   { kind: 'acceptance', test: (name) => name.startsWith('delivery-gate-') },
 ];
 

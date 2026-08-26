@@ -17,6 +17,7 @@ import { blockedPath, setTaskStatusOnDisk } from '../gate/blocked.ts';
 import { coherentJudgeChain, probeStubOutcome } from '../gate/testing/judge-stub.ts';
 import { observerStubOutcome } from '../gate/testing/observer-stub.ts';
 import { PROBE_RESULT } from '../gate/product-probe.ts';
+import { probeContainerName } from '../gate/quality-stage.ts';
 import { executorContainerName } from '../executor/run.ts';
 import { HANDOFF, HandoffTask, importHandoff, taskFileName } from '../intake/handoff.ts';
 import { createLogger, type Logger } from '../observability/log.ts';
@@ -785,7 +786,7 @@ describe('вершинный критерий стоит на суде каче�
   function engineWhereProbeSays(probe: StartOutcome): FakeEngine {
     return createFakeEngine({
       onStart: ({ name }) => {
-        if (name === 'quality-probe') return probe;
+        if (name === probeContainerName(PROJECT)) return probe;
         if (name.startsWith('delivery-executor-')) {
           writeReport(name.replace('delivery-executor-', ''));
           return {};
@@ -808,7 +809,7 @@ describe('вершинный критерий стоит на суде каче�
   it('зелёная доска: проект завершён, и вердикт стоит в той же строке', async () => {
     writeTree([task('1', ['lib/a.js'])]);
 
-    const results = await drive(engineWhereProbeSays(probeStubOutcome('quality-probe') ?? {}));
+    const results = await drive(engineWhereProbeSays(probeStubOutcome(probeContainerName(PROJECT)) ?? {}));
 
     expect(results.map((entry) => entry.outcome)).toEqual(['COMPLETED']);
     expect(readBoard(database, PROJECT)?.status).toBe('COMPLETED');
@@ -823,7 +824,9 @@ describe('вершинный критерий стоит на суде каче�
     writeTree([task('1', ['lib/a.js'])]);
 
     /* Тот самый тост из продукта заказчика — абсолютный запрет, красная ось безусловно. */
-    const stubbed = JSON.parse(String((probeStubOutcome('quality-probe')?.stdout ?? [])[1])) as {
+    const stubbed = JSON.parse(
+      String((probeStubOutcome(probeContainerName(PROJECT))?.stdout ?? [])[1]),
+    ) as {
       operability: { elements: { alert: string }[] };
     };
     stubbed.operability.elements = stubbed.operability.elements.map((element) => ({

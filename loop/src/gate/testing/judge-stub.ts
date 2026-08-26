@@ -57,7 +57,7 @@ const GREEN = {
 
 /** Ответ пробы продукта, или `null` — контейнер не пробный, пусть кейс решает сам. */
 export function probeStubOutcome(name: string): StartOutcome | null {
-  if (name !== 'quality-probe') return null;
+  if (!name.startsWith('quality-probe')) return null;
 
   return { exitCode: 0, stdout: [PROBE_RESULT, JSON.stringify(GREEN)] };
 }

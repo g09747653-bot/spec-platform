@@ -761,7 +761,7 @@ export async function driveProject(
       say('Все задачи приняты. Суд качества: открываю продукт и пользуюсь им.');
 
       const judged = await judgeProduct(
-        { projectDirectory, seed: readSeed(projectDirectory) },
+        { projectDirectory, seed: readSeed(projectDirectory), projectId },
         {
           engine: deps.engine,
           chain: deps.judgeChain ?? null,

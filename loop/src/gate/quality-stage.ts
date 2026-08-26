@@ -47,6 +47,12 @@ import {
 
 export const QUALITY_FILE = join('handoff', 'QUALITY.json');
 
+/** `quality-probe[-<projectId>]` — имя пробы этого проекта и ничьё больше. */
+export function probeContainerName(projectId?: string): string {
+  const scope = (projectId ?? '').replace(/[^A-Za-z0-9_.-]/g, '');
+  return scope === '' ? 'quality-probe' : `quality-probe-${scope}`;
+}
+
 /** Проба поднимает браузер и обходит десятки элементов: её потолок — свой, не приёмочный. */
 export const PROBE_TIMEOUT_MS = 15 * 60_000;
 
@@ -246,7 +252,7 @@ export function readQuality(projectDirectory: string): QualityBoard | null {
  * продукт, а продукт меняется. Прошлая доска — история, а не ответ, и каждый заход судит заново.
  */
 export async function judgeProduct(
-  args: { projectDirectory: string; seed: string | null },
+  args: { projectDirectory: string; seed: string | null; projectId?: string },
   deps: QualityStageDeps,
 ): Promise<QualityOutcome> {
   const capability = await resolveCapabilityImage(
@@ -277,7 +283,12 @@ export async function judgeProduct(
     deps.engine,
     capability.image,
     args.projectDirectory,
-    'quality-probe',
+    /*
+     * Имя пробы несёт проект: `findByName` сносит одноимённый контейнер перед стартом, и общее имя
+     * означало бы, что суд одного проекта убивает пробу другого. Тот же довод, что у составного
+     * ключа доски (D-324).
+     */
+    probeContainerName(args.projectId),
     buildProbeScript(probeOptions),
     deps,
   );
