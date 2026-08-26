@@ -2,17 +2,20 @@ import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
+import { getEnv, providerCredentials, roleConfiguration } from '../config/env.ts';
 import { openMigratedDatabase } from '../db/migrate.ts';
 import { DEFAULT_INTAKE_CONCURRENCY } from '../intake/fan-out.ts';
 import { intakeBundle, type IntakeStageSpan } from '../intake/intake.ts';
 import { readBundle } from '../intake/validate.ts';
 import type { Chain } from '../llm/chain.ts';
+import { createRoleChain } from '../llm/roles.ts';
 import { createLogger } from '../observability/log.ts';
 
 /**
- * Разбивка стены интейка ПО СТАДИЯМ (А-51 п.3).
+ * Разбивка стены интейка ПО СТАДИЯМ (А-51 п.3; живой режим — А-52 п.2).
  *
  * `node src/bench/intake-stages-cli.ts [--bundle=путь] [--latency=9098] [--wide=5] [--out=путь]`
+ * `node --env-file-if-exists=.env src/bench/intake-stages-cli.ts --live [--wide=5] [--out=путь]`
  *
  * **Почему замер стоит перед правкой, а не после.** Мандат требует распараллелить планирование, но
  * «интейк 127,4 с» — одно число за шестью разными работами, и ускорять вслепую значит гадать, какая
@@ -25,9 +28,15 @@ import { createLogger } from '../observability/log.ts';
  * потолка, а из живого замера А-44: широкий прогон дал `intakeMs = 127369` при 14 модельных
  * вызовах на бандле из десяти задач, то есть **9098 мс на вызов**. Это и есть умолчание `--latency`.
  *
+ * **`--live` (А-52 п.2) убирает и её.** Цепочки берутся из окружения контура — те же роли, тот же
+ * порядок провайдеров, что у прода (`LOOP_PROVIDER_ORDER`), — и каждый вызов стоит настоящего хода
+ * настоящего звена. Это подтверждение симуляции живьём: тот же бандл, тот же код, те же два потолка
+ * веера; расхождение двух отчётов — это и есть цена подставленной задержки, названная числом.
+ *
  * **Чего числа НЕ значат.** Они не предсказывают живой интейк на другом бандле и другой цепочке:
  * задержка настоящего звена гуляет с длиной промпта и с загрузкой провайдера. Они называют ДРУГОЕ,
- * и это как раз спрошенное: какая доля стены интейка приходится на какую стадию и что даёт веер.
+ * и это как раз спрошенное: какая доля стены интейка приходится на какую стадию и что из этого
+ * забирает веер.
  */
 
 function argOf(name: string, fallback: number): number {
@@ -43,10 +52,18 @@ function pathArg(name: string, fallback: string): string {
 /** Замеренная средняя задержка модельного вызова: 127369 мс / 14 вызовов широкого прогона А-44. */
 const A44_LATENCY_MS = 9098;
 
+/** Живой режим: настоящие цепочки вместо подставленной задержки (А-52 п.2). */
+const live = process.argv.includes('--live');
+
 const bundlePath = resolve(pathArg('bundle', '../artifacts/gate-M14a/machine-bundle/bundle'));
 const latency = argOf('latency', A44_LATENCY_MS);
 const wide = argOf('wide', DEFAULT_INTAKE_CONCURRENCY);
-const out = resolve(pathArg('out', '../.specs/handoff/INTAKE-STAGES.md'));
+const out = resolve(
+  pathArg(
+    'out',
+    live ? '../.specs/handoff/INTAKE-STAGES-LIVE.md' : '../.specs/handoff/INTAKE-STAGES.md',
+  ),
+);
 
 /**
  * Звено с замеренной задержкой и осмысленными ответами.
@@ -143,11 +160,36 @@ async function measure(concurrency: number): Promise<Run> {
   const titles = readBundle(join(projectDirectory, 'bundle')).tasks.map((task) => task.title);
 
   /*
-   * Одно звено на все роли — как в проде, когда роли отдельно не настроены (`createRoleChain`
-   * падает на общий порядок). Счётчик вызовов при этом общий, и порядок ответов совпадает с
-   * порядком вопросов интейка: исследователь, класс, выполнимость, объём, задания.
+   * Симуляция: одно звено на все роли — как в проде, когда роли отдельно не настроены
+   * (`createRoleChain` падает на общий порядок). Счётчик вызовов при этом общий, и порядок ответов
+   * совпадает с порядком вопросов интейка: исследователь, класс, выполнимость, объём, задания.
+   *
+   * Живой режим (А-52 п.2): цепочки из окружения контура, ролями, как их собирает прод. Пустая
+   * цепочка архитектора — именованный отказ, а не бесплатная стадия: замер с неответившим звеном
+   * мерил бы скелет кода вместо работы модели (урок А-51, строка карты 10б).
    */
-  const chain = latencyChain(titles);
+  let chain: Chain;
+  let researchChain: Chain;
+
+  if (live) {
+    const env = getEnv();
+    const roles = roleConfiguration(env);
+    const credentials = providerCredentials(env);
+    const architect = createRoleChain(roles, 'architect', credentials);
+    const researcher = createRoleChain(roles, 'researcher', credentials);
+
+    if (architect.providers.length === 0) {
+      throw new Error(
+        'живой замер невозможен: цепочка архитектора пуста — настройте провайдеров в loop/.env',
+      );
+    }
+
+    chain = architect;
+    researchChain = researcher.providers.length === 0 ? architect : researcher;
+  } else {
+    chain = latencyChain(titles);
+    researchChain = chain;
+  }
 
   const startedAt = Date.now();
   const intake = await intakeBundle(
@@ -156,7 +198,7 @@ async function measure(concurrency: number): Promise<Run> {
       database,
       logger: createLogger(database),
       chain,
-      researchChain: chain,
+      researchChain,
       concurrency,
     },
   );
@@ -202,16 +244,30 @@ function table(run: Run): string[] {
 const sequential = await measure(1);
 const parallel = await measure(wide);
 
+const preamble = live
+  ? [
+      '## Живой прогон интейка по стадиям (А-52 п.2)',
+      '',
+      `Бандл: \`${bundlePath}\`. Задержки не подставлены: каждый вызов — настоящий ход настоящей`,
+      'цепочки контура (`LOOP_PROVIDER_ORDER`), ролями, как их собирает прод. Тот же бандл, тот же',
+      'код и те же два потолка веера, что у симуляции выше, — расхождение двух отчётов и есть цена',
+      'подставленной задержки звена.',
+      '',
+    ]
+  : [
+      '## Разбивка интейка по стадиям и цена веера (А-51 п.3)',
+      '',
+      `Бандл: \`${bundlePath}\`. Задержка модельного звена: **${String(latency)} мс на вызов** —`,
+      'не выдумана, а взята из живого замера А-44 (`intakeMs = 127369` при 14 вызовах широкого прогона).',
+      '',
+      'Настоящее здесь всё, кроме задержки звена: те же стадии, тот же порядок, тот же код. Числа не',
+      'предсказывают живой интейк на другой цепочке — они называют, какая доля стены на какой стадии',
+      'лежит и что из этого забирает веер.',
+      '',
+    ];
+
 const report = [
-  '## Разбивка интейка по стадиям и цена веера (А-51 п.3)',
-  '',
-  `Бандл: \`${bundlePath}\`. Задержка модельного звена: **${String(latency)} мс на вызов** —`,
-  'не выдумана, а взята из живого замера А-44 (`intakeMs = 127369` при 14 вызовах широкого прогона).',
-  '',
-  'Настоящее здесь всё, кроме задержки звена: те же стадии, тот же порядок, тот же код. Числа не',
-  'предсказывают живой интейк на другой цепочке — они называют, какая доля стены на какой стадии',
-  'лежит и что из этого забирает веер.',
-  '',
+  ...preamble,
   ...table(sequential),
   ...table(parallel),
   '### Итог',
@@ -237,8 +293,12 @@ const report = [
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, `${report}\n`, 'utf8');
 writeFileSync(
-  join(dirname(out), 'INTAKE-STAGES.json'),
-  `${JSON.stringify({ sequential, parallel, latency, bundlePath }, null, 2)}\n`,
+  out.replace(/\.md$/, '.json'),
+  `${JSON.stringify(
+    { sequential, parallel, ...(live ? { live } : { latency }), bundlePath },
+    null,
+    2,
+  )}\n`,
   'utf8',
 );
 

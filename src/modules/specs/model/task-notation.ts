@@ -13,9 +13,10 @@
  * - **the mapping** (`specs/export/machine-bundle.ts`), which recognises all three shapes below as
  *   *tolerance* — bundles already sealed under the old instruction must keep exporting — and reads
  *   `dependsOn` out of the dependency clause;
- * - **the tasks-generation instruction** (`prompts/assets/spec-generation.ts`), which renders the
- *   canonical record from `CANONICAL_TASK_RECORD` and names the dependency labels from
- *   `DEPENDENCY_LABELS`.
+ * - **the tasks-generation instructions** (`prompts/assets/spec-generation.ts`) — the parity one,
+ *   which renders the canonical record from `CANONICAL_TASK_RECORD`, and the methodology one, which
+ *   renders the dependency clause from `METHODOLOGY_DEPENDENCY_RECORD` (А-52); both name the
+ *   dependency labels from `DEPENDENCY_LABELS`.
  *
  * Nothing here validates: a document that ignores the canonical form is still a valid document and
  * still exports (the form is an instruction, not a refusal). What the canonical form buys is a
@@ -44,6 +45,27 @@ export const CANONICAL_TASK_RECORD = Object.freeze({
   dependencies: `_${DEPENDENCY_LABELS[0]}: 2, 3_`,
   /** The same clause for a task that waits for nothing. */
   noDependencies: `_${DEPENDENCY_LABELS[0]}: ${NO_DEPENDENCIES_MARK}_`,
+} as const);
+
+/**
+ * The dependency record a **methodology** document is asked for (А-52).
+ *
+ * A methodology's task notation is its template's — lettered checkboxes for speckit, whatever the
+ * next vendored template writes — so the generation instruction cannot prescribe the canonical
+ * entry above. What it can and now must prescribe is the *dependency clause*: every task states
+ * what it waits for, in one of the two forms the mapping already reads (D-316's inline clause on
+ * the entry line, or the labelled line beneath the entry that every recognised shape shares).
+ * These lines exist so the instruction quotes a form the export provably reads back — the same
+ * contract `CANONICAL_TASK_RECORD` keeps for the parity path, tested the same way.
+ */
+export const METHODOLOGY_DEPENDENCY_RECORD = Object.freeze({
+  /** A template-shaped entry whose dependencies sit on a line of their own beneath it. */
+  entry: '- [ ] T002 Short imperative title',
+  dependencies: `_${DEPENDENCY_LABELS[0]}: T001_`,
+  /** The same clause for a task that waits for nothing. */
+  noDependencies: `_${DEPENDENCY_LABELS[0]}: ${NO_DEPENDENCIES_MARK}_`,
+  /** The Spec-Kit form: the clause inline on the entry line itself (D-316). */
+  inline: '- [ ] T004 (depends on T002, T003) Short imperative title',
 } as const);
 
 /** `#### Task 1.1: Title` / `#### Задача 2: Название` — the heading shape the A0 bundle writes. */

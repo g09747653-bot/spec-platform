@@ -17,6 +17,7 @@ import {
   deriveTasks,
   parseDependsOn,
   parseTaskEntries,
+  FLAT_PLAN_TASK_LIMIT,
   MACHINE_BUNDLE_FILES,
 } from './machine-bundle';
 
@@ -288,6 +289,127 @@ describe('the speckit methodology’s live documents — the lettered-checkbox s
   it('parses lettered dependency tokens without double-counting their digits', () => {
     expect(parseDependsOn('T006, T007')).toEqual(['T006', 'T007']);
     expect(parseDependsOn('2, 3')).toEqual(['2', '3']);
+  });
+});
+
+describe('the flat-plan warning in the tasks extract (А-52)', () => {
+  /*
+   * A warning, never a gate: the bundle exports exactly as it did, and what changes is that the
+   * flatness is *named* in the extract both sides read. The M14а live plan — sixteen tasks, zero
+   * stated dependencies — is what a flat plan costs: the loop's slicer falls back to phase-of-
+   * identifier grouping and the plan's parallel ceiling measured 2.67× out of 10 executors.
+   */
+  const flatPlan = (count: number, dependingTasks = 0): string =>
+    Array.from({ length: count }, (_, index) => {
+      const id = String(index + 1);
+      const clause =
+        index < dependingTasks && index > 0 ? `\n  - _Dependencies: ${String(index)}_` : '';
+      return `- [ ] ${id}. Task number ${id}${clause}`;
+    }).join('\n');
+
+  it('names the flatness of a plan over the limit, in the sentence the mandate states', () => {
+    const derived = deriveTasks(flatPlan(FLAT_PLAN_TASK_LIMIT + 1), 'b', 'p');
+
+    expect(derived.warnings).toHaveLength(1);
+    expect(derived.warnings?.[0]?.name).toBe('flat-plan');
+    expect(derived.warnings?.[0]?.message).toContain(
+      'план плоский — ширина параллельности выродится',
+    );
+    expect(derived.warnings?.[0]?.message).toContain(String(FLAT_PLAN_TASK_LIMIT + 1));
+
+    // The warning is additive: the extract stays schema-valid for the loop's own validation.
+    expect(validTasks(derived), ajv.errorsText(validTasks.errors)).toBe(true);
+  });
+
+  it('stays silent at the limit and below — a plan that small loses nothing to flatness', () => {
+    expect(deriveTasks(flatPlan(FLAT_PLAN_TASK_LIMIT), 'b', 'p').warnings).toBeUndefined();
+  });
+
+  it('stays silent when even one task states a dependency', () => {
+    const derived = deriveTasks(flatPlan(FLAT_PLAN_TASK_LIMIT + 2, 2), 'b', 'p');
+
+    expect(derived.tasks.filter((task) => task.dependsOn.length > 0)).toHaveLength(1);
+    expect(derived.warnings).toBeUndefined();
+  });
+
+  it('is absent, not empty: a clean extract stays byte-identical to its pre-А-52 shape', () => {
+    const clean = `${JSON.stringify(deriveTasks(flatPlan(3), 'b', 'p'), null, 2)}\n`;
+
+    expect(clean).not.toContain('warnings');
+  });
+
+  it('reaches the assembled bundle result, for the response that hands the archive over', () => {
+    const entry = (specType: 'constitution' | 'tasks', content: string): ExportableFile => ({
+      specFileId: `${specType}-id`,
+      specType,
+      fileName: specFileName(specType),
+      content,
+      revisionNumber: 1,
+    });
+
+    const flat = assembleMachineBundle([entry('tasks', flatPlan(9))], 'p');
+    expect(flat.warnings.map((warning) => warning.name)).toEqual(['flat-plan']);
+
+    const stated = assembleMachineBundle(
+      [entry('tasks', read('fixtures/spec-bundle/golden/m14a-canonical.tasks.md'))],
+      'p',
+    );
+    expect(stated.warnings).toEqual([]);
+
+    const withoutTasks = assembleMachineBundle([entry('constitution', '# К\n')], 'p');
+    expect(withoutTasks.warnings).toEqual([]);
+  });
+});
+
+describe('the canonical twin of the M14а plan (А-52)', () => {
+  /*
+   * The fifth golden pair — the same sixteen tasks as the live M14а plan, recorded the way the
+   * generation instruction now demands: flat identifiers, and an explicit dependency clause on
+   * every task, «—» included. The graph is not invented wholesale: every edge names the tasks whose
+   * product the depending task's own text uses. The live pair stays byte-for-byte as the historical
+   * record; this pair is what the same class of plan looks like after the instruction, and the
+   * loop's `plan-width` bench measures the width the two notations give the same work.
+   */
+  const TWIN = () => read('fixtures/spec-bundle/golden/m14a-canonical.tasks.md');
+
+  it('states a dependency clause on every task — «none» is a statement, not an omission', () => {
+    const clauses = TWIN()
+      .split('\n')
+      .filter((line) => line.includes('_Зависимости:'));
+
+    expect(clauses).toHaveLength(16);
+  });
+
+  it('is the same plan as the live snapshot, task for task', () => {
+    const twin = deriveTasks(TWIN(), 'x', 'x');
+    const live = deriveTasks(read('fixtures/spec-bundle/golden/m14a-live.tasks.md'), 'x', 'x');
+
+    expect(twin.tasks.map((task) => task.title)).toEqual(live.tasks.map((task) => task.title));
+  });
+
+  it('carries the stated graph out of the export, and earns no flat-plan warning', () => {
+    const derived = deriveTasks(TWIN(), 'm14a-canonical-bundle', 'm14a-canonical-project');
+
+    expect(validTasks(derived), ajv.errorsText(validTasks.errors)).toBe(true);
+    expect(derived.tasks).toHaveLength(16);
+    expect(derived.warnings).toBeUndefined();
+    expect(derived.tasks.filter((task) => task.dependsOn.length > 0)).toHaveLength(13);
+
+    // Every stated dependency resolves, so the loop's topological pass can walk the graph.
+    const ids = new Set(derived.tasks.map((task) => task.taskId));
+    for (const task of derived.tasks) {
+      for (const dependency of task.dependsOn) expect(ids).toContain(dependency);
+    }
+  });
+
+  it('matches the committed golden byte for byte', () => {
+    const derived = `${JSON.stringify(
+      deriveTasks(TWIN(), 'm14a-canonical-bundle', 'm14a-canonical-project'),
+      null,
+      2,
+    )}\n`;
+
+    expect(derived).toBe(read('fixtures/spec-bundle/golden/m14a-canonical.tasks.json'));
   });
 });
 

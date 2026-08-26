@@ -26,6 +26,7 @@ const VARIABLES: { [Id in PromptId]: PromptVariables[Id] } = {
     documentLabel: 'Plan',
     template: '# Implementation Plan\n\n## Summary\n',
     requiredSections: '1. ## Summary',
+    documentRules: '',
     initialPrompt: 'A tool for writing specs.',
     context: '',
     changeInstruction: '',

@@ -272,10 +272,55 @@ export interface MachineTaskRow {
   metadata: { expectedArtifacts: never[] };
 }
 
+/**
+ * A named warning the tasks extract carries to its readers (А-52). Named, so the owner's tooling
+ * and the loop's planner match on the name while a human reads the sentence; the closed list is
+ * the same discipline as the loop's named refusal reasons.
+ */
+export interface MachineTasksWarning {
+  name: 'flat-plan';
+  message: string;
+}
+
+/**
+ * Over this many tasks, a plan that states no dependencies at all gets the flat-plan warning.
+ *
+ * Eight is the whole-artifact share ceiling the loop already lives with: a plan that small is one
+ * milestone's worth of work and loses nothing to flatness, while the M14а plan — sixteen tasks,
+ * zero stated dependencies — degenerated to a 2.67× ceiling out of 10 executors for exactly this
+ * reason, measured by `plan-width-cli` on the live bundle.
+ */
+export const FLAT_PLAN_TASK_LIMIT = 8;
+
+/**
+ * The flat-plan warning, or nothing (А-52).
+ *
+ * **A warning, never a gate.** The bundle exports exactly as it did — a sealed plan must keep
+ * exporting, and a flat plan is a legal plan. What changes is that the flatness is *named* in the
+ * extract both sides read: the loop's milestone slicer, given no dependencies, falls back to
+ * phase-of-identifier grouping (its task 156 fallback), and parallel width dies in that notation —
+ * `phaseOf('7') === '7'`, so a flat-numbered plan becomes one milestone per task.
+ */
+function flatPlanWarnings(tasks: readonly MachineTaskRow[]): MachineTasksWarning[] {
+  const stated = tasks.some((task) => task.dependsOn.length > 0);
+  if (stated || tasks.length <= FLAT_PLAN_TASK_LIMIT) return [];
+
+  return [
+    {
+      name: 'flat-plan',
+      message:
+        `план плоский — ширина параллельности выродится: задач ${String(tasks.length)}, ` +
+        'зависимостей не заявила ни одна; нарезка вех сможет опереться только на номера задач',
+    },
+  ];
+}
+
 export interface MachineTasks {
   bundleId: string;
   projectId: string;
   tasks: MachineTaskRow[];
+  /** Present only when there is something to say: a clean extract stays byte-identical (А-52). */
+  warnings?: MachineTasksWarning[];
 }
 
 /*
@@ -527,7 +572,10 @@ export function deriveTasks(
   bundleId: string,
   projectId: string,
 ): MachineTasks {
-  return { bundleId, projectId, tasks: parseTaskEntries(tasksMarkdown) };
+  const tasks = parseTaskEntries(tasksMarkdown);
+  const warnings = flatPlanWarnings(tasks);
+
+  return { bundleId, projectId, tasks, ...(warnings.length === 0 ? {} : { warnings }) };
 }
 
 /* ------------------------------------------------------------------ the archive */
@@ -554,6 +602,8 @@ export interface MachineBundleResult {
   /** The serialized JSON payloads, for callers that validate or hash them without unzipping. */
   requirementsJson: string | null;
   tasksJson: string | null;
+  /** What the tasks extract warned about, for the response that hands the archive over (А-52). */
+  warnings: MachineTasksWarning[];
 }
 
 const serialize = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
@@ -591,11 +641,21 @@ export function assembleMachineBundle(
 
   const tasks = byType.get('tasks');
   let tasksJson: string | null = null;
+  let warnings: MachineTasksWarning[] = [];
   if (tasks === undefined) omitted.push(MACHINE_BUNDLE_FILES.tasks);
   else {
-    tasksJson = serialize(deriveTasks(tasks.content, projectId, projectId));
+    const derived = deriveTasks(tasks.content, projectId, projectId);
+    warnings = derived.warnings ?? [];
+    tasksJson = serialize(derived);
     put(MACHINE_BUNDLE_FILES.tasks, tasksJson);
   }
 
-  return { zip: zipSync(entries, { level: 6 }), included, omitted, requirementsJson, tasksJson };
+  return {
+    zip: zipSync(entries, { level: 6 }),
+    included,
+    omitted,
+    requirementsJson,
+    tasksJson,
+    warnings,
+  };
 }

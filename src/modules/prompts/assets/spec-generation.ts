@@ -1,7 +1,8 @@
-import type { CoreSpecType } from '@/modules/specs/model/spec-files';
+import type { CoreSpecType, SpecType } from '@/modules/specs/model/spec-files';
 import {
   CANONICAL_TASK_RECORD,
   DEPENDENCY_LABELS,
+  METHODOLOGY_DEPENDENCY_RECORD,
   NO_DEPENDENCIES_MARK,
 } from '@/modules/specs/model/task-notation';
 
@@ -88,6 +89,47 @@ function documentRulesBlock(specType: CoreSpecType): string {
   ].join('\n');
 }
 
+/**
+ * The dependency rules for a **methodology's** plan document (А-52).
+ *
+ * The other half of «the generator always writes explicit dependencies». The parity block above
+ * closed this for the parity path at task 169; the methodology path stayed silent, and the live
+ * Программа-А plan is what that silence produces — 7 inline clauses across 41 tasks, 34 exported
+ * with an empty `dependsOn`, and a scheduler honestly starting T019 alongside T001.
+ *
+ * A methodology's task *entry* is its template's own — lettered checkboxes for speckit — so unlike
+ * the parity block this one prescribes no entry form. It prescribes the **clause**: every task
+ * states what it waits for, in one of the two forms the export already reads (D-316), and «waits
+ * for nothing» is stated with the mark rather than left out. The example lines are quoted from
+ * `task-notation.ts` and run through the mapping by a unit test, exactly as the canonical record is.
+ */
+function methodologyDependencyRulesBlock(specType: SpecType | undefined): string {
+  if (specType !== 'tasks') return '';
+
+  return [
+    '',
+    'Whatever entry form the template uses for its tasks, every task must state which tasks it',
+    'waits for, by their identifiers. Either keep the dependency clause inline on the entry line,',
+    'the way the template writes it:',
+    '',
+    `    ${METHODOLOGY_DEPENDENCY_RECORD.inline}`,
+    '',
+    'or state it on a line of its own beneath the entry:',
+    '',
+    `    ${METHODOLOGY_DEPENDENCY_RECORD.entry}`,
+    `      ${METHODOLOGY_DEPENDENCY_RECORD.dependencies}`,
+    '',
+    `A task that waits for nothing states that too, with ${NO_DEPENDENCIES_MARK}:`,
+    '',
+    `      ${METHODOLOGY_DEPENDENCY_RECORD.noDependencies}`,
+    '',
+    `Write the label in the language of the document — "${DEPENDENCY_LABELS.join('" or "')}" — and`,
+    'name only task identifiers after it, never requirement identifiers or prose. Dependencies are',
+    'what makes the plan executable in the right order, so state them for every task, including the',
+    'ones that have none: «depends on nothing» is a statement, not a default.',
+  ].join('\n');
+}
+
 export function specGenerationPrompt(input: SpecPromptInput): AssembledPrompt {
   return assemblePrompt(
     'spec.generation.v2',
@@ -120,6 +162,11 @@ export const METHODOLOGY_GENERATION_PROMPT_ID = 'spec.generation.methodology.v1'
 export interface MethodologyPromptInput {
   /** The document as the methodology names it: «Plan», «Proposal», «Specs». */
   documentLabel: string;
+  /**
+   * The spec type this document stores into (А-52) — what decides whether the dependency rules
+   * apply. Absent means «not a plan», which every caller written before this input existed means.
+   */
+  specType?: SpecType;
   /** The template, verbatim. */
   template: string;
   /** Required headings in required order, or an empty list when the template prescribes none. */
@@ -151,6 +198,7 @@ export function methodologyGenerationPrompt(input: MethodologyPromptInput): Asse
       documentLabel: input.documentLabel,
       template: input.template,
       requiredSections: sections,
+      documentRules: methodologyDependencyRulesBlock(input.specType),
       initialPrompt: input.initialPrompt,
       context: contextBlock(input.context),
       changeInstruction: changeBlock(input.changeInstruction),

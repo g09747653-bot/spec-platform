@@ -114,6 +114,8 @@ describe('GET /api/projects/:id/export/machine (task 150)', () => {
       'bundle/constitution.md,bundle/architecture.md,bundle/requirements.json,bundle/tasks.json',
     );
     expect(response.headers.get('X-Spec-Export-Omitted')).toBe('');
+    // The A0 plan states no dependencies across twenty tasks: the extract's warning, by name (А-52).
+    expect(response.headers.get('X-Spec-Export-Warnings')).toBe('flat-plan');
 
     const entries = unzipSync(new Uint8Array(await response.arrayBuffer()));
     expect(Object.keys(entries).sort()).toEqual([
@@ -155,6 +157,16 @@ describe('GET /api/projects/:id/export/machine (task 150)', () => {
       'bundle/requirements.json',
       'bundle/tasks.json',
     ]);
+  });
+
+  it('answers a plan with stated dependencies without the flat-plan warning (А-52)', async () => {
+    await approve('constitution', '# Constitution\n');
+    await approve('tasks', read('fixtures/spec-bundle/golden/m14a-canonical.tasks.md'));
+
+    const response = await download();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('X-Spec-Export-Warnings')).toBe('');
   });
 
   it('is byte-deterministic: two downloads of the same revisions are one archive', async () => {

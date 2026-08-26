@@ -1,4 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import type { BundleTask } from '../intake/validate.ts';
 
@@ -104,5 +108,93 @@ describe('прогон плана настоящим планировщиком'
   it('план, по которому нельзя дойти до конца, — названная ошибка, а не вечный цикл', () => {
     /* Зависимость на задачу вне плана: `sliceMilestones` такой бандл и не примет. */
     expect(() => planShape([task('1', ['нет-такой'])])).toThrow('нарезка отказала');
+  });
+});
+
+describe('нотация решает ширину: слепок M14а против его канонического близнеца (А-52)', () => {
+  /*
+   * Регрессия мандата А-52 на настоящих выжимках. Живой слепок M14а — шестнадцать честных задач,
+   * ни одна не заявила зависимости — и его близнец: тот же план (те же шестнадцать задач той же
+   * задумки), записанный так, как теперь велит инструкция генерации платформы, — сквозные номера
+   * и явная строка зависимостей у каждой задачи. Обе выжимки — голдены платформы, произведённые её
+   * настоящим маппингом; нарезка и планировщик здесь — настоящие. Разница между 2,67× и большим
+   * числом близнеца — цена НОТАЦИИ, а не способности планировать.
+   */
+  const golden = (name: string): BundleTask[] => {
+    const raw: unknown = JSON.parse(
+      readFileSync(join(import.meta.dirname, '../../../fixtures/spec-bundle/golden', name), 'utf8'),
+    );
+
+    return z
+      .object({
+        tasks: z.array(
+          z.object({
+            taskId: z.string(),
+            title: z.string(),
+            description: z.string(),
+            dependsOn: z.array(z.string()),
+            metadata: z.object({ expectedArtifacts: z.array(z.unknown()) }),
+          }),
+        ),
+      })
+      .parse(raw).tasks;
+  };
+
+  it('живой слепок без зависимостей режется по фазам: шесть последовательных вех, потолок 2,67×', () => {
+    const measured = measureWidth({
+      label: 'M14а: живой слепок',
+      tasks: golden('m14a-live.tasks.json'),
+      filesOf: noFiles,
+      limit: 10,
+    });
+
+    expect(measured.shape.strategy).toBe('phases');
+    expect(measured.shape.withDependencies).toBe(0);
+    expect(measured.shape.milestones.map((milestone) => milestone.tasks)).toEqual([
+      2, 2, 2, 3, 4, 3,
+    ]);
+    expect(measured.speedup).toBeCloseTo(16 / 6, 5);
+  });
+
+  it('тот же план в новой записи режется по зависимостям — и ширина измеримо больше', () => {
+    const live = measureWidth({
+      label: 'M14а: живой слепок',
+      tasks: golden('m14a-live.tasks.json'),
+      filesOf: noFiles,
+      limit: 10,
+    });
+    const twin = measureWidth({
+      label: 'M14а: канонический близнец',
+      tasks: golden('m14a-canonical.tasks.json'),
+      filesOf: noFiles,
+      limit: 10,
+    });
+
+    expect(twin.shape.strategy).toBe('dependencies');
+    expect(twin.shape.tasks).toBe(live.shape.tasks);
+
+    /* Измеримо: меньше тактов, шире пик, выше ускорение — не «примерно так же». */
+    expect(twin.wide.ticks).toBeLessThan(live.wide.ticks);
+    expect(twin.shape.widest).toBeGreaterThan(live.shape.widest);
+    expect(twin.speedup).toBeGreaterThan(live.speedup);
+  });
+
+  it('та же запись с плоскими номерами, но БЕЗ заявленных зависимостей — вырождение до единицы', () => {
+    /*
+     * Ловушка, ради которой машинный экспорт получил named-предупреждение о плоском плане (А-52):
+     * канонические сквозные номера при пустых `dependsOn` — это `phaseOf('7') === '7'`, шестнадцать
+     * вех по одной задаче, ускорение 1,00×. Хуже живого слепка, у которого хотя бы фазы были.
+     */
+    const flattened = measureWidth({
+      label: 'близнец с вычеркнутыми зависимостями',
+      tasks: golden('m14a-canonical.tasks.json').map((entry) => ({ ...entry, dependsOn: [] })),
+      filesOf: noFiles,
+      limit: 10,
+    });
+
+    expect(flattened.shape.strategy).toBe('phases');
+    expect(flattened.shape.milestones).toHaveLength(16);
+    expect(flattened.shape.widest).toBe(1);
+    expect(flattened.speedup).toBeCloseTo(1, 5);
   });
 });

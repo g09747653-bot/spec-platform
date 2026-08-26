@@ -102,6 +102,8 @@ export function specPromptBuilder(input: {
         })
       : methodologyGenerationPrompt({
           documentLabel: input.documentLabel ?? input.specType,
+          /* The document's own type, so a plan gets the dependency rules whatever it is named (А-52). */
+          specType: document.specType,
           template: document.templateId === null ? '' : templateText(document.templateId),
           requiredSections:
             document.structure.kind === 'declared' ? document.structure.sections : [],

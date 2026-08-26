@@ -80,6 +80,13 @@ export interface PromptVariables {
      * and a foreign methodology's headings are its template's, not the baseline's.
      */
     requiredSections: string;
+    /**
+     * The dependency rules for a plan document (А-52), rendered by the caller from
+     * `specs/model/task-notation.ts` — the same module and the same reason as the parity asset's
+     * `documentRules`: the clause the model is asked for and the clause the machine bundle reads
+     * back have to be one clause. Empty for every document that is not a plan.
+     */
+    documentRules: string;
     initialPrompt: string;
     context: string;
     changeInstruction: string;
@@ -282,6 +289,7 @@ const SPEC_GENERATION_METHODOLOGY: PromptAsset = {
     '{{template}}',
     'TEMPLATE',
     '{{requiredSections}}',
+    '{{documentRules}}',
     '',
     'Product idea:',
     '{{initialPrompt}}',
@@ -292,6 +300,7 @@ const SPEC_GENERATION_METHODOLOGY: PromptAsset = {
     'documentLabel',
     'template',
     'requiredSections',
+    'documentRules',
     'initialPrompt',
     'context',
     'changeInstruction',

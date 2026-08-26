@@ -40,6 +40,12 @@ export async function GET(
       'X-Spec-Export-Mode': 'machine',
       'X-Spec-Export-Included': bundle.included.join(','),
       'X-Spec-Export-Omitted': bundle.omitted.join(','),
+      /*
+       * The extract's named warnings, by name (А-52). The sentence itself lives inside
+       * `bundle/tasks.json` next to the tasks it is about; the header is the owner-visible flag on
+       * the response that produced the archive — a warning, never a refusal.
+       */
+      'X-Spec-Export-Warnings': bundle.warnings.map((warning) => warning.name).join(','),
       'Cache-Control': 'no-store',
     },
   });
