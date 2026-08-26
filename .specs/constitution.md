@@ -190,12 +190,25 @@ Stale enriched artifacts are never exported and never silently reused: a traceab
 3. **Deterministic state-machine tests with mocked LLM responses** — no test in CI may depend on a live model call. Provider adapters are exercised against recorded/stubbed responses.
 4. **Structural assertion of generated specs (parity check)** — an automated test asserts, against the section schema defined in P3, that every generated spec file contains its required section headings in the required order, and that a default-mode export contains exactly the four parity files and no Quality content. Coverage must include a default-mode export taken from a session where enrichment has already run (the A6 export rule), and a Quality-mode export blocked by stale enrichment (the A6 staleness rule). This test is the enforcement mechanism for P3 and must run in CI on every change to prompts, generation logic, the section schema, or export logic.
 
+### V1 — Verification produces what it accepts (non-negotiable)
+
+**Приёмка не принимает артефакт, который она не могла произвести сама.**
+
+A check that reads a number, a report, or a file produced by the very thing under test is not a check — it is a copy of the claim. The rule therefore has three parts, and all three are binding:
+
+1. **The verifier runs the measurement itself**, in its own environment, and that environment must be *capable of what the task asks it to measure*. A visual measurement needs a browser; a verifier without one does not "skip the measurement", it fails to verify. Image size, install time, and dependency weight are the **named price of independence** and are accepted as such.
+2. **Any artifact the subject may have left behind is destroyed before the verification runs.** A report that survives into the verification run is a planted answer, whatever its provenance.
+3. **Where the verifier physically cannot produce what it would have to judge, the task is marked "not verifiable by acceptance" explicitly** and the question is escalated to the quality judgement. A silent pass is prohibited: "could not check" and "checked and it is fine" are different statements and must never render as the same one.
+
+Convergence, where a check compares a run to a previous run, compares **its own** previous measurement — never one recorded by the subject.
+
 ### Rules
 
 - CI is red-blocking: all four mandatory suites must pass before merge.
 - Non-determinism from the model is isolated at the adapter boundary so all orchestration logic is deterministically testable.
 - The section schema backing test 4 is versioned in-repo as the single artifact described in P3; changing it is an explicit, reviewed decision, never an incidental side effect of a prompt edit.
 - Bug fixes land with a regression test.
+- V1 applies to every verifier the project owns, including the delivery loop's acceptance gate: a measurement it did not run is a measurement that did not happen.
 
 ### Not required in v1
 
