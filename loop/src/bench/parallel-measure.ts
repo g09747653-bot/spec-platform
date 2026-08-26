@@ -66,7 +66,7 @@ export function instrumentEngine(
 
   const close = (id: string): void => {
     const span = byId.get(id);
-    if (span !== undefined && span.endedAt === null) span.endedAt = now();
+    if (span?.endedAt === null) span.endedAt = now();
   };
 
   const wrapped: DockerEngine = {

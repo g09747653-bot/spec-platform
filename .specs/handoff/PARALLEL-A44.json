@@ -1,0 +1,942 @@
+{
+  "wide": {
+    "label": "широкий прогон",
+    "projectId": "par-wide",
+    "maxExecutors": 10,
+    "intakeMs": 127369,
+    "pipelineMs": 29037,
+    "totalMs": 156406,
+    "tasks": 10,
+    "accepted": 10,
+    "failed": 0,
+    "executor": {
+      "average": 7.2401418879360815,
+      "peak": 10,
+      "zeroShare": 0.2077005200261735,
+      "zeroMs": 6031,
+      "busyMs": 210232,
+      "wallMs": 29037
+    },
+    "acceptance": {
+      "average": 1.2668319729999655,
+      "peak": 10,
+      "zeroShare": 0.6890174604814547,
+      "zeroMs": 20007,
+      "busyMs": 36785,
+      "wallMs": 29037
+    },
+    "acceptanceBusyMs": 36785,
+    "probeBusyMs": 281,
+    "startup": {
+      "containers": 61,
+      "totalMs": 17822,
+      "averageMs": 292.1639344262295
+    },
+    "tariff": {
+      "lines": 21,
+      "statuses": {
+        "allowed_warning": 21
+      },
+      "allAllowed": true
+    },
+    "spans": [
+      {
+        "name": "delivery-executor-1.3",
+        "kind": "executor",
+        "createdAt": 1787706087192,
+        "startedAt": 1787706087608,
+        "endedAt": 1787706110024
+      },
+      {
+        "name": "delivery-executor-1.9",
+        "kind": "executor",
+        "createdAt": 1787706087193,
+        "startedAt": 1787706087598,
+        "endedAt": 1787706107655
+      },
+      {
+        "name": "delivery-executor-1.10",
+        "kind": "executor",
+        "createdAt": 1787706087194,
+        "startedAt": 1787706087566,
+        "endedAt": 1787706108168
+      },
+      {
+        "name": "delivery-executor-1.7",
+        "kind": "executor",
+        "createdAt": 1787706087194,
+        "startedAt": 1787706087698,
+        "endedAt": 1787706110519
+      },
+      {
+        "name": "delivery-executor-1.2",
+        "kind": "executor",
+        "createdAt": 1787706087195,
+        "startedAt": 1787706087674,
+        "endedAt": 1787706109896
+      },
+      {
+        "name": "delivery-executor-1.6",
+        "kind": "executor",
+        "createdAt": 1787706087194,
+        "startedAt": 1787706087666,
+        "endedAt": 1787706110093
+      },
+      {
+        "name": "delivery-executor-1.4",
+        "kind": "executor",
+        "createdAt": 1787706087194,
+        "startedAt": 1787706087537,
+        "endedAt": 1787706106954
+      },
+      {
+        "name": "delivery-executor-1.1",
+        "kind": "executor",
+        "createdAt": 1787706087195,
+        "startedAt": 1787706087630,
+        "endedAt": 1787706106021
+      },
+      {
+        "name": "delivery-executor-1.8",
+        "kind": "executor",
+        "createdAt": 1787706087195,
+        "startedAt": 1787706087513,
+        "endedAt": 1787706109329
+      },
+      {
+        "name": "delivery-executor-1.5",
+        "kind": "executor",
+        "createdAt": 1787706087196,
+        "startedAt": 1787706087640,
+        "endedAt": 1787706107703
+      },
+      {
+        "name": "delivery-gate-1.1-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706106051,
+        "startedAt": 1787706106215,
+        "endedAt": 1787706106916
+      },
+      {
+        "name": "delivery-gate-1.1-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706106941,
+        "startedAt": 1787706107108,
+        "endedAt": 1787706107147
+      },
+      {
+        "name": "delivery-gate-1.4-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706106990,
+        "startedAt": 1787706107126,
+        "endedAt": 1787706107714
+      },
+      {
+        "name": "delivery-gate-1.1-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706107173,
+        "startedAt": 1787706107369,
+        "endedAt": 1787706108836
+      },
+      {
+        "name": "delivery-gate-1.9-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706107691,
+        "startedAt": 1787706107870,
+        "endedAt": 1787706108398
+      },
+      {
+        "name": "delivery-gate-1.5-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706107746,
+        "startedAt": 1787706107890,
+        "endedAt": 1787706108432
+      },
+      {
+        "name": "delivery-gate-1.4-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706107758,
+        "startedAt": 1787706107900,
+        "endedAt": 1787706107972
+      },
+      {
+        "name": "delivery-gate-1.4-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706108001,
+        "startedAt": 1787706108197,
+        "endedAt": 1787706109528
+      },
+      {
+        "name": "delivery-gate-1.10-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706108207,
+        "startedAt": 1787706108365,
+        "endedAt": 1787706108902
+      },
+      {
+        "name": "delivery-gate-1.9-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706108423,
+        "startedAt": 1787706108609,
+        "endedAt": 1787706108648
+      },
+      {
+        "name": "delivery-gate-1.5-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706108459,
+        "startedAt": 1787706108606,
+        "endedAt": 1787706108647
+      },
+      {
+        "name": "delivery-gate-1.5-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706108686,
+        "startedAt": 1787706108904,
+        "endedAt": 1787706110437
+      },
+      {
+        "name": "delivery-gate-1.9-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706108687,
+        "startedAt": 1787706108917,
+        "endedAt": 1787706110295
+      },
+      {
+        "name": "delivery-gate-1.1-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706108864,
+        "startedAt": 1787706109102,
+        "endedAt": 1787706110588
+      },
+      {
+        "name": "delivery-gate-1.10-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706108937,
+        "startedAt": 1787706109143,
+        "endedAt": 1787706109180
+      },
+      {
+        "name": "delivery-gate-1.10-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706109205,
+        "startedAt": 1787706109556,
+        "endedAt": 1787706110976
+      },
+      {
+        "name": "delivery-gate-1.8-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706109373,
+        "startedAt": 1787706109526,
+        "endedAt": 1787706110174
+      },
+      {
+        "name": "delivery-gate-1.4-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706109559,
+        "startedAt": 1787706110624,
+        "endedAt": 1787706112029
+      },
+      {
+        "name": "delivery-gate-1.2-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706109943,
+        "startedAt": 1787706110268,
+        "endedAt": 1787706110938
+      },
+      {
+        "name": "delivery-gate-1.3-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706110080,
+        "startedAt": 1787706110441,
+        "endedAt": 1787706110987
+      },
+      {
+        "name": "delivery-gate-1.6-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706110140,
+        "startedAt": 1787706110446,
+        "endedAt": 1787706110985
+      },
+      {
+        "name": "delivery-gate-1.8-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706110209,
+        "startedAt": 1787706110437,
+        "endedAt": 1787706110476
+      },
+      {
+        "name": "delivery-gate-1.9-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706110328,
+        "startedAt": 1787706110651,
+        "endedAt": 1787706112160
+      },
+      {
+        "name": "delivery-gate-1.5-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706110475,
+        "startedAt": 1787706110764,
+        "endedAt": 1787706112229
+      },
+      {
+        "name": "delivery-gate-1.8-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706110511,
+        "startedAt": 1787706110778,
+        "endedAt": 1787706112314
+      },
+      {
+        "name": "delivery-gate-1.7-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706110571,
+        "startedAt": 1787706110848,
+        "endedAt": 1787706111526
+      },
+      {
+        "name": "delivery-gate-1.1-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706110644,
+        "startedAt": 1787706110930,
+        "endedAt": 1787706111156
+      },
+      {
+        "name": "delivery-gate-1.2-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706110971,
+        "startedAt": 1787706111250,
+        "endedAt": 1787706111296
+      },
+      {
+        "name": "delivery-gate-1.10-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706111020,
+        "startedAt": 1787706111288,
+        "endedAt": 1787706112478
+      },
+      {
+        "name": "delivery-gate-1.6-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706111047,
+        "startedAt": 1787706111287,
+        "endedAt": 1787706111326
+      },
+      {
+        "name": "delivery-gate-1.3-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706111064,
+        "startedAt": 1787706111292,
+        "endedAt": 1787706111330
+      },
+      {
+        "name": "delivery-gate-1.2-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706111326,
+        "startedAt": 1787706111573,
+        "endedAt": 1787706113141
+      },
+      {
+        "name": "delivery-gate-1.6-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706111351,
+        "startedAt": 1787706111585,
+        "endedAt": 1787706113065
+      },
+      {
+        "name": "delivery-gate-1.3-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706111360,
+        "startedAt": 1787706111599,
+        "endedAt": 1787706113216
+      },
+      {
+        "name": "delivery-gate-1.7-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706111559,
+        "startedAt": 1787706111773,
+        "endedAt": 1787706111824
+      },
+      {
+        "name": "delivery-gate-1.7-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706111854,
+        "startedAt": 1787706112342,
+        "endedAt": 1787706113688
+      },
+      {
+        "name": "delivery-gate-1.4-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706112064,
+        "startedAt": 1787706112358,
+        "endedAt": 1787706112642
+      },
+      {
+        "name": "delivery-gate-1.9-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706112186,
+        "startedAt": 1787706112405,
+        "endedAt": 1787706112725
+      },
+      {
+        "name": "delivery-gate-1.5-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706112261,
+        "startedAt": 1787706112785,
+        "endedAt": 1787706113373
+      },
+      {
+        "name": "delivery-gate-1.8-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706112360,
+        "startedAt": 1787706112805,
+        "endedAt": 1787706113945
+      },
+      {
+        "name": "delivery-gate-1.10-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706112511,
+        "startedAt": 1787706112813,
+        "endedAt": 1787706113288
+      },
+      {
+        "name": "delivery-gate-1.6-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706113095,
+        "startedAt": 1787706113417,
+        "endedAt": 1787706114571
+      },
+      {
+        "name": "delivery-gate-1.2-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706113177,
+        "startedAt": 1787706113429,
+        "endedAt": 1787706114606
+      },
+      {
+        "name": "delivery-gate-1.3-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706113249,
+        "startedAt": 1787706113485,
+        "endedAt": 1787706114651
+      },
+      {
+        "name": "delivery-gate-1.7-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706113715,
+        "startedAt": 1787706113915,
+        "endedAt": 1787706115039
+      },
+      {
+        "name": "delivery-gate-1.8-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706113974,
+        "startedAt": 1787706114191,
+        "endedAt": 1787706114350
+      },
+      {
+        "name": "delivery-gate-1.6-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706114597,
+        "startedAt": 1787706114801,
+        "endedAt": 1787706115013
+      },
+      {
+        "name": "delivery-gate-1.2-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706114632,
+        "startedAt": 1787706114826,
+        "endedAt": 1787706115073
+      },
+      {
+        "name": "delivery-gate-1.3-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706114687,
+        "startedAt": 1787706115106,
+        "endedAt": 1787706115299
+      },
+      {
+        "name": "delivery-gate-1.7-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706115064,
+        "startedAt": 1787706115331,
+        "endedAt": 1787706115502
+      },
+      {
+        "name": "quality-probe-par-wide",
+        "kind": "probe",
+        "createdAt": 1787706115587,
+        "startedAt": 1787706115751,
+        "endedAt": 1787706116032
+      }
+    ]
+  },
+  "narrow": {
+    "label": "узкий прогон",
+    "projectId": "par-narrow",
+    "maxExecutors": 1,
+    "intakeMs": 112073,
+    "pipelineMs": 282311,
+    "totalMs": 394384,
+    "tasks": 10,
+    "accepted": 10,
+    "failed": 0,
+    "executor": {
+      "average": 0.8570477239639972,
+      "peak": 1,
+      "zeroShare": 0.14295227603600286,
+      "zeroMs": 40357,
+      "busyMs": 241954,
+      "wallMs": 282311
+    },
+    "acceptance": {
+      "average": 0.10069745776820599,
+      "peak": 1,
+      "zeroShare": 0.8993025422317941,
+      "zeroMs": 253883,
+      "busyMs": 28428,
+      "wallMs": 282311
+    },
+    "acceptanceBusyMs": 28428,
+    "probeBusyMs": 244,
+    "startup": {
+      "containers": 61,
+      "totalMs": 9757,
+      "averageMs": 159.95081967213116
+    },
+    "tariff": {
+      "lines": 21,
+      "statuses": {
+        "allowed_warning": 21
+      },
+      "allAllowed": true
+    },
+    "spans": [
+      {
+        "name": "delivery-executor-1.1",
+        "kind": "executor",
+        "createdAt": 1787706228239,
+        "startedAt": 1787706228436,
+        "endedAt": 1787706257344
+      },
+      {
+        "name": "delivery-gate-1.1-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706257368,
+        "startedAt": 1787706257520,
+        "endedAt": 1787706258092
+      },
+      {
+        "name": "delivery-gate-1.1-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706258108,
+        "startedAt": 1787706258233,
+        "endedAt": 1787706258265
+      },
+      {
+        "name": "delivery-gate-1.1-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706258284,
+        "startedAt": 1787706258436,
+        "endedAt": 1787706259625
+      },
+      {
+        "name": "delivery-gate-1.1-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706259645,
+        "startedAt": 1787706259828,
+        "endedAt": 1787706260764
+      },
+      {
+        "name": "delivery-gate-1.1-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706260789,
+        "startedAt": 1787706260954,
+        "endedAt": 1787706261144
+      },
+      {
+        "name": "delivery-executor-1.2",
+        "kind": "executor",
+        "createdAt": 1787706261219,
+        "startedAt": 1787706261397,
+        "endedAt": 1787706282802
+      },
+      {
+        "name": "delivery-gate-1.2-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706282829,
+        "startedAt": 1787706282998,
+        "endedAt": 1787706283450
+      },
+      {
+        "name": "delivery-gate-1.2-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706283467,
+        "startedAt": 1787706283604,
+        "endedAt": 1787706283635
+      },
+      {
+        "name": "delivery-gate-1.2-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706283655,
+        "startedAt": 1787706283830,
+        "endedAt": 1787706284847
+      },
+      {
+        "name": "delivery-gate-1.2-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706284867,
+        "startedAt": 1787706285034,
+        "endedAt": 1787706285926
+      },
+      {
+        "name": "delivery-gate-1.2-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706285946,
+        "startedAt": 1787706286099,
+        "endedAt": 1787706286229
+      },
+      {
+        "name": "delivery-executor-1.3",
+        "kind": "executor",
+        "createdAt": 1787706286307,
+        "startedAt": 1787706286480,
+        "endedAt": 1787706313449
+      },
+      {
+        "name": "delivery-gate-1.3-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706313473,
+        "startedAt": 1787706313621,
+        "endedAt": 1787706314075
+      },
+      {
+        "name": "delivery-gate-1.3-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706314093,
+        "startedAt": 1787706314223,
+        "endedAt": 1787706314257
+      },
+      {
+        "name": "delivery-gate-1.3-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706314286,
+        "startedAt": 1787706314469,
+        "endedAt": 1787706315565
+      },
+      {
+        "name": "delivery-gate-1.3-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706315584,
+        "startedAt": 1787706315730,
+        "endedAt": 1787706316636
+      },
+      {
+        "name": "delivery-gate-1.3-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706316657,
+        "startedAt": 1787706316806,
+        "endedAt": 1787706316947
+      },
+      {
+        "name": "delivery-executor-1.4",
+        "kind": "executor",
+        "createdAt": 1787706317023,
+        "startedAt": 1787706317193,
+        "endedAt": 1787706337643
+      },
+      {
+        "name": "delivery-gate-1.4-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706337677,
+        "startedAt": 1787706337848,
+        "endedAt": 1787706338359
+      },
+      {
+        "name": "delivery-gate-1.4-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706338380,
+        "startedAt": 1787706338514,
+        "endedAt": 1787706338547
+      },
+      {
+        "name": "delivery-gate-1.4-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706338568,
+        "startedAt": 1787706338750,
+        "endedAt": 1787706339797
+      },
+      {
+        "name": "delivery-gate-1.4-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706339819,
+        "startedAt": 1787706339991,
+        "endedAt": 1787706340968
+      },
+      {
+        "name": "delivery-gate-1.4-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706340992,
+        "startedAt": 1787706341175,
+        "endedAt": 1787706341368
+      },
+      {
+        "name": "delivery-executor-1.5",
+        "kind": "executor",
+        "createdAt": 1787706341460,
+        "startedAt": 1787706341686,
+        "endedAt": 1787706364084
+      },
+      {
+        "name": "delivery-gate-1.5-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706364113,
+        "startedAt": 1787706364261,
+        "endedAt": 1787706364754
+      },
+      {
+        "name": "delivery-gate-1.5-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706364770,
+        "startedAt": 1787706364889,
+        "endedAt": 1787706364919
+      },
+      {
+        "name": "delivery-gate-1.5-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706364938,
+        "startedAt": 1787706365093,
+        "endedAt": 1787706366371
+      },
+      {
+        "name": "delivery-gate-1.5-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706366392,
+        "startedAt": 1787706366539,
+        "endedAt": 1787706367442
+      },
+      {
+        "name": "delivery-gate-1.5-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706367466,
+        "startedAt": 1787706367640,
+        "endedAt": 1787706367766
+      },
+      {
+        "name": "delivery-executor-1.6",
+        "kind": "executor",
+        "createdAt": 1787706367849,
+        "startedAt": 1787706368052,
+        "endedAt": 1787706391742
+      },
+      {
+        "name": "delivery-gate-1.6-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706391768,
+        "startedAt": 1787706391937,
+        "endedAt": 1787706392594
+      },
+      {
+        "name": "delivery-gate-1.6-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706392611,
+        "startedAt": 1787706392758,
+        "endedAt": 1787706392791
+      },
+      {
+        "name": "delivery-gate-1.6-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706392809,
+        "startedAt": 1787706392973,
+        "endedAt": 1787706394131
+      },
+      {
+        "name": "delivery-gate-1.6-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706394153,
+        "startedAt": 1787706394311,
+        "endedAt": 1787706395265
+      },
+      {
+        "name": "delivery-gate-1.6-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706395287,
+        "startedAt": 1787706395441,
+        "endedAt": 1787706395585
+      },
+      {
+        "name": "delivery-executor-1.7",
+        "kind": "executor",
+        "createdAt": 1787706395663,
+        "startedAt": 1787706395835,
+        "endedAt": 1787706416105
+      },
+      {
+        "name": "delivery-gate-1.7-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706416136,
+        "startedAt": 1787706416294,
+        "endedAt": 1787706416890
+      },
+      {
+        "name": "delivery-gate-1.7-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706416906,
+        "startedAt": 1787706417016,
+        "endedAt": 1787706417047
+      },
+      {
+        "name": "delivery-gate-1.7-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706417067,
+        "startedAt": 1787706417237,
+        "endedAt": 1787706418197
+      },
+      {
+        "name": "delivery-gate-1.7-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706418219,
+        "startedAt": 1787706418373,
+        "endedAt": 1787706419257
+      },
+      {
+        "name": "delivery-gate-1.7-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706419279,
+        "startedAt": 1787706419442,
+        "endedAt": 1787706419560
+      },
+      {
+        "name": "delivery-executor-1.8",
+        "kind": "executor",
+        "createdAt": 1787706419641,
+        "startedAt": 1787706419813,
+        "endedAt": 1787706437006
+      },
+      {
+        "name": "delivery-gate-1.8-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706437031,
+        "startedAt": 1787706437184,
+        "endedAt": 1787706437721
+      },
+      {
+        "name": "delivery-gate-1.8-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706437737,
+        "startedAt": 1787706437901,
+        "endedAt": 1787706437931
+      },
+      {
+        "name": "delivery-gate-1.8-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706437948,
+        "startedAt": 1787706438102,
+        "endedAt": 1787706439075
+      },
+      {
+        "name": "delivery-gate-1.8-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706439097,
+        "startedAt": 1787706439272,
+        "endedAt": 1787706441221
+      },
+      {
+        "name": "delivery-gate-1.8-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706441242,
+        "startedAt": 1787706441429,
+        "endedAt": 1787706441595
+      },
+      {
+        "name": "delivery-executor-1.9",
+        "kind": "executor",
+        "createdAt": 1787706441676,
+        "startedAt": 1787706441830,
+        "endedAt": 1787706463144
+      },
+      {
+        "name": "delivery-gate-1.9-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706463169,
+        "startedAt": 1787706463319,
+        "endedAt": 1787706463937
+      },
+      {
+        "name": "delivery-gate-1.9-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706463954,
+        "startedAt": 1787706464092,
+        "endedAt": 1787706464122
+      },
+      {
+        "name": "delivery-gate-1.9-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706464142,
+        "startedAt": 1787706464293,
+        "endedAt": 1787706465358
+      },
+      {
+        "name": "delivery-gate-1.9-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706465378,
+        "startedAt": 1787706465521,
+        "endedAt": 1787706466460
+      },
+      {
+        "name": "delivery-gate-1.9-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706466480,
+        "startedAt": 1787706466627,
+        "endedAt": 1787706466815
+      },
+      {
+        "name": "delivery-executor-1.10",
+        "kind": "executor",
+        "createdAt": 1787706466888,
+        "startedAt": 1787706467047,
+        "endedAt": 1787706506404
+      },
+      {
+        "name": "delivery-gate-1.10-copy",
+        "kind": "acceptance",
+        "createdAt": 1787706506429,
+        "startedAt": 1787706506577,
+        "endedAt": 1787706507209
+      },
+      {
+        "name": "delivery-gate-1.10-observe",
+        "kind": "acceptance",
+        "createdAt": 1787706507226,
+        "startedAt": 1787706507346,
+        "endedAt": 1787706507378
+      },
+      {
+        "name": "delivery-gate-1.10-style-eslint",
+        "kind": "acceptance",
+        "createdAt": 1787706507397,
+        "startedAt": 1787706507569,
+        "endedAt": 1787706508544
+      },
+      {
+        "name": "delivery-gate-1.10-style-prettier",
+        "kind": "acceptance",
+        "createdAt": 1787706508565,
+        "startedAt": 1787706508712,
+        "endedAt": 1787706509672
+      },
+      {
+        "name": "delivery-gate-1.10-unit",
+        "kind": "acceptance",
+        "createdAt": 1787706509691,
+        "startedAt": 1787706509855,
+        "endedAt": 1787706509991
+      },
+      {
+        "name": "quality-probe-par-narrow",
+        "kind": "probe",
+        "createdAt": 1787706510069,
+        "startedAt": 1787706510243,
+        "endedAt": 1787706510487
+      }
+    ]
+  }
+}

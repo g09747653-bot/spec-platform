@@ -65,14 +65,13 @@ interface RunOutcome {
 }
 
 function argOf(name: string, fallback: number): number {
-  /* eslint-disable-next-line no-restricted-properties -- CLI замера читает свою же командную строку. */
+  /* CLI замера читает свою же командную строку — не окружение. */
   const raw = process.argv.find((entry) => entry.startsWith(`--${name}=`))?.split('=')[1];
   const value = Number(raw);
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 function pathArg(name: string, fallback: string): string {
-  /* eslint-disable-next-line no-restricted-properties -- см. выше. */
   return process.argv.find((entry) => entry.startsWith(`--${name}=`))?.split('=')[1] ?? fallback;
 }
 

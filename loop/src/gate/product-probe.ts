@@ -377,7 +377,20 @@ async function main() {
         if (hovered.count > 0) record.changed = true;
 
         const alertsBefore = alerts.length;
-        await target.click({ timeout: 4000, force: true, noWaitAfter: true });
+        /*
+         * Нажатие с одной повторной попыткой после переписи.
+         * Предыдущее действие могло перерисовать страницу, и метка на узле уехала вместе с ним —
+         * это утверждение о нашей пробе, а не о продукте, и объявлять по нему «сломано» значило бы
+         * красить исправную работу. Устоявший отказ — уже о продукте, и он идёт в улики.
+         */
+        try {
+          await target.click({ timeout: 4000, force: true, noWaitAfter: true });
+        } catch (first) {
+          await inPage(IN_PAGE.inventory, LIMIT).catch(() => {});
+          const again = page.locator('[data-loop-probe="' + String(item.index) + '"]').first();
+          if ((await again.count()) === 0) throw first;
+          await again.click({ timeout: 4000, force: true, noWaitAfter: true });
+        }
         record.clicked = true;
         await page.waitForTimeout(700);
 
@@ -417,7 +430,7 @@ async function main() {
       elements.push(record);
 
       /* Домой: следующий элемент судится на той же странице, что и предыдущий. */
-      if (record.navigated || record.error !== null) {
+      if (record.navigated || record.error !== null || record.changed) {
         await page.goto(base, { waitUntil: 'load', timeout: 60000 }).catch(() => {});
         await page.waitForTimeout(500);
         /* Метки живут на узлах, а навигация их стёрла: перепись повторяется тем же порядком. */
