@@ -55,6 +55,7 @@ describe('файл вердикта (task 176)', () => {
           judged: ['src/util.js'],
         },
         returnedByController: false,
+  measurement: null,
       },
     });
 

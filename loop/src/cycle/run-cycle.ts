@@ -6,6 +6,7 @@ import type { DockerEngine } from '../docker/engine.ts';
 import type { ExecutorCredential } from '../executor/credential.ts';
 import { runExecutor, type ExecutorRun } from '../executor/run.ts';
 import { ACCEPTANCE_IMAGES, acceptTask, type AcceptanceVerdict } from '../gate/accept.ts';
+import { recordMeasurement, recordUnverifiable } from '../gate/measurement.ts';
 import { blockedPath } from '../gate/blocked.ts';
 import { eventBus } from '../events/bus.ts';
 import { snapshotTree, treesMatch, type TreeSnapshot } from '../gate/observe.ts';
@@ -462,6 +463,37 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
       decisionId: recorded,
       techStackRewritten: stackRewritten,
     };
+  }
+
+  /*
+   * **Книга замеров — на стороне контура, и пишет её цикл** (А-44 п.1).
+   *
+   * Не приёмка: она судит копию, которую сама же удаляет, и в рабочую директорию не пишет ни байта
+   * по построению. Не исполнитель: его запись и была той «памятью сходимости», из-за которой
+   * приёмка сравнивала число исполнителя с его же числом. Базовая линия двигается только ПРИНЯТОЙ
+   * работой — иначе полировка, сделавшая хуже, назначала бы себе новый, худший ориентир.
+   */
+  if (acceptance.measurement?.status === 'measured' && acceptance.accepted) {
+    recordMeasurement(projectDirectory, {
+      key: acceptance.measurement.key,
+      value: acceptance.measurement.value,
+      taskId,
+      image: acceptance.measurement.image,
+      at: new Date().toISOString(),
+    });
+  }
+
+  if (acceptance.measurement?.status === 'unverifiable') {
+    recordUnverifiable(projectDirectory, {
+      taskId,
+      reason: acceptance.measurement.reason,
+      at: new Date().toISOString(),
+    });
+    say(
+      `Задача ${taskId} помечена «не проверяемо приёмкой»: ${acceptance.measurement.reason}. ` +
+        'Запись легла в handoff/MEASUREMENTS.json — суд качества прочитает её и назовёт владельцу.',
+      'WARN',
+    );
   }
 
   const outcome: CycleOutcome = acceptance.accepted ? 'COMPLETED' : 'FAILED';

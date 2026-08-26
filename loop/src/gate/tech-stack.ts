@@ -208,8 +208,12 @@ export function rewriteAssignment(
  * accepted it would be a gate accepting a task nothing was run against. The refusal is therefore
  * about *nothing to run*, with the `generic` case still named in its own words.
  */
-export function commandsRefusal(commands: ResolvedCommands): string | null {
-  if (commands.unitTestCmd !== '' || commands.e2eTestCmd !== '') return null;
+export function commandsRefusal(
+  commands: ResolvedCommands,
+  /** У задания есть замер, который приёмка прогонит сама (А-44 п.1) — запускать ей есть что. */
+  hasMeasurement = false,
+): string | null {
+  if (commands.unitTestCmd !== '' || commands.e2eTestCmd !== '' || hasMeasurement) return null;
 
   const cause =
     commands.techStack === 'generic'

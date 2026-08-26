@@ -8,8 +8,6 @@ import { WHOLE_ARTIFACT_TASK_LIMIT, judgeWholeArtifactPlan } from './artifact-cl
 import {
   asReviewable,
   buildWholeArtifactPlan,
-  composeMeasuredAcceptance,
-  CONVERGENCE_LEDGER,
   judgeMeasuredAcceptance,
   shapePlan,
   skeletonPlan,
@@ -362,55 +360,19 @@ describe('регрессия: слепок nvidia-плана, поданный �
 });
 
 /**
- * Приёмка полировки и замера — факт, а не число (А-37 п.1).
+ * Приёмка полировки и замера — ЗАМЕР ПРИЁМКИ, а не команда исполнителя (А-44 п.1).
  *
- * Регрессия внизу гоняет слепок WA04 — ту самую задачу, чью приёмку план написал себе сам
- * как «прогон сверки вернул 0», где сверка внутри держала порог «не больше 1% различающихся
- * пикселей». Сборка с нуля такого не берёт по построению, и задача не могла быть принята
- * никогда: конвейер встал не на плохой работе, а на невыполнимом определении готовности.
+ * Прежняя форма («код склеивает `unitTestCmd` из measurement») отменена: её три «факта»
+ * удовлетворялись артефактом самого исполнителя. Здесь остаётся то, что этой ветке принадлежит, —
+ * замер обязан быть НАЗВАН, доехать до задания частями и не превратиться в тестовую команду.
  */
-describe('приёмка полировки и замера составляется кодом', () => {
+describe('замер полировки едет на задание, а не склеивается в команду', () => {
   const measurement = {
     cmd: 'node tools/visual-diff/compare.js',
     recordPath: 'tools/visual-diff/report.json',
     divergenceKey: 'summary.diffPercent',
+    capability: 'browser' as const,
   };
-
-  it('вердикт самого измерения проглатывается: мнение о качестве воротами не бывает', () => {
-    const accepted = composeMeasuredAcceptance(measurement);
-
-    expect(accepted).toContain('node tools/visual-diff/compare.js || true');
-  });
-
-  it('требуется ФАКТ записи: отчёт существует и непуст', () => {
-    expect(composeMeasuredAcceptance(measurement)).toContain(
-      'test -s tools/visual-diff/report.json',
-    );
-  });
-
-  it('требуется сходимость, а не порог: расхождение не выросло против прошлой итерации', () => {
-    const accepted = composeMeasuredAcceptance(measurement);
-
-    expect(accepted).toContain(CONVERGENCE_LEDGER);
-    expect(accepted).toContain('расхождение выросло');
-    /* Ни одного абсолютного порога в приёмке нет — он публикуемая метрика, а не ворота. */
-    expect(accepted).not.toMatch(/<=\s*\d/);
-    expect(accepted).toContain('замер зафиксирован');
-  });
-
-  it('число берётся по ключу, и нечисло — названный отказ, а не тихий пропуск', () => {
-    const accepted = composeMeasuredAcceptance(measurement);
-
-    expect(accepted).toContain('"summary.diffPercent".split(".")');
-    expect(accepted).toContain('замер не записал число по ключу');
-  });
-
-  it('вставка не ломает `sh -c`: внутри одинарных кавычек их больше нет', () => {
-    const accepted = composeMeasuredAcceptance(measurement);
-    const inner = accepted.slice(accepted.indexOf("node -e '") + 9, accepted.length - 1);
-
-    expect(inner).not.toContain("'");
-  });
 
   it('полировка и замер без измерения — названный пробел формы', () => {
     const shaped = shapePlan([
@@ -424,7 +386,7 @@ describe('приёмка полировки и замера составляет
     expect(gaps[0]).toContain('публикуется метрикой');
   });
 
-  it('измерение названо — пробелов нет, приёмку несёт задача', () => {
+  it('измерение названо — пробелов нет, и оно едет на задание КАК ЕСТЬ', () => {
     const shaped = shapePlan([
       { role: 'whole', title: 'Целиком', description: '…', filesToEdit: ['index.html'] },
       {
@@ -437,7 +399,27 @@ describe('приёмка полировки и замера составляет
     ]);
 
     expect(judgeMeasuredAcceptance(shaped)).toEqual([]);
-    expect(shaped[1]?.unitTestCmd).toBe(composeMeasuredAcceptance(measurement));
+    expect(shaped[1]?.measurement).toEqual(measurement);
+  });
+
+  /*
+   * Регрессия отмены А-37 п.1: склеенной команды на задании полировки БОЛЬШЕ НЕТ. Пока она там
+   * была, приёмка запускала ровно то, что успел запустить исполнитель, и принимала его отчёт.
+   */
+  it('у полировки нет тестовой команды: замер прогоняет приёмка, а не задание', () => {
+    const shaped = shapePlan([
+      { role: 'whole', title: 'Целиком', description: '…', filesToEdit: ['index.html'] },
+      {
+        role: 'polish',
+        title: 'Полировка',
+        description: '…',
+        filesToEdit: ['index.html'],
+        unitTestCmd: 'node tools/visual-diff/compare.js || true',
+        measurement,
+      },
+    ]);
+
+    expect(shaped[1]?.unitTestCmd).toBeUndefined();
   });
 
   it('промпт запрещает порог воротами и просит измерение', () => {
@@ -540,9 +522,14 @@ describe('регрессия А-37: слепок WA04 — ворота «≤1%»
     expect(result.retriedBecause).toEqual([]);
 
     const polish = result.tasks.find((task) => task.role === 'polish');
-    /* Прогон остался — воротами перестал быть. */
-    expect(polish?.unitTestCmd).toContain(`${WA04_GATE} || true`);
-    expect(polish?.unitTestCmd).toContain('расхождение выросло');
+    /*
+     * Прогон остался, воротами не стал и — с А-44 п.1 — уехал на задание ЧАСТЯМИ: командой,
+     * отчётом, ключом и способностью. Собирает из них прогон приёмка, в своём контейнере.
+     */
+    expect(polish?.unitTestCmd).toBeUndefined();
+    expect(polish?.measurement?.cmd).toBe(WA04_GATE);
+    expect(polish?.measurement?.recordPath).toBe('tools/visual-diff/report.json');
+    expect(polish?.measurement?.capability).toBe('none');
   });
 });
 
@@ -561,7 +548,12 @@ describe('область идентификаторов задач — втор�
       title: 'Полировка',
       description: '…',
       filesToEdit: ['index.html'],
-      measurement: { cmd: 'node m.js', recordPath: 'r.json', divergenceKey: 'diff' },
+      measurement: {
+        cmd: 'node m.js',
+        recordPath: 'r.json',
+        divergenceKey: 'diff',
+        capability: 'none' as const,
+      },
     },
   ];
 

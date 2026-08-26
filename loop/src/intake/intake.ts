@@ -350,6 +350,8 @@ export async function intakeBundle(
           ...(planned.iterationTimeoutSec === undefined
             ? {}
             : { iterationTimeoutSec: planned.iterationTimeoutSec }),
+          /* Замер едет на задание частями — собирает из них прогон приёмка (А-44 п.1). */
+          ...(planned.measurement === undefined ? {} : { measurement: planned.measurement }),
           expectedArtifacts: [],
           status: 'PENDING',
         }),

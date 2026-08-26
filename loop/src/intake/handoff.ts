@@ -45,6 +45,38 @@ export const ExpectedArtifact = z.object({
 });
 
 /**
+ * Что приёмочный образ обязан УМЕТЬ, чтобы прогнать замер самому — закрытый перечень (А-44 п.1).
+ *
+ * Перечень закрыт по той же причине, по которой закрыт перечень причин недостижимости
+ * (`feasibility.ts`): свободная формулировка способности превратила бы её в пожелание, а образ
+ * выбирается КОДОМ и выбирается из конечного набора. «none» — хватает образа стека; «browser» —
+ * замер открывает продукт настоящим браузером, и без него он не замер, а отсутствие замера.
+ */
+export const MEASUREMENT_CAPABILITIES = ['none', 'browser'] as const;
+export type MeasurementCapability = (typeof MEASUREMENT_CAPABILITIES)[number];
+
+/**
+ * Замер полировки и итога — контракт, который ПРИЁМКА исполняет сама (А-44 п.1).
+ *
+ * Раньше это был текст, склеенный интейком в `unitTestCmd`: приёмка запускала его, но и
+ * исполнитель запускал его же в своём контейнере, где браузер был. Проверялся, стало быть, не
+ * замер, а файл, который исполнитель написал сам. Теперь на диске лежат ЧАСТИ, а собирает из них
+ * прогон приёмка — в своём контейнере, снеся чужой отчёт перед стартом.
+ */
+export const Measurement = z.object({
+  /** Команда прогона замера. Прогоняет её приёмка; не прогналась — красное, а не молчание. */
+  cmd: z.string().min(1),
+  /** Файл, куда замер кладёт отчёт. Приёмка сносит его ДО прогона: чужой отчёт не переживает. */
+  recordPath: z.string().min(1),
+  /** Ключ (через точку) внутри отчёта, под которым лежит ЧИСЛО расхождения. */
+  divergenceKey: z.string().min(1),
+  /** Что нужно образу приёмки, чтобы этот замер вообще состоялся. */
+  capability: z.enum(MEASUREMENT_CAPABILITIES).default('none'),
+});
+
+export type Measurement = z.infer<typeof Measurement>;
+
+/**
  * A handoff assignment, exactly the shape of A0's `task_schema.json`.
  *
  * Declared as a Zod schema rather than an interface because it is written to disk and read back by
@@ -81,6 +113,14 @@ export const HandoffTask = z.object({
    * a wall clock the container cannot argue with.
    */
   iterationTimeoutSec: z.number().int().positive().max(7_200).optional(),
+  /**
+   * Замер, который приёмка прогоняет САМА (А-44 п.1) — вместо склеенной команды в `unitTestCmd`.
+   *
+   * Дополнение, а не замена контракта A0: задание, написанное до этого поля, разбирается ровно как
+   * прежде (тот же договор совместимости, что у `iterationTimeoutSec`). Отсутствие поля означает
+   * «задача замером не судится», а не «замер прошёл».
+   */
+  measurement: Measurement.optional(),
   expectedArtifacts: z.array(ExpectedArtifact),
   status: z.enum(HANDOFF_TASK_STATUSES),
 });
@@ -200,6 +240,8 @@ export function mergeWithDisk(existing: HandoffTask | null, fresh: HandoffTask):
     status: existing.status,
     ...(existing.unitTestCmd === undefined ? {} : { unitTestCmd: existing.unitTestCmd }),
     ...(existing.e2eTestCmd === undefined ? {} : { e2eTestCmd: existing.e2eTestCmd }),
+    /* Замер — то же, что тестовая команда: определение готовности под работающим исполнителем не меняют. */
+    ...(existing.measurement === undefined ? {} : { measurement: existing.measurement }),
     /* An operator's mark on a heavy task survives a re-intake for the same reason the prose does. */
     ...(existing.iterationTimeoutSec === undefined
       ? {}

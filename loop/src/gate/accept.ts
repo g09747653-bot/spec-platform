@@ -5,8 +5,16 @@ import { join } from 'node:path';
 import type { DockerEngine } from '../docker/engine.ts';
 import { readLogFrames } from '../docker/log-frames.ts';
 import { bindMount } from '../docker/paths.ts';
-import type { HandoffTask, TechStack } from '../intake/handoff.ts';
+import type { HandoffTask, Measurement, TechStack } from '../intake/handoff.ts';
 
+import { resolveCapabilityImage } from './capability-image.ts';
+import {
+  judgeConvergence,
+  measurementKey,
+  measurementShell,
+  readMeasurementOutput,
+  readMeasurements,
+} from './measurement.ts';
 import { runInCleanCopy } from './clean-run.ts';
 import { runController, type ControllerVerdict } from './controller.ts';
 import { observeProjectRoot } from './observe.ts';
@@ -79,6 +87,26 @@ export interface ArtifactWalkResult {
   output: string;
 }
 
+/**
+ * Исход замера, прогнанного САМОЙ приёмкой (А-44 п.1).
+ *
+ * Три исхода, и третий — главный: приёмка, которая физически не может проверить задачу, обязана
+ * сказать это ВСЛУХ и отдать вопрос суду качества. Молчаливый проход запрещён — именно им был
+ * прошлый режим, где отсутствие браузера глотал `|| true`.
+ */
+export type MeasurementOutcome =
+  | {
+      status: 'measured';
+      value: number;
+      /** Прошлое число ЭТОЙ ЖЕ приёмки, с которым сравнивали. Null — первый замер цепочки. */
+      previous: number | null;
+      converged: boolean;
+      image: string;
+      key: string;
+    }
+  | { status: 'failed'; reason: string }
+  | { status: 'unverifiable'; reason: string };
+
 export interface AcceptanceVerdict {
   accepted: boolean;
   /** Why, in one sentence, for the feed and the report. */
@@ -103,6 +131,8 @@ export interface AcceptanceVerdict {
    */
   controller: ControllerVerdict | null;
   returnedByController: boolean;
+  /** Null — задание замера не несёт; тогда о замере не сказано ничего, и это не «замер прошёл». */
+  measurement: MeasurementOutcome | null;
 }
 
 export interface AcceptanceDeps {
@@ -173,6 +203,7 @@ export async function acceptTask(
         output: copied.output,
         controller: null,
         returnedByController: false,
+        measurement: null,
       };
     }
 
@@ -200,11 +231,18 @@ export async function acceptTask(
         output: '',
         controller: null,
         returnedByController: false,
+        measurement: null,
       };
     }
 
     const commands = resolveCommands(task, detectStackFromObservation(observed));
-    const refusal = commandsRefusal(commands);
+    /*
+     * Задача с замером — задаче с командой ровня: приёмке ЕСТЬ что запускать, и запускает она это
+     * сама (А-44 п.1). Прежде замер был склеен интейком в `unitTestCmd` и поэтому проходил здесь
+     * как обычная команда; теперь он лежит на задании частями, и отказ «нечего запускать» обязан
+     * знать о нём, иначе полировка отвергалась бы за отсутствие того, что ей и не положено.
+     */
+    const refusal = commandsRefusal(commands, task.measurement !== undefined);
     if (refusal !== null) {
       return {
         accepted: false,
@@ -216,6 +254,7 @@ export async function acceptTask(
         output: '',
         controller: null,
         returnedByController: false,
+        measurement: null,
       };
     }
 
@@ -250,6 +289,7 @@ export async function acceptTask(
           .join('\n\n'),
         controller,
         returnedByController: true,
+        measurement: null,
       };
     }
 
@@ -289,6 +329,7 @@ export async function acceptTask(
           output: output.join('\n\n'),
           controller,
           returnedByController: false,
+          measurement: null,
         };
       }
     }
@@ -307,13 +348,77 @@ export async function acceptTask(
         output: output.join('\n\n'),
         controller,
         returnedByController: false,
+        measurement: null,
+      };
+    }
+
+    /*
+     * **Замер — последним, и прогоняет его приёмка** (А-44 п.1).
+     *
+     * После тестов и артефактов, потому что замер дороже их всех вместе (браузер, страницы,
+     * сравнение картинок), и платить за него над красной кодовой базой незачем.
+     */
+    const measurement =
+      task.measurement === undefined
+        ? null
+        : await runMeasurement(task.measurement, {
+            engine: deps.engine,
+            copyPath,
+            name,
+            image,
+            taskId: task.taskId,
+            previous: readMeasurements(workspacePath).measured[measurementKey(task.measurement)]
+              ?.value,
+            timeoutMs: Math.min(
+              deps.timeoutMs ?? ACCEPTANCE_TIMEOUT_MS,
+              MEASUREMENT_TIMEOUT_MS,
+            ),
+            onLine: deps.onLine,
+          });
+
+    if (measurement !== null) {
+      output.push(describeMeasurement(measurement));
+      deps.onLine?.({ stream: 'stdout', text: describeMeasurement(measurement) });
+    }
+
+    /* Не прогнавшийся замер краснеет, а не молчит; выросшее расхождение — тоже вердикт. */
+    if (measurement?.status === 'failed') {
+      return {
+        accepted: false,
+        reason: `Замер приёмки не состоялся: ${measurement.reason} — задача не принята.`,
+        commands,
+        unitExitCode: 0,
+        e2eExitCode: 0,
+        artifacts,
+        output: output.join('\n\n'),
+        controller,
+        returnedByController: false,
+        measurement,
+      };
+    }
+
+    if (measurement?.status === 'measured' && !measurement.converged) {
+      return {
+        accepted: false,
+        reason:
+          `Замер приёмки: ${String(measurement.value)} против прошлого своего ` +
+          `${String(measurement.previous ?? 0)} — расхождение выросло, задача не принята.`,
+        commands,
+        unitExitCode: 0,
+        e2eExitCode: 0,
+        artifacts,
+        output: output.join('\n\n'),
+        controller,
+        returnedByController: false,
+        measurement,
       };
     }
 
     return {
       accepted: true,
       reason:
-        'Чистый контейнер: тесты зелёные, артефакты подтверждены. Задача принята независимым перепрогоном.',
+        'Чистый контейнер: тесты зелёные, артефакты подтверждены. Задача принята независимым перепрогоном.' +
+        (measurement === null ? '' : ` ${describeMeasurement(measurement)}`),
       commands,
       unitExitCode: 0,
       e2eExitCode: 0,
@@ -321,6 +426,7 @@ export async function acceptTask(
       output: output.join('\n\n'),
       controller,
       returnedByController: false,
+      measurement,
     };
   } finally {
     try {
@@ -329,6 +435,101 @@ export async function acceptTask(
       // A copy the operating system will reclaim is not a failed acceptance.
     }
   }
+}
+
+/**
+ * Своя граница у замера: браузер поднимается и обходит страницы дольше, чем идёт тест (задача 174 —
+ * тот же приём, только в другую сторону). Потолок приёмки остаётся задним упором.
+ */
+export const MEASUREMENT_TIMEOUT_MS = 10 * 60_000;
+
+/**
+ * Прогон замера приёмкой — от образа до числа (А-44 п.1).
+ *
+ * Порядок шагов и есть довод независимости: сперва образ, УМЕЮЩИЙ то, что задача требует измерить;
+ * потом контейнер, который сносит чужой отчёт и пишет свой; потом число, прочитанное из вывода
+ * этого же контейнера. Ни на одном шаге приёмка не берёт на веру ничего из того, что оставил
+ * исполнитель.
+ */
+async function runMeasurement(
+  measurement: Measurement,
+  args: {
+    engine: DockerEngine;
+    copyPath: string;
+    name: string;
+    /** Образ стека — им и обойдётся замер, которому ничего особенного не нужно. */
+    image: string;
+    taskId: string;
+    previous: number | undefined;
+    timeoutMs: number;
+    onLine?: AcceptanceDeps['onLine'];
+  },
+): Promise<MeasurementOutcome> {
+  const capability = await resolveCapabilityImage(
+    args.engine,
+    measurement.capability,
+    args.image,
+    (message) => {
+      args.onLine?.({ stream: 'stdout', text: message });
+    },
+  );
+
+  /*
+   * Приёмка физически не может — и говорит это ВСЛУХ (А-44 п.1). Не «принято», не «отвергнуто»:
+   * вопрос уходит суду качества с названной причиной. Молчаливый проход здесь и был тем режимом,
+   * который прошлый прогон прожил трижды.
+   */
+  if (!capability.ok) {
+    return {
+      status: 'unverifiable',
+      reason: `не проверяемо приёмкой: ${capability.reason} (замер требует «${measurement.capability}»)`,
+    };
+  }
+
+  const run = await runInCleanCopy(
+    args.engine,
+    capability.image,
+    args.copyPath,
+    `${args.name}-measure`,
+    measurementShell(measurement),
+    { timeoutMs: args.timeoutMs, ...(args.onLine === undefined ? {} : { onLine: args.onLine }) },
+  );
+
+  const reading = readMeasurementOutput(run.output, run.exitCode, measurement);
+  if (reading.status === 'failed') return { status: 'failed', reason: reading.reason };
+
+  const previous = args.previous ?? null;
+  const convergence = judgeConvergence(previous, reading.value);
+
+  return {
+    status: 'measured',
+    value: reading.value,
+    previous,
+    converged: convergence.converged,
+    image: capability.image,
+    key: measurementKey(measurement),
+  };
+}
+
+/** Что о замере говорится в ленте и в вердикте — одной строкой, одинаково для обоих читателей. */
+export function describeMeasurement(outcome: MeasurementOutcome): string {
+  if (outcome.status === 'unverifiable') {
+    return `Замер НЕ ПРОВЕРЯЛСЯ приёмкой — ${outcome.reason}; вопрос уходит суду качества.`;
+  }
+  if (outcome.status === 'failed') {
+    return `Замер приёмки не состоялся: ${outcome.reason}.`;
+  }
+
+  const against =
+    outcome.previous === null
+      ? 'первый замер этой цепочки — сравнивать не с чем'
+      : `прошлый свой ${String(outcome.previous)}`;
+
+  return (
+    `Замер приёмки (образ ${outcome.image}): ${String(outcome.value)}, ${against}. ` +
+    `${outcome.converged ? 'Расхождение не выросло' : 'РАСХОЖДЕНИЕ ВЫРОСЛО'}. ` +
+    'Само число — публикуемая метрика, воротами оно не бывает.'
+  );
 }
 
 /**
