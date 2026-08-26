@@ -273,7 +273,7 @@ async function main() {
    * Страница входа: названная, иначе index.html, иначе первая найденная. Продукт без единой
    * страницы — не «пустой суд», а отказ с причиной: судить нечего, и это надо сказать.
    */
-  const pages = files.filter((file) => /\.html?$/i.test(file));
+  const pages = files.filter((file) => /\\.html?$/i.test(file));
   const entryUsed = ENTRY || (pages.includes('index.html') ? 'index.html' : pages[0]);
   if (!entryUsed) {
     const refusal = JSON.stringify({ ok: false, reason: 'в рабочей директории нет ни одной страницы — открывать нечего' });

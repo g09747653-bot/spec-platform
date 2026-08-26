@@ -30,6 +30,7 @@ import {
   type FeasibilityRecord,
 } from './feasibility.ts';
 import { PLAN_REVIEW_FILE, readPlanReview, readSeed } from './plan-review.ts';
+import { judgeScope, scopeExclusions, type ScopeRecord } from './scope.ts';
 import { readBundle, type Bundle } from './validate.ts';
 import { buildWholeArtifactPlan } from './whole-artifact-plan.ts';
 
@@ -107,6 +108,13 @@ export interface IntakeResult {
    * состоялось, причина уже названа в ленте.
    */
   feasibility: FeasibilityRecord | null;
+  /**
+   * Суждение об объёме, вынесенное ДО плана (А-44 п.4).
+   *
+   * Уезжает наружу по той же причине, что и выполнимость: сокращение объявляет владельцу маршрут
+   * ОДНИМ алертом вместе с ним — два сообщения об одном решении читались бы как два решения.
+   */
+  scope: ScopeRecord | null;
   degradations: string[];
 }
 
@@ -291,7 +299,62 @@ export async function intakeBundle(
     }
   }
 
-  const conditions = feasibility === null ? [] : planConditions(feasibility);
+  /*
+   * **Суждение об ОБЪЁМЕ — сразу за выполнимостью, до плана** (А-44 п.4).
+   *
+   * Пара к суждению о выполнимости и та же его половина, которой не было: выполнимость судит
+   * МАТЕРИАЛ («этого нельзя»), объём судит БЮДЖЕТ («на это не хватит»). Замер заказчика на двух
+   * прогонах одного контура: у NEURA 44 ссылки и ни одной в никуда, у копии — 86 и 74 в никуда.
+   * Разница не в мастерстве: одна сессия ВЫБИРАЛА СЕБЕ ОБЪЁМ и доводила всё, что начинала.
+   *
+   * Сокращение ДО сборки — выбор; сокращение ПОСЛЕ — заглушка. Поэтому плану уезжает уже суженный
+   * объём, а не полный бриф с надеждой.
+   */
+  const scoped = await judgeScope({
+    projectDirectory: request.projectDirectory,
+    seed,
+    titles: bundle.tasks.map((task) => task.title),
+    chain,
+  });
+  const scope = scoped.status === 'judged' ? scoped.record : null;
+
+  if (scoped.status === 'skipped') {
+    say(`Суждение об объёме не вынесено: ${scoped.reason}. План пишется на полный бриф.`, 'WARN');
+    if (seed !== null) degradations.push(`суждение об объёме: ${scoped.reason}`);
+  } else {
+    say(
+      `Суждение об объёме (судил ${scoped.record.judgedBy}): ${scoped.record.verdict}. ` +
+        `Бюджет ${String(scoped.record.budgetUnits)} единиц, бриф просит ` +
+        `${String(scoped.record.plannedUnits)}; довожу ${String(scoped.record.kept.length)} пунктов ` +
+        `(${String(scoped.record.keptUnits)}), не берусь за ${String(scoped.record.cut.length)} ` +
+        `(${String(scoped.record.cutUnits)}). Перечень — в handoff/SCOPE.json и в алерте владельцу.`,
+      scoped.record.verdict === 'полностью' ? 'INFO' : 'WARN',
+    );
+
+    for (const item of scoped.record.cut) {
+      say(`Не берусь: ${item.title} (${item.necessity}) — ${item.why}`, 'WARN');
+    }
+    if (scoped.record.unestimated.length > 0) {
+      say(
+        `Пункты, которые модель не оценила (взята цена по умолчанию): ` +
+          scoped.record.unestimated.join(', '),
+        'WARN',
+      );
+    }
+  }
+
+  /*
+   * Условия плана — из обоих суждений. Разница между ними существенна и сохраняется дословно: у
+   * выполнимости названы недостижимое И ЗАМЕНА ему, у объёма — только запрет. Замена сокращённому
+   * пункту и была бы той заглушкой, ради запрета которой стадия заведена.
+   */
+  const conditions = [
+    ...(feasibility === null ? [] : planConditions(feasibility)),
+    ...(scope === null ? [] : scopeExclusions(scope)),
+  ];
+
+  /* Плану уезжает уже суженный охват, а не полный бриф. */
+  const coverage = scope === null ? bundle.tasks.map((task) => task.title) : scope.kept.map((item) => item.title);
 
   const tasks: HandoffTask[] = [];
   let writtenByModel = 0;
@@ -311,7 +374,7 @@ export async function intakeBundle(
       seed,
       context: {
         architecture: bundle.architecture,
-        bundleTitles: bundle.tasks.map((task) => task.title),
+        bundleTitles: coverage,
         research: researchForPrompt(surveyed.report),
         techStack,
         mustCover: carriedGaps,
@@ -517,6 +580,7 @@ export async function intakeBundle(
     regenerated: request.regenerate === true,
     artifactClass,
     feasibility,
+    scope,
     degradations,
   };
 }

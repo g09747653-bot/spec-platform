@@ -15,6 +15,7 @@ import { createDockerEngine } from '../../../../docker/engine.ts';
 import { resolveEndpoint } from '../../../../docker/transport.ts';
 import { eventBus } from '../../../../events/bus.ts';
 import { describeFeasibility } from '../../../../intake/feasibility.ts';
+import { describeScope } from '../../../../intake/scope.ts';
 import { ensureBlockWatcher } from '../../../../gate/blocked.ts';
 import { intakeBundle, IntakeRefused } from '../../../../intake/intake.ts';
 import { ensurePlanReviewed } from '../../../../intake/plan-review.ts';
@@ -148,12 +149,24 @@ export async function POST(request: Request): Promise<Response> {
    * показа продукта (А-39). Публикуется здесь, а не в интейке, по тому же правилу, что и
    * `plan-review`, — шину со стороны маршрута трогает маршрут; интейк отдаёт готовую запись.
    */
-  if (intake.feasibility !== null) {
+  if (intake.feasibility !== null || intake.scope !== null) {
+    /*
+     * **Одним алертом — оба суждения** (А-44 п.4). Выполнимость говорит, чего наличными средствами
+     * НЕЛЬЗЯ; объём — за что при наличных средствах решено НЕ БРАТЬСЯ. Это два ответа на один
+     * вопрос владельца «что я получу», и два сообщения читались бы как два решения.
+     */
     eventBus().publish({
       type: 'feasibility',
       projectId: intake.projectId,
-      verdict: intake.feasibility.verdict,
-      text: describeFeasibility(intake.feasibility),
+      verdict:
+        (intake.feasibility?.verdict ?? 'выполнимость не судилась') +
+        ` / объём: ${intake.scope?.verdict ?? 'не судился'}`,
+      text: [
+        intake.feasibility === null ? null : describeFeasibility(intake.feasibility),
+        intake.scope === null ? null : describeScope(intake.scope),
+      ]
+        .filter((part): part is string => part !== null)
+        .join('\n\n'),
     });
   }
 
@@ -193,6 +206,7 @@ export async function POST(request: Request): Promise<Response> {
       keptFromDisk: intake.keptFromDisk,
       regenerated: intake.regenerated,
       feasibility: intake.feasibility,
+      scope: intake.scope,
       degradations: intake.degradations,
       planGaps: review.gaps,
     });
@@ -269,6 +283,7 @@ export async function POST(request: Request): Promise<Response> {
     keptFromDisk: intake.keptFromDisk,
     regenerated: intake.regenerated,
     feasibility: intake.feasibility,
+    scope: intake.scope,
     degradations: intake.degradations,
   });
 }

@@ -701,6 +701,18 @@ describe('класс задумки решает, какой план писат
    */
   const FEASIBLE = JSON.stringify({ reproducible: ['всё по задумке'], outOfReach: [] });
 
+  /**
+   * Ответ суждения об ОБЪЁМЕ (А-44 п.4) — третий вопрос интейка, сразу за выполнимостью.
+   *
+   * Стоит в сценариях явно по той же причине, что и предыдущий: порядок вопросов к модели — часть
+   * контракта интейка. Оценка щедрая, чтобы объём не сузился и кейсы класса судили класс.
+   */
+  const FITS = JSON.stringify({
+    items: [
+      { title: 'любой', units: 1, necessity: 'основное', why: 'бюджета хватает на всё' },
+    ],
+  });
+
   const WHOLE_PLAN = JSON.stringify({
     tasks: [
       {
@@ -743,7 +755,7 @@ describe('класс задумки решает, какой план писат
   it('цельный артефакт: план пишется цельно-артефактной формой, а не разбиением бандла', async () => {
     seedFile('Сделай сайт — графическую копию, две страницы, статикой, без бэкенда.');
 
-    const result = await intake(scripted(COHERENT, FEASIBLE, WHOLE_PLAN));
+    const result = await intake(scripted(COHERENT, FEASIBLE, FITS, WHOLE_PLAN));
 
     expect(result.artifactClass).toBe('coherent-artifact');
     expect(result.tasks.length).toBeLessThanOrEqual(WHOLE_ARTIFACT_TASK_LIMIT);
@@ -755,7 +767,7 @@ describe('класс задумки решает, какой план писат
   it('владелец целого владеет артефактом целиком, и его ждут полировка с замером', async () => {
     seedFile('Сделай лендинг в одну страницу.');
 
-    const result = await intake(scripted(COHERENT, FEASIBLE, WHOLE_PLAN));
+    const result = await intake(scripted(COHERENT, FEASIBLE, FITS, WHOLE_PLAN));
     const owner = result.tasks.find((task) => task.title === 'Собери артефакт целиком');
 
     expect(owner?.filesToEdit).toEqual(['index.html', 'products.html', 'src/styles/main.css']);
@@ -766,7 +778,7 @@ describe('класс задумки решает, какой план писат
   it('план цельной ветки уезжает на диск и в индекс тем же деревом', async () => {
     seedFile('Сделай сайт-визитку.');
 
-    await intake(scripted(COHERENT, FEASIBLE, WHOLE_PLAN));
+    await intake(scripted(COHERENT, FEASIBLE, FITS, WHOLE_PLAN));
 
     const onDisk = readdirSync(join(directory, 'project', 'handoff', 'tasks')).filter((name) =>
       name.startsWith('task_'),
@@ -783,7 +795,7 @@ describe('класс задумки решает, какой план писат
   it('система: план по-прежнему режется по бандлу — те же 16 задач, теми же фазами', async () => {
     seedFile('Сделай сервис с API, хранилищем и очередью обработки.');
 
-    const result = await intake(scripted(SYSTEM, FEASIBLE));
+    const result = await intake(scripted(SYSTEM, FEASIBLE, FITS));
 
     expect(result.artifactClass).toBe('system');
     expect(result.strategy).toBe('phases');
@@ -794,14 +806,14 @@ describe('класс задумки решает, какой план писат
   it('класс не определился — прежнее поведение, как для системы', async () => {
     seedFile('Задумка, о которой модель ответила прозой.');
 
-    const result = await intake(scripted('не знаю, что это', FEASIBLE));
+    const result = await intake(scripted('не знаю, что это', FEASIBLE, FITS));
 
     expect(result.artifactClass).toBe('unknown');
     expect(result.tasks).toHaveLength(16);
   });
 
   it('задумки нет — класс не спрашивается, план прежний', async () => {
-    const result = await intake(scripted(COHERENT, FEASIBLE, WHOLE_PLAN));
+    const result = await intake(scripted(COHERENT, FEASIBLE, FITS, WHOLE_PLAN));
 
     expect(result.artifactClass).toBe('unknown');
     expect(result.tasks).toHaveLength(16);
@@ -810,8 +822,8 @@ describe('класс задумки решает, какой план писат
   it('дерево на диске цельная ветка не переписывает без команды оператора', async () => {
     seedFile('Сделай сайт — графическую копию.');
 
-    await intake(scripted(SYSTEM, FEASIBLE));
-    const second = await intake(scripted(COHERENT, FEASIBLE, WHOLE_PLAN));
+    await intake(scripted(SYSTEM, FEASIBLE, FITS));
+    const second = await intake(scripted(COHERENT, FEASIBLE, FITS, WHOLE_PLAN));
 
     expect(second.artifactClass).toBe('coherent-artifact');
     expect(second.tasks).toHaveLength(16);
@@ -820,7 +832,7 @@ describe('класс задумки решает, какой план писат
 
   it('возобновление по цельному плану не режет бандл и не спрашивает модель (D-326)', async () => {
     seedFile('Сделай сайт — графическую копию, две страницы, статикой.');
-    const first = await intake(scripted(COHERENT, FEASIBLE, WHOLE_PLAN));
+    const first = await intake(scripted(COHERENT, FEASIBLE, FITS, WHOLE_PLAN));
     expect(first.tasks.map((task) => task.taskId)).toEqual([WA(1), WA(2), WA(3)]);
 
     /* Второй заход: считаем КАЖДЫЙ вопрос к модели. */
@@ -853,7 +865,7 @@ describe('класс задумки решает, какой план писат
 
   it('перегенерация уносит вердикт прошлого плана, но не его пробелы', async () => {
     seedFile('Сделай сайт — графическую копию под своим знаком.');
-    await intake(scripted(COHERENT, FEASIBLE, WHOLE_PLAN));
+    await intake(scripted(COHERENT, FEASIBLE, FITS, WHOLE_PLAN));
 
     /* Суд полноты назвал пробел этому плану — так, как назвал бы его живой прогон. */
     writeFileSync(
@@ -893,10 +905,14 @@ describe('класс задумки решает, какой план писат
   it('перегенерация цельным планом уносит из индекса задачи, которых на диске больше нет', async () => {
     seedFile('Сделай сайт — графическую копию.');
 
-    await intake(scripted(SYSTEM, FEASIBLE));
+    await intake(scripted(SYSTEM, FEASIBLE, FITS));
     expect(indexedTaskIds()).toHaveLength(16);
 
-    const regenerated = await intake(scripted(COHERENT, FEASIBLE, WHOLE_PLAN), true);
+    /*
+     * Перегенерация сносит ПЛАН, но не суждения: и выполнимость, и объём объявлены владельцу и
+     * лежат на диске с первого захода. Поэтому у второго сценария ровно два ответа — класс и план.
+     */
+    const regenerated = await intake(scripted(COHERENT, WHOLE_PLAN), true);
 
     expect(regenerated.regenerated).toBe(true);
     expect(regenerated.tasks).toHaveLength(3);
