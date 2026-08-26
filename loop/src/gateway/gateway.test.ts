@@ -466,6 +466,41 @@ describe('алерты по событиям шины — по каждому с
   });
 });
 
+describe('вердикт суда качества доезжает до владельца (А-44 п.2)', () => {
+  it('РЕГРЕССИЯ: красный суд — алерт, а не тишина', async () => {
+    seedProject();
+    await startGateway();
+
+    bus.publish({
+      type: 'quality',
+      projectId: PROJECT,
+      green: false,
+      text: '4. Работоспособность — СЛОМАНО: заглушка объявлена интерфейсом.',
+    });
+    await until(() => api.sent.some((entry) => entry.text.includes('НЕ ПРИНЯТ')));
+
+    const alert = api.sent.find((entry) => entry.text.includes('НЕ ПРИНЯТ'));
+    expect(alert?.text).toContain('проект не завершён');
+    /* Вердикт дословно: пересказанный вердикт — это второй вердикт. */
+    expect(alert?.text).toContain('Работоспособность — СЛОМАНО');
+  });
+
+  it('зелёный суд тоже называется — молчание не отличает «принято» от «не судили»', async () => {
+    seedProject();
+    await startGateway();
+
+    bus.publish({
+      type: 'quality',
+      projectId: PROJECT,
+      green: true,
+      text: 'Итог: зелено по всем четырём осям.',
+    });
+    await until(() => api.sent.some((entry) => entry.text.includes('зелено по всем четырём осям')));
+
+    expect(api.sent.some((entry) => entry.text.includes('Суд качества'))).toBe(true);
+  });
+});
+
 describe('финальный алерт — сверка с задумкой, обе формы (А-33 п.4а)', () => {
   it('при существующем DEVIATIONS.md успех несёт замер, счёт задач и путь — не голую галочку', async () => {
     const projectDirectory = seedProject();
