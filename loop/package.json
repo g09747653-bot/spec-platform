@@ -16,6 +16,8 @@
     "db:migrate": "node src/db/migrate-cli.ts",
     "bench": "node --env-file-if-exists=.env src/bench/bench-cli.ts",
     "bench:parallel": "node --env-file-if-exists=.env src/bench/parallel-cli.ts",
+    "bench:plan-width": "node src/bench/plan-width-cli.ts",
+    "bench:intake-stages": "node src/bench/intake-stages-cli.ts",
     "bridge": "node --env-file-if-exists=.env src/bridge/serve.ts"
   },
   "dependencies": {

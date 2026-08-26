@@ -12,7 +12,7 @@ import type { LlmImage } from '../llm/types.ts';
 import { ACCEPTANCE_IMAGES } from './accept.ts';
 import { resolveCapabilityImage } from './capability-image.ts';
 import { entryFactsFromObservation, HREF_PATTERN, judgeEntryPoint } from './entry-point.ts';
-import { readMeasurements } from './measurement.ts';
+import { readLedger } from './measurement.ts';
 import { buildProbeScript, PROBE_RESULT, type ProbeOptions } from './product-probe.ts';
 import {
   assembleBoard,
@@ -77,12 +77,18 @@ const ProbePayload = z.object({
   ),
   operability: z.object({
     total: z.number().int().nonnegative(),
+    /** Проба уперлась в свой потолок — улика, а не вывод из чисел (А-51 п.5). */
+    capped: z.boolean().default(false),
     elements: z.array(
       z.object({
         label: z.string(),
         tag: z.string(),
         href: z.string().nullable(),
         inChrome: z.boolean(),
+        /** Сколько одинаковых элементов представляет улика. Старая проба их не считала. */
+        duplicates: z.number().int().positive().default(1),
+        /** Разрешается ли якорь в существующее место страницы; `null` — ссылка не якорь. */
+        anchorResolves: z.boolean().nullable().default(null),
         hoverChanged: z.boolean(),
         clicked: z.boolean(),
         navigated: z.boolean(),
@@ -103,12 +109,39 @@ const ProbePayload = z.object({
 
 export type ProbePayload = z.infer<typeof ProbePayload>;
 
-const ProbeRefusal = z.object({ ok: z.literal(false), reason: z.string() });
+/**
+ * Отказ пробы — с машинным признаком, а не с разбором её же фразы.
+ *
+ * `unjudgeable: true` проба ставит ровно в одном случае: в работе нет ни одной страницы, которую
+ * можно открыть. Это и есть тот механический признак, по которому КОД (а не модель) решает, что
+ * продукт не судим этим судом (вердикт §10.1).
+ */
+const ProbeRefusal = z.object({
+  ok: z.literal(false),
+  reason: z.string(),
+  unjudgeable: z.boolean().optional(),
+});
 
 export type QualityOutcome =
   | { status: 'judged'; board: QualityBoard; text: string; entry: string }
   /** Суд не состоялся — с причиной. «Не судили» зелёным не бывает и молчанием тоже. */
-  | { status: 'skipped'; reason: string };
+  | { status: 'skipped'; reason: string }
+  /**
+   * Продукт НЕ СУДИМ этим судом — законный исход по образцу «не проверяемо приёмкой»
+   * (А-51, вердикт §10.1).
+   *
+   * **Отличие от `skipped` существенно и потому названо отдельно.** `skipped` — отказ СУДА:
+   * браузера нет, проба упала, улики не разобрались; чинить надо контур. `unjudgeable` — свойство
+   * ПРОДУКТА: открывать нечего, потому что в работе нет запускаемой точки входа с интерфейсом.
+   * Первое означает «мы не смогли посмотреть» и «завершён» не даёт; второе означает «смотреть
+   * нечем по построению», считается долгом и оставляет строку карты «судья для невизуального»
+   * открытой.
+   *
+   * **Решает КОД по механическому признаку.** Признак — ответ пробы изнутри контейнера: есть ли в
+   * работе хоть одна страница, которую браузер может открыть. Модель не вправе объявить свой
+   * продукт несудимым: её об этом никто не спрашивает.
+   */
+  | { status: 'unjudgeable'; reason: string };
 
 export interface QualityStageDeps {
   engine: DockerEngine;
@@ -297,11 +330,18 @@ export async function judgeProduct(
 
   const raw = extractProbePayload(run.output);
   const refused = ProbeRefusal.safeParse(raw);
-  if (refused.success) return { status: 'skipped', reason: refused.data.reason };
+  if (refused.success) {
+    return refused.data.unjudgeable === true
+      ? { status: 'unjudgeable', reason: refused.data.reason }
+      : { status: 'skipped', reason: refused.data.reason };
+  }
 
   const parsed = ProbePayload.safeParse(raw);
   if (!parsed.success) {
-    return { status: 'skipped', reason: `улики пробы не разобраны: ${z.prettifyError(parsed.error)}` };
+    return {
+      status: 'skipped',
+      reason: `улики пробы не разобраны: ${z.prettifyError(parsed.error)}`,
+    };
   }
 
   const payload = parsed.data;
@@ -335,11 +375,18 @@ export async function judgeProduct(
   const elements: InteractiveProbe[] = payload.operability.elements;
   const operability = judgeOperability({
     total: payload.operability.total,
+    capped: payload.operability.capped,
     probes: elements,
     pageText: payload.operability.pageText,
     sources: payload.sources.map((source) => ({ file: source.file, text: source.text })),
     notes: payload.operability.notes,
   });
+
+  /*
+   * Книга контура — источник строки «не проверено приёмкой». Нечитаемая книга здесь не «пустой
+   * список»: суд обязан сказать, что этой части ответа у него нет (А-51 п.1).
+   */
+  const ledger = readLedger(args.projectDirectory);
 
   const board = assembleBoard({
     coherence,
@@ -347,10 +394,17 @@ export async function judgeProduct(
     evidence: { probes, signals },
     entry,
     operability,
-    unverified: readMeasurements(args.projectDirectory).unverifiable.map((entryRow) => ({
-      taskId: entryRow.taskId,
-      reason: entryRow.reason,
-    })),
+    unverified:
+      ledger.status === 'unreadable'
+        ? []
+        : ledger.ledger.unverifiable.map((entryRow) => ({
+            taskId: entryRow.taskId,
+            reason: entryRow.reason,
+          })),
+    debts:
+      ledger.status === 'unreadable'
+        ? [{ what: 'список «не проверено приёмкой»', why: ledger.reason }]
+        : [],
   });
 
   const text = renderQualityBoard(board);
@@ -370,27 +424,59 @@ export async function judgeProduct(
 }
 
 /**
- * Строка вершинного критерия — вердикт суда ДОСЛОВНО (А-44 п.2).
+ * Строка вершинного критерия — вердикт суда ДОСЛОВНО (А-44 п.2, исправлено А-51 п.4).
  *
  * «Проект завершён» при любой красной оси невозможно: не смягчено, не сокращено, не пересказано.
  * Несостоявшийся суд — тоже не «завершён»: суд, который не состоялся, ничего не подтвердил.
+ *
+ * **Исходов четыре, и вершинная строка обязана назвать тот, который случился.** До А-51 их было
+ * два: зелено и «но суд качества красный», причём вторая фраза зашивалась В ОБЕ незелёные ветки —
+ * то есть несостоявшийся суд объявлялся владельцу красным судом. Это неправда о продукте: «мы
+ * посмотрели и плохо» и «мы не смогли посмотреть» — разные новости, и лечатся они разным.
+ * `kind` здесь и есть то, чем эти исходы различает читатель строки.
  */
+export type QualityLineKind = 'green' | 'red' | 'not-held' | 'unjudgeable';
+
 export function qualityLine(outcome: QualityOutcome | null): {
+  /** Можно ли сказать «проект завершён». Долг завершению не мешает, красная ось — мешает. */
   complete: boolean;
+  kind: QualityLineKind;
   text: string;
 } {
   if (outcome === null) {
     return {
       complete: false,
+      kind: 'not-held',
       text: 'Суд качества не проводился — сказать «проект завершён» не на чем.',
     };
   }
   if (outcome.status === 'skipped') {
     return {
       complete: false,
+      kind: 'not-held',
       text: `Суд качества НЕ СОСТОЯЛСЯ: ${outcome.reason}. «Завершён» не говорится по несостоявшемуся суду.`,
     };
   }
+  if (outcome.status === 'unjudgeable') {
+    /*
+     * Долг, а не отказ (вердикт §10.1). Образец — «не проверяемо приёмкой»: приёмка, которая не
+     * могла проверить, задачу не блокировала, а записывала долг и называла его вслух. Здесь то же
+     * самое одним уровнем выше: продукт без интерфейса не судим судом с глазами, и держать из-за
+     * этого проект в ACTIVE значило бы наказывать невизуальную работу за то, что она невизуальна.
+     */
+    return {
+      complete: true,
+      kind: 'unjudgeable',
+      text:
+        `Суд качества НЕ СУДИЛ: продукт не судим этим судом — ${outcome.reason}. ` +
+        'Судьи для невизуальной работы у контура нет; исход записан ДОЛГОМ, а не зелёной галочкой, ' +
+        'и «продукт хорош» отсюда не следует — следует «этим судом он не проверен».',
+    };
+  }
 
-  return { complete: outcome.board.green, text: outcome.text };
+  return {
+    complete: outcome.board.green,
+    kind: outcome.board.green ? 'green' : 'red',
+    text: outcome.text,
+  };
 }

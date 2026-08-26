@@ -11,6 +11,7 @@ import type { LlmImage } from '../llm/types.ts';
 import type { EntryVerdict } from './entry-point.ts';
 import {
   LIVENESS_KINDS,
+  anchorFragment,
   assembleBoard,
   classifyProbe,
   coherencePrompt,
@@ -336,8 +337,81 @@ describe('четвёртая ось: продуктом пользуются, а
     expect(stubPhraseIn('Купить сейчас')).toBeNull();
   });
 
+  it('РЕГРЕССИЯ (А-51 п.5-VII): перечень ловит РЕПЛИКИ ПОЛЬЗОВАТЕЛЮ, а не пометки разработчика', () => {
+    /*
+     * Три изъятые фразы, каждая — промышленный ложный срабат: `placeholder` есть у любой честной
+     * формы на свете, `lorem ipsum` законна на макете, `todo:` живёт в комментарии, которого
+     * пользователь не видит. Ни одна не обращена к пользователю, а каждая краснила ось безусловно.
+     */
+    expect(stubPhraseIn('<input placeholder="Ваше имя">')).toBeNull();
+    expect(stubPhraseIn('Lorem ipsum dolor sit amet')).toBeNull();
+    expect(stubPhraseIn('// TODO: причесать отступы')).toBeNull();
+
+    /* И это НЕ ослабление запрета: реплики пользователю ловятся по-прежнему. */
+    expect(stubPhraseIn('Демо-версия')).toBe('демо-версия');
+    expect(stubPhraseIn('Функция недоступна')).toBe('функция недоступна');
+
+    /* Ложный срабат стоил бы красной оси на любом макете — проверяем это целиком. */
+    const honestForm = judgeOperability({
+      total: 1,
+      probes: [element({ label: 'Отправить' })],
+      pageText: 'Имя',
+      sources: [{ file: 'index.html', text: '<input placeholder="Ваше имя">' }],
+      notes: [],
+    });
+
+    expect(honestForm.verdict).toBe('operable');
+    expect(honestForm.findings).toEqual([]);
+  });
+
+  it('РЕГРЕССИЯ (А-51 п.5-VIII): живой якорь — РАБОТАЮЩАЯ ссылка, мёртвый — инертная', () => {
+    /*
+     * Фикс А-44 объявил инертным всё, что не сдвинуло страницу, и сравнял `href="#"` с
+     * `href="#news"`. На NEURA — сорок четыре живые ссылки и ни одной в никуда — это дало бы
+     * восемь ложно-инертных.
+     */
+    const still = { navigated: false, changed: false, hoverChanged: false };
+
+    const alive = classifyProbe(element({ href: '#news', anchorResolves: true, ...still }));
+    expect(alive.outcome).toBe('working');
+    expect(alive.why).toContain('существующему месту');
+
+    const dead = classifyProbe(element({ href: '#', anchorResolves: null, ...still }));
+    expect(dead.outcome).toBe('inert');
+    expect(dead.why).toContain('в никуда');
+
+    /* Якорь к несуществующему месту — тоже инертный, но причина названа своя. */
+    const broken = classifyProbe(element({ href: '#нет-такого', anchorResolves: false, ...still }));
+    expect(broken.outcome).toBe('inert');
+    expect(broken.why).toContain('которого на странице нет');
+  });
+
+  it('РЕГРЕССИЯ (А-51 п.5): javascript:void(0); с точкой с запятой — тоже «ведёт в никуда»', () => {
+    const still = { navigated: false, changed: false, hoverChanged: false };
+
+    expect(classifyProbe(element({ href: 'javascript:void(0);', ...still })).why).toContain(
+      'в никуда',
+    );
+  });
+
+  it('кусок ссылки после решётки читается кодом, а не угадывается', () => {
+    expect(anchorFragment('#news')).toBe('news');
+    expect(anchorFragment('/products.html#specs')).toBe('specs');
+    expect(anchorFragment('#')).toBeNull();
+    expect(anchorFragment('/products.html')).toBeNull();
+    expect(anchorFragment(null)).toBeNull();
+    /* Процентная запись разворачивается: `#%D0%B0` и `#а` — одно и то же место. */
+    expect(anchorFragment('#%D0%B0')).toBe('а');
+  });
+
   it('ни одного интерактивного элемента — ось не бывает зелёной по умолчанию', () => {
-    const verdict = judgeOperability({ total: 0, probes: [], pageText: '', sources: [], notes: [] });
+    const verdict = judgeOperability({
+      total: 0,
+      probes: [],
+      pageText: '',
+      sources: [],
+      notes: [],
+    });
 
     expect(verdict.verdict).toBe('broken');
     expect(verdict.findings.join('\n')).toContain('не проверялась');
@@ -362,7 +436,7 @@ describe('четвёртая ось: продуктом пользуются, а
     expect(renderQualityBoard(board)).toContain('4. Работоспособность — СЛОМАНО');
   });
 
-  it('число инертных уходит в доску и в реестр расхождений, раздел II', () => {
+  it('число инертных уходит в доску — и это число ЭЛЕМЕНТОВ, а не улик', () => {
     const board = assembleBoard({
       coherence: { status: 'judged', verdict: 'coherent', findings: [], judgedBy: 'google' },
       liveness: { verdict: 'alive', findings: [] },
@@ -370,7 +444,10 @@ describe('четвёртая ось: продуктом пользуются, а
       entry: entryOk,
       operability: judgeOperability({
         total: 86,
-        probes: [element(), element({ href: '#', navigated: false, changed: false })],
+        probes: [
+          element({ duplicates: 12 }),
+          element({ href: '#', navigated: false, changed: false, duplicates: 74 }),
+        ],
         pageText: '',
         sources: [],
         notes: [],
@@ -379,9 +456,34 @@ describe('четвёртая ось: продуктом пользуются, а
 
     const text = renderQualityBoard(board);
     expect(board.green).toBe(true);
-    expect(text).toContain('нажато 2 из 86');
-    expect(text).toContain('Инертное законно и потому посчитано: 1');
-    expect(text).toContain('раздел II');
+    expect(text).toContain('нажато 2 из 86 видимых');
+    /*
+     * РЕГРЕССИЯ А-51 п.5-IX: прежде здесь стояла единица — счёт УЛИК после дедупликации по
+     * `tag|label|href`. Семьдесят четыре мёртвые ссылки одной подписи представали одной, и
+     * заказчик находил разницу руками за минуту, а суд её не находил вовсе.
+     */
+    expect(text).toContain('инертных 1 (элементов 74)');
+    expect(text).toContain('Инертное законно и потому посчитано: 74');
+  });
+
+  it('РЕГРЕССИЯ (А-51 п.5-IX): потолок пробы называется вслух, даже когда числа сошлись', () => {
+    const board = assembleBoard({
+      coherence: { status: 'judged', verdict: 'coherent', findings: [], judgedBy: 'google' },
+      liveness: { verdict: 'alive', findings: [] },
+      evidence: { probes: ALIVE, signals: [] },
+      entry: entryOk,
+      operability: judgeOperability({
+        total: 120,
+        capped: true,
+        probes: [element()],
+        pageText: '',
+        sources: [],
+        notes: [],
+      }),
+    });
+
+    /* Именно этот случай прежде молчал: при чистом обрезании `total` совпадал с числом улик. */
+    expect(renderQualityBoard(board)).toContain('остановилась на своём потолке');
   });
 
   it('«не проверяемо приёмкой» доезжает до доски строкой, а не растворяется', () => {
@@ -427,9 +529,47 @@ describe('доска — то, что читает заказчик', () => {
     expect(scattered.green).toBe(false);
   });
 
-  it('несостоявшийся суд зелёным не бывает', () => {
+  it('РЕГРЕССИЯ (А-51 п.4, §10.1): несудившаяся ось — ДОЛГ, а не красное', () => {
+    /*
+     * **Живой производственный дефект, который эта правка чинит.** Ось связности требовала
+     * настроенного провайдера судьи, а прод отдаёт `null` при пустом перечне провайдеров роли
+     * `judge` (`start-loop/route.ts`). Значит без настроенного судьи НИ ОДИН проект не мог
+     * получить зелёной доски — не потому, что продукт плох, а потому, что смотреть было некому.
+     *
+     * «Не судимо» и «судимо и плохо» — разные утверждения. Первое считается долгом по образцу
+     * «не проверяемо приёмкой» (A-50): называется вслух, публикуется числом, зелёности не даёт и
+     * зелёность не отменяет.
+     */
     const board = assembleBoard({
-      coherence: { status: 'skipped', reason: 'звено с глазами не ответило: 429' },
+      coherence: { status: 'skipped', reason: 'провайдер роли судьи не настроен' },
+      liveness: { verdict: 'alive', findings: [] },
+      evidence: { probes: ALIVE, signals: [] },
+      entry: entryOk,
+      operability: OPERABLE,
+    });
+
+    expect(board.green).toBe(true);
+    expect(board.debts).toEqual([
+      { what: 'ось связности (I)', why: 'провайдер роли судьи не настроен' },
+    ]);
+
+    const text = renderQualityBoard(board);
+    expect(text).toContain('НЕ СУДИМА');
+    expect(text).toContain('Это долг, а не красная ось');
+    expect(text).toContain('Долги суда (судить было нечем): 1');
+    /* И «зелено по всем четырём осям» при долге не говорится: это была бы вторая неправда. */
+    expect(text).not.toContain('зелено по всем четырём осям');
+    expect(text).toContain('при долгах 1');
+  });
+
+  it('судившаяся и разошедшаяся связность — по-прежнему красное, а не долг', () => {
+    const board = assembleBoard({
+      coherence: {
+        status: 'judged',
+        verdict: 'broken',
+        findings: ['кадр 2: кнопки разной высоты'],
+        judgedBy: 'google',
+      },
       liveness: { verdict: 'alive', findings: [] },
       evidence: { probes: ALIVE, signals: [] },
       entry: entryOk,
@@ -437,7 +577,7 @@ describe('доска — то, что читает заказчик', () => {
     });
 
     expect(board.green).toBe(false);
-    expect(renderQualityBoard(board)).toContain('НЕ СУДИЛАСЬ');
+    expect(board.debts).toEqual([]);
   });
 
   it('текст доски называет каждую ось и итог', () => {

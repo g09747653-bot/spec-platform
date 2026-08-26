@@ -100,6 +100,18 @@ describe('сужение объёма решает КОД (P1)', () => {
 
     expect(narrowed.kept.map((item) => item.title)).toEqual(['Главная']);
     expect(narrowed.cut).toEqual([]);
+    /* И это ФАКТ, который едет наружу, а не тихо теряется в пустом `cut` (А-51 п.3). */
+    expect(narrowed.overBudget).toBe(true);
+  });
+
+  it('уложившийся набор не объявляется превышением', () => {
+    const narrowed = narrowScope({
+      titles: ['Главная', 'Каталог'],
+      estimates: [estimate('Главная', 4, 'основное'), estimate('Каталог', 4, 'основное')],
+      budgetUnits: 44,
+    });
+
+    expect(narrowed.overBudget).toBe(false);
   });
 
   it('неоценённый пункт получает цену по умолчанию — и это названо, а не проглочено', () => {
@@ -173,6 +185,73 @@ describe('вердикт и алерт', () => {
 
     expect(outcome.record.verdict).toBe('полностью');
     expect(describeScope(outcome.record)).toContain('Сокращать нечего');
+  });
+
+  it('РЕГРЕССИЯ (А-51 п.3): «один пункт дороже бюджета» — свой вердикт и свой алерт, а не «полностью»', async () => {
+    /*
+     * Живой баг, найденный исполнением: единственный пункт ценой 500 при бюджете 10 давал
+     * `verdict: 'полностью'` и владельцу говорили «Объём брифа укладывается в отпущенное: 500
+     * единиц работы при бюджете 10. Сокращать нечего — делается всё» — прямо противоположное
+     * правде. Обещано было «делай самое главное И ГОВОРИ ОБ ЭТОМ».
+     */
+    const outcome = await judgeScope({
+      projectDirectory: directory,
+      seed: 'Сделай витрину.',
+      titles: ['Главная'],
+      chain: stubChain(
+        JSON.stringify({
+          items: [{ title: 'Главная', units: 500, necessity: 'основное', why: 'вся витрина' }],
+        }),
+      ),
+      budgetUnits: 10,
+    });
+
+    if (outcome.status !== 'judged') throw new Error('суждение не состоялось');
+
+    expect(outcome.record.verdict).toBe('сверх бюджета');
+    expect(outcome.record.cut).toEqual([]);
+
+    const text = describeScope(outcome.record);
+    expect(text).toContain('НЕ УКЛАДЫВАЕТСЯ даже в один пункт');
+    expect(text).toContain('«Главная»');
+    expect(text).toContain('говорю об этом ЗАРАНЕЕ');
+    /* Прежняя ложь не должна вернуться ни одним словом. */
+    expect(text).not.toContain('укладывается в отпущенное');
+    expect(text).not.toContain('Сокращать нечего');
+  });
+
+  it('РЕГРЕССИЯ (А-51 п.3): резка на РЕАЛЬНОМ превышении, а не на «всё влезает»', async () => {
+    /*
+     * Кейс мандата: механизм резки не срабатывал живьём ни разу (`cutUnits = 0`), а единственный
+     * кейс на «всё влезает» фиксировал успех занижения как норму. Здесь бюджет мал, оценки честны,
+     * и код обязан отрезать по роду — сперва необязательное, потом поддерживающее.
+     */
+    const outcome = await judgeScope({
+      projectDirectory: directory,
+      seed: 'Сделай витрину.',
+      titles: ['Главная', 'Каталог', 'Блог', 'Виджет погоды'],
+      chain: stubChain(
+        JSON.stringify({
+          items: [
+            { title: 'Главная', units: 6, necessity: 'основное', why: 'ядро' },
+            { title: 'Каталог', units: 6, necessity: 'основное', why: 'ядро' },
+            { title: 'Блог', units: 6, necessity: 'поддерживающее', why: 'обогащает' },
+            { title: 'Виджет погоды', units: 6, necessity: 'необязательное', why: 'приятно' },
+          ],
+        }),
+      ),
+      budgetUnits: 12,
+    });
+
+    if (outcome.status !== 'judged') throw new Error('суждение не состоялось');
+
+    const { record } = outcome;
+    expect(record.verdict).toBe('сужено');
+    expect(record.keptUnits).toBe(12);
+    expect(record.cutUnits).toBe(12);
+    expect(record.kept.map((item) => item.title)).toEqual(['Главная', 'Каталог']);
+    /* Порядок брифа возвращается владельцу: он читает свой бриф, а не нашу сортировку по роду. */
+    expect(record.cut.map((item) => item.title)).toEqual(['Блог', 'Виджет погоды']);
   });
 
   it('запрет объёма идёт БЕЗ замены — замена сокращённому пункту и была бы заглушкой', async () => {
@@ -264,12 +343,21 @@ describe('стадия и её отказы', () => {
   });
 
   it('промпт называет единицу так, что декорация в неё не попадает', () => {
-    const prompt = scopePrompt('Сделай витрину.', ['Главная', 'Каталог'], 44);
+    const prompt = scopePrompt('Сделай витрину.', ['Главная', 'Каталог']);
 
     expect(prompt).toContain('РАБОЧЕГО состояния');
     expect(prompt).toContain('Декоративная ссылка');
     expect(prompt).toContain('единицами НЕ являются');
     /* Решение — не её: модель, которой позволено решать, объявит «всё влезает». */
     expect(prompt).toContain('решаешь НЕ ты');
+  });
+
+  it('РЕГРЕССИЯ (А-51 п.3): промпт НЕ называет модели бюджет — кто знает ворота, тот под них подгоняет', () => {
+    const prompt = scopePrompt('Сделай витрину.', ['Главная', 'Каталог']);
+
+    expect(prompt).not.toContain('Бюджет');
+    expect(prompt).not.toContain('44');
+    /* Умолчание названо вслух, а не оставлено дырой: модель должна знать, ПОЧЕМУ ей не сказали. */
+    expect(prompt).toContain('НЕ СООБЩАЕТСЯ намеренно');
   });
 });

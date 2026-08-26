@@ -809,7 +809,9 @@ describe('вершинный критерий стоит на суде каче�
   it('зелёная доска: проект завершён, и вердикт стоит в той же строке', async () => {
     writeTree([task('1', ['lib/a.js'])]);
 
-    const results = await drive(engineWhereProbeSays(probeStubOutcome(probeContainerName(PROJECT)) ?? {}));
+    const results = await drive(
+      engineWhereProbeSays(probeStubOutcome(probeContainerName(PROJECT)) ?? {}),
+    );
 
     expect(results.map((entry) => entry.outcome)).toEqual(['COMPLETED']);
     expect(readBoard(database, PROJECT)?.status).toBe('COMPLETED');
@@ -860,5 +862,52 @@ describe('вершинный критерий стоит на суде каче�
 
     const feed = logger.tail(PROJECT, 300).map((line) => line.message);
     expect(feed.some((line) => line.includes('Суд качества НЕ СОСТОЯЛСЯ'))).toBe(true);
+  }, 30_000);
+
+  it('РЕГРЕССИЯ (А-51 п.4): вершинная строка НЕ называет несостоявшийся суд красным', async () => {
+    /*
+     * Прежде `orchestrator.ts` зашивал «но суд качества красный» в ОБЕ незелёные ветки — и
+     * владельцу, у которого проба просто упала, сообщалось, что продукт судили и забраковали.
+     * Строка врала в единственном месте, которое владелец читает.
+     */
+    writeTree([task('1', ['lib/a.js'])]);
+
+    await drive(engineWhereProbeSays({ exitCode: 70, stdout: ['проба упала'] }));
+
+    const feed = logger.tail(PROJECT, 300).map((line) => line.message);
+    const headline = feed.find((line) => line.includes('Проект НЕ завершён'));
+
+    expect(headline).toBeDefined();
+    expect(headline).toContain('НЕ СОСТОЯЛСЯ');
+    expect(headline).toContain('отказ контура, а не приговор продукту');
+    expect(headline).not.toContain('суд качества КРАСНЫЙ');
+  }, 30_000);
+
+  it('РЕГРЕССИЯ (§10.1): продукт без страниц НЕ СУДИМ — завершён с долгом, а не красный', async () => {
+    /*
+     * Механический признак ставит КОД пробы: страниц нет — открывать нечего, судьи для
+     * невизуальной работы у контура нет. Исход законный, по образцу «не проверяемо приёмкой»:
+     * долг называется вслух, проект закрывается, «продукт хорош» отсюда не следует.
+     */
+    writeTree([task('1', ['lib/a.js'])]);
+
+    const refusal = JSON.stringify({
+      ok: false,
+      unjudgeable: true,
+      reason: 'в рабочей директории нет ни одной страницы — открывать нечего',
+    });
+
+    await drive(engineWhereProbeSays({ exitCode: 0, stdout: [PROBE_RESULT, refusal] }));
+
+    expect(readBoard(database, PROJECT)?.status).toBe('COMPLETED');
+
+    const feed = logger.tail(PROJECT, 300).map((line) => line.message);
+    const headline = feed.find((line) => line.includes('Проект завершён С ДОЛГОМ'));
+
+    expect(headline).toBeDefined();
+    expect(headline).toContain('НЕ СУДИМ судом качества');
+    expect(headline).toContain('Долг записан');
+    /* И ни одна из двух прежних формул на этом исходе не произносится. */
+    expect(feed.some((line) => line.includes('суд качества КРАСНЫЙ'))).toBe(false);
   }, 30_000);
 });

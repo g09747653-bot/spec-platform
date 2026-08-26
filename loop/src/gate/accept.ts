@@ -9,11 +9,12 @@ import type { HandoffTask, Measurement, TechStack } from '../intake/handoff.ts';
 
 import { resolveCapabilityImage } from './capability-image.ts';
 import {
+  CONVERGENCE_PATIENCE,
   judgeConvergence,
   measurementKey,
   measurementShell,
+  readLedger,
   readMeasurementOutput,
-  readMeasurements,
 } from './measurement.ts';
 import { runInCleanCopy } from './clean-run.ts';
 import { runController, type ControllerVerdict } from './controller.ts';
@@ -101,6 +102,13 @@ export type MeasurementOutcome =
       /** Прошлое число ЭТОЙ ЖЕ приёмки, с которым сравнивали. Null — первый замер цепочки. */
       previous: number | null;
       converged: boolean;
+      /**
+       * Сошлось ИСЧЕРПАНИЕМ терпения, а не улучшением (А-51, вердикт §10.2).
+       *
+       * Отдельным полем, а не оттенком `converged`: «стало не хуже» и «хуже, но хватит» —
+       * разные факты о работе, и цикл записывает их в книгу по-разному.
+       */
+      exhausted: boolean;
       image: string;
       key: string;
     }
@@ -358,23 +366,14 @@ export async function acceptTask(
      * После тестов и артефактов, потому что замер дороже их всех вместе (браузер, страницы,
      * сравнение картинок), и платить за него над красной кодовой базой незачем.
      */
-    const measurement =
-      task.measurement === undefined
-        ? null
-        : await runMeasurement(task.measurement, {
-            engine: deps.engine,
-            copyPath,
-            name,
-            image,
-            taskId: task.taskId,
-            previous: readMeasurements(workspacePath).measured[measurementKey(task.measurement)]
-              ?.value,
-            timeoutMs: Math.min(
-              deps.timeoutMs ?? ACCEPTANCE_TIMEOUT_MS,
-              MEASUREMENT_TIMEOUT_MS,
-            ),
-            onLine: deps.onLine,
-          });
+    const measurement = await measure(task, workspacePath, {
+      engine: deps.engine,
+      copyPath,
+      name,
+      image,
+      timeoutMs: Math.min(deps.timeoutMs ?? ACCEPTANCE_TIMEOUT_MS, MEASUREMENT_TIMEOUT_MS),
+      ...(deps.onLine === undefined ? {} : { onLine: deps.onLine }),
+    });
 
     if (measurement !== null) {
       output.push(describeMeasurement(measurement));
@@ -444,6 +443,55 @@ export async function acceptTask(
 export const MEASUREMENT_TIMEOUT_MS = 10 * 60_000;
 
 /**
+ * Замер задачи вместе с чтением книги контура (А-51 п.1).
+ *
+ * **Книга читается ДО контейнера, и нечитаемая книга краснеет здесь же.** Прежде порча книги
+ * молча давала «прошлого числа нет» → «первый замер цепочки» → проход. Это и есть тихий проход,
+ * который А-44 запретил, — просто добытый не через отчёт, а через бухгалтерию. Испорченная книга
+ * не даёт судить о сходимости ничего, а значит и принять по сходимости нельзя.
+ *
+ * Платить за контейнер замера при этом незачем: книга уже не даст сравнить число ни с чем.
+ */
+async function measure(
+  task: HandoffTask,
+  workspacePath: string,
+  args: {
+    engine: DockerEngine;
+    copyPath: string;
+    name: string;
+    image: string;
+    timeoutMs: number;
+    onLine?: AcceptanceDeps['onLine'];
+  },
+): Promise<MeasurementOutcome | null> {
+  if (task.measurement === undefined) return null;
+
+  const ledger = readLedger(workspacePath);
+  if (ledger.status === 'unreadable') {
+    return {
+      status: 'failed',
+      reason:
+        `${ledger.reason} — сходимость сравнивать не с чем, и «не с чем» здесь означает ` +
+        'потерянное прошлое, а не начало цепочки. Почините или снесите книгу явным решением.',
+    };
+  }
+
+  const key = measurementKey(task.measurement);
+
+  return runMeasurement(task.measurement, {
+    engine: args.engine,
+    copyPath: args.copyPath,
+    name: args.name,
+    image: args.image,
+    taskId: task.taskId,
+    previous: ledger.ledger.measured[key]?.value,
+    stalls: ledger.ledger.stalls[key]?.count ?? 0,
+    timeoutMs: args.timeoutMs,
+    ...(args.onLine === undefined ? {} : { onLine: args.onLine }),
+  });
+}
+
+/**
  * Прогон замера приёмкой — от образа до числа (А-44 п.1).
  *
  * Порядок шагов и есть довод независимости: сперва образ, УМЕЮЩИЙ то, что задача требует измерить;
@@ -461,6 +509,8 @@ async function runMeasurement(
     image: string;
     taskId: string;
     previous: number | undefined;
+    /** Сколько заходов подряд этот замер уже не улучшался — предохранитель §10.2. */
+    stalls: number;
     timeoutMs: number;
     onLine?: AcceptanceDeps['onLine'];
   },
@@ -499,13 +549,18 @@ async function runMeasurement(
   if (reading.status === 'failed') return { status: 'failed', reason: reading.reason };
 
   const previous = args.previous ?? null;
-  const convergence = judgeConvergence(previous, reading.value);
+  const convergence = judgeConvergence(previous, reading.value, args.stalls);
+
+  if (convergence.reason !== null) {
+    args.onLine?.({ stream: 'stdout', text: convergence.reason });
+  }
 
   return {
     status: 'measured',
     value: reading.value,
     previous,
     converged: convergence.converged,
+    exhausted: convergence.exhausted,
     image: capability.image,
     key: measurementKey(measurement),
   };
@@ -525,9 +580,16 @@ export function describeMeasurement(outcome: MeasurementOutcome): string {
       ? 'первый замер этой цепочки — сравнивать не с чем'
       : `прошлый свой ${String(outcome.previous)}`;
 
+  const convergence = outcome.exhausted
+    ? `РАСХОЖДЕНИЕ ВЫРОСЛО, но терпение цепочки исчерпано (${String(CONVERGENCE_PATIENCE)} захода ` +
+      'подряд без улучшения) — сходимость засчитана исчерпанием, задача принята'
+    : outcome.converged
+      ? 'Расхождение не выросло'
+      : 'РАСХОЖДЕНИЕ ВЫРОСЛО';
+
   return (
     `Замер приёмки (образ ${outcome.image}): ${String(outcome.value)}, ${against}. ` +
-    `${outcome.converged ? 'Расхождение не выросло' : 'РАСХОЖДЕНИЕ ВЫРОСЛО'}. ` +
+    `${convergence}. ` +
     'Само число — публикуемая метрика, воротами оно не бывает.'
   );
 }

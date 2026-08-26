@@ -5,20 +5,27 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
-  countRegistryEntries,
+  countRegistryRows,
   findSelfCheckReport,
+  readDeviationRecord,
   REGISTRY_SECTIONS,
+  SELF_CHECK_RECORD,
   verificationLine,
 } from './self-check.ts';
 
 /**
- * Вершинный критерий (А-33 п.4а) и реестр расхождений в ДВУХ разделах (А-44 п.3).
+ * Вершинный критерий (А-33 п.4а) и реестр расхождений, у которого род есть ПОЛЕ (А-44 п.3, А-51 п.2).
  *
  * Раздельность — не оформление. Замена по материалу («видео-фонов hero не воспроизвести — материала
  * нет, вместо них статичный кадр») прошла суждение о выполнимости и объявлена ДО сборки; сокращение
  * объёма («74 ссылки оставлены декоративными») — решение исполнителя при наличном материале. Одна
  * колонка на оба рода превращает реестр в место, где недоделанное легализуется задним числом: число
  * 74 читается как «мы не могли», хотя оно означает «мы не стали».
+ *
+ * А-51 п.2 добавил к этому вторую половину: различение не может быть чтением markdown. Плоский
+ * реестр, чей ТИТУЛ содержит слова обоих разделов, прежде давал `{material: 2, scope: 0}` и печатал
+ * владельцу «замен по материалу 2, сокращений объёма 0» — то есть выдавал сокращения за замены
+ * молча, ровно тем отказом, ради которого разделы заведены.
  */
 
 let directory: string;
@@ -52,9 +59,30 @@ const REGISTRY = [
   '| Форма подписки | без отправки |',
 ].join('\n');
 
-/** Реестр старой формы — одной кучей, без разделов. Ровно то, что писали до этой правки. */
+/** Машинная запись к той же прозе: род каждой записи — полем, а не фразой в заголовке. */
+const RECORD = {
+  entries: [
+    { kind: 'материал', what: 'Видео-фоны hero', why: 'материала нет', instead: 'статичный кадр' },
+    {
+      kind: 'материал',
+      what: 'Начертание NVIDIA Sans',
+      why: 'лицензия',
+      instead: 'Inter той же метрики',
+    },
+    { kind: 'объём', what: 'Раздел «Драйверы»', why: 'оставлен декоративной ссылкой' },
+    { kind: 'объём', what: 'Карточки блога', why: 'три из двенадцати' },
+    { kind: 'объём', what: 'Форма подписки', why: 'без отправки' },
+  ],
+};
+
+/**
+ * Реестр старой формы, и он ЗЛОНАМЕРЕННО НЕВИНЕН: титул содержит слова обоих разделов.
+ *
+ * Ровно этот вход исполнением и уронил прежний счёт: `# Реестр расхождений: замены по материалу и
+ * сокращения объёма` — первый же заголовок, и по нему все строки попадали в «материал».
+ */
 const FLAT = [
-  '# Реестр расхождений',
+  '# Реестр расхождений: замены по материалу и сокращения объёма',
   '',
   '| Раздел | Ширина | Описание | Решение |',
   '|---|---|---|---|',
@@ -62,43 +90,61 @@ const FLAT = [
   '| Products | 1440px | SC-002 diff=108px | named-строка |',
 ].join('\n');
 
-describe('счёт записей реестра по разделам', () => {
-  it('считает строки данных РАЗДЕЛЬНО, не считая шапок и разделителей', () => {
-    expect(countRegistryEntries(REGISTRY)).toEqual({ material: 2, scope: 3, unfiled: 0 });
-  });
+const writeRegistry = (markdown: string, record?: unknown): void => {
+  writeFileSync(join(directory, 'DEVIATIONS.md'), markdown, 'utf8');
+  if (record !== undefined) {
+    writeFileSync(join(directory, SELF_CHECK_RECORD), JSON.stringify(record, null, 2), 'utf8');
+  }
+};
 
-  it('файл без таблиц — нули по всем разделам, не мусорное число', () => {
-    expect(countRegistryEntries('# Отчёт\n\nПросто текст без таблиц.')).toEqual({
-      material: 0,
-      scope: 0,
-      unfiled: 0,
+describe('род расхождения — поле машинной записи, а не фраза заголовка', () => {
+  it('считает роды по полю kind, а не по тому, что написано над таблицей', () => {
+    expect(readDeviationRecord(join(directory, 'нет.json'))).toEqual({ status: 'absent' });
+
+    writeRegistry(REGISTRY, RECORD);
+
+    expect(readDeviationRecord(join(directory, SELF_CHECK_RECORD))).toEqual({
+      status: 'read',
+      counts: { material: 2, scope: 3 },
     });
   });
 
-  it('РЕГРЕССИЯ: реестр без разделов не приписывается к первому — он «вне разделов»', () => {
-    expect(countRegistryEntries(FLAT)).toEqual({ material: 0, scope: 0, unfiled: 2 });
+  it('запись не той формы — «не распознана», а не «нулей по родам»', () => {
+    writeRegistry(REGISTRY, { entries: [{ kind: 'какой-то свой род', what: 'x', why: 'y' }] });
+
+    expect(readDeviationRecord(join(directory, SELF_CHECK_RECORD))).toMatchObject({
+      status: 'unreadable',
+    });
   });
 
-  it('заголовок раздела узнаётся по имени, а не по точному совпадению строки', () => {
-    const decorated = [
-      `### I. ${REGISTRY_SECTIONS.material} — прошли суждение о выполнимости`,
-      '| Что | Причина | Взамен |',
-      '|---|---|---|',
-      '| Видео | материал | кадр |',
-    ].join('\n');
+  it('битый JSON — тоже «не распознана», и это не то же самое, что её отсутствие', () => {
+    writeRegistry(REGISTRY);
+    writeFileSync(join(directory, SELF_CHECK_RECORD), '{ битый', 'utf8');
 
-    expect(countRegistryEntries(decorated).material).toBe(1);
+    expect(readDeviationRecord(join(directory, SELF_CHECK_RECORD))).toMatchObject({
+      status: 'unreadable',
+    });
+  });
+});
+
+describe('счёт строк прозы — только для нераспознанной формы и только приблизительный', () => {
+  it('считает строки данных, не считая шапок и разделителей', () => {
+    expect(countRegistryRows(REGISTRY)).toBe(5);
+  });
+
+  it('файл без таблиц — ноль, а не мусорное число', () => {
+    expect(countRegistryRows('# Отчёт\n\nПросто текст без таблиц.')).toBe(0);
   });
 });
 
 describe('поиск отчёта самопроверки', () => {
   it('находит DEVIATIONS.md в корне рабочей директории и меряет его', () => {
-    writeFileSync(join(directory, 'DEVIATIONS.md'), REGISTRY, 'utf8');
+    writeRegistry(REGISTRY, RECORD);
 
     const report = findSelfCheckReport(directory);
     expect(report).not.toBeNull();
     expect(report?.relativePath).toBe('DEVIATIONS.md');
-    expect(report?.entries).toEqual({ material: 2, scope: 3, unfiled: 0 });
+    expect(report?.form).toMatchObject({ kind: 'filed', counts: { material: 2, scope: 3 } });
   });
 
   it('находит отчёт на уровень глубже, но не заглядывает в служебные деревья', () => {
@@ -111,14 +157,22 @@ describe('поиск отчёта самопроверки', () => {
     expect(findSelfCheckReport(directory)?.relativePath).toBe('docs/DEVIATIONS.md');
   });
 
+  it('машинная запись ищется РЯДОМ с прозой, а не только в корне', () => {
+    mkdirSync(join(directory, 'docs'), { recursive: true });
+    writeFileSync(join(directory, 'docs', 'DEVIATIONS.md'), REGISTRY, 'utf8');
+    writeFileSync(join(directory, 'docs', SELF_CHECK_RECORD), JSON.stringify(RECORD), 'utf8');
+
+    expect(findSelfCheckReport(directory)?.form).toMatchObject({ kind: 'filed' });
+  });
+
   it('отчёта нет — null, и это форма «план самопроверку не снимал»', () => {
     expect(findSelfCheckReport(directory)).toBeNull();
   });
 });
 
-describe('строка сверки — две формы, обе явные (А-33 п.4а)', () => {
+describe('строка сверки — три формы, все явные (А-33 п.4а, А-51 п.2)', () => {
   it('РЕГРЕССИЯ: числа двух родов называются раздельно, а не одной суммой', () => {
-    writeFileSync(join(directory, 'DEVIATIONS.md'), REGISTRY, 'utf8');
+    writeRegistry(REGISTRY, RECORD);
 
     const line = verificationLine(findSelfCheckReport(directory));
     expect(line).toContain('план снимал самопроверку');
@@ -129,12 +183,42 @@ describe('строка сверки — две формы, обе явные (А
     expect(line).toContain('DEVIATIONS.md');
   });
 
-  it('реестр старой формы называется старым, а не выдаётся за раздельный', () => {
-    writeFileSync(join(directory, 'DEVIATIONS.md'), FLAT, 'utf8');
+  it('РЕГРЕССИЯ (А-51 п.2): плоский реестр с титулом обоих разделов НЕ выдаётся за раздельный', () => {
+    writeRegistry(FLAT);
 
     const line = verificationLine(findSelfCheckReport(directory));
-    expect(line).toContain('записей вне разделов 2');
-    expect(line).toContain('род расхождения по ним не назван');
+
+    /*
+     * Прежний счёт на этом самом входе печатал «замен по материалу 2, сокращений объёма 0» и ни
+     * слова о форме. Теперь чисел по родам нет вовсе, а форма названа вслух: приблизительный род
+     * читается как точный, и это хуже отсутствующего.
+     */
+    expect(line).toContain('ФОРМА РЕЕСТРА НЕ РАСПОЗНАНА');
+    expect(line).toContain('машинной записи реестра');
+    expect(line).not.toContain('замен по материалу');
+    expect(line).not.toContain('сокращений объёма 0');
+    expect(line).toContain('примерно 2');
+  });
+
+  it('РЕГРЕССИЯ (А-51 п.2): перифраз заголовка больше ничего не решает', () => {
+    /* «Замена по материалу» вместо «Замены по материалу» прежде уводило записи «вне разделов». */
+    const paraphrased = REGISTRY.replace('Замены по материалу', 'Замена по материалу').replace(
+      'Сокращения объёма',
+      'Сокращение объёма',
+    );
+    writeRegistry(paraphrased, RECORD);
+
+    expect(verificationLine(findSelfCheckReport(directory))).toContain('замен по материалу 2');
+  });
+
+  it('РЕГРЕССИЯ (А-51 п.2): подзаголовок внутри раздела больше ничего не сбрасывает', () => {
+    const withSubheading = REGISTRY.replace(
+      '| Видео-фоны hero | материал | статичный кадр той же композиции |',
+      '### Подробности\n\n| Видео-фоны hero | материал | статичный кадр той же композиции |',
+    );
+    writeRegistry(withSubheading, RECORD);
+
+    expect(verificationLine(findSelfCheckReport(directory))).toContain('сокращений объёма 3');
   });
 
   it('без отчёта: сверка не снималась — сказано словом, не отсутствием слова', () => {

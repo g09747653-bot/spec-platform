@@ -12,6 +12,7 @@ import {
   type RoleCredentials,
 } from '../llm/roles.ts';
 import { LLM_PROVIDERS, type LlmProviderId } from '../llm/types.ts';
+import { DEFAULT_INTAKE_CONCURRENCY } from '../intake/fan-out.ts';
 import { DEFAULT_MAX_EXECUTORS } from '../orchestrator/schedule.ts';
 
 /**
@@ -138,6 +139,19 @@ const envObject = z.object({
   LOOP_MAX_EXECUTORS: z.preprocess(
     blankToUndefined,
     z.coerce.number().int().min(1).max(64).default(DEFAULT_MAX_EXECUTORS),
+  ),
+
+  /**
+   * Сколько заданий интейк пишет РАЗОМ (А-51 п.3).
+   *
+   * Пара к `LOOP_MAX_EXECUTORS`, и потолок так же, а не цель: заданий в вехе может быть меньше, и
+   * веер тогда уже. Диапазон закрыт сверху намеренно — цепочка провайдеров перебирает все свои
+   * звенья на каждом вызове, и «шестьсот параллельных заданий» означало бы шестьсот одновременных
+   * запросов к каждому звену по очереди, а не быстрый интейк.
+   */
+  LOOP_INTAKE_CONCURRENCY: z.preprocess(
+    blankToUndefined,
+    z.coerce.number().int().min(1).max(32).default(DEFAULT_INTAKE_CONCURRENCY),
   ),
 
   /**

@@ -226,15 +226,16 @@ export function createTelegramGateway(deps: GatewayDeps): TelegramGateway {
        * рядом с «Проект завершён»; красный приходит ВМЕСТО него — и это главное, ради чего событие
        * заведено: «все задачи приняты» и «продукт принят» суть разные утверждения.
        */
-      void send(
-        alertText(
-          event.green
-            ? '⚖️ Суд качества — зелено по всем четырём осям'
-            : '⚖️ Продукт судом качества НЕ ПРИНЯТ — проект не завершён',
-          projectLabel(event.projectId),
-          trimTo(event.text, 3000),
-        ),
-      );
+      const title =
+        event.kind === 'green'
+          ? '⚖️ Суд качества — зелено по судимым осям'
+          : event.kind === 'unjudgeable'
+            ? '⚖️ Продукт НЕ СУДИМ судом качества — записан долг'
+            : event.kind === 'not-held'
+              ? '⚖️ Суд качества НЕ СОСТОЯЛСЯ — проект не завершён'
+              : '⚖️ Продукт судом качества НЕ ПРИНЯТ — проект не завершён';
+
+      void send(alertText(title, projectLabel(event.projectId), trimTo(event.text, 3000)));
       return;
     }
 

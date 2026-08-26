@@ -21,7 +21,10 @@ import { readSeed } from '../intake/plan-review.ts';
 import { research } from '../intake/researcher.ts';
 
 import { detectTechStack } from '../gate/tech-stack.ts';
+import { LEDGER_DIRECTORY } from '../gate/measurement.ts';
 import { judgeProduct, qualityLine, type QualityOutcome } from '../gate/quality-stage.ts';
+import { recordCalibration } from '../intake/calibration.ts';
+import { readScope } from '../intake/scope.ts';
 import type { TechStack } from '../intake/handoff.ts';
 
 import { freezePipeline, isFrozen, markProject } from './freeze.ts';
@@ -206,6 +209,14 @@ export function recoverFromDisk(
 
   for (const entry of readdirSync(workspaceRoot, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
+
+    /*
+     * Бухгалтерия контура проектом не бывает (А-51 п.1). Книги замеров живут СОСЕДЯМИ рабочих
+     * директорий, и перебор корня их видит. Сегодня их отсекло бы `readHandoffTree`, вернув
+     * `null`, — но это совпадение, а не правило: связь между переносом книги и восстановлением с
+     * диска невидима, и следующий, менее придирчивый скан корня прочёл бы книгу как проект.
+     */
+    if (entry.name === LEDGER_DIRECTORY) continue;
 
     const projectDirectory = join(workspaceRoot, entry.name);
     const tree = readHandoffTree(projectDirectory);
@@ -769,12 +780,10 @@ export async function driveProject(
             say(line.text, line.stream === 'stderr' ? 'WARN' : 'INFO');
           },
         },
-      ).catch(
-        (error: unknown): QualityOutcome => ({
-          status: 'skipped',
-          reason: `стадия суда упала: ${error instanceof Error ? error.message : String(error)}`,
-        }),
-      );
+      ).catch((error: unknown): QualityOutcome => ({
+        status: 'skipped',
+        reason: `стадия суда упала: ${error instanceof Error ? error.message : String(error)}`,
+      }));
 
       const line = qualityLine(judged);
       say(line.text, line.complete ? 'INFO' : 'ERROR');
@@ -787,7 +796,8 @@ export async function driveProject(
       eventBus().publish({
         type: 'quality',
         projectId,
-        green: line.complete,
+        green: line.kind === 'green',
+        kind: line.kind,
         text: line.text,
       });
 
@@ -799,14 +809,59 @@ export async function driveProject(
        */
       markProject(database, projectId, line.complete ? 'COMPLETED' : 'ACTIVE');
 
+      /*
+       * **Петля калибровки бюджета замыкается здесь** (А-51, вердикт §10.4).
+       *
+       * Оценка модели была ПРЕДСКАЗАНИЕМ (`keptUnits` суждения об объёме); четвёртая ось суда
+       * только что дала ФАКТ (`counts.working` — сколько элементов проба потрогала и они
+       * сработали). Отношение одного к другому и есть коэффициент, на который правится бюджет
+       * следующих проектов, — измеренный, а не угаданный. Пишется только когда суд СОСТОЯЛСЯ:
+       * несудившийся продукт факта не даёт, и записать по нему ноль значило бы сфабриковать
+       * систематическое занижение.
+       */
+      if (judged.status === 'judged') {
+        const scope = readScope(projectDirectory);
+
+        if (scope !== null) {
+          recordCalibration(projectDirectory, {
+            projectId,
+            at: new Date().toISOString(),
+            predictedUnits: scope.keptUnits,
+            workingUnits: judged.board.operability.counts.working,
+          });
+          say(
+            `Калибровка бюджета: предсказано ${String(scope.keptUnits)} единиц, вышло рабочим ` +
+              `${String(judged.board.operability.counts.working)}. Запись легла в журнал ` +
+              'калибровки — бюджет следующих проектов правится на измеренное отношение.',
+          );
+        }
+      }
+
       const registry = verificationLine(findSelfCheckReport(projectDirectory));
 
+      /*
+       * **Вершинная строка называет ТОТ исход, который случился** (А-51 п.4).
+       *
+       * Прежде здесь стояли две ветки, и незелёная зашивала «но суд качества красный» независимо
+       * от того, был ли суд вообще. Несостоявшийся суд объявлялся владельцу красным — то есть
+       * строка врала о продукте в единственном месте, которое владелец читает. Исходов четыре,
+       * и различает их `line.kind`, а не наличие галочки.
+       */
+      const headline =
+        line.kind === 'green'
+          ? `Проект завершён: принято задач ${String(plan.tasks.length)}.`
+          : line.kind === 'unjudgeable'
+            ? `Проект завершён С ДОЛГОМ: принято задач ${String(plan.tasks.length)}, но продукт ` +
+              'НЕ СУДИМ судом качества — судьи для невизуальной работы у контура нет. Долг записан.'
+            : line.kind === 'not-held'
+              ? `Проект НЕ завершён: все ${String(plan.tasks.length)} задач приняты, а суд ` +
+                'качества НЕ СОСТОЯЛСЯ — это отказ контура, а не приговор продукту.'
+              : `Проект НЕ завершён: все ${String(plan.tasks.length)} задач приняты, но суд ` +
+                'качества КРАСНЫЙ.';
+
       say(
-        line.complete
-          ? `Проект завершён: принято задач ${String(plan.tasks.length)}. ${registry}\n${line.text}`
-          : `Проект НЕ завершён: все ${String(plan.tasks.length)} задач приняты, но суд качества ` +
-              `красный. ${registry}\n${line.text}`,
-        line.complete ? 'INFO' : 'ERROR',
+        `${headline} ${registry}\n${line.text}`,
+        line.kind === 'green' ? 'INFO' : line.kind === 'unjudgeable' ? 'WARN' : 'ERROR',
       );
     } else {
       /*

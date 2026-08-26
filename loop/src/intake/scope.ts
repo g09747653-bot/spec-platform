@@ -72,7 +72,16 @@ const ModelScope = z.object({ items: z.array(ModelItem).min(1) });
 /** Оценка одного пункта — то, что модель отдаёт, а код превращает в решение. */
 export type ScopeEstimate = z.infer<typeof ModelItem>;
 
-export const SCOPE_VERDICTS = ['полностью', 'сужено'] as const;
+/**
+ * Исходы суждения — ТРИ, и третий заведён живым багом (А-51 п.3).
+ *
+ * `сверх бюджета` — случай, при котором даже САМОЕ ГЛАВНОЕ дороже отпущенного. Прежде его не было
+ * в перечне, и он молча становился «полностью»: единственный пункт ценой 500 при бюджете 10 давал
+ * владельцу «Объём брифа укладывается в отпущенное: 500 единиц работы при бюджете 10. Сокращать
+ * нечего — делается всё», то есть ровно противоположное правде. Обещано было другое: «делай самое
+ * главное И ГОВОРИ ОБ ЭТОМ».
+ */
+export const SCOPE_VERDICTS = ['полностью', 'сужено', 'сверх бюджета'] as const;
 export type ScopeVerdict = (typeof SCOPE_VERDICTS)[number];
 
 const ScopeItem = z.object({
@@ -102,8 +111,7 @@ export const ScopeRecord = z.object({
 export type ScopeRecord = z.infer<typeof ScopeRecord>;
 
 export type ScopeOutcome =
-  | { status: 'judged'; record: ScopeRecord }
-  | { status: 'skipped'; reason: string };
+  { status: 'judged'; record: ScopeRecord } | { status: 'skipped'; reason: string };
 
 /* ─────────────────────────── решает код ─────────────────────────── */
 
@@ -126,6 +134,14 @@ export function narrowScope(args: {
   kept: ScopeItem[];
   cut: ScopeItem[];
   unestimated: string[];
+  /**
+   * Даже удержанное не влезло в бюджет (А-51 п.3).
+   *
+   * Возможно ровно в одном случае — первый по роду пункт дороже всего бюджета, — и именно он
+   * прежде выдавался за «укладывается». Возвращается фактом, а не выводится из чисел вызывающим:
+   * «сумма больше бюджета» вычислима, но СМЫСЛ («самое главное не влезло») живёт здесь.
+   */
+  overBudget: boolean;
 } {
   const byTitle = new Map(args.estimates.map((item) => [normalise(item.title), item]));
   const unestimated: string[] = [];
@@ -168,9 +184,16 @@ export function narrowScope(args: {
   /* Порядок брифа возвращается обоим спискам: владелец читает свой бриф, а не нашу сортировку. */
   const position = new Map(args.titles.map((title, index) => [title, index]));
   const inBriefOrder = (list: ScopeItem[]): ScopeItem[] =>
-    [...list].sort((left, right) => (position.get(left.title) ?? 0) - (position.get(right.title) ?? 0));
+    [...list].sort(
+      (left, right) => (position.get(left.title) ?? 0) - (position.get(right.title) ?? 0),
+    );
 
-  return { kept: inBriefOrder(kept), cut: inBriefOrder(cut), unestimated };
+  return {
+    kept: inBriefOrder(kept),
+    cut: inBriefOrder(cut),
+    unestimated,
+    overBudget: spent > args.budgetUnits,
+  };
 }
 
 const sum = (items: readonly ScopeItem[]): number =>
@@ -183,6 +206,32 @@ export function describeScope(record: ScopeRecord): string {
       `Объём брифа укладывается в отпущенное: ${String(record.plannedUnits)} единиц работы при ` +
       `бюджете ${String(record.budgetUnits)}. Сокращать нечего — делается всё.`
     );
+  }
+
+  /*
+   * **Свой алерт своему случаю** (А-51 п.3). Обещание §5 звучало «делай самое главное и говори об
+   * этом»; молчаливое «укладывается» было нарушением обеих его половин сразу.
+   */
+  if (record.verdict === 'сверх бюджета') {
+    const first = record.kept[0];
+
+    return [
+      `Объём брифа НЕ УКЛАДЫВАЕТСЯ даже в один пункт: самое главное — «${first?.title ?? '—'}» — ` +
+        `стоит ${String(record.keptUnits)} единиц при бюджете ${String(record.budgetUnits)}.`,
+      '',
+      'Берусь за него одного и говорю об этом ЗАРАНЕЕ, а не покажу заглушку потом. Всё остальное',
+      `(${String(record.cut.length)} пунктов, ${String(record.cutUnits)} единиц) не берётся.`,
+      ...(record.cut.length === 0
+        ? []
+        : [
+            '',
+            'Не берусь:',
+            ...record.cut.map((item) => `• ${item.title} — ${item.necessity}; ${item.why}`),
+          ]),
+      '',
+      'Бюджет, в который не влезает ничего, означает «делай самое главное», а не «не делай ничего»',
+      '— но и не «всё влезло». Число публикуется как есть; воротами оно не становится.',
+    ].join('\n');
   }
 
   return [
@@ -244,12 +293,18 @@ const SYSTEM = [
   'кавычек кода.',
 ].join(' ');
 
-/** Промпт стадии — экспортирован, чтобы регрессия судила ВХОД, а не только выход. */
-export function scopePrompt(
-  seed: string,
-  titles: readonly string[],
-  budgetUnits: number,
-): string {
+/**
+ * Промпт стадии — экспортирован, чтобы регрессия судила ВХОД, а не только выход.
+ *
+ * **Бюджета в промпте НЕТ, и это правка, а не упущение** (А-51 п.3, вердикт §10.4). Прежде число
+ * называлось модели прямым текстом — а кто знает ворота, тот под них подгоняет: оценка перестаёт
+ * быть оценкой и становится подгонкой под «всё влезло». Модель отвечает на вопрос «во что
+ * обойдётся довести пункт до рабочего состояния», и ответ обязан не зависеть от того, сколько нам
+ * отпущено. Сравнение с бюджетом — работа кода, и код не спрашивает у модели разрешения.
+ *
+ * Единица определена в промпте по-прежнему: без определения число не значит ничего.
+ */
+export function scopePrompt(seed: string, titles: readonly string[]): string {
   return [
     'Задумка владельца (дословно):',
     seed,
@@ -257,10 +312,10 @@ export function scopePrompt(
     'Пункты брифа — то, чего задумка требует по охвату:',
     ...titles.map((title, index) => `${String(index + 1)}. ${title}`),
     '',
-    `Бюджет: ${String(budgetUnits)} единиц доведённого. ЕДИНИЦА — это один элемент, доведённый до`,
-    'РАБОЧЕГО состояния: страница, которая открывается и живёт; ссылка, которая ведёт куда обещает;',
-    'форма, которая отправляет; меню, которое раскрывается и не ломается. Декоративная ссылка,',
-    'пустой раздел и кнопка с сообщением «функция недоступна» единицами НЕ являются и в счёт не идут.',
+    'ЕДИНИЦА — это один элемент, доведённый до РАБОЧЕГО состояния: страница, которая открывается',
+    'и живёт; ссылка, которая ведёт куда обещает; форма, которая отправляет; меню, которое',
+    'раскрывается и не ломается. Декоративная ссылка, пустой раздел и кнопка с сообщением',
+    '«функция недоступна» единицами НЕ являются и в счёт не идут.',
     '',
     'ПРАВИЛА ОЦЕНКИ:',
     '1. Оцени КАЖДЫЙ пункт: units — во что обойдётся довести его до рабочего состояния.',
@@ -268,7 +323,8 @@ export function scopePrompt(
     '   "основное" — без этого задумки нет вовсе;',
     '   "поддерживающее" — задумка узнаётся и без него, но заметно беднеет;',
     '   "необязательное" — приятно иметь.',
-    '3. Оценивай ЧЕСТНО и не занижай, чтобы «всё влезло». Заниженная оценка не увеличивает',
+    '3. Оценивай ЧЕСТНО. Сколько всего работы отпущено, тебе НЕ СООБЩАЕТСЯ намеренно: подогнать',
+    '   оценку под чужой предел — значит не оценить, а угадать. Заниженная оценка не увеличивает',
     '   сделанное — она превращает недоделанное в заглушку, а заглушка запрещена безусловно.',
     '4. Что делать, а что нет, решаешь НЕ ты: код наберёт по роду до бюджета и остальное отрежет.',
     '',
@@ -327,7 +383,7 @@ export async function judgeScope(args: {
   try {
     answer = await args.chain.generate({
       system: SYSTEM,
-      prompt: scopePrompt(args.seed, args.titles, budgetUnits),
+      prompt: scopePrompt(args.seed, args.titles),
       maxOutputTokens: 8192,
     });
   } catch (error) {
@@ -339,7 +395,10 @@ export async function judgeScope(args: {
 
   const parsed = ModelScope.safeParse(extractJson(answer.text));
   if (!parsed.success) {
-    return { status: 'skipped', reason: `ответ модели не разобран: ${z.prettifyError(parsed.error)}` };
+    return {
+      status: 'skipped',
+      reason: `ответ модели не разобран: ${z.prettifyError(parsed.error)}`,
+    };
   }
 
   const narrowed = narrowScope({
@@ -349,7 +408,15 @@ export async function judgeScope(args: {
   });
 
   const record: ScopeRecord = {
-    verdict: narrowed.cut.length === 0 ? 'полностью' : 'сужено',
+    /*
+     * Порядок проверок — порядок правды: «не влезло даже главное» бьёт первым, потому что при
+     * пустом `cut` оно прежде читалось как «полностью», и это был живой баг (А-51 п.3).
+     */
+    verdict: narrowed.overBudget
+      ? 'сверх бюджета'
+      : narrowed.cut.length === 0
+        ? 'полностью'
+        : 'сужено',
     budgetUnits,
     plannedUnits: sum(narrowed.kept) + sum(narrowed.cut),
     keptUnits: sum(narrowed.kept),

@@ -30,9 +30,17 @@ import {
   type FeasibilityRecord,
 } from './feasibility.ts';
 import { PLAN_REVIEW_FILE, readPlanReview, readSeed } from './plan-review.ts';
-import { judgeScope, scopeExclusions, type ScopeRecord } from './scope.ts';
-import { readBundle, type Bundle } from './validate.ts';
+import { judgeScope, SCOPE_BUDGET_UNITS, scopeExclusions, type ScopeRecord } from './scope.ts';
+import { readBundle, type Bundle, type BundleTask } from './validate.ts';
 import { buildWholeArtifactPlan } from './whole-artifact-plan.ts';
+import { DEFAULT_INTAKE_CONCURRENCY, mapWithLimit } from './fan-out.ts';
+import {
+  calibratedBudget,
+  calibrationCoefficient,
+  describeCalibration,
+  readCalibration,
+} from './calibration.ts';
+import { stampLedger } from '../gate/measurement.ts';
 
 /**
  * Taking a bundle in and turning it into a runnable plan (task 156).
@@ -79,6 +87,31 @@ export interface IntakeDeps {
    * executor's own vendor unless the operator says otherwise.
    */
   researchChain?: Chain | null;
+  /**
+   * Сколько заданий пишется РАЗОМ (А-51 п.3).
+   *
+   * Без него — `DEFAULT_INTAKE_CONCURRENCY`. Ноль и отрицательное значение веер приводит к
+   * единице сам: «параллельность, выключенная опечаткой» должна быть последовательностью, а не
+   * остановкой.
+   */
+  concurrency?: number;
+}
+
+/**
+ * Сколько заняла одна стадия интейка и сколько модельных вызовов она стоила (А-51 п.3).
+ *
+ * **Замер стоит первым, а не после правки.** Мандат требует распараллелить планирование, но
+ * оптимизировать вслепую нельзя: 127,4 секунды интейка — это сумма шести разных работ, и пока не
+ * видно, какая из них чего стоит, ускорение одной может оказаться шумом на фоне другой. Спан —
+ * тот же приём, что у замера параллельности (`bench/parallel-measure.ts`): концы отрезка совпадают
+ * с настоящими концами работы, а не с опросом сбоку.
+ */
+export interface IntakeStageSpan {
+  stage: string;
+  startedAt: number;
+  endedAt: number;
+  /** Модельных вызовов стадии. Ноль — стадия решалась кодом или не состоялась. */
+  calls: number;
 }
 
 export interface IntakeResult {
@@ -116,6 +149,29 @@ export interface IntakeResult {
    */
   scope: ScopeRecord | null;
   degradations: string[];
+  /** Разбивка стены интейка по стадиям — публикуемое число, воротами не бывает (А-51 п.3). */
+  stages: IntakeStageSpan[];
+}
+
+/** Разбивка одной строкой: что сколько заняло и сколько вызовов стоило. */
+export function describeStages(stages: readonly IntakeStageSpan[]): string {
+  const total = stages.reduce((sum, span) => sum + (span.endedAt - span.startedAt), 0);
+  const calls = stages.reduce((sum, span) => sum + span.calls, 0);
+
+  const parts = stages.map((span) => {
+    const ms = span.endedAt - span.startedAt;
+    const share = total === 0 ? 0 : Math.round((ms / total) * 100);
+    return (
+      `${span.stage} ${String(Math.round(ms / 100) / 10)} с (${String(share)}%, ` +
+      `вызовов ${String(span.calls)})`
+    );
+  });
+
+  return (
+    `Разбивка интейка по стадиям: ${parts.join('; ')}. ` +
+    `Всего ${String(Math.round(total / 100) / 10)} с и ${String(calls)} модельных вызовов. ` +
+    'Числа публикуются как есть; воротами они не становятся.'
+  );
 }
 
 /** Marker files the tech-stack guess reads. The gate's own detection (task 157) refines it. */
@@ -167,7 +223,59 @@ export async function intakeBundle(
     logger.write({ projectId, agentRole: 'ARCHITECT', logLevel: level, message });
   };
 
+  /*
+   * Спаны стадий (А-51 п.3). Концы отрезка — настоящие концы работы: `finally`, чтобы упавшая
+   * стадия тоже попала в разбивку своим временем, а не исчезла из неё вместе с интейком.
+   */
+  const stages: IntakeStageSpan[] = [];
+
+  async function timeStage<T>(
+    stage: string,
+    run: () => Promise<T>,
+    calls: (value: T) => number = () => 0,
+  ): Promise<T> {
+    const startedAt = Date.now();
+    let value: T | undefined;
+    try {
+      value = await run();
+      return value;
+    } finally {
+      stages.push({
+        stage,
+        startedAt,
+        endedAt: Date.now(),
+        calls: value === undefined ? 0 : calls(value),
+      });
+    }
+  }
+
   say(`Принят бандл ${bundle.bundleId}: задач ${String(bundle.tasks.length)}.`);
+
+  /*
+   * **Книга замеров клеймится владельцем ДО первой стадии** (А-51 п.1).
+   *
+   * Побочное следствие переноса книги наружу: она переживает снос рабочей директории, и проект,
+   * пересозданный под тем же именем каталога, унаследовал бы чужую базовую линию сходимости. Здесь
+   * — единственное место, знающее, ЧЕЙ это план; здесь и решается, продолжается ли цепочка
+   * полировок или начинается заново.
+   */
+  const stamp = stampLedger(request.projectDirectory, { projectId, bundleId: bundle.bundleId });
+
+  if (stamp.status === 'reset') {
+    say(
+      `Книга замеров контура заведена заново: она принадлежала бандлу ${stamp.previous?.bundleId ?? '—'} ` +
+        `проекта ${stamp.previous?.projectId ?? '—'}, а этот заход — бандла ${bundle.bundleId}. ` +
+        `Снято прошлых базовых линий: ${String(stamp.dropped)}. Сходимость чужого плана нашему не ориентир.`,
+      'WARN',
+    );
+  }
+  if (stamp.status === 'unreadable') {
+    say(
+      `Книга замеров контура не читается: ${stamp.reason}. Задачи с замером будут краснеть, пока ` +
+        'книгу не починят или не снесут — тихого прохода по потерянному прошлому не будет.',
+      'ERROR',
+    );
+  }
 
   /*
    * Пробелы, названные суду ПРОШЛОГО плана, переживают его снос (А-36 п.1, находка прогона).
@@ -204,9 +312,14 @@ export async function intakeBundle(
    * report goes into every assignment's prompt and onto the disk the executors mount, so the
    * architect and the executors read the same account of the workspace.
    */
-  const surveyed = await research(
-    request.projectDirectory,
-    deps.researchChain === undefined ? chain : deps.researchChain,
+  const surveyed = await timeStage(
+    'исследование',
+    () =>
+      research(
+        request.projectDirectory,
+        deps.researchChain === undefined ? chain : deps.researchChain,
+      ),
+    (value) => (value.writtenBy === null ? 0 : 1),
   );
   say(
     `Исследователь: записей в дереве ${String(surveyed.survey.tree.length)}, ` +
@@ -237,7 +350,11 @@ export async function intakeBundle(
   } else if (chain === null) {
     say('Класс задумки не определялся: провайдер роли архитектора не настроен.', 'WARN');
   } else {
-    const classified = await classifyArtifact(seed, chain);
+    const classified = await timeStage(
+      'класс задумки',
+      () => classifyArtifact(seed, chain),
+      () => 1,
+    );
 
     if (classified.status === 'classified') {
       artifactClass = classified.artifactClass;
@@ -268,11 +385,16 @@ export async function intakeBundle(
    * Оно ничего не останавливает: невыполнимость части задумки не ошибка, а факт, который называют и
    * обходят. Не состоялось — именованная деградация, как у всякой модельной роли (D-229).
    */
-  const judged = await judgeFeasibility({
-    projectDirectory: request.projectDirectory,
-    seed,
-    chain,
-  });
+  const judged = await timeStage(
+    'выполнимость',
+    () =>
+      judgeFeasibility({
+        projectDirectory: request.projectDirectory,
+        seed,
+        chain,
+      }),
+    (value) => (value.status === 'judged' ? 1 : 0),
+  );
   const feasibility = judged.status === 'judged' ? judged.record : null;
 
   if (judged.status === 'skipped') {
@@ -310,12 +432,31 @@ export async function intakeBundle(
    * Сокращение ДО сборки — выбор; сокращение ПОСЛЕ — заглушка. Поэтому плану уезжает уже суженный
    * объём, а не полный бриф с надеждой.
    */
-  const scoped = await judgeScope({
-    projectDirectory: request.projectDirectory,
-    seed,
-    titles: bundle.tasks.map((task) => task.title),
-    chain,
-  });
+  /*
+   * **Бюджет объёма правится ИЗМЕРЕННЫМ коэффициентом** (вердикт §10.4). Стартовая константа —
+   * аналогия (44 ссылки одного сайта при шире определённой единице), и подпирать её второй
+   * аналогией было бы гаданием по гаданию. Журнал калибровки сравнивает предсказание модели с
+   * фактом четвёртой оси суда; коэффициент применяется с третьего прогона, а до него говорится,
+   * что поправлять пока не на что.
+   */
+  const journal = readCalibration(request.projectDirectory);
+  const coefficient = calibrationCoefficient(journal);
+  const budgetUnits = calibratedBudget(SCOPE_BUDGET_UNITS, coefficient);
+
+  say(describeCalibration(SCOPE_BUDGET_UNITS, journal, coefficient));
+
+  const scoped = await timeStage(
+    'объём',
+    () =>
+      judgeScope({
+        projectDirectory: request.projectDirectory,
+        seed,
+        titles: bundle.tasks.map((task) => task.title),
+        chain,
+        budgetUnits,
+      }),
+    (value) => (value.status === 'judged' ? 1 : 0),
+  );
   const scope = scoped.status === 'judged' ? scoped.record : null;
 
   if (scoped.status === 'skipped') {
@@ -330,6 +471,20 @@ export async function intakeBundle(
         `(${String(scoped.record.cutUnits)}). Перечень — в handoff/SCOPE.json и в алерте владельцу.`,
       scoped.record.verdict === 'полностью' ? 'INFO' : 'WARN',
     );
+
+    /*
+     * Случай «даже самое главное дороже бюджета» — своей строкой (А-51 п.3). Прежде он молча
+     * становился «полностью» и владельцу говорили «укладывается в отпущенное: 500 единиц при
+     * бюджете 10», то есть прямо противоположное правде.
+     */
+    if (scoped.record.verdict === 'сверх бюджета') {
+      say(
+        `Даже САМОЕ ГЛАВНОЕ дороже бюджета: «${scoped.record.kept[0]?.title ?? '—'}» стоит ` +
+          `${String(scoped.record.keptUnits)} единиц при бюджете ${String(scoped.record.budgetUnits)}. ` +
+          'Берусь за него одного и говорю об этом заранее — заглушки на остальные места не ставятся.',
+        'WARN',
+      );
+    }
 
     for (const item of scoped.record.cut) {
       say(`Не берусь: ${item.title} (${item.necessity}) — ${item.why}`, 'WARN');
@@ -354,7 +509,78 @@ export async function intakeBundle(
   ];
 
   /* Плану уезжает уже суженный охват, а не полный бриф. */
-  const coverage = scope === null ? bundle.tasks.map((task) => task.title) : scope.kept.map((item) => item.title);
+  const coverage =
+    scope === null ? bundle.tasks.map((task) => task.title) : scope.kept.map((item) => item.title);
+
+  /*
+   * **Суженный охват действует и на ОБЩЕЙ ветке** (А-51 п.3).
+   *
+   * Прежде `coverage` и `conditions` потреблялись исключительно внутри ветки цельного артефакта, а
+   * общая шла по ПОЛНОМУ бандлу и звала `buildAssignment` без единого условия — то есть в обоих
+   * замерных прогонах стадия объёма была чисто декларативной: судила, писала SCOPE.json, говорила
+   * владельцу и ни на что не влияла.
+   *
+   * Сокращение здесь означает буквально «задачи нет в плане»: `scopeExclusions` запрещает ставить
+   * на её место заглушку, а задание, которое всё-таки написано, — это и есть приглашение поставить.
+   *
+   * **С одной оговоркой, и она обязательна: сокращённая задача, от которой ЗАВИСИТ удержанная,
+   * остаётся.** Иначе нарезка вех получила бы висячую зависимость и отказала бы всему плану
+   * (`sliceMilestones` → `dangling`), а «сокращение объёма» превратилось бы в «конвейер не
+   * запускается». Зависимость от пункта означает, что он по существу основной, как бы его ни
+   * оценила модель, — и об отмене сокращения говорится вслух.
+   */
+  const cutTitles = new Set((scope?.cut ?? []).map((item) => item.title));
+  const planned: BundleTask[] = [];
+  const dropped: BundleTask[] = [];
+  const restored: BundleTask[] = [];
+
+  if (cutTitles.size === 0) {
+    planned.push(...bundle.tasks);
+  } else {
+    const keep = new Set(
+      bundle.tasks.filter((task) => !cutTitles.has(task.title)).map((task) => task.taskId),
+    );
+    const byId = new Map(bundle.tasks.map((task) => [task.taskId, task]));
+
+    /* Замыкание вниз по зависимостям: удержанное тянет за собой всё, чего оно ждёт. */
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const taskId of [...keep]) {
+        for (const dependency of byId.get(taskId)?.dependsOn ?? []) {
+          if (byId.has(dependency) && !keep.has(dependency)) {
+            keep.add(dependency);
+            grew = true;
+          }
+        }
+      }
+    }
+
+    for (const task of bundle.tasks) {
+      if (!cutTitles.has(task.title)) {
+        planned.push(task);
+      } else if (keep.has(task.taskId)) {
+        planned.push(task);
+        restored.push(task);
+      } else {
+        dropped.push(task);
+      }
+    }
+
+    say(
+      `Объём сужен и на общей ветке: из ${String(bundle.tasks.length)} задач бандла в план идут ` +
+        `${String(planned.length)}, не берутся ${String(dropped.length)}. Сокращённой задаче ` +
+        'задание не пишется вовсе — ни заглушки, ни декоративной ссылки на её место не ставится.',
+      dropped.length === 0 ? 'INFO' : 'WARN',
+    );
+
+    for (const task of restored) {
+      say(
+        `Сокращение отменено для ${task.taskId} («${task.title}»): от неё зависят задачи, ` +
+          'которые план оставляет. Зависимость и есть доказательство, что пункт основной.',
+        'WARN',
+      );
+    }
+  }
 
   const tasks: HandoffTask[] = [];
   let writtenByModel = 0;
@@ -370,20 +596,25 @@ export async function intakeBundle(
   const existingTree = countAssignments(request.projectDirectory);
 
   if (artifactClass === 'coherent-artifact' && seed !== null && existingTree === 0) {
-    const plan = await buildWholeArtifactPlan({
-      seed,
-      context: {
-        architecture: bundle.architecture,
-        bundleTitles: coverage,
-        research: researchForPrompt(surveyed.report),
-        techStack,
-        mustCover: carriedGaps,
-        conditions,
-      },
-      chain,
-      knownArtifactFiles: surveyed.survey.tree,
-      scope: milestoneScope(projectId),
-    });
+    const plan = await timeStage(
+      'план',
+      () =>
+        buildWholeArtifactPlan({
+          seed,
+          context: {
+            architecture: bundle.architecture,
+            bundleTitles: coverage,
+            research: researchForPrompt(surveyed.report),
+            techStack,
+            mustCover: carriedGaps,
+            conditions,
+          },
+          chain,
+          knownArtifactFiles: surveyed.survey.tree,
+          scope: milestoneScope(projectId),
+        }),
+      (value) => (value.writtenBy === null ? 0 : 1 + value.retriedBecause.length),
+    );
 
     slice = sliceMilestones(plan.tasks, milestoneScope(projectId));
     say(describeSlice(slice), slice.ok ? 'INFO' : 'ERROR');
@@ -480,58 +711,120 @@ export async function intakeBundle(
         'модель не спрошена ни разу — бандл при живом цельном плане не режется.',
     );
   } else {
-    slice = sliceMilestones(bundle.tasks, milestoneScope(projectId));
+    slice = sliceMilestones(planned, milestoneScope(projectId));
     say(describeSlice(slice), slice.ok ? 'INFO' : 'ERROR');
     if (!slice.ok) throw new IntakeRefused(describeSlice(slice));
 
     const milestoneOf = milestoneIndex(slice.milestones);
 
-    for (const task of bundle.tasks) {
-      const milestone = milestoneOf.get(task.taskId);
-      if (milestone === undefined) {
-        throw new IntakeRefused(
-          `задача ${task.taskId} не попала ни в одну веху — это дефект нарезки`,
-        );
-      }
+    /*
+     * **Фаза 1 — чтение диска, последовательно и без модели.**
+     *
+     * `readTaskFile` дёшев и синхронен; параллелить его нечего. Здесь же решается, какие задания
+     * вообще пойдут в модель: задание, уже лежащее на диске, не переписывается (задача 172) — не
+     * только потому, что перезапись стоит вызова на задачу при каждом перезаходе, но потому, что
+     * файл есть то, из чего исполнитель мог уже начать работу.
+     */
+    const slots: { task: BundleTask; milestone: SlicedMilestone; onDisk: HandoffTask | null }[] =
+      planned.map((task) => {
+        const milestone = milestoneOf.get(task.taskId);
+        if (milestone === undefined) {
+          throw new IntakeRefused(
+            `задача ${task.taskId} не попала ни в одну веху — это дефект нарезки`,
+          );
+        }
 
-      /*
-       * **An assignment that already exists is not written again** (task 172).
-       *
-       * Not merely because rewriting it costs a model call per task on every resume — though it does,
-       * and the M15а gate spent a free tier discovering that — but because the file is what an executor
-       * may already be working from. `writeHandoff` keeps its prose whatever arrives here; skipping the
-       * call is the same rule applied one step earlier, where it also saves the money.
-       */
-      const onDisk = readTaskFile(
-        join(request.projectDirectory, HANDOFF.tasks, taskFileName(task.taskId)),
+        return {
+          task,
+          milestone,
+          onDisk: readTaskFile(
+            join(request.projectDirectory, HANDOFF.tasks, taskFileName(task.taskId)),
+          ),
+        };
+      });
+
+    const toWrite = slots.filter((slot) => slot.onDisk === null);
+
+    /*
+     * **Фаза 2 — веер (А-51 п.3).**
+     *
+     * Десять независимых заданий писались десятью модельными вызовами ПО ОЧЕРЕДИ при нулевых
+     * зависимостях между ними: `for (const task of bundle.tasks) { … await buildAssignment(…) }`.
+     * Исполнительская полоса к этому моменту выжата на 97,2% идеала — потолок ставит планирование,
+     * и ставит его вот этот цикл.
+     *
+     * Гонки записи здесь нет по построению: `buildAssignment` не пишет на диск ни байта, весь
+     * ввод-вывод плана собран в `writeHandoff` ниже. Потолок — не осторожность вообще, а
+     * конкретный довод: цепочка провайдеров перебирает все свои звенья на КАЖДОМ вызове, и без
+     * потолка красное первое звено дало бы столько одновременных запросов ко второму, сколько
+     * задач в вехе.
+     */
+    const width = deps.concurrency ?? DEFAULT_INTAKE_CONCURRENCY;
+
+    if (toWrite.length > 1) {
+      say(
+        `Задания вехи пишутся ПАРАЛЛЕЛЬНО: ${String(toWrite.length)} независимых заданий, ` +
+          `одновременно не больше ${String(Math.min(width, toWrite.length))}. Порядок задач в ` +
+          'плане и порядок строк в ленте — прежние: их задаёт бандл, а не то, кто ответил первым.',
       );
+    }
 
-      if (onDisk !== null) {
-        tasks.push(onDisk);
+    const built = await timeStage(
+      'задания',
+      () =>
+        mapWithLimit(toWrite, width, (slot) =>
+          buildAssignment(
+            slot.task,
+            slot.milestone,
+            {
+              architecture: bundle.architecture,
+              techStack,
+              research: researchForPrompt(surveyed.report),
+              /*
+               * **Условия — и на общей ветке тоже** (А-51 п.3). Прежде их получала только ветка
+               * цельного артефакта, и суждения о выполнимости и об объёме на системном плане не
+               * доезжали до исполнителя вовсе.
+               */
+              conditions,
+            },
+            chain,
+          ),
+        ),
+      (value) => value.filter((entry) => entry.writtenBy !== null).length,
+    );
+
+    /*
+     * **Фаза 3 — сборка, строго по порядку бандла.**
+     *
+     * Веер вернул результаты в порядке входа; лента и массив собираются здесь, последовательно.
+     * Это и есть цена, которую параллельность не платит: одновременность живёт в сетевых ходах, а
+     * не в бухгалтерии, и бухгалтерия остаётся детерминированной.
+     */
+    const writtenFor = new Map(toWrite.map((slot, index) => [slot.task.taskId, built[index]]));
+
+    for (const slot of slots) {
+      if (slot.onDisk !== null) {
+        tasks.push(slot.onDisk);
         keptFromDisk += 1;
         continue;
       }
 
-      const built = await buildAssignment(
-        task,
-        milestone,
-        {
-          architecture: bundle.architecture,
-          techStack,
-          research: researchForPrompt(surveyed.report),
-        },
-        chain,
-      );
+      const result = writtenFor.get(slot.task.taskId);
+      if (result === undefined) {
+        throw new IntakeRefused(
+          `задание ${slot.task.taskId} не написано ни моделью, ни скелетом — это дефект веера`,
+        );
+      }
 
-      tasks.push(built.task);
+      tasks.push(result.task);
 
-      if (built.writtenBy === null) {
-        const reason = built.degradedBecause ?? 'причина не названа';
-        degradations.push(`${task.taskId}: ${reason}`);
-        say(`Задание ${task.taskId} написано без модели (${reason}).`, 'WARN');
+      if (result.writtenBy === null) {
+        const reason = result.degradedBecause ?? 'причина не названа';
+        degradations.push(`${slot.task.taskId}: ${reason}`);
+        say(`Задание ${slot.task.taskId} написано без модели (${reason}).`, 'WARN');
       } else {
         writtenByModel += 1;
-        say(`Задание ${task.taskId} написано провайдером ${built.writtenBy}.`);
+        say(`Задание ${slot.task.taskId} написано провайдером ${result.writtenBy}.`);
       }
     }
 
@@ -569,7 +862,14 @@ export async function intakeBundle(
       `стек ${techStack}. Диск — источник правды, база — индекс.`,
   );
 
+  /*
+   * Разбивка — в ленту, последней строкой интейка (А-51 п.3). Оптимизировать вслепую нельзя: до
+   * этой строки «интейк 127,4 с» было одним числом, за которым скрывались шесть разных работ.
+   */
+  say(describeStages(stages));
+
   return {
+    stages,
     projectId,
     bundleId: bundle.bundleId,
     strategy: slice.strategy,

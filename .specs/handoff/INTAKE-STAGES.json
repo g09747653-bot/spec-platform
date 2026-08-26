@@ -1,0 +1,80 @@
+{
+  "sequential": {
+    "concurrency": 1,
+    "totalMs": 182229,
+    "stages": [
+      {
+        "stage": "исследование",
+        "startedAt": 1787735958809,
+        "endedAt": 1787735967920,
+        "calls": 1
+      },
+      {
+        "stage": "класс задумки",
+        "startedAt": 1787735967954,
+        "endedAt": 1787735977063,
+        "calls": 1
+      },
+      {
+        "stage": "выполнимость",
+        "startedAt": 1787735977092,
+        "endedAt": 1787735986203,
+        "calls": 1
+      },
+      {
+        "stage": "объём",
+        "startedAt": 1787735986206,
+        "endedAt": 1787735995318,
+        "calls": 1
+      },
+      {
+        "stage": "задания",
+        "startedAt": 1787735995324,
+        "endedAt": 1787736141005,
+        "calls": 16
+      }
+    ],
+    "tasks": 16,
+    "writtenByModel": 16
+  },
+  "parallel": {
+    "concurrency": 5,
+    "totalMs": 72971,
+    "stages": [
+      {
+        "stage": "исследование",
+        "startedAt": 1787736141061,
+        "endedAt": 1787736150170,
+        "calls": 1
+      },
+      {
+        "stage": "класс задумки",
+        "startedAt": 1787736150171,
+        "endedAt": 1787736159283,
+        "calls": 1
+      },
+      {
+        "stage": "выполнимость",
+        "startedAt": 1787736159284,
+        "endedAt": 1787736168392,
+        "calls": 1
+      },
+      {
+        "stage": "объём",
+        "startedAt": 1787736168416,
+        "endedAt": 1787736177522,
+        "calls": 1
+      },
+      {
+        "stage": "задания",
+        "startedAt": 1787736177568,
+        "endedAt": 1787736213987,
+        "calls": 16
+      }
+    ],
+    "tasks": 16,
+    "writtenByModel": 16
+  },
+  "latency": 9098,
+  "bundlePath": "C:\\Users\\Bob\\Desktop\\F\\Fmyspec-clone-spec-platform\\artifacts\\gate-M14a\\machine-bundle\\bundle"
+}

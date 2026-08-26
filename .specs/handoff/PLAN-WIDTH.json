@@ -1,0 +1,185 @@
+[
+  {
+    "label": "M16а: настоящая задумка, план написала платформа (33 задач)",
+    "shape": {
+      "strategy": "dependencies",
+      "tasks": 33,
+      "milestones": [
+        {
+          "milestoneId": "ms_bench_01",
+          "title": "Веха 1",
+          "tasks": 10
+        },
+        {
+          "milestoneId": "ms_bench_02",
+          "title": "Веха 2",
+          "tasks": 10
+        },
+        {
+          "milestoneId": "ms_bench_03",
+          "title": "Веха 3",
+          "tasks": 10
+        },
+        {
+          "milestoneId": "ms_bench_04",
+          "title": "Веха 4",
+          "tasks": 2
+        },
+        {
+          "milestoneId": "ms_bench_05",
+          "title": "Веха 5",
+          "tasks": 1
+        }
+      ],
+      "widest": 10,
+      "averageWidth": 6.6,
+      "withDependencies": 23
+    },
+    "wide": {
+      "limit": 10,
+      "ticks": 5,
+      "averageConcurrency": 6.6,
+      "peak": 10,
+      "zeroShare": 0,
+      "held": {
+        "milestone": 40,
+        "files": 0,
+        "dependency": 0,
+        "ceiling": 0
+      }
+    },
+    "narrow": {
+      "limit": 1,
+      "ticks": 33,
+      "averageConcurrency": 1,
+      "peak": 1,
+      "zeroShare": 0,
+      "held": {
+        "milestone": 392,
+        "files": 0,
+        "dependency": 0,
+        "ceiling": 136
+      }
+    },
+    "speedup": 6.6,
+    "ideal": 10,
+    "shareOfIdeal": 0.6599999999999999
+  },
+  {
+    "label": "M14а: настоящая задумка, плоские идентификаторы (16 задач)",
+    "shape": {
+      "strategy": "phases",
+      "tasks": 16,
+      "milestones": [
+        {
+          "milestoneId": "ms_bench_01",
+          "title": "Фаза 1",
+          "tasks": 2
+        },
+        {
+          "milestoneId": "ms_bench_02",
+          "title": "Фаза 2",
+          "tasks": 2
+        },
+        {
+          "milestoneId": "ms_bench_03",
+          "title": "Фаза 3",
+          "tasks": 2
+        },
+        {
+          "milestoneId": "ms_bench_04",
+          "title": "Фаза 4",
+          "tasks": 3
+        },
+        {
+          "milestoneId": "ms_bench_05",
+          "title": "Фаза 5",
+          "tasks": 4
+        },
+        {
+          "milestoneId": "ms_bench_06",
+          "title": "Фаза 6",
+          "tasks": 3
+        }
+      ],
+      "widest": 4,
+      "averageWidth": 2.6666666666666665,
+      "withDependencies": 0
+    },
+    "wide": {
+      "limit": 10,
+      "ticks": 6,
+      "averageConcurrency": 2.6666666666666665,
+      "peak": 4,
+      "zeroShare": 0,
+      "held": {
+        "milestone": 46,
+        "files": 0,
+        "dependency": 0,
+        "ceiling": 0
+      }
+    },
+    "narrow": {
+      "limit": 1,
+      "ticks": 16,
+      "averageConcurrency": 1,
+      "peak": 1,
+      "zeroShare": 0,
+      "held": {
+        "milestone": 105,
+        "files": 0,
+        "dependency": 0,
+        "ceiling": 15
+      }
+    },
+    "speedup": 2.6666666666666665,
+    "ideal": 10,
+    "shareOfIdeal": 0.26666666666666666
+  },
+  {
+    "label": "А-44: синтетический эталон, собранный руками (10 задач)",
+    "shape": {
+      "strategy": "phases",
+      "tasks": 10,
+      "milestones": [
+        {
+          "milestoneId": "ms_bench_01",
+          "title": "Фаза 1",
+          "tasks": 10
+        }
+      ],
+      "widest": 10,
+      "averageWidth": 10,
+      "withDependencies": 0
+    },
+    "wide": {
+      "limit": 10,
+      "ticks": 1,
+      "averageConcurrency": 10,
+      "peak": 10,
+      "zeroShare": 0,
+      "held": {
+        "milestone": 0,
+        "files": 0,
+        "dependency": 0,
+        "ceiling": 0
+      }
+    },
+    "narrow": {
+      "limit": 1,
+      "ticks": 10,
+      "averageConcurrency": 1,
+      "peak": 1,
+      "zeroShare": 0,
+      "held": {
+        "milestone": 0,
+        "files": 0,
+        "dependency": 0,
+        "ceiling": 45
+      }
+    },
+    "speedup": 10,
+    "ideal": 10,
+    "shareOfIdeal": 1
+  }
+]

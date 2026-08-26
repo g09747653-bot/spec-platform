@@ -112,11 +112,42 @@ async function shoot(page, label, into) {
 
 /* Что элемент делает при наведении и при клике — фиксируется в браузере, судится снаружи. */
 const IN_PAGE = {
+  /*
+   * Перепись — УЛИКИ, и только они (P1). Три вещи, которых здесь прежде не было и без которых
+   * числа доски лгали (А-51 п.5). Обратных кавычек ниже нет ни одной намеренно: весь этот файл
+   * живёт внутри шаблонной строки, и кавычка закрыла бы её посреди скрипта пробы.
+   *
+   * 1. duplicates — сколько одинаковых элементов представляет улика. Схлопывать одинаковые
+   *    правильно (трогать восемьдесят шесть «Подробнее →» с одним href="#" незачем), а вот
+   *    ЧИСЛО владельцу схлопывать нельзя: разница между «инертных 4» и «инертных 74» есть разница
+   *    между опечаткой и приговором.
+   * 2. anchorResolves — разрешается ли фрагмент ссылки в существующий id или name. Единственный
+   *    корректный признак живого якоря: прокрутка врёт в обе стороны, потому что клик по href="#"
+   *    уводит документ в начало, а href="#нет-такого" не двигает ничего.
+   * 3. capped — уперлась ли перепись в потолок. Вывести это из чисел нельзя: при чистом обрезании
+   *    без единого дубля total равен числу улик.
+   *
+   * И одна гигиена: метки прошлой переписи снимаются. Перепись повторяется после неудачного клика
+   * и после навигации, нумерует заново и в порядке DOM, — а старая метка, оставшаяся на узле,
+   * выпавшем из нового списка, уводила бы клик на чужой элемент.
+   */
   inventory: (limit) => {
     const selector = 'a[href], button, summary, [role="button"], [role="tab"], [role="menuitem"], input[type="submit"], input[type="button"], [onclick]';
-    const seen = new Set();
+    for (const stale of Array.from(document.querySelectorAll('[data-loop-probe]'))) stale.removeAttribute('data-loop-probe');
+
+    const anchors = new Set();
+    for (const node of Array.from(document.querySelectorAll('[id], a[name]'))) {
+      const id = node.getAttribute('id');
+      const name = node.getAttribute('name');
+      if (id) anchors.add(id);
+      if (name) anchors.add(name);
+    }
+
+    const at = new Map();
     const found = [];
     let total = 0;
+    let capped = false;
+
     for (const node of Array.from(document.querySelectorAll(selector))) {
       const box = node.getBoundingClientRect();
       if (box.width < 2 || box.height < 2) continue;
@@ -126,19 +157,36 @@ const IN_PAGE = {
       const href = node.getAttribute('href');
       const label = (node.innerText || node.getAttribute('aria-label') || node.value || node.title || '').trim().replace(/\\s+/g, ' ').slice(0, 60);
       const key = node.tagName + '|' + label + '|' + (href || '');
-      if (seen.has(key)) continue;
-      seen.add(key);
+
+      const already = at.get(key);
+      if (already !== undefined) {
+        already.duplicates += 1;
+        continue;
+      }
+      if (found.length >= limit) { capped = true; continue; }
+
+      const hash = href === null ? -1 : href.indexOf('#');
+      let fragment = '';
+      if (hash !== -1) {
+        const raw = href.slice(hash + 1).trim();
+        try { fragment = decodeURIComponent(raw); } catch (error) { fragment = raw; }
+      }
+
       node.setAttribute('data-loop-probe', String(found.length));
-      found.push({
+      const record = {
         index: found.length,
         label: label === '' ? '(без подписи)' : label,
         tag: node.tagName.toLowerCase(),
         href: href,
         inChrome: Boolean(node.closest('header, nav, footer')),
-      });
-      if (found.length >= limit) break;
+        duplicates: 1,
+        anchorResolves: fragment === '' ? null : anchors.has(fragment),
+      };
+      at.set(key, record);
+      found.push(record);
     }
-    return { total, elements: found };
+
+    return { total, elements: found, capped: capped };
   },
 
   /* Слепок страницы: по нему и решается, «сдвинулось ли» и «раскрылось ли». */
@@ -276,7 +324,13 @@ async function main() {
   const pages = files.filter((file) => /\\.html?$/i.test(file));
   const entryUsed = ENTRY || (pages.includes('index.html') ? 'index.html' : pages[0]);
   if (!entryUsed) {
-    const refusal = JSON.stringify({ ok: false, reason: 'в рабочей директории нет ни одной страницы — открывать нечего' });
+    /*
+     * Механический признак «не судимо судом» (А-51, вердикт §10.1): запускаемой точки входа с
+     * интерфейсом нет — открывать физически нечего. Признак ставит КОД пробы, изнутри контейнера,
+     * по списку файлов; модель об этом не спрашивают, и объявить свой продукт несудимым она не
+     * вправе.
+     */
+    const refusal = JSON.stringify({ ok: false, unjudgeable: true, reason: 'в рабочей директории нет ни одной страницы — открывать нечего, запускаемой точки входа с интерфейсом у продукта нет' });
     process.stdout.write('${PROBE_RESULT}\\n' + refusal + '\\n');
     return;
   }
@@ -289,6 +343,7 @@ async function main() {
   const elements = [];
   const notes = [];
   let inventoryTotal = 0;
+  let inventoryCapped = false;
   let pageText = '';
 
   try {
@@ -354,6 +409,7 @@ async function main() {
       const target = page.locator('[data-loop-probe="' + String(item.index) + '"]').first();
       const record = {
         label: item.label, tag: item.tag, href: item.href, inChrome: item.inChrome,
+        duplicates: item.duplicates, anchorResolves: item.anchorResolves,
         hoverChanged: false, clicked: false, navigated: false, changed: false,
         revealedText: '', overlapPairs: 0, emptyPanel: false, stuckOpen: false,
         alert: '', error: null,
@@ -448,8 +504,16 @@ async function main() {
       detail: 'состояние изменили ' + String(elements.filter((element) => element.hoverChanged).length),
     });
 
+    /*
+     * Записка о том, что потрогано не всё, — и она печатается по ФАКТУ потолка, а не по
+     * неравенству чисел (А-51 п.5-IX). При чистом обрезании без единого дубля total совпадает с
+     * числом улик, и прежде записки не было вовсе: потолок молчал даже в операторскую ленту.
+     */
+    inventoryCapped = list.capped === true;
     if (list.total > list.elements.length) {
-      notes.push('интерактивных элементов на входной странице ' + String(list.total) + ', проба трогала ' + String(list.elements.length) + ' (потолок пробы)');
+      notes.push('интерактивных элементов, видимых на входной странице, ' + String(list.total) + '; проба трогала ' + String(list.elements.length) + ' различных' + (list.capped === true ? ' (упёрлась в потолок пробы ' + String(LIMIT) + ')' : ' — остальные одинаковы с уже потроганными и посчитаны вместе с ними'));
+    } else if (list.capped === true) {
+      notes.push('проба упёрлась в свой потолок ' + String(LIMIT) + ': трогала не всё, что видела');
     }
 
     await context.close();
@@ -475,7 +539,7 @@ async function main() {
     entryUsed,
     shots,
     liveness,
-    operability: { total: inventoryTotal, elements, pageText, notes },
+    operability: { total: inventoryTotal, capped: inventoryCapped, elements, pageText, notes },
     sources: sources.map((source) => ({ file: source.file, signals: source.signals, text: source.text })),
   });
 

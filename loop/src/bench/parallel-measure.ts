@@ -200,7 +200,10 @@ export function startupCost(spans: readonly ContainerSpan[]): {
   averageMs: number;
 } {
   const started = spans.filter((span) => span.startedAt !== null);
-  const totalMs = started.reduce((total, span) => total + ((span.startedAt ?? 0) - span.createdAt), 0);
+  const totalMs = started.reduce(
+    (total, span) => total + ((span.startedAt ?? 0) - span.createdAt),
+    0,
+  );
 
   return {
     containers: spans.length,

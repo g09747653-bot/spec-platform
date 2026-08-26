@@ -706,12 +706,22 @@ describe('класс задумки решает, какой план писат
    *
    * Стоит в сценариях явно по той же причине, что и предыдущий: порядок вопросов к модели — часть
    * контракта интейка. Оценка щедрая, чтобы объём не сузился и кейсы класса судили класс.
+   *
+   * **Собирается из НАСТОЯЩИХ заголовков бандла** (А-51 п.3). Прежде здесь стоял один пункт с
+   * выдуманным заголовком «любой», и он не совпадал ни с одним пунктом брифа: все шестнадцать
+   * задач получали цену по умолчанию (4 единицы, 64 против бюджета 44). Пока объём не действовал
+   * на общей ветке, это было незаметно — «щедрая оценка» на деле была самой скупой из возможных.
+   * Теперь ветка объём соблюдает, и фикстура обязана делать то, что о ней написано.
    */
-  const FITS = JSON.stringify({
-    items: [
-      { title: 'любой', units: 1, necessity: 'основное', why: 'бюджета хватает на всё' },
-    ],
-  });
+  const FITS = (): string =>
+    JSON.stringify({
+      items: readBundle(join(directory, 'project', 'bundle')).tasks.map((task) => ({
+        title: task.title,
+        units: 1,
+        necessity: 'основное',
+        why: 'бюджета хватает на всё',
+      })),
+    });
 
   const WHOLE_PLAN = JSON.stringify({
     tasks: [
@@ -755,7 +765,7 @@ describe('класс задумки решает, какой план писат
   it('цельный артефакт: план пишется цельно-артефактной формой, а не разбиением бандла', async () => {
     seedFile('Сделай сайт — графическую копию, две страницы, статикой, без бэкенда.');
 
-    const result = await intake(scripted(COHERENT, FEASIBLE, FITS, WHOLE_PLAN));
+    const result = await intake(scripted(COHERENT, FEASIBLE, FITS(), WHOLE_PLAN));
 
     expect(result.artifactClass).toBe('coherent-artifact');
     expect(result.tasks.length).toBeLessThanOrEqual(WHOLE_ARTIFACT_TASK_LIMIT);
@@ -767,7 +777,7 @@ describe('класс задумки решает, какой план писат
   it('владелец целого владеет артефактом целиком, и его ждут полировка с замером', async () => {
     seedFile('Сделай лендинг в одну страницу.');
 
-    const result = await intake(scripted(COHERENT, FEASIBLE, FITS, WHOLE_PLAN));
+    const result = await intake(scripted(COHERENT, FEASIBLE, FITS(), WHOLE_PLAN));
     const owner = result.tasks.find((task) => task.title === 'Собери артефакт целиком');
 
     expect(owner?.filesToEdit).toEqual(['index.html', 'products.html', 'src/styles/main.css']);
@@ -778,7 +788,7 @@ describe('класс задумки решает, какой план писат
   it('план цельной ветки уезжает на диск и в индекс тем же деревом', async () => {
     seedFile('Сделай сайт-визитку.');
 
-    await intake(scripted(COHERENT, FEASIBLE, FITS, WHOLE_PLAN));
+    await intake(scripted(COHERENT, FEASIBLE, FITS(), WHOLE_PLAN));
 
     const onDisk = readdirSync(join(directory, 'project', 'handoff', 'tasks')).filter((name) =>
       name.startsWith('task_'),
@@ -795,7 +805,7 @@ describe('класс задумки решает, какой план писат
   it('система: план по-прежнему режется по бандлу — те же 16 задач, теми же фазами', async () => {
     seedFile('Сделай сервис с API, хранилищем и очередью обработки.');
 
-    const result = await intake(scripted(SYSTEM, FEASIBLE, FITS));
+    const result = await intake(scripted(SYSTEM, FEASIBLE, FITS()));
 
     expect(result.artifactClass).toBe('system');
     expect(result.strategy).toBe('phases');
@@ -806,14 +816,14 @@ describe('класс задумки решает, какой план писат
   it('класс не определился — прежнее поведение, как для системы', async () => {
     seedFile('Задумка, о которой модель ответила прозой.');
 
-    const result = await intake(scripted('не знаю, что это', FEASIBLE, FITS));
+    const result = await intake(scripted('не знаю, что это', FEASIBLE, FITS()));
 
     expect(result.artifactClass).toBe('unknown');
     expect(result.tasks).toHaveLength(16);
   });
 
   it('задумки нет — класс не спрашивается, план прежний', async () => {
-    const result = await intake(scripted(COHERENT, FEASIBLE, FITS, WHOLE_PLAN));
+    const result = await intake(scripted(COHERENT, FEASIBLE, FITS(), WHOLE_PLAN));
 
     expect(result.artifactClass).toBe('unknown');
     expect(result.tasks).toHaveLength(16);
@@ -822,8 +832,8 @@ describe('класс задумки решает, какой план писат
   it('дерево на диске цельная ветка не переписывает без команды оператора', async () => {
     seedFile('Сделай сайт — графическую копию.');
 
-    await intake(scripted(SYSTEM, FEASIBLE, FITS));
-    const second = await intake(scripted(COHERENT, FEASIBLE, FITS, WHOLE_PLAN));
+    await intake(scripted(SYSTEM, FEASIBLE, FITS()));
+    const second = await intake(scripted(COHERENT, FEASIBLE, FITS(), WHOLE_PLAN));
 
     expect(second.artifactClass).toBe('coherent-artifact');
     expect(second.tasks).toHaveLength(16);
@@ -832,7 +842,7 @@ describe('класс задумки решает, какой план писат
 
   it('возобновление по цельному плану не режет бандл и не спрашивает модель (D-326)', async () => {
     seedFile('Сделай сайт — графическую копию, две страницы, статикой.');
-    const first = await intake(scripted(COHERENT, FEASIBLE, FITS, WHOLE_PLAN));
+    const first = await intake(scripted(COHERENT, FEASIBLE, FITS(), WHOLE_PLAN));
     expect(first.tasks.map((task) => task.taskId)).toEqual([WA(1), WA(2), WA(3)]);
 
     /* Второй заход: считаем КАЖДЫЙ вопрос к модели. */
@@ -865,7 +875,7 @@ describe('класс задумки решает, какой план писат
 
   it('перегенерация уносит вердикт прошлого плана, но не его пробелы', async () => {
     seedFile('Сделай сайт — графическую копию под своим знаком.');
-    await intake(scripted(COHERENT, FEASIBLE, FITS, WHOLE_PLAN));
+    await intake(scripted(COHERENT, FEASIBLE, FITS(), WHOLE_PLAN));
 
     /* Суд полноты назвал пробел этому плану — так, как назвал бы его живой прогон. */
     writeFileSync(
@@ -905,7 +915,7 @@ describe('класс задумки решает, какой план писат
   it('перегенерация цельным планом уносит из индекса задачи, которых на диске больше нет', async () => {
     seedFile('Сделай сайт — графическую копию.');
 
-    await intake(scripted(SYSTEM, FEASIBLE, FITS));
+    await intake(scripted(SYSTEM, FEASIBLE, FITS()));
     expect(indexedTaskIds()).toHaveLength(16);
 
     /*
@@ -918,5 +928,235 @@ describe('класс задумки решает, какой план писат
     expect(regenerated.tasks).toHaveLength(3);
     /* Сорок пять строк прошлого плана не остаются исполнимыми задачами без файлов на диске. */
     expect(indexedTaskIds()).toEqual([WA(1), WA(2), WA(3)]);
+  });
+});
+
+/**
+ * Распараллеленное планирование и суждение об объёме на ОБЩЕЙ ветке (А-51 п.3).
+ *
+ * Две находки одного мандата, и обе про одно и то же место — цикл по задачам бандла. Первая: цикл
+ * последователен по построению, десять независимых заданий писались десятью вызовами по очереди при
+ * нулевых зависимостях. Вторая: `coverage` и `conditions` потреблялись только веткой цельного
+ * артефакта, а общая шла по полному бандлу без условий — то есть суждение об объёме на системном
+ * плане было чисто декларативным.
+ */
+describe('интейк системной ветки: веер и объём (А-51 п.3)', () => {
+  const SYSTEM_CLASS = '{"artifactClass":"system","reason":"сервис"}';
+  const FEASIBLE = JSON.stringify({ reproducible: ['всё по задумке'], outOfReach: [] });
+
+  const project = () => join(directory, 'project');
+
+  const seedFile = (text: string) => {
+    writeFileSync(join(project(), 'SEED.md'), text, 'utf8');
+  };
+
+  /** Оценка объёма по НАСТОЯЩИМ заголовкам бандла: иначе всё уедет в цену по умолчанию. */
+  const estimates = (units: number): string =>
+    JSON.stringify({
+      items: readBundle(join(project(), 'bundle')).tasks.map((task, index) => ({
+        title: task.title,
+        units,
+        necessity: index < 2 ? 'основное' : 'необязательное',
+        why: 'цена доведения',
+      })),
+    });
+
+  /** Цепочка, помнящая промпты и отвечающая по сценарию: класс, выполнимость, объём, задания. */
+  const recording = (scope: string) => {
+    const asked: string[] = [];
+    let call = 0;
+
+    const chain: Chain = {
+      providers: [],
+      generate: (request) => {
+        asked.push(request.prompt);
+        const index = call;
+        call += 1;
+
+        const answer =
+          index === 0
+            ? SYSTEM_CLASS
+            : index === 1
+              ? FEASIBLE
+              : index === 2
+                ? scope
+                : JSON.stringify({
+                    description: 'Сделай по записи задачи.',
+                    filesToEdit: [],
+                    unitTestCmd: 'node -e 0',
+                  });
+
+        return Promise.resolve({ text: answer, provider: 'claude-cli' });
+      },
+    };
+
+    return { chain, asked };
+  };
+
+  const intake = (chain: Chain, concurrency?: number) =>
+    intakeBundle(
+      { projectDirectory: project(), projectTitle: 'Системный бандл' },
+      {
+        database,
+        logger: createLogger(database),
+        chain,
+        researchChain: null,
+        ...(concurrency === undefined ? {} : { concurrency }),
+      },
+    );
+
+  it('РЕГРЕССИЯ (А-51 п.3): условия объёма и выполнимости доезжают до задания ОБЩЕЙ ветки', async () => {
+    seedFile('Собери сервис из независимых частей.');
+    const { chain, asked } = recording(estimates(20));
+
+    await intake(chain);
+
+    const assignments = asked.filter((prompt) => prompt.includes('Запись задачи из бандла'));
+    expect(assignments.length).toBeGreaterThan(0);
+
+    /*
+     * Прежде общая ветка звала `buildAssignment` без единого условия, и оба суждения — о материале
+     * и о бюджете — до исполнителя не доезжали вовсе. Условие, не доехавшее до того, кто работает,
+     * есть протокол о намерениях, а не условие.
+     */
+    for (const prompt of assignments) {
+      expect(prompt).toContain('УСЛОВИЯ ПЛАНА');
+      expect(prompt).toContain('НЕ ДЕЛАТЬ');
+      expect(prompt).toContain('Ни заглушки, ни декоративной ссылки');
+    }
+  });
+
+  it('РЕГРЕССИЯ (А-51 п.3): сокращённой задаче задание не пишется вовсе', async () => {
+    seedFile('Собери сервис из независимых частей.');
+    const bundle = readBundle(join(project(), 'bundle'));
+    const { chain } = recording(estimates(20));
+
+    const result = await intake(chain);
+
+    /* Двадцать единиц на задачу при бюджете 44 — влезают две; остальные не берутся. */
+    expect(result.tasks.length).toBeLessThan(bundle.tasks.length);
+    expect(result.scope?.verdict).toBe('сужено');
+
+    const planned = new Set(result.tasks.map((task) => task.title));
+    for (const item of result.scope?.cut ?? []) {
+      expect(planned.has(item.title)).toBe(false);
+    }
+  });
+
+  it('сокращение отменяется для задачи, от которой ЗАВИСИТ удержанная — иначе план висячий', async () => {
+    /*
+     * Бандл гейта зависимостей не заявляет, поэтому случай строится свой. Без этой оговорки
+     * «сокращение объёма» превращалось бы в «конвейер не запускается»: нарезка вех отказала бы
+     * всему плану по висячей зависимости.
+     */
+    const tasks = [
+      {
+        taskId: '1.1',
+        title: 'Ядро',
+        description: 'Ядро сервиса.',
+        techStack: 'nodejs',
+        dependsOn: [],
+        metadata: { expectedArtifacts: [] },
+      },
+      {
+        taskId: '1.2',
+        title: 'Виджет',
+        description: 'Виджет поверх ядра.',
+        techStack: 'nodejs',
+        dependsOn: ['1.1'],
+        metadata: { expectedArtifacts: [] },
+      },
+    ];
+
+    writeFileSync(
+      join(project(), 'bundle', 'tasks.json'),
+      JSON.stringify({ bundleId: 'deps-1', projectId: 'proj_deps', tasks }, null, 2),
+      'utf8',
+    );
+    seedFile('Собери сервис.');
+
+    /* Ядро объявлено дорогим и НЕОБЯЗАТЕЛЬНЫМ — код обязан всё равно его удержать. */
+    const { chain } = recording(
+      JSON.stringify({
+        items: [
+          { title: 'Ядро', units: 40, necessity: 'необязательное', why: 'дорого' },
+          { title: 'Виджет', units: 4, necessity: 'основное', why: 'ядро задумки' },
+        ],
+      }),
+    );
+
+    const result = await intake(chain);
+
+    expect(result.tasks.map((task) => task.taskId).sort()).toEqual(['1.1', '1.2']);
+  });
+
+  it('РЕГРЕССИЯ (А-51 п.3): задания пишутся ПАРАЛЛЕЛЬНО, а порядок плана и ленты — прежний', async () => {
+    seedFile('Собери сервис из независимых частей.');
+    const bundle = readBundle(join(project(), 'bundle'));
+
+    let live = 0;
+    let peak = 0;
+    let call = 0;
+
+    /* Медленное звено: последовательный цикл дал бы пик 1 при любой задержке. */
+    const chain: Chain = {
+      providers: [],
+      generate: async () => {
+        const index = call;
+        call += 1;
+
+        if (index < 3) {
+          return {
+            text: index === 0 ? SYSTEM_CLASS : index === 1 ? FEASIBLE : estimates(1),
+            provider: 'claude-cli' as const,
+          };
+        }
+
+        live += 1;
+        peak = Math.max(peak, live);
+        await new Promise((resolve) => setTimeout(resolve, 15));
+        live -= 1;
+
+        return {
+          text: JSON.stringify({
+            description: 'Сделай.',
+            filesToEdit: [],
+            unitTestCmd: 'node -e 0',
+          }),
+          provider: 'claude-cli' as const,
+        };
+      },
+    };
+
+    const result = await intake(chain, 4);
+
+    expect(peak).toBe(4);
+    /* Порядок задач в плане задаёт бандл, а не то, кто ответил первым. */
+    expect(result.tasks.map((task) => task.taskId)).toEqual(
+      bundle.tasks.map((task) => task.taskId),
+    );
+    expect(result.writtenByModel).toBe(bundle.tasks.length);
+  });
+
+  it('разбивка по стадиям публикуется — оптимизировать вслепую нельзя', async () => {
+    seedFile('Собери сервис из независимых частей.');
+    const { chain } = recording(estimates(1));
+
+    const result = await intake(chain);
+    const named = result.stages.map((span) => span.stage);
+
+    expect(named).toContain('исследование');
+    expect(named).toContain('класс задумки');
+    expect(named).toContain('выполнимость');
+    expect(named).toContain('объём');
+    expect(named).toContain('задания');
+
+    for (const span of result.stages) {
+      expect(span.endedAt).toBeGreaterThanOrEqual(span.startedAt);
+    }
+
+    /* Стадия заданий — единственная, чьи вызовы считаются десятками: именно она и параллелится. */
+    const assignments = result.stages.find((span) => span.stage === 'задания');
+    expect(assignments?.calls).toBe(result.writtenByModel);
   });
 });

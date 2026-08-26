@@ -12,7 +12,7 @@ import { openMigratedDatabase } from '../db/migrate.ts';
 import { createDockerEngine } from '../docker/engine.ts';
 import { resolveEndpoint } from '../docker/transport.ts';
 import { ensureExecutorImage } from '../executor/image.ts';
-import { intakeBundle } from '../intake/intake.ts';
+import { intakeBundle, type IntakeStageSpan } from '../intake/intake.ts';
 import { createRoleChain } from '../llm/roles.ts';
 import { createLogger } from '../observability/log.ts';
 import { driveProject } from '../orchestrator/orchestrator.ts';
@@ -62,6 +62,8 @@ interface RunOutcome {
   startup: ReturnType<typeof startupCost>;
   tariff: TariffObservation;
   spans: ContainerSpan[];
+  /** Разбивка интейка по стадиям (А-51 п.3): оптимизировать вслепую нельзя. */
+  stages: IntakeStageSpan[];
 }
 
 function argOf(name: string, fallback: number): number {
@@ -121,6 +123,7 @@ async function measure(args: {
       logger,
       chain: architect.providers.length === 0 ? null : architect,
       researchChain: researcher.providers.length === 0 ? null : researcher,
+      concurrency: env.LOOP_INTAKE_CONCURRENCY,
     },
   );
 
@@ -162,6 +165,7 @@ async function measure(args: {
     startup: startupCost(spans),
     tariff,
     spans,
+    stages: intake.stages,
   };
 }
 
@@ -185,6 +189,25 @@ function render(wide: RunOutcome, narrow: RunOutcome): string {
     `- суд качества: ${seconds(run.probeBusyMs)} контейнеро-секунд`,
     `- контейнеров поднято: ${String(run.startup.containers)}; суммарная задержка старта ${seconds(run.startup.totalMs)} с (в среднем ${run.startup.averageMs.toFixed(0)} мс)`,
     `- тариф: строк ${String(run.tariff.lines)}, статусы ${JSON.stringify(run.tariff.statuses)}, все разрешены: ${run.tariff.allAllowed ? 'да' : 'НЕТ'}`,
+    '',
+    /*
+     * **Разбивка интейка по стадиям** (А-51 п.3). До неё «интейк 127,4 с» было одним числом за
+     * шестью разными работами, и распараллеливать вслепую значило бы гадать, какая из них стоит
+     * этих секунд.
+     *
+     * Оговорка, без которой числа не сойдутся с живым прогоном: суд полноты плана живёт в
+     * маршруте, а не в интейке, и замерным CLI не зовётся вовсе. Его стадии здесь нет — не
+     * потому, что она бесплатна, а потому, что этот контур её не проходит.
+     */
+    '#### Стадии интейка',
+    '',
+    '| стадия | стена | доля интейка | модельных вызовов |',
+    '|---|---|---|---|',
+    ...run.stages.map((span) => {
+      const ms = span.endedAt - span.startedAt;
+      return `| ${span.stage} | ${seconds(ms)} с | ${percent(run.intakeMs === 0 ? 0 : ms / run.intakeMs)}% | ${String(span.calls)} |`;
+    }),
+    `| **интейк целиком** | **${seconds(run.intakeMs)} с** | 100% | **${String(run.stages.reduce((sum, span) => sum + span.calls, 0))}** |`,
     '',
   ];
 
@@ -277,11 +300,7 @@ console.log(`Узкий прогон закончен: стена ${seconds(narr
 
 const report = render(wide, narrow);
 writeFileSync(out, `${report}\n`, 'utf8');
-writeFileSync(
-  `${out}.json`,
-  `${JSON.stringify({ wide, narrow }, null, 2)}\n`,
-  'utf8',
-);
+writeFileSync(`${out}.json`, `${JSON.stringify({ wide, narrow }, null, 2)}\n`, 'utf8');
 
 console.log(report);
 console.log(`\nОтчёт: ${out}`);

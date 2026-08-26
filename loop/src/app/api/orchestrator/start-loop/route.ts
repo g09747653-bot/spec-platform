@@ -132,6 +132,8 @@ export async function POST(request: Request): Promise<Response> {
         logger,
         chain: architect.providers.length === 0 ? null : architect,
         researchChain: researcher.providers.length === 0 ? null : researcher,
+        /* Ширина веера планирования — операторская ручка, как и потолок исполнителей (А-51 п.3). */
+        concurrency: env.LOOP_INTAKE_CONCURRENCY,
       },
     );
   } catch (error) {

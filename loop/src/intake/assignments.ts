@@ -91,6 +91,19 @@ export interface AssignmentContext {
    * already contradicted: the bundle describes what was planned, this describes what exists.
    */
   research?: string;
+  /**
+   * Условия плана — что недостижимо и чем заменено, чего не берём вовсе (А-51 п.3).
+   *
+   * **Прежде их получала только ветка цельного артефакта.** Общая ветка звала `buildAssignment`
+   * без единого условия, и оба суждения — о выполнимости и об объёме — на системном плане были
+   * чисто декларативными: судили, писали свои JSON, говорили владельцу и до исполнителя не
+   * доезжали. Условие, не доехавшее до того, кто работает, — это не условие, а протокол о
+   * намерениях.
+   *
+   * Разница между двумя родами условий сохраняется дословно и здесь: у недостижимого названа
+   * ЗАМЕНА, у сокращённого — только запрет. Замена сокращённому пункту и есть заглушка.
+   */
+  conditions?: readonly string[];
 }
 
 function prompt(task: BundleTask, context: AssignmentContext): string {
@@ -100,6 +113,15 @@ function prompt(task: BundleTask, context: AssignmentContext): string {
     '',
     `Стек проекта: ${context.techStack}.`,
     '',
+    ...(context.conditions === undefined || context.conditions.length === 0
+      ? []
+      : [
+          'УСЛОВИЯ ПЛАНА — решены ДО сборки и обязательны. Гнаться за тем, что здесь названо',
+          'недостижимым, значит гнаться за недостижимым; ставить заглушку на месте того, за что',
+          'решено не браться, запрещено безусловно:',
+          ...context.conditions.map((condition) => `- ${condition}`),
+          '',
+        ]),
     ...(context.research === undefined || context.research.trim() === ''
       ? []
       : ['Отчёт исследователя о рабочей директории:', context.research, '']),

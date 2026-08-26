@@ -297,10 +297,23 @@ export const OPERABILITY_OUTCOMES = ['working', 'inert', 'broken', 'stub'] as co
 export type OperabilityOutcome = (typeof OPERABILITY_OUTCOMES)[number];
 
 /**
- * Чем продукт объявляет о собственной незавершённости — закрытый перечень (А-44 п.2).
+ * Чем продукт ОБРАЩАЕТСЯ К ПОЛЬЗОВАТЕЛЮ о собственной незавершённости — закрытый перечень
+ * (А-44 п.2, сужен А-51 п.5-VII).
  *
- * Закрытый, потому что запрет абсолютный: расширять его вправе только человек, а угадывать
- * «похоже на заглушку» — значит вернуть суду мнение там, где нужен факт.
+ * Закрытый, потому что запрет абсолютный: менять его вправе только человек, а угадывать «похоже на
+ * заглушку» — значит вернуть суду мнение там, где нужен факт. **Сужение — тоже изменение перечня, и
+ * оно вынесено вердиктом А-51 п.5, а не «по смыслу»**: из списка изъяты `placeholder`, `lorem ipsum`
+ * и `todo:`.
+ *
+ * Довод изъятия один на все три, и он про адресата. Запрет звучит так: «продукт не разговаривает с
+ * пользователем о своей незавершённости». `placeholder` — атрибут поля ввода, который есть у каждой
+ * честной формы на свете (`<input placeholder="Ваше имя">`), и ищется он в том числе по тексту
+ * ИСХОДНИКОВ; `lorem ipsum` — рыба вёрстки, законная на макете; `todo:` — пометка разработчика в
+ * комментарии, которую пользователь не видит никогда. Ни одна из трёх не обращена к пользователю, а
+ * каждая краснила ось безусловно — то есть перечень ловил не то, ради чего заведён, и делал это
+ * промышленным потоком.
+ *
+ * Оставшиеся фразы объединены ровно тем, что каждая — реплика, адресованная посетителю.
  */
 export const STUB_PHRASES: readonly string[] = [
   'демо-версия',
@@ -316,14 +329,41 @@ export const STUB_PHRASES: readonly string[] = [
   'not implemented',
   'not available in this demo',
   'demo only',
-  'placeholder',
-  'lorem ipsum',
-  'todo:',
   'заглушка',
 ];
 
-/** Ссылки, которые никуда не ведут по самой своей записи. */
-const DEAD_HREF = /^\s*(#|javascript:\s*void\s*\(\s*0\s*\)|javascript:;|)\s*$/i;
+/**
+ * Ссылки, которые никуда не ведут по самой своей записи.
+ *
+ * Хвостовая `;` у `javascript:void(0)` учтена (А-51 п.5): без неё такая ссылка получала
+ * объяснение «ни навигации, ни изменения», а не «ведёт в никуда» — исход тот же, довод неверный.
+ */
+const DEAD_HREF = /^\s*(#|javascript:\s*void\s*\(\s*0\s*\)\s*;?|javascript:;|)\s*$/i;
+
+/**
+ * Кусок ссылки после решётки, или `null` — чистая функция над записью ссылки.
+ *
+ * Заведена ради различения, которое фикс А-44 потерял: `href="#"` и `href="#news"` — разные вещи,
+ * и первая ведёт в никуда, а вторая ведёт к месту на странице.
+ */
+export function anchorFragment(href: string | null): string | null {
+  if (href === null) return null;
+
+  const hash = href.indexOf('#');
+  if (hash === -1) return null;
+
+  const fragment = href.slice(hash + 1).trim();
+  return fragment === '' ? null : decodeFragment(fragment);
+}
+
+function decodeFragment(fragment: string): string {
+  try {
+    return decodeURIComponent(fragment);
+  } catch {
+    /* Ссылка с битой процентной записью — это ровно та ссылка, что в браузере никуда не ведёт. */
+    return fragment;
+  }
+}
 
 /** Найденная в тексте самообъявленная заглушка, или null. Чистая функция над строкой. */
 export function stubPhraseIn(text: string): string | null {
@@ -353,10 +393,39 @@ export interface InteractiveProbe {
   alert: string;
   /** Клик не удался вовсе: элемент перекрыт, оторван, не кликается. */
   error: string | null;
+  /**
+   * Сколько одинаковых элементов представляет эта улика (А-51 п.5-IX).
+   *
+   * Перепись схлопывает элементы по `tag|label|href`: восемьдесят шесть ссылок «Подробнее →» с
+   * одним и тем же `href="#"` — это одна улика, трогать их все незачем. Но ЧИСЛО, которое читает
+   * владелец, обязано считать элементы, а не улики: разница между «инертных 4» и «инертных 74» —
+   * это разница между опечаткой и приговором. Единица — сама улика и есть; больше — она говорит и
+   * за схлопнутых.
+   */
+  duplicates?: number;
+  /**
+   * Ведёт ли якорь к СУЩЕСТВУЮЩЕМУ месту страницы (А-51 п.5-VIII).
+   *
+   * `true` — на странице есть `id`/`name`, к которому ведёт фрагмент; `false` — фрагмент есть, а
+   * места нет; `null`/отсутствует — ссылка не якорь и вопрос не стоит.
+   *
+   * Улика, а не вердикт: собирает её проба перечнем идентификаторов страницы, а решает по ней
+   * КОД ниже (P1). Ровно поэтому её нельзя было заменить сравнением прокрутки: в Chromium клик по
+   * `href="#"` прокручивает документ В НАЧАЛО, то есть мёртвая ссылка изменила бы `scrollY`, а
+   * `href="#nonexistent"` не изменил бы ничего — признак сработал бы в обе стороны неверно.
+   */
+  anchorResolves?: boolean | null;
 }
 
 export interface OperabilityEvidence {
-  /** Сколько интерактивных элементов на входной странице всего. */
+  /**
+   * Сколько интерактивных элементов проба ВИДЕЛА на входной странице в покое.
+   *
+   * Именно так, а не «сколько их есть»: перепись считает только узлы шире и выше двух пикселей,
+   * не скрытые `display`/`visibility`/`opacity`. Элементы в закрытом меню, за `overflow` и в
+   * неразвёрнутом аккордеоне в это число не входят, и текст доски обязан говорить это словом —
+   * иначе «нажато 12 из 86» читается как «на странице 86 элементов» (А-51 п.5).
+   */
   total: number;
   probes: readonly InteractiveProbe[];
   /** Текст страницы в покое — самообъявление ищут и здесь. */
@@ -365,15 +434,33 @@ export interface OperabilityEvidence {
   sources: readonly { file: string; text: string }[];
   /** Что проба не смогла или обрезала — печатается, а не проглатывается. */
   notes: readonly string[];
+  /**
+   * Проба уперлась в свой потолок и трогала не всё, что видела (А-51 п.5-IX).
+   *
+   * Отдельным полем, потому что вывести его из чисел нельзя: при чистом обрезании без единого
+   * дубля `total` совпадает с числом улик, и «мы не всё посмотрели» стало бы неотличимо от «мы
+   * посмотрели всё».
+   */
+  capped?: boolean;
 }
 
 export interface OperabilityVerdict {
   verdict: 'operable' | 'broken';
   /** Классификация каждой улики — по ней и считаются числа. */
   outcomes: { probe: InteractiveProbe; outcome: OperabilityOutcome; why: string }[];
-  /** Числа, которые публикуются: инертных столько-то из стольких-то. */
+  /** Улик каждого рода — сколько РАЗНЫХ элементов проба трогала руками. */
   counts: Record<OperabilityOutcome, number>;
+  /**
+   * ЭЛЕМЕНТОВ каждого рода — с учётом схлопнутых переписью (А-51 п.5-IX).
+   *
+   * То самое число, которое заказчик нашёл руками за минуту: «74 из 86 ссылок ведут в никуда».
+   * Прежде доска называла `counts`, то есть счёт улик после дедупликации по `tag|label|href`, и
+   * семьдесят четыре мёртвые ссылки одной подписи представали четырьмя.
+   */
+  represented: Record<OperabilityOutcome, number>;
   total: number;
+  /** Проба остановилась на своём потолке: числа считают потроганное, а не всё увиденное. */
+  capped: boolean;
   findings: string[];
 }
 
@@ -384,7 +471,10 @@ export interface OperabilityVerdict {
  * оно запрещено безусловно; испорченный результат вторым, потому что он про качество работы; и
  * только потом «ничего не случилось», потому что это законный случай, который надо посчитать.
  */
-export function classifyProbe(probe: InteractiveProbe): { outcome: OperabilityOutcome; why: string } {
+export function classifyProbe(probe: InteractiveProbe): {
+  outcome: OperabilityOutcome;
+  why: string;
+} {
   const declared =
     stubPhraseIn(probe.alert) ?? stubPhraseIn(probe.revealedText) ?? stubPhraseIn(probe.label);
 
@@ -411,12 +501,33 @@ export function classifyProbe(probe: InteractiveProbe): { outcome: OperabilityOu
 
   if (probe.navigated || probe.changed) return { outcome: 'working', why: 'реагирует' };
 
+  /*
+   * **Живой якорь — это РАБОТАЮЩАЯ ссылка** (А-51 п.5-VIII).
+   *
+   * Фикс А-44 объявил инертным всё, что не сдвинуло страницу, и на этом сравнял `href="#"` с
+   * `href="#news"`. На NEURA — сорок четыре живые ссылки и ни одной в никуда — это дало бы восемь
+   * ложно-инертных: якорная навигация к существующему разделу и есть то, что ссылка обещает.
+   * Прокрутка признаком быть не может (клик по `href="#"` в Chromium уводит документ в начало, то
+   * есть мёртвая ссылка «двигает» страницу); признаком является РАЗРЕШИМОСТЬ фрагмента, снятая до
+   * клика.
+   */
+  if (probe.anchorResolves === true) {
+    return {
+      outcome: 'working',
+      why: `якорь ведёт к существующему месту страницы (href="${probe.href ?? ''}")`,
+    };
+  }
+
+  const fragment = anchorFragment(probe.href);
+
   return {
     outcome: 'inert',
     why:
       probe.href !== null && DEAD_HREF.test(probe.href)
         ? `ссылка ведёт в никуда (href="${probe.href}")`
-        : 'ни навигации, ни изменения на странице',
+        : probe.anchorResolves === false && fragment !== null
+          ? `якорь ведёт к «${fragment}», которого на странице нет (href="${probe.href ?? ''}")`
+          : 'ни навигации, ни изменения на странице',
   };
 }
 
@@ -430,7 +541,18 @@ export function classifyProbe(probe: InteractiveProbe): { outcome: OperabilityOu
 export function judgeOperability(evidence: OperabilityEvidence): OperabilityVerdict {
   const outcomes = evidence.probes.map((probe) => ({ probe, ...classifyProbe(probe) }));
   const counts: Record<OperabilityOutcome, number> = { working: 0, inert: 0, broken: 0, stub: 0 };
-  for (const entry of outcomes) counts[entry.outcome] += 1;
+  const represented: Record<OperabilityOutcome, number> = {
+    working: 0,
+    inert: 0,
+    broken: 0,
+    stub: 0,
+  };
+
+  for (const entry of outcomes) {
+    counts[entry.outcome] += 1;
+    /* Улика без числа схлопнутых говорит сама за себя — и ровно за себя. */
+    represented[entry.outcome] += Math.max(entry.probe.duplicates ?? 1, 1);
+  }
 
   const findings: string[] = [];
 
@@ -469,7 +591,9 @@ export function judgeOperability(evidence: OperabilityEvidence): OperabilityVerd
     verdict: findings.length === 0 ? 'operable' : 'broken',
     outcomes,
     counts,
+    represented,
     total: evidence.total,
+    capped: evidence.capped ?? false,
     findings,
   };
 }
@@ -488,7 +612,24 @@ export interface QualityBoard {
    * растворился. Зелёности они не отменяют, но и молчать о них суд не имеет права.
    */
   unverified: readonly { taskId: string; reason: string }[];
-  /** Зелено только когда все ЧЕТЫРЕ оси зелены. Несостоявшийся суд зелёным не бывает. */
+  /**
+   * Долги суда: то, что судить было НЕЧЕМ, — названное поимённо (А-51, вердикт §10.1).
+   *
+   * **Почему это не красная ось.** «Не судимо» и «судимо и плохо» — разные утверждения, и
+   * склеивать их значит врать в обе стороны сразу. Прежде ось связности требовала настроенного
+   * провайдера судьи, а прод отдаёт `null` при пустом перечне провайдеров роли `judge`: значит без
+   * настроенного судьи НИ ОДИН проект не мог получить зелёной доски — не потому, что продукт плох,
+   * а потому, что смотреть было некому. Это ровно тот отказ, по образцу которого А-50 завёл «не
+   * проверяемо приёмкой»: исход законный, считается ДОЛГОМ, публикуется числом и не молчит.
+   *
+   * Зелёность долги не отменяют — но и не прячутся за ней: доска называет каждый.
+   */
+  debts: readonly { what: string; why: string }[];
+  /**
+   * Зелено, когда ни одна СУДИМАЯ ось не красная.
+   *
+   * Несудимая ось зелёной не притворяется: она уезжает в `debts` и произносится вслух.
+   */
   green: boolean;
 }
 
@@ -499,16 +640,28 @@ export function assembleBoard(args: {
   entry: EntryVerdict;
   operability: OperabilityVerdict;
   unverified?: readonly { taskId: string; reason: string }[];
+  /** Долги, замеченные вне осей: нечитаемая книга контура, отсутствующий судья и подобное. */
+  debts?: readonly { what: string; why: string }[];
 }): QualityBoard {
+  const debts = [
+    ...(args.debts ?? []),
+    ...(args.coherence.status === 'skipped'
+      ? [{ what: 'ось связности (I)', why: args.coherence.reason }]
+      : []),
+  ];
+
   return {
     coherence: args.coherence,
     liveness: { ...args.liveness, evidence: args.evidence },
     entry: args.entry,
     operability: args.operability,
     unverified: args.unverified ?? [],
+    debts,
     green:
-      args.coherence.status === 'judged' &&
-      args.coherence.verdict === 'coherent' &&
+      /*
+       * Связность красна только когда её СУДИЛИ и она разошлась. Несудившаяся — долг выше.
+       */
+      (args.coherence.status === 'skipped' || args.coherence.verdict === 'coherent') &&
       args.liveness.verdict === 'alive' &&
       args.entry.verdict === 'single-entry' &&
       args.operability.verdict === 'operable',
@@ -522,7 +675,10 @@ export function renderQualityBoard(board: QualityBoard): string {
   const lines: string[] = ['Суд качества:'];
 
   if (board.coherence.status === 'skipped') {
-    lines.push(`1. Связность — НЕ СУДИЛАСЬ: ${board.coherence.reason}.`);
+    lines.push(
+      `1. Связность — НЕ СУДИМА: ${board.coherence.reason}. Это долг, а не красная ось: ` +
+        'смотреть было некому, и продукт тут ни при чём.',
+    );
   } else if (board.coherence.verdict === 'coherent') {
     lines.push(`1. Связность — связно (смотрел ${board.coherence.judgedBy}).`);
   } else {
@@ -552,11 +708,24 @@ export function renderQualityBoard(board: QualityBoard): string {
   }
 
   const counts = board.operability.counts;
+  const represented = board.operability.represented;
   const probed = board.operability.outcomes.length;
+
+  /*
+   * **Число элементов, а не число улик** (А-51 п.5-IX). Перепись схлопывает одинаковые элементы, и
+   * прежде именно схлопнутый счёт уезжал в заголовок: семьдесят четыре мёртвые ссылки одной
+   * подписи представали четырьмя. Оба числа теперь называются рядом и разными словами — «нажато»
+   * говорит о работе пробы, «элементов» о продукте.
+   */
+  const withRepresented = (outcome: OperabilityOutcome, name: string): string =>
+    represented[outcome] === counts[outcome]
+      ? `${name} ${String(counts[outcome])}`
+      : `${name} ${String(counts[outcome])} (элементов ${String(represented[outcome])})`;
+
   const tally =
-    `нажато ${String(probed)} из ${String(board.operability.total)}; ` +
-    `работает ${String(counts.working)}, инертных ${String(counts.inert)}, ` +
-    `сломанных ${String(counts.broken)}, заглушек ${String(counts.stub)}`;
+    `нажато ${String(probed)} из ${String(board.operability.total)} видимых на входной странице; ` +
+    `${withRepresented('working', 'работает')}, ${withRepresented('inert', 'инертных')}, ` +
+    `${withRepresented('broken', 'сломанных')}, ${withRepresented('stub', 'заглушек')}`;
 
   if (board.operability.verdict === 'operable') {
     lines.push(`4. Работоспособность — работает: ${tally}.`);
@@ -565,10 +734,18 @@ export function renderQualityBoard(board: QualityBoard): string {
     lines.push(...bullet(board.operability.findings));
   }
 
-  if (counts.inert > 0) {
+  if (board.operability.capped) {
     lines.push(
-      `   Инертное законно и потому посчитано: ${String(counts.inert)} элементов не ведут никуда. ` +
-        'Число уходит в реестр расхождений, раздел II.',
+      '   Проба остановилась на своём потолке: числа выше считают то, что она успела потрогать, ' +
+        'а не всё, что на странице есть.',
+    );
+  }
+
+  if (represented.inert > 0) {
+    lines.push(
+      `   Инертное законно и потому посчитано: ${String(represented.inert)} элементов не ведут ` +
+        'никуда. Число публикуется здесь; его место в реестре расхождений — раздел «объём», и ' +
+        'записать его туда обязан тот, кто реестр пишет.',
     );
   }
 
@@ -577,9 +754,18 @@ export function renderQualityBoard(board: QualityBoard): string {
     lines.push(...bullet(board.unverified.map((entry) => `${entry.taskId}: ${entry.reason}`)));
   }
 
+  /* Долги — числом и поимённо: «не судимо» молчанием не бывает (вердикт §10.1). */
+  if (board.debts.length > 0) {
+    lines.push(`Долги суда (судить было нечем): ${String(board.debts.length)}.`);
+    lines.push(...bullet(board.debts.map((debt) => `${debt.what} — ${debt.why}`)));
+  }
+
   lines.push(
     board.green
-      ? 'Итог: зелено по всем четырём осям.'
+      ? board.debts.length === 0
+        ? 'Итог: зелено по всем четырём осям.'
+        : `Итог: зелено по судимым осям, при долгах ${String(board.debts.length)} — ` +
+          'несудившееся зелёным не считается и названо выше.'
       : 'Итог: НЕ ПРИНЯТО — красная ось выше называет, что чинить.',
   );
 

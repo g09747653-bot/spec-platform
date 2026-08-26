@@ -475,6 +475,7 @@ describe('вердикт суда качества доезжает до вла�
       type: 'quality',
       projectId: PROJECT,
       green: false,
+      kind: 'red',
       text: '4. Работоспособность — СЛОМАНО: заглушка объявлена интерфейсом.',
     });
     await until(() => api.sent.some((entry) => entry.text.includes('НЕ ПРИНЯТ')));
@@ -493,6 +494,7 @@ describe('вердикт суда качества доезжает до вла�
       type: 'quality',
       projectId: PROJECT,
       green: true,
+      kind: 'green',
       text: 'Итог: зелено по всем четырём осям.',
     });
     await until(() => api.sent.some((entry) => entry.text.includes('зелено по всем четырём осям')));
@@ -520,6 +522,18 @@ describe('финальный алерт — сверка с задумкой, о
         '| Раздел «Драйверы» | оставлен декоративной ссылкой |',
         '| Форма подписки | без отправки |',
       ].join('\n'),
+      'utf8',
+    );
+    /* Род расхождения — поле машинной записи (А-51 п.2): по прозе он больше не выводится. */
+    writeFileSync(
+      join(projectDirectory, 'DEVIATIONS.json'),
+      JSON.stringify({
+        entries: [
+          { kind: 'материал', what: 'Видео-фоны hero', why: 'материала нет', instead: 'кадр' },
+          { kind: 'объём', what: 'Раздел «Драйверы»', why: 'декоративная ссылка' },
+          { kind: 'объём', what: 'Форма подписки', why: 'без отправки' },
+        ],
+      }),
       'utf8',
     );
     await startGateway();

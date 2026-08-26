@@ -1,6 +1,7 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -14,17 +15,22 @@ import { HandoffTask, Measurement } from '../intake/handoff.ts';
 import { acceptTask } from './accept.ts';
 import { ACCEPTANCE_BROWSER_IMAGE } from './capability-image.ts';
 import {
+  CONVERGENCE_PATIENCE,
   judgeConvergence,
+  LEDGER_DIRECTORY,
+  ledgerPath,
   measurementKey,
   measurementShell,
   MEASUREMENT_ABSENT,
   MEASUREMENT_FAILED,
   MEASUREMENT_RECORD,
   numberAt,
+  readLedger,
   readMeasurementOutput,
-  readMeasurements,
   recordMeasurement,
+  recordStall,
   recordUnverifiable,
+  stampLedger,
 } from './measurement.ts';
 
 /**
@@ -77,6 +83,8 @@ beforeEach(() => {
 afterEach(() => {
   try {
     rmSync(workspace, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    /* Книга живёт СНАРУЖИ рабочей директории — значит и убирается отдельно от неё (А-51 п.1). */
+    rmSync(ledgerPath(workspace), { force: true, maxRetries: 5, retryDelay: 50 });
   } catch {
     // Уборка — не утверждение.
   }
@@ -122,6 +130,148 @@ describe('строка прогона замера', () => {
 
     expect(shell).toContain(MEASUREMENT_RECORD);
     expect(shell).toContain(`cat 'tools/visual-diff/report.json'`);
+  });
+});
+
+/**
+ * Шелл замера, исполненный НАСТОЯЩИМ POSIX-шеллом (А-51 п.1).
+ *
+ * **Почему прежней регрессии было мало.** Кейс «подложенный отчёт чужого авторства не проходит»
+ * клал файл НЕ в `recordPath`, а движок был захардкожен вернуть `exitCode: 65` — то есть тест
+ * утверждал имя исхода, которое сам же и назначил, и шелл в нём не исполнялся ни разу. Такой тест
+ * не сторожит: подмени порядок строк в `measurementShell` — он останется зелёным.
+ *
+ * Здесь шелл исполняется как есть, в настоящей временной директории, и подложенный отчёт лежит
+ * ИМЕННО там, куда смотрит замер. Docker не нужен: `sh` — не контейнер.
+ */
+describe('шелл замера исполняется по-настоящему', () => {
+  /**
+   * POSIX-шелл хоста. На Windows он приезжает с Git; отсутствие названо, а не проглочено.
+   *
+   * Корень установки Git ищется ПОДЪЁМОМ от найденного `git.exe`, а не вычитанием двух уровней:
+   * `where git` на этой машине отдаёт `…\\Git\\mingw64\\bin\\git.exe`, а `sh.exe` лежит в
+   * `…\\Git\\bin`. Разница в один уровень — и «шелла нет» вместо шелла, который есть.
+   */
+  function posixShell(): string {
+    if (process.platform !== 'win32') return '/bin/sh';
+
+    const roots: string[] = [];
+
+    try {
+      const git = execFileSync('where', ['git'], { encoding: 'utf8' }).split(/\r?\n/)[0] ?? '';
+      for (let cursor = dirname(git), depth = 0; depth < 5; depth += 1) {
+        roots.push(cursor);
+        const parent = dirname(cursor);
+        if (parent === cursor) break;
+        cursor = parent;
+      }
+    } catch {
+      // Git не на пути — остаются обычные места установки ниже.
+    }
+
+    /* Обычные места установки — на случай, когда `git` не на пути вовсе. */
+    roots.push('C:\\Program Files\\Git', 'C:\\Program Files (x86)\\Git');
+
+    for (const root of roots) {
+      for (const candidate of [join(root, 'bin', 'sh.exe'), join(root, 'usr', 'bin', 'sh.exe')]) {
+        if (existsSync(candidate)) return candidate;
+      }
+    }
+
+    throw new Error(
+      'POSIX-шелла на этой машине не нашлось (ни /bin/sh, ни sh.exe из Git for Windows). ' +
+        'Регрессия шелла замера НЕ ПРОПУСКАЕТСЯ: сторож, который молча не сторожит, — не сторож.',
+    );
+  }
+
+  /** Прогоняет шелл замера в `cwd` и отдаёт код возврата и вывод — как их видел бы контейнер. */
+  function run(cwd: string, measurement = MEASUREMENT): { code: number; output: string } {
+    /* Шелл ищется ДО try: «шелла нет» — не исход замера, а отсутствие условий для суждения. */
+    const shell = posixShell();
+
+    try {
+      const output = execFileSync(shell, ['-c', measurementShell(measurement)], {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      return { code: 0, output };
+    } catch (error) {
+      const failure = error as { status?: number; stdout?: string; stderr?: string };
+      return {
+        code: failure.status ?? -1,
+        output: `${failure.stdout ?? ''}${failure.stderr ?? ''}`,
+      };
+    }
+  }
+
+  const TOUCHES_NOTHING = Measurement.parse({ ...MEASUREMENT, cmd: 'true' });
+  const WRITES_REPORT = Measurement.parse({
+    ...MEASUREMENT,
+    cmd: `mkdir -p tools/visual-diff && printf '%s' '{"summary":{"diffPercent":3.5}}' > tools/visual-diff/report.json`,
+  });
+  /* Живой случай, дословно: «browserType.launch: Executable doesn't exist» — команды нет в образе. */
+  const CANNOT_RUN = Measurement.parse({ ...MEASUREMENT, cmd: 'no-such-binary-for-measurement' });
+  /* Команда, которая зовёт встроенный `exit`: она не «падает», она ЗАВЕРШАЕТ шелл. */
+  const EXITS_ITSELF = Measurement.parse({ ...MEASUREMENT, cmd: 'exit 7' });
+
+  it('РЕГРЕССИЯ: отчёт, подложенный ИМЕННО в recordPath, шелла не переживает', () => {
+    mkdirSync(join(workspace, 'tools', 'visual-diff'), { recursive: true });
+    writeFileSync(
+      join(workspace, 'tools', 'visual-diff', 'report.json'),
+      JSON.stringify({ summary: { diffPercent: 0 } }),
+      'utf8',
+    );
+
+    const { code, output } = run(workspace, TOUCHES_NOTHING);
+
+    /* `rm -f` снёс чужой отчёт, замер своего не написал — «отчёта нет», код 65. */
+    expect(code).toBe(65);
+    expect(output).toContain(MEASUREMENT_ABSENT);
+    expect(output).not.toContain('diffPercent');
+    expect(readMeasurementOutput(output, code, TOUCHES_NOTHING)).toMatchObject({
+      status: 'failed',
+    });
+  });
+
+  it('замер, написавший СВОЙ отчёт, проходит — и число берётся из него', () => {
+    const { code, output } = run(workspace, WRITES_REPORT);
+
+    expect(code).toBe(0);
+    expect(output).toContain(MEASUREMENT_RECORD);
+    expect(readMeasurementOutput(output, code, WRITES_REPORT)).toMatchObject({
+      status: 'read',
+      value: 3.5,
+    });
+  });
+
+  it('замер, который не смог прогнаться, краснеет кодом 64 — глотать нечем', () => {
+    const { code, output } = run(workspace, CANNOT_RUN);
+
+    expect(code).toBe(64);
+    expect(output).toContain(MEASUREMENT_FAILED);
+    expect(readMeasurementOutput(output, code, CANNOT_RUN)).toMatchObject({ status: 'failed' });
+  });
+
+  it('команда со встроенным exit минует метку — но КРАСНЫМ остаётся, и это тоже проверено', () => {
+    /*
+     * Найдено исполнением настоящего шелла (А-51): `{ …; }` — группировка, а не подоболочка, и
+     * встроенный `exit` внутри неё завершает ВЕСЬ шелл, не дав сработать ветке `||`. Метка
+     * `MEASUREMENT_FAILED` тогда не печатается.
+     *
+     * Чинить группировку подоболочкой мы не стали: `( … )` не сохранила бы `cd` команды плана, а
+     * `recordPath` читается после неё тем же шеллом — лечение оказалось бы дороже болезни.
+     * Гарантия при этом ЦЕЛА и закреплена здесь: исход всё равно красный, просто причина названа
+     * кодом возврата, а не меткой. Тихого прохода нет ни в одном из двух путей.
+     */
+    const { code, output } = run(workspace, EXITS_ITSELF);
+
+    expect(code).toBe(7);
+    expect(output).not.toContain(MEASUREMENT_FAILED);
+    expect(readMeasurementOutput(output, code, EXITS_ITSELF)).toMatchObject({
+      status: 'failed',
+      reason: 'замерочный контейнер вернул 7',
+    });
   });
 });
 
@@ -171,20 +321,57 @@ describe('разбор вывода замера', () => {
 
 describe('сходимость — своё число против прошлого своего', () => {
   it('первый замер цепочки сравнивать не с чем', () => {
-    expect(judgeConvergence(null, 99)).toEqual({ converged: true });
+    expect(judgeConvergence(null, 99)).toMatchObject({ converged: true, exhausted: false });
   });
 
   it('не выросло — сошлось; выросло — названо', () => {
-    expect(judgeConvergence(10, 10)).toEqual({ converged: true });
-    expect(judgeConvergence(10, 9.5)).toEqual({ converged: true });
+    expect(judgeConvergence(10, 10)).toMatchObject({ converged: true, exhausted: false });
+    expect(judgeConvergence(10, 9.5)).toMatchObject({ converged: true, exhausted: false });
     expect(judgeConvergence(10, 10.5)).toMatchObject({ converged: false });
+  });
+
+  it('РЕГРЕССИЯ (§10.2): после названного числа заходов без улучшения задача ПРИНИМАЕТСЯ', () => {
+    /* Предпоследний заход ещё держит: предохранитель — не отмена сходимости, а её потолок. */
+    expect(judgeConvergence(10, 10.5, CONVERGENCE_PATIENCE - 2)).toMatchObject({
+      converged: false,
+      exhausted: false,
+    });
+
+    const exhausted = judgeConvergence(10, 10.5, CONVERGENCE_PATIENCE - 1);
+
+    expect(exhausted).toMatchObject({ converged: true, exhausted: true });
+    expect(exhausted.reason).toContain('Сходимость достигнута исчерпанием');
+    /* Число публикуется как есть — исчерпание не прячет, что стало хуже. */
+    expect(exhausted.reason).toContain('стало 10.5');
+  });
+
+  it('заход без улучшения копится в книге, а принятая работа обнуляет счёт', () => {
+    const key = measurementKey(MEASUREMENT);
+
+    recordStall(workspace, { key, taskId: 'WA05', at: 'вчера' });
+    recordStall(workspace, { key, taskId: 'WA05', at: 'сегодня' });
+
+    const read = readLedger(workspace);
+    expect(read.status).toBe('read');
+    expect(read.status === 'read' ? read.ledger.stalls[key]?.count : null).toBe(2);
+
+    recordMeasurement(workspace, {
+      key,
+      value: 1,
+      taskId: 'WA05',
+      image: 'node:24-bookworm-slim',
+      at: 'сегодня',
+    });
+
+    const after = readLedger(workspace);
+    expect(after.status === 'read' ? after.ledger.stalls[key] : 'нет книги').toBeUndefined();
   });
 
   it('ключ цепочки — замер, а не задача: полировка №2 сравнивается с полировкой №1', () => {
     expect(measurementKey(MEASUREMENT)).toBe('tools/visual-diff/report.json#summary.diffPercent');
   });
 
-  it('книга замеров живёт у контура и переживает удаление копии', () => {
+  it('РЕГРЕССИЯ (А-51 п.1): книга лежит СНАРУЖИ рабочей директории — исполнителю туда не дотянуться', () => {
     recordMeasurement(workspace, {
       key: measurementKey(MEASUREMENT),
       value: 42,
@@ -193,15 +380,88 @@ describe('сходимость — своё число против прошло
       at: '2026-08-25T00:00:00.000Z',
     });
 
-    expect(readMeasurements(workspace).measured[measurementKey(MEASUREMENT)]?.value).toBe(42);
-    expect(readFileSync(join(workspace, 'handoff', 'MEASUREMENTS.json'), 'utf8')).toContain('42');
+    const path = ledgerPath(workspace);
+    const read = readLedger(workspace);
+
+    expect(
+      read.status === 'read' ? read.ledger.measured[measurementKey(MEASUREMENT)]?.value : null,
+    ).toBe(42);
+    expect(readFileSync(path, 'utf8')).toContain('42');
+
+    /*
+     * Главное утверждение регрессии, и оно про МЕХАНИЗМ, а не про нрав: исполнительский контейнер
+     * монтирует рабочую директорию как `/workspace` НА ЗАПИСЬ, и всё, что внутри неё, ему
+     * доступно. Книга внутри быть не должна ни под каким именем.
+     */
+    expect(relative(resolve(workspace), path).startsWith('..')).toBe(true);
+    expect(existsSync(join(workspace, 'handoff', 'MEASUREMENTS.json'))).toBe(false);
+    expect(basename(dirname(path))).toBe(LEDGER_DIRECTORY);
+  });
+
+  it('РЕГРЕССИЯ (А-51 п.1): НЕЧИТАЕМАЯ книга краснит задачу, а не проходит молча', async () => {
+    mkdirSync(dirname(ledgerPath(workspace)), { recursive: true });
+    writeFileSync(ledgerPath(workspace), 'это не JSON, это порча', 'utf8');
+
+    /* Чтение книги называет порчу своим словом, а не «прошлого числа нет». */
+    expect(readLedger(workspace).status).toBe('unreadable');
+
+    const verdict = await acceptTask(TASK, workspace, {
+      engine: engineWhereMeasureSays(reported(0)),
+    });
+
+    expect(verdict.accepted).toBe(false);
+    expect(verdict.measurement).toMatchObject({ status: 'failed' });
+    expect(verdict.reason).toContain('книга замеров контура');
+  });
+
+  it('РЕГРЕССИЯ (А-51 п.1): запись поверх испорченной книги ЗАПРЕЩЕНА — прошлое не стирается', () => {
+    mkdirSync(dirname(ledgerPath(workspace)), { recursive: true });
+    writeFileSync(ledgerPath(workspace), '{ битый', 'utf8');
+
+    const write = recordMeasurement(workspace, {
+      key: measurementKey(MEASUREMENT),
+      value: 1,
+      taskId: 'WA05',
+      image: 'node:24-bookworm-slim',
+      at: 'сегодня',
+    });
+
+    expect(write.ok).toBe(false);
+    /* Файл остался тем же: свежая книга поверх испорченной и была бы стиранием базовой линии. */
+    expect(readFileSync(ledgerPath(workspace), 'utf8')).toBe('{ битый');
+  });
+
+  it('клеймо владельца: чужая книга заводится заново, своя — продолжается', () => {
+    recordMeasurement(workspace, {
+      key: measurementKey(MEASUREMENT),
+      value: 7,
+      taskId: 'WA04',
+      image: 'node:24-bookworm-slim',
+      at: 'вчера',
+    });
+
+    expect(stampLedger(workspace, { projectId: 'p1', bundleId: 'b1' }).status).toBe('stamped');
+    expect(stampLedger(workspace, { projectId: 'p1', bundleId: 'b1' }).status).toBe('kept');
+
+    /* Прошлое число пережило собственное клеймо. */
+    const kept = readLedger(workspace);
+    expect(
+      kept.status === 'read' ? kept.ledger.measured[measurementKey(MEASUREMENT)]?.value : null,
+    ).toBe(7);
+
+    const reset = stampLedger(workspace, { projectId: 'p1', bundleId: 'b2' });
+    expect(reset).toMatchObject({ status: 'reset', dropped: 1 });
+
+    const after = readLedger(workspace);
+    expect(after.status === 'read' ? after.ledger.measured : null).toEqual({});
   });
 
   it('«не проверяемо приёмкой» записывается по задаче и не двоится', () => {
     recordUnverifiable(workspace, { taskId: 'WA05', reason: 'нет браузера', at: 'вчера' });
     recordUnverifiable(workspace, { taskId: 'WA05', reason: 'нет браузера', at: 'сегодня' });
 
-    expect(readMeasurements(workspace).unverifiable).toEqual([
+    const read = readLedger(workspace);
+    expect(read.status === 'read' ? read.ledger.unverifiable : null).toEqual([
       { taskId: 'WA05', reason: 'нет браузера', at: 'сегодня' },
     ]);
   });

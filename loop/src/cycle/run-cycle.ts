@@ -6,7 +6,13 @@ import type { DockerEngine } from '../docker/engine.ts';
 import type { ExecutorCredential } from '../executor/credential.ts';
 import { runExecutor, type ExecutorRun } from '../executor/run.ts';
 import { ACCEPTANCE_IMAGES, acceptTask, type AcceptanceVerdict } from '../gate/accept.ts';
-import { recordMeasurement, recordUnverifiable } from '../gate/measurement.ts';
+import {
+  ledgerPath,
+  recordMeasurement,
+  recordStall,
+  recordUnverifiable,
+  type LedgerWrite,
+} from '../gate/measurement.ts';
 import { blockedPath } from '../gate/blocked.ts';
 import { eventBus } from '../events/bus.ts';
 import { snapshotTree, treesMatch, type TreeSnapshot } from '../gate/observe.ts';
@@ -142,6 +148,16 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
 
   const say = (message: string, level: 'INFO' | 'WARN' | 'ERROR' = 'INFO') => {
     logger.write({ projectId, taskId, agentRole: 'ORCHESTRATOR', logLevel: level, message });
+  };
+
+  /** Отказ книги контура в записи — названная ошибка, а не молчание (А-51 п.1). */
+  const named = (write: LedgerWrite, what: string): void => {
+    if (write.ok) return;
+    say(
+      `Книга контура не приняла ${what}: ${write.reason}. Базовая линия сходимости осталась ` +
+        'прежней — почините книгу, иначе следующий замер сравнится с устаревшим числом.',
+      'ERROR',
+    );
   };
 
   setStatus(database, projectDirectory, projectId, taskId, 'IN_PROGRESS');
@@ -390,9 +406,38 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
   // 3. The gate. A fresh container, a copy of the code, and no knowledge of what the executor said.
   say('Приёмка: свежий чистый контейнер, копия кодовой базы, независимый прогон.');
 
-  const task = HandoffTask.parse(
+  const onDisk = HandoffTask.parse(
     JSON.parse(readFileSync(join(projectDirectory, HANDOFF.tasks, taskFileName(taskId)), 'utf8')),
   );
+
+  /*
+   * **Замер задачи назначает ПЛАН, а не исполнитель** (А-51 п.1, находка разведки этой сессии).
+   *
+   * Перенос книги наружу закрыл подделку прошлого ЧИСЛА и не закрывал подделку КЛЮЧА, по которому
+   * число ищут: ключ есть `recordPath#divergenceKey` самого задания (`measurementKey`), а задание
+   * лежит в том же rw-монтировании и перечитывается ПОСЛЕ итерации. Исполнителю довольно было
+   * поправить у себя `recordPath` — ключ становился новым, прошлого числа по нему нет, сходимость
+   * проходит «первым замером цепочки»; убрать блок `measurement` целиком — и о замере не
+   * говорилось бы вовсе.
+   *
+   * Поэтому блок замера берётся из чтения ДО итерации, а расхождение называется вслух. Остальное
+   * задание по-прежнему читается свежим: стек и команды приёмка вправе была уточнить, и это
+   * отдельный, обоснованный D-314 случай.
+   */
+  const { measurement: rewritten, ...withoutMeasurement } = onDisk;
+  const task = HandoffTask.parse({
+    ...withoutMeasurement,
+    ...(assignment.measurement === undefined ? {} : { measurement: assignment.measurement }),
+  });
+
+  if (JSON.stringify(rewritten ?? null) !== JSON.stringify(assignment.measurement ?? null)) {
+    say(
+      `Задание переписало собственный ЗАМЕР за время итерации: было ` +
+        `${JSON.stringify(assignment.measurement ?? null)}, стало ${JSON.stringify(rewritten ?? null)}. ` +
+        'Приёмка судит по замеру из плана: ключ сравнения назначает план, а не тот, кого по нему судят.',
+      'ERROR',
+    );
+  }
 
   /*
    * Стек решает сама приёмка — контейнерным наблюдением копии в момент суда (D-314). Это и есть
@@ -474,24 +519,56 @@ export async function runCycle(request: CycleRequest, deps: CycleDeps): Promise<
    * работой — иначе полировка, сделавшая хуже, назначала бы себе новый, худший ориентир.
    */
   if (acceptance.measurement?.status === 'measured' && acceptance.accepted) {
-    recordMeasurement(projectDirectory, {
-      key: acceptance.measurement.key,
-      value: acceptance.measurement.value,
-      taskId,
-      image: acceptance.measurement.image,
-      at: new Date().toISOString(),
-    });
+    /*
+     * Отказ книги в записи — ГРОМКИЙ (А-51 п.1). Книга, которая не приняла принятое число, оставит
+     * следующий заход сравнивать с устаревшей базовой линией, и это надо видеть в ленте, а не
+     * узнавать по странному вердикту через три задачи.
+     */
+    named(
+      recordMeasurement(projectDirectory, {
+        key: acceptance.measurement.key,
+        value: acceptance.measurement.value,
+        taskId,
+        image: acceptance.measurement.image,
+        at: new Date().toISOString(),
+      }),
+      'принятое число',
+    );
+  }
+
+  /*
+   * Не сошлось — плюс один к терпению цепочки: предохранитель §10.2 считает именно здесь.
+   *
+   * Условие — ИМЕННО `!converged`, а не `!accepted`. Разница не косметическая: приёмка вправе
+   * отказать по причине, к сходимости отношения не имеющей, и считать такой отказ «заходом без
+   * улучшения» значило бы приближать автоприём по исчерпанию чужими красными. Сегодня после
+   * замера отказать может только он сам — но этот инвариант держался бы на порядке строк в
+   * `acceptTask`, а порядок строк не контракт.
+   */
+  if (acceptance.measurement?.status === 'measured' && !acceptance.measurement.converged) {
+    named(
+      recordStall(projectDirectory, {
+        key: acceptance.measurement.key,
+        taskId,
+        at: new Date().toISOString(),
+      }),
+      'заход без улучшения',
+    );
   }
 
   if (acceptance.measurement?.status === 'unverifiable') {
-    recordUnverifiable(projectDirectory, {
-      taskId,
-      reason: acceptance.measurement.reason,
-      at: new Date().toISOString(),
-    });
+    named(
+      recordUnverifiable(projectDirectory, {
+        taskId,
+        reason: acceptance.measurement.reason,
+        at: new Date().toISOString(),
+      }),
+      '«не проверяемо приёмкой»',
+    );
     say(
       `Задача ${taskId} помечена «не проверяемо приёмкой»: ${acceptance.measurement.reason}. ` +
-        'Запись легла в handoff/MEASUREMENTS.json — суд качества прочитает её и назовёт владельцу.',
+        `Запись легла в книгу контура (${ledgerPath(projectDirectory)}) — суд качества прочитает ` +
+        'её и назовёт владельцу.',
       'WARN',
     );
   }
