@@ -1,6 +1,8 @@
 import type { StartOutcome } from '../../docker/testing/fake-engine.ts';
 import { MANIFEST_MARKER } from '../observe.ts';
 
+import { probeStubOutcome } from './judge-stub.ts';
+
 /**
  * Валидные ответы наблюдателя приёмки (D-314) для стабов, чьи кейсы — не о наблюдении.
  *
@@ -27,5 +29,6 @@ export function observerStubOutcome(name: string): StartOutcome | null {
   if (name.endsWith('-snapshot-after')) {
     return { exitCode: 0, stdout: ['f 2 200.0 ./package.json'] };
   }
-  return null;
+  /* Суд качества стал стадией (А-44 п.2): кейс, доводящий конвейер до конца, обязан ей ответить. */
+  return probeStubOutcome(name);
 }

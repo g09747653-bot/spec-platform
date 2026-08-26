@@ -19,8 +19,15 @@ import { LLM_PROVIDERS, type LlmProviderId } from './types.ts';
  * the default true the moment a key exists, without a second code path appearing on that day.
  */
 
-/** The roles that ask a model something. Executors are containers and are not on this list. */
-export const LOOP_ROLES = ['architect', 'controller', 'researcher'] as const;
+/**
+ * The roles that ask a model something. Executors are containers and are not on this list.
+ *
+ * `judge` — суд качества (А-44 п.2). Своя роль, а не заимствованный архитектор: «судья подыгрывает
+ * своему конвейеру» — именованный режим отказа, и разводить их конфигурацией должно быть возможно
+ * одной строкой. Цепочка сама отберёт звено, которое ВИДИТ (`supportsImages`), — судить кадры
+ * текстовой моделью значит получить уверенный текст о том, чего она не смотрела.
+ */
+export const LOOP_ROLES = ['architect', 'controller', 'researcher', 'judge'] as const;
 
 export type LoopRole = (typeof LOOP_ROLES)[number];
 

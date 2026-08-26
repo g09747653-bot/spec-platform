@@ -7,10 +7,16 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { readBoard } from '../db/board.ts';
 import { openMigratedDatabase } from '../db/migrate.ts';
-import { createFakeEngine, type FakeEngine } from '../docker/testing/fake-engine.ts';
+import {
+  createFakeEngine,
+  type FakeEngine,
+  type StartOutcome,
+} from '../docker/testing/fake-engine.ts';
 import { acceptanceContainerName } from '../gate/accept.ts';
 import { blockedPath, setTaskStatusOnDisk } from '../gate/blocked.ts';
+import { coherentJudgeChain, probeStubOutcome } from '../gate/testing/judge-stub.ts';
 import { observerStubOutcome } from '../gate/testing/observer-stub.ts';
+import { PROBE_RESULT } from '../gate/product-probe.ts';
 import { executorContainerName } from '../executor/run.ts';
 import { HANDOFF, HandoffTask, importHandoff, taskFileName } from '../intake/handoff.ts';
 import { createLogger, type Logger } from '../observability/log.ts';
@@ -189,6 +195,7 @@ describe('many executors at once (task 159)', () => {
       engine,
       logger,
       credential: { kind: 'ANTHROPIC_API_KEY', value: 'x' },
+      judgeChain: coherentJudgeChain(),
       maxExecutors: 3,
     });
 
@@ -247,6 +254,7 @@ describe('many executors at once (task 159)', () => {
       engine,
       logger,
       credential: { kind: 'ANTHROPIC_API_KEY', value: 'x' },
+      judgeChain: coherentJudgeChain(),
       maxExecutors: 10,
     });
 
@@ -304,6 +312,7 @@ describe('the tariff window closing mid-run (task 159; А-24 §2)', () => {
       engine,
       logger,
       credential: { kind: 'ANTHROPIC_API_KEY', value: 'x' },
+      judgeChain: coherentJudgeChain(),
       maxExecutors: 1,
       now: () => clock,
       sleep: (ms: number) => {
@@ -374,6 +383,7 @@ describe('красный CI: the whole orchestration stops (task 160)', () => {
       engine,
       logger,
       credential: { kind: 'ANTHROPIC_API_KEY', value: 'x' },
+      judgeChain: coherentJudgeChain(),
       maxExecutors: 3,
     });
 
@@ -485,6 +495,7 @@ describe('красный CI: the whole orchestration stops (task 160)', () => {
       engine,
       logger,
       credential: { kind: 'ANTHROPIC_API_KEY', value: 'x' },
+      judgeChain: coherentJudgeChain(),
     });
 
     expect(afterBoot, 'a frozen pipeline runs nothing at all').toEqual([]);
@@ -548,6 +559,7 @@ describe('конвейер переходит между вехами сам (А
       engine,
       logger,
       credential: { kind: 'ANTHROPIC_API_KEY', value: 'x' },
+      judgeChain: coherentJudgeChain(),
       maxExecutors: 2,
     });
 
@@ -583,6 +595,7 @@ describe('конвейер переходит между вехами сам (А
       engine,
       logger,
       credential: { kind: 'ANTHROPIC_API_KEY', value: 'x' },
+      judgeChain: coherentJudgeChain(),
       maxExecutors: 1,
       now: () => 1_000_000,
       sleep: () => {
@@ -633,6 +646,7 @@ describe('конвейер переходит между вехами сам (А
       engine,
       logger,
       credential: { kind: 'ANTHROPIC_API_KEY' as const, value: 'x' },
+      judgeChain: coherentJudgeChain(),
       maxExecutors: 1,
     };
 
@@ -692,6 +706,7 @@ describe('снятая блокировка не требует второго �
       engine,
       logger,
       credential: { kind: 'ANTHROPIC_API_KEY', value: 'x' },
+      judgeChain: coherentJudgeChain(),
       maxExecutors: 1,
     });
 
@@ -711,6 +726,7 @@ describe('снятая блокировка не требует второго �
       engine,
       logger,
       credential: { kind: 'ANTHROPIC_API_KEY', value: 'x' },
+      judgeChain: coherentJudgeChain(),
       maxExecutors: 1,
     });
 
@@ -734,6 +750,7 @@ describe('снятая блокировка не требует второго �
       engine,
       logger,
       credential: { kind: 'ANTHROPIC_API_KEY' as const, value: 'x' },
+      judgeChain: coherentJudgeChain(),
       maxExecutors: 1,
     };
 
@@ -754,3 +771,91 @@ async function waitFor(condition: () => boolean, timeoutMs = 10_000): Promise<vo
 
   throw new Error('условие не наступило за отведённое время');
 }
+
+/**
+ * Суд качества — СТАДИЯ, и вершинная строка стоит на нём (А-44 п.2).
+ *
+ * До этой правки `visual-judge.ts` был мёртвым кодом, а «Проект завершён: принято задач N» —
+ * утверждением о ЗАДАЧАХ, выданным за утверждение о ЗАДУМКЕ. Продукт с 74 мёртвыми ссылками из 86 и
+ * тостом «Демо-версия, функция недоступна» проходил его целиком: ни одна из трёх прежних осей не
+ * открывала продукт.
+ */
+describe('вершинный критерий стоит на суде качества (А-44 п.2)', () => {
+  /** Демон, у которого всё зелено, а проба продукта отвечает тем, что диктует случай. */
+  function engineWhereProbeSays(probe: StartOutcome): FakeEngine {
+    return createFakeEngine({
+      onStart: ({ name }) => {
+        if (name === 'quality-probe') return probe;
+        if (name.startsWith('delivery-executor-')) {
+          writeReport(name.replace('delivery-executor-', ''));
+          return {};
+        }
+        return observerStubOutcome(name) ?? {};
+      },
+    });
+  }
+
+  const drive = (engine: FakeEngine) =>
+    driveProject(PROJECT, projectDirectory, {
+      database,
+      engine,
+      logger,
+      credential: { kind: 'ANTHROPIC_API_KEY', value: 'x' },
+      judgeChain: coherentJudgeChain(),
+      maxExecutors: 1,
+    });
+
+  it('зелёная доска: проект завершён, и вердикт стоит в той же строке', async () => {
+    writeTree([task('1', ['lib/a.js'])]);
+
+    const results = await drive(engineWhereProbeSays(probeStubOutcome('quality-probe') ?? {}));
+
+    expect(results.map((entry) => entry.outcome)).toEqual(['COMPLETED']);
+    expect(readBoard(database, PROJECT)?.status).toBe('COMPLETED');
+
+    const feed = logger.tail(PROJECT, 300).map((line) => line.message);
+    expect(feed.some((line) => line.includes('Проект завершён'))).toBe(true);
+    /* Вердикт входит в вершинную строку ДОСЛОВНО — не пересказом и не галочкой. */
+    expect(feed.some((line) => line.includes('Итог: зелено по всем четырём осям'))).toBe(true);
+  }, 30_000);
+
+  it('РЕГРЕССИЯ: красная ось не даёт сказать «завершён», хотя все задачи приняты', async () => {
+    writeTree([task('1', ['lib/a.js'])]);
+
+    /* Тот самый тост из продукта заказчика — абсолютный запрет, красная ось безусловно. */
+    const stubbed = JSON.parse(String((probeStubOutcome('quality-probe')?.stdout ?? [])[1])) as {
+      operability: { elements: { alert: string }[] };
+    };
+    stubbed.operability.elements = stubbed.operability.elements.map((element) => ({
+      ...element,
+      alert: 'Демо-версия, функция недоступна',
+    }));
+
+    const results = await drive(
+      engineWhereProbeSays({ exitCode: 0, stdout: [PROBE_RESULT, JSON.stringify(stubbed)] }),
+    );
+
+    /* Задача принята честно: приёмка — про задачу, суд — про задумку, и это разные утверждения. */
+    expect(results.map((entry) => entry.outcome)).toEqual(['COMPLETED']);
+    expect(statuses()).toEqual({ '1': 'COMPLETED' });
+
+    expect(readBoard(database, PROJECT)?.status).not.toBe('COMPLETED');
+
+    const feed = logger.tail(PROJECT, 300).map((line) => line.message);
+    expect(feed.some((line) => line.includes('Проект НЕ завершён'))).toBe(true);
+    expect(feed.some((line) => line.includes('Заглушка объявлена интерфейсом'))).toBe(true);
+    expect(feed.some((line) => line.includes('Проект завершён:'))).toBe(false);
+  }, 30_000);
+
+  it('несостоявшийся суд «завершён» тоже не даёт: не судили — не подтвердили', async () => {
+    writeTree([task('1', ['lib/a.js'])]);
+
+    const results = await drive(engineWhereProbeSays({ exitCode: 70, stdout: ['проба упала'] }));
+
+    expect(results.map((entry) => entry.outcome)).toEqual(['COMPLETED']);
+    expect(readBoard(database, PROJECT)?.status).not.toBe('COMPLETED');
+
+    const feed = logger.tail(PROJECT, 300).map((line) => line.message);
+    expect(feed.some((line) => line.includes('Суд качества НЕ СОСТОЯЛСЯ'))).toBe(true);
+  }, 30_000);
+});

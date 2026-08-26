@@ -58,6 +58,89 @@ const NOT_THE_ARTIFACT = [
 const START_FILES = ['start.cmd', 'start.bat', 'start.sh', 'start.ps1', 'Makefile'];
 
 /**
+ * Как из разметки достаётся ссылка — ОДНО выражение на оба берега (А-44 п.2).
+ *
+ * Второй берег — проба продукта: она читает страницы внутри контейнера, потому что хостовое чтение
+ * контейнерных записей уликой не является (D-314). Выражение вставляется в её скрипт отсюда: две
+ * копии регулярного выражения — это два разных определения того, что считается ссылкой.
+ */
+export const HREF_PATTERN = /href\s*=\s*["']([^"'#?]+)/gi;
+
+/** Страница артефакта: html вне служебных и инструментальных деревьев. Чистая функция над путём. */
+export function isArtifactPage(relativePath: string): boolean {
+  const parts = relativePath.split('/');
+  if (parts.some((part) => NOT_THE_ARTIFACT.includes(part))) return false;
+  return /\.html?$/i.test(relativePath);
+}
+
+/** Ссылка страницы, приведённая к пути от корня, или null — если это не ссылка на страницу. */
+export function resolveHref(page: string, href: string): string | null {
+  if (/^(https?:|mailto:|tel:|data:)/i.test(href)) return null;
+  if (!/\.html?$/i.test(href)) return null;
+
+  const base = page.includes('/') ? `${page.slice(0, page.lastIndexOf('/'))}/` : '';
+
+  return href.startsWith('/')
+    ? href.slice(1)
+    : `${base}${href}`
+        .split('/')
+        .reduce<string[]>((parts, part) => {
+          if (part === '.' || part === '') return parts;
+          if (part === '..') return parts.slice(0, -1);
+          return [...parts, part];
+        }, [])
+        .join('/');
+}
+
+/**
+ * Факты одного входа из НАБЛЮДЕНИЯ — того, что увидела проба внутри контейнера (А-44 п.2).
+ *
+ * Та же чистая логика, что у хостового обхода ниже, над другим источником фактов: листингом,
+ * сырыми ссылками каждой страницы и манифестом. Разделение то же, что во всей приёмке после D-314:
+ * глаза — контейнерные, суждение — чистая функция.
+ */
+export function entryFactsFromObservation(observation: {
+  files: readonly string[];
+  hrefs: Readonly<Record<string, readonly string[]>>;
+  packageJson: string | null;
+}): EntryFacts {
+  const pages = observation.files
+    .filter((file) => isArtifactPage(file))
+    .sort((left, right) => left.localeCompare(right));
+
+  const entries: string[] = [];
+  if (pages.includes('index.html')) entries.push('index.html');
+  for (const file of START_FILES) {
+    if (observation.files.includes(file)) entries.push(file);
+  }
+  if (observation.packageJson !== null) {
+    try {
+      const parsed: unknown = JSON.parse(observation.packageJson);
+      const scripts =
+        typeof parsed === 'object' && parsed !== null && 'scripts' in parsed
+          ? (parsed as { scripts?: Record<string, unknown> }).scripts
+          : undefined;
+      if (scripts !== undefined && typeof scripts.start === 'string') entries.push('npm start');
+    } catch {
+      /* Нечитаемый манифест точкой входа не является. */
+    }
+  }
+
+  const links: Record<string, string[]> = {};
+  for (const page of pages) {
+    links[page] = [
+      ...new Set(
+        (observation.hrefs[page] ?? [])
+          .map((href) => resolveHref(page, href))
+          .filter((path): path is string => path !== null),
+      ),
+    ];
+  }
+
+  return { entries, pages, links };
+}
+
+/**
  * Вердикт по фактам — ЧИСТАЯ функция, без диска.
  *
  * Пробелы называются так, как их прочтёт владелец: не «нарушен инвариант», а что именно ему
@@ -134,26 +217,13 @@ function collectPages(directory: string, current = directory, found: string[] = 
 /** Ссылки страницы на другие страницы — href из разметки, приведённые к путям от корня. */
 function linksOf(directory: string, page: string): string[] {
   const html = readFileSync(join(directory, page), 'utf8');
-  const base = page.includes('/') ? `${page.slice(0, page.lastIndexOf('/'))}/` : '';
   const links = new Set<string>();
 
-  for (const match of html.matchAll(/href\s*=\s*["']([^"'#?]+)/gi)) {
+  for (const match of html.matchAll(HREF_PATTERN)) {
     const href = match[1];
-    if (href === undefined || /^(https?:|mailto:|tel:|data:)/i.test(href)) continue;
-    if (!/\.html?$/i.test(href)) continue;
-
-    const resolved = href.startsWith('/')
-      ? href.slice(1)
-      : `${base}${href}`
-          .split('/')
-          .reduce<string[]>((parts, part) => {
-            if (part === '.' || part === '') return parts;
-            if (part === '..') return parts.slice(0, -1);
-            return [...parts, part];
-          }, [])
-          .join('/');
-
-    links.add(resolved);
+    if (href === undefined) continue;
+    const resolved = resolveHref(page, href);
+    if (resolved !== null) links.add(resolved);
   }
 
   return [...links];

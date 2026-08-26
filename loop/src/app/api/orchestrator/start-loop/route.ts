@@ -113,6 +113,8 @@ export async function POST(request: Request): Promise<Response> {
   const credentials = providerCredentials(env);
   const architect = createRoleChain(roles, 'architect', credentials);
   const researcher = createRoleChain(roles, 'researcher', credentials);
+  /* Суд качества — своя роль (А-44 п.2): «судья подыгрывает своему конвейеру» именованный отказ. */
+  const judge = createRoleChain(roles, 'judge', credentials);
 
   let intake;
   try {
@@ -216,6 +218,7 @@ export async function POST(request: Request): Promise<Response> {
     maxExecutors: env.LOOP_MAX_EXECUTORS,
     acceptanceTestTimeoutMs: env.ACCEPTANCE_TEST_TIMEOUT_MS,
     researchChain: researcher.providers.length === 0 ? null : researcher,
+    judgeChain: judge.providers.length === 0 ? null : judge,
     ...(env.LOOP_ANTHROPIC_MODEL === undefined ? {} : { model: env.LOOP_ANTHROPIC_MODEL }),
     ...(executorStubEnabled() ? { executorCommand: executorStubCommand } : {}),
   };

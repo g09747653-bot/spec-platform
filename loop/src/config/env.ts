@@ -116,6 +116,7 @@ const envObject = z.object({
   LOOP_ROLE_PROVIDER_ARCHITECT: optional(z.string().min(1)),
   LOOP_ROLE_PROVIDER_CONTROLLER: optional(z.string().min(1)),
   LOOP_ROLE_PROVIDER_RESEARCHER: optional(z.string().min(1)),
+  LOOP_ROLE_PROVIDER_JUDGE: optional(z.string().min(1)),
   LOOP_ANTHROPIC_MODEL: optional(z.string().min(1)),
   OPENAI_API_KEY: optional(z.string().min(1)),
   LOOP_OPENAI_MODEL: optional(z.string().min(1)),
@@ -210,10 +211,12 @@ export function roleConfiguration(env: LoopEnv): RoleConfiguration {
   const architect = parseRoleOrder(env.LOOP_ROLE_PROVIDER_ARCHITECT);
   const controller = parseRoleOrder(env.LOOP_ROLE_PROVIDER_CONTROLLER);
   const researcher = parseRoleOrder(env.LOOP_ROLE_PROVIDER_RESEARCHER);
+  const judge = parseRoleOrder(env.LOOP_ROLE_PROVIDER_JUDGE);
 
   if (architect !== undefined) perRole.architect = architect;
   if (controller !== undefined) perRole.controller = controller;
   if (researcher !== undefined) perRole.researcher = researcher;
+  if (judge !== undefined) perRole.judge = judge;
 
   return { order: env.LOOP_PROVIDER_ORDER, perRole };
 }

@@ -17,9 +17,11 @@ import {
 } from '../intake/handoff.ts';
 import type { Chain } from '../llm/chain.ts';
 import type { Logger } from '../observability/log.ts';
+import { readSeed } from '../intake/plan-review.ts';
 import { research } from '../intake/researcher.ts';
 
 import { detectTechStack } from '../gate/tech-stack.ts';
+import { judgeProduct, qualityLine, type QualityOutcome } from '../gate/quality-stage.ts';
 import type { TechStack } from '../intake/handoff.ts';
 
 import { freezePipeline, isFrozen, markProject } from './freeze.ts';
@@ -90,6 +92,13 @@ export interface OrchestratorDeps {
    * now rather than what was there before its own first attempt.
    */
   researchChain?: Chain | null;
+  /**
+   * Цепочка суда качества (А-44 п.2) — своя роль, а не заимствованный архитектор.
+   *
+   * `null`/отсутствует — ось связности не судится, и доска говорит это словами: суд, которому нечем
+   * смотреть, не бывает зелёным по умолчанию, и «проект завершён» по нему не произносится.
+   */
+  judgeChain?: Chain | null;
   /** Injected so the throttling case is a table of cases rather than a test that sleeps. */
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -740,14 +749,52 @@ export async function driveProject(
     const count = (status: string) => plan.tasks.filter((task) => task.status === status).length;
 
     if (plan.tasks.length > 0 && count('COMPLETED') === plan.tasks.length) {
-      markProject(database, projectId, 'COMPLETED');
       /*
-       * Вершинный критерий (А-33 п.4а): финальная строка несёт сверку с задумкой, когда конвейер
-       * ею располагает. Галочка при существующем DEVIATIONS.md — дефект, не краткость.
+       * **Суд качества — СТАДИЯ, и последняя** (А-44 п.2). Все задачи приняты — это утверждение о
+       * ЗАДАЧАХ; вершинный критерий обязан быть утверждением о ЗАДУМКЕ. Между ними и стоит суд:
+       * контур открывает продукт браузером, пользуется им и выносит доску четырёх осей.
+       *
+       * До сих пор `visual-judge.ts` был мёртвым кодом — его импортировал только собственный тест,
+       * а суд все раунды выносил операторский скрипт снаружи. Продукт с 74 мёртвыми ссылками из 86
+       * и тостом «Демо-версия, функция недоступна» проходил вершинный критерий целиком.
        */
+      say('Все задачи приняты. Суд качества: открываю продукт и пользуюсь им.');
+
+      const judged = await judgeProduct(
+        { projectDirectory, seed: readSeed(projectDirectory) },
+        {
+          engine: deps.engine,
+          chain: deps.judgeChain ?? null,
+          onLine: (line) => {
+            say(line.text, line.stream === 'stderr' ? 'WARN' : 'INFO');
+          },
+        },
+      ).catch(
+        (error: unknown): QualityOutcome => ({
+          status: 'skipped',
+          reason: `стадия суда упала: ${error instanceof Error ? error.message : String(error)}`,
+        }),
+      );
+
+      const line = qualityLine(judged);
+      say(line.text, line.complete ? 'INFO' : 'ERROR');
+
+      /*
+       * **«Проект завершён» при любой красной оси невозможно** (А-44 п.2). Вердикт входит в
+       * вершинную строку ДОСЛОВНО: не смягчён, не пересказан, не сокращён до галочки. Задачи при
+       * этом приняты честно и статус проекта это отражает — но статус задач и приговор задумке суть
+       * разные утверждения, и второе теперь произносится вслух.
+       */
+      markProject(database, projectId, line.complete ? 'COMPLETED' : 'ACTIVE');
+
+      const registry = verificationLine(findSelfCheckReport(projectDirectory));
+
       say(
-        `Проект завершён: принято задач ${String(plan.tasks.length)}. ` +
-          verificationLine(findSelfCheckReport(projectDirectory)),
+        line.complete
+          ? `Проект завершён: принято задач ${String(plan.tasks.length)}. ${registry}\n${line.text}`
+          : `Проект НЕ завершён: все ${String(plan.tasks.length)} задач приняты, но суд качества ` +
+              `красный. ${registry}\n${line.text}`,
+        line.complete ? 'INFO' : 'ERROR',
       );
     } else {
       /*

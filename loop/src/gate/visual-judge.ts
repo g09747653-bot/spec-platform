@@ -209,8 +209,13 @@ export interface LivenessVerdict {
   findings: string[];
 }
 
-/** Что в исходниках вообще заявляет о движении. Список — то, что ищется, а не что доказано. */
-const MOTION_SIGNALS: readonly { name: string; pattern: RegExp }[] = [
+/**
+ * Что в исходниках вообще заявляет о движении. Список — то, что ищется, а не что доказано.
+ *
+ * Экспортирован (А-44 п.2): те же выражения вставляются в скрипт пробы, потому что исходники
+ * читаются теперь ВНУТРИ контейнера. Два списка означали бы два разных определения движения.
+ */
+export const MOTION_SIGNAL_PATTERNS: readonly { name: string; pattern: RegExp }[] = [
   { name: 'CSS-переходы (transition)', pattern: /\btransition(-[a-z]+)?\s*:/i },
   { name: 'CSS-анимации (@keyframes)', pattern: /@keyframes\b/i },
   { name: 'состояния наведения (:hover)', pattern: /:hover\b/i },
@@ -222,7 +227,7 @@ const MOTION_SIGNALS: readonly { name: string; pattern: RegExp }[] = [
 
 /** Признаки движения в исходниках — чистая функция над уже прочитанными текстами. */
 export function scanMotionSignals(sources: readonly { file: string; text: string }[]): string[] {
-  return MOTION_SIGNALS.filter((signal) =>
+  return MOTION_SIGNAL_PATTERNS.filter((signal) =>
     sources.some((source) => signal.pattern.test(source.text)),
   ).map((signal) => signal.name);
 }
@@ -265,13 +270,225 @@ export function judgeLiveness(evidence: LivenessEvidence): LivenessVerdict {
   return { verdict: findings.length === 0 ? 'alive' : 'static', findings };
 }
 
+/* ─────────────────────────── ось IV: работоспособность ─────────────────────────── */
+
+/**
+ * Четвёртая ось — РАБОТОСПОСОБНОСТЬ (А-44 п.2).
+ *
+ * **Зачем она.** Три прежние оси судят продукт в ПОКОЕ: кадр, признаки движения, карта ссылок. Все
+ * три были зелены на продукте, где 74 из 86 ссылок главной ведут в никуда, лежит
+ * `decorative-stubs.js` с тостом «Демо-версия, функция недоступна», а раскрытое мега-меню налезает
+ * текстом само на себя. Заказчик нашёл это за минуту, открыв продукт. Суд не нашёл — потому что не
+ * открывал: в цепи «мысль → ТЗ → реализация → тестирование → полировка → готовое» звена
+ * тестирования не было.
+ *
+ * **Три исхода, и различать их обязательно** — они не про степень, а про род:
+ *
+ * - **СЛОМАННОЕ** — реагирует, но результат испорчен: текст налезает, панель пуста, слой не
+ *   закрывается. Красная ось всегда, без порогов;
+ * - **ИНЕРТНОЕ** — не ведёт никуда и большего не обещает. Законно (макет вправе быть макетом), но
+ *   СЧИТАЕТСЯ и публикуется числом: разница между 44 живыми ссылками и 86 с 74 мёртвыми — это и
+ *   есть разница между продуктом и его видимостью;
+ * - **САМООБЪЯВЛЕННАЯ ЗАГЛУШКА** — «демо», «функция недоступна», «coming soon», «в разработке».
+ *   Абсолютный запрет, красная ось безусловно: **продукт не разговаривает с пользователем о своей
+ *   незавершённости.** Честность живёт в отчёте, а не в интерфейсе.
+ */
+export const OPERABILITY_OUTCOMES = ['working', 'inert', 'broken', 'stub'] as const;
+export type OperabilityOutcome = (typeof OPERABILITY_OUTCOMES)[number];
+
+/**
+ * Чем продукт объявляет о собственной незавершённости — закрытый перечень (А-44 п.2).
+ *
+ * Закрытый, потому что запрет абсолютный: расширять его вправе только человек, а угадывать
+ * «похоже на заглушку» — значит вернуть суду мнение там, где нужен факт.
+ */
+export const STUB_PHRASES: readonly string[] = [
+  'демо-версия',
+  'демо версия',
+  'демоверсия',
+  'функция недоступна',
+  'функционал недоступен',
+  'недоступно в демо',
+  'в разработке',
+  'скоро будет',
+  'ожидается',
+  'coming soon',
+  'not implemented',
+  'not available in this demo',
+  'demo only',
+  'placeholder',
+  'lorem ipsum',
+  'todo:',
+  'заглушка',
+];
+
+/** Ссылки, которые никуда не ведут по самой своей записи. */
+const DEAD_HREF = /^\s*(#|javascript:\s*void\s*\(\s*0\s*\)|javascript:;|)\s*$/i;
+
+/** Найденная в тексте самообъявленная заглушка, или null. Чистая функция над строкой. */
+export function stubPhraseIn(text: string): string | null {
+  const haystack = text.toLowerCase();
+  return STUB_PHRASES.find((phrase) => haystack.includes(phrase)) ?? null;
+}
+
+/** Одна улика работоспособности: что трогали и что из этого вышло. Слова «сломано» здесь нет. */
+export interface InteractiveProbe {
+  label: string;
+  tag: string;
+  href: string | null;
+  /** Элемент живёт в шапке, навигации или подвале — «верхний уровень» в буквальном смысле. */
+  inChrome: boolean;
+  hoverChanged: boolean;
+  clicked: boolean;
+  navigated: boolean;
+  /** Страница изменилась после действия: раскрылось, перерисовалось, добавилось. */
+  changed: boolean;
+  /** Текст, ставший видимым после наведения или клика. */
+  revealedText: string;
+  /** Пары накладывающихся друг на друга текстовых блоков в раскрытом. */
+  overlapPairs: number;
+  emptyPanel: boolean;
+  stuckOpen: boolean;
+  /** Что продукт сказал через alert/confirm — тост «демо» приходит сюда. */
+  alert: string;
+  /** Клик не удался вовсе: элемент перекрыт, оторван, не кликается. */
+  error: string | null;
+}
+
+export interface OperabilityEvidence {
+  /** Сколько интерактивных элементов на входной странице всего. */
+  total: number;
+  probes: readonly InteractiveProbe[];
+  /** Текст страницы в покое — самообъявление ищут и здесь. */
+  pageText: string;
+  /** Исходники продукта: имя и текст. `decorative-stubs.js` виден именно тут. */
+  sources: readonly { file: string; text: string }[];
+  /** Что проба не смогла или обрезала — печатается, а не проглатывается. */
+  notes: readonly string[];
+}
+
+export interface OperabilityVerdict {
+  verdict: 'operable' | 'broken';
+  /** Классификация каждой улики — по ней и считаются числа. */
+  outcomes: { probe: InteractiveProbe; outcome: OperabilityOutcome; why: string }[];
+  /** Числа, которые публикуются: инертных столько-то из стольких-то. */
+  counts: Record<OperabilityOutcome, number>;
+  total: number;
+  findings: string[];
+}
+
+/**
+ * Исход одной улики — ЧИСТАЯ функция (P1: решает код).
+ *
+ * Порядок проверок — это порядок строгости, и он не случаен: самообъявление бьёт первым, потому что
+ * оно запрещено безусловно; испорченный результат вторым, потому что он про качество работы; и
+ * только потом «ничего не случилось», потому что это законный случай, который надо посчитать.
+ */
+export function classifyProbe(probe: InteractiveProbe): { outcome: OperabilityOutcome; why: string } {
+  const declared =
+    stubPhraseIn(probe.alert) ?? stubPhraseIn(probe.revealedText) ?? stubPhraseIn(probe.label);
+
+  if (declared !== null) {
+    return {
+      outcome: 'stub',
+      why: `продукт сам сообщает о незавершённости: «${declared}»`,
+    };
+  }
+
+  if (probe.overlapPairs > 0) {
+    return {
+      outcome: 'broken',
+      why: `раскрытое налезает само на себя: пар накладывающихся текстовых блоков ${String(probe.overlapPairs)}`,
+    };
+  }
+  if (probe.emptyPanel) return { outcome: 'broken', why: 'раскрылась пустая панель' };
+  if (probe.stuckOpen) {
+    return { outcome: 'broken', why: 'раскрытый слой не закрылся ни по Escape, ни щелчком мимо' };
+  }
+  if (probe.error !== null) {
+    return { outcome: 'broken', why: `нажать не удалось: ${probe.error}` };
+  }
+
+  if (probe.navigated || probe.changed) return { outcome: 'working', why: 'реагирует' };
+
+  return {
+    outcome: 'inert',
+    why:
+      probe.href !== null && DEAD_HREF.test(probe.href)
+        ? `ссылка ведёт в никуда (href="${probe.href}")`
+        : 'ни навигации, ни изменения на странице',
+  };
+}
+
+/**
+ * Вердикт оси — ЧИСТАЯ функция над уликами.
+ *
+ * Красная при любом сломанном и при любой самообъявленной заглушке — порогов здесь нет по
+ * построению. Инертное красноты не даёт: оно даёт ЧИСЛО, и число едет во все три места, где его
+ * читает человек.
+ */
+export function judgeOperability(evidence: OperabilityEvidence): OperabilityVerdict {
+  const outcomes = evidence.probes.map((probe) => ({ probe, ...classifyProbe(probe) }));
+  const counts: Record<OperabilityOutcome, number> = { working: 0, inert: 0, broken: 0, stub: 0 };
+  for (const entry of outcomes) counts[entry.outcome] += 1;
+
+  const findings: string[] = [];
+
+  /* Самообъявление в исходниках и в тексте покоя — то, чего клик мог и не достать. */
+  const inSources = evidence.sources
+    .map((source) => ({ file: source.file, phrase: stubPhraseIn(source.text) }))
+    .filter((found): found is { file: string; phrase: string } => found.phrase !== null);
+
+  const inPage = stubPhraseIn(evidence.pageText);
+
+  for (const entry of outcomes.filter((candidate) => candidate.outcome === 'stub')) {
+    findings.push(`Заглушка объявлена интерфейсом: «${entry.probe.label}» — ${entry.why}.`);
+  }
+  for (const found of inSources) {
+    findings.push(
+      `Самообъявление незавершённости в исходнике ${found.file}: «${found.phrase}». ` +
+        'Такой файл удаляется, а не переписывается: честность живёт в отчёте, а не в интерфейсе.',
+    );
+  }
+  if (inPage !== null) {
+    findings.push(`Страница в покое говорит о своей незавершённости: «${inPage}».`);
+  }
+
+  for (const entry of outcomes.filter((candidate) => candidate.outcome === 'broken')) {
+    findings.push(`Сломано: «${entry.probe.label}» (${entry.probe.tag}) — ${entry.why}.`);
+  }
+
+  if (evidence.probes.length === 0) {
+    findings.push(
+      'Работоспособность не проверялась: проба не нашла ни одного интерактивного элемента — ' +
+        'ось не бывает зелёной по умолчанию.',
+    );
+  }
+
+  return {
+    verdict: findings.length === 0 ? 'operable' : 'broken',
+    outcomes,
+    counts,
+    total: evidence.total,
+    findings,
+  };
+}
+
 /* ─────────────────────────── доска ─────────────────────────── */
 
 export interface QualityBoard {
   coherence: CoherenceOutcome;
   liveness: LivenessVerdict & { evidence: LivenessEvidence };
   entry: EntryVerdict;
-  /** Зелено только когда все три оси зелены. Несостоявшийся суд зелёным не бывает. */
+  operability: OperabilityVerdict;
+  /**
+   * Задачи, которые приёмка физически не смогла проверить (А-44 п.1).
+   *
+   * На доске они не ось, а строка: приёмка сказала «не проверяемо» — значит вопрос дошёл сюда, а не
+   * растворился. Зелёности они не отменяют, но и молчать о них суд не имеет права.
+   */
+  unverified: readonly { taskId: string; reason: string }[];
+  /** Зелено только когда все ЧЕТЫРЕ оси зелены. Несостоявшийся суд зелёным не бывает. */
   green: boolean;
 }
 
@@ -280,16 +497,21 @@ export function assembleBoard(args: {
   liveness: LivenessVerdict;
   evidence: LivenessEvidence;
   entry: EntryVerdict;
+  operability: OperabilityVerdict;
+  unverified?: readonly { taskId: string; reason: string }[];
 }): QualityBoard {
   return {
     coherence: args.coherence,
     liveness: { ...args.liveness, evidence: args.evidence },
     entry: args.entry,
+    operability: args.operability,
+    unverified: args.unverified ?? [],
     green:
       args.coherence.status === 'judged' &&
       args.coherence.verdict === 'coherent' &&
       args.liveness.verdict === 'alive' &&
-      args.entry.verdict === 'single-entry',
+      args.entry.verdict === 'single-entry' &&
+      args.operability.verdict === 'operable',
   };
 }
 
@@ -329,9 +551,35 @@ export function renderQualityBoard(board: QualityBoard): string {
     lines.push(...bullet(board.entry.findings));
   }
 
+  const counts = board.operability.counts;
+  const probed = board.operability.outcomes.length;
+  const tally =
+    `нажато ${String(probed)} из ${String(board.operability.total)}; ` +
+    `работает ${String(counts.working)}, инертных ${String(counts.inert)}, ` +
+    `сломанных ${String(counts.broken)}, заглушек ${String(counts.stub)}`;
+
+  if (board.operability.verdict === 'operable') {
+    lines.push(`4. Работоспособность — работает: ${tally}.`);
+  } else {
+    lines.push(`4. Работоспособность — СЛОМАНО (${tally}):`);
+    lines.push(...bullet(board.operability.findings));
+  }
+
+  if (counts.inert > 0) {
+    lines.push(
+      `   Инертное законно и потому посчитано: ${String(counts.inert)} элементов не ведут никуда. ` +
+        'Число уходит в реестр расхождений, раздел II.',
+    );
+  }
+
+  if (board.unverified.length > 0) {
+    lines.push(`Не проверено приёмкой: задач ${String(board.unverified.length)}.`);
+    lines.push(...bullet(board.unverified.map((entry) => `${entry.taskId}: ${entry.reason}`)));
+  }
+
   lines.push(
     board.green
-      ? 'Итог: зелено по всем трём осям.'
+      ? 'Итог: зелено по всем четырём осям.'
       : 'Итог: НЕ ПРИНЯТО — красная ось выше называет, что чинить.',
   );
 

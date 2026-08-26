@@ -12,14 +12,19 @@ import type { EntryVerdict } from './entry-point.ts';
 import {
   LIVENESS_KINDS,
   assembleBoard,
+  classifyProbe,
   coherencePrompt,
   judgeLiveness,
+  judgeOperability,
   loadShots,
   renderQualityBoard,
   reviewCoherence,
   scanMotionSignals,
+  stubPhraseIn,
   type CoherenceOutcome,
+  type InteractiveProbe,
   type LivenessProbe,
+  type OperabilityVerdict,
   type Shot,
 } from './visual-judge.ts';
 
@@ -200,6 +205,200 @@ describe('ось живости — судится, а не предполага
   });
 });
 
+/* ─────────────────────────── ось IV: работоспособность ─────────────────────────── */
+
+/** Улика по умолчанию — «навели, нажали, ничего страшного не случилось». */
+const element = (over: Partial<InteractiveProbe> = {}): InteractiveProbe => ({
+  label: 'Products',
+  tag: 'a',
+  href: '/products.html',
+  inChrome: true,
+  hoverChanged: true,
+  clicked: true,
+  navigated: true,
+  changed: true,
+  revealedText: '',
+  overlapPairs: 0,
+  emptyPanel: false,
+  stuckOpen: false,
+  alert: '',
+  error: null,
+  ...over,
+});
+
+const OPERABLE: OperabilityVerdict = judgeOperability({
+  total: 1,
+  probes: [element()],
+  pageText: 'Главная страница',
+  sources: [],
+  notes: [],
+});
+
+/**
+ * Работоспособность — четвёртая ось (А-44 п.2).
+ *
+ * Три улики ниже взяты с продукта дословно: 74 из 86 ссылок главной ведут `href="#"`,
+ * `decorative-stubs.js` показывает тост «Демо-версия, функция недоступна», раскрытое мега-меню
+ * «Products» налезает текстом само на себя. Ни одну из трёх кадр не показывает — кадр это первый
+ * экран в покое, — и ровно поэтому ось судит ДЕЙСТВИЕМ, а не видом.
+ */
+describe('четвёртая ось: продуктом пользуются, а не смотрят на него', () => {
+  it('РЕГРЕССИЯ: ссылка в никуда — инертна, законна и ПОСЧИТАНА', () => {
+    const dead = element({ href: '#', navigated: false, changed: false, hoverChanged: false });
+
+    expect(classifyProbe(dead).outcome).toBe('inert');
+
+    const verdict = judgeOperability({
+      total: 86,
+      probes: [
+        ...Array.from({ length: 74 }, () => dead),
+        ...Array.from({ length: 12 }, () => element()),
+      ],
+      pageText: '',
+      sources: [],
+      notes: [],
+    });
+
+    /* Инертное красноты не даёт: оно даёт число — то самое, которого не увидел ни один суд. */
+    expect(verdict.verdict).toBe('operable');
+    expect(verdict.counts.inert).toBe(74);
+    expect(verdict.counts.working).toBe(12);
+    expect(verdict.total).toBe(86);
+  });
+
+  it('РЕГРЕССИЯ: самообъявленная заглушка — красное безусловно, без порогов', () => {
+    const toast = element({
+      label: 'Купить',
+      href: '#',
+      navigated: false,
+      alert: 'Демо-версия, функция недоступна',
+    });
+
+    expect(classifyProbe(toast).outcome).toBe('stub');
+
+    const verdict = judgeOperability({
+      total: 1,
+      probes: [toast],
+      pageText: '',
+      sources: [],
+      notes: [],
+    });
+
+    expect(verdict.verdict).toBe('broken');
+    expect(verdict.findings.join('\n')).toContain('Заглушка объявлена интерфейсом');
+  });
+
+  it('РЕГРЕССИЯ: заглушка в исходнике краснеет, даже если клик до неё не дошёл', () => {
+    const verdict = judgeOperability({
+      total: 1,
+      probes: [element()],
+      pageText: '',
+      sources: [
+        {
+          file: 'src/scripts/decorative-stubs.js',
+          text: 'toast("Демо-версия, функция недоступна");',
+        },
+      ],
+      notes: [],
+    });
+
+    expect(verdict.verdict).toBe('broken');
+    expect(verdict.findings.join('\n')).toContain('decorative-stubs.js');
+    /* Продукт не разговаривает с пользователем о своей незавершённости — файл удаляют. */
+    expect(verdict.findings.join('\n')).toContain('удаляется, а не переписывается');
+  });
+
+  it('РЕГРЕССИЯ: раскрытое мега-меню, налезающее само на себя, — сломанное', () => {
+    const menu = element({
+      label: 'Products',
+      href: '#',
+      navigated: false,
+      changed: true,
+      overlapPairs: 3,
+      revealedText: 'GeForce Studio Data Center',
+    });
+
+    expect(classifyProbe(menu)).toMatchObject({ outcome: 'broken' });
+    expect(classifyProbe(menu).why).toContain('налезает');
+  });
+
+  it('пустая панель и незакрывающийся слой — тоже испорченный результат', () => {
+    expect(classifyProbe(element({ navigated: false, emptyPanel: true })).outcome).toBe('broken');
+    expect(classifyProbe(element({ navigated: false, stuckOpen: true })).outcome).toBe('broken');
+    expect(classifyProbe(element({ navigated: false, error: 'element is covered' })).outcome).toBe(
+      'broken',
+    );
+  });
+
+  it('самообъявление ищется закрытым перечнем, а не «похоже на заглушку»', () => {
+    expect(stubPhraseIn('Скоро будет доступно')).toBe('скоро будет');
+    expect(stubPhraseIn('Coming Soon')).toBe('coming soon');
+    expect(stubPhraseIn('Купить сейчас')).toBeNull();
+  });
+
+  it('ни одного интерактивного элемента — ось не бывает зелёной по умолчанию', () => {
+    const verdict = judgeOperability({ total: 0, probes: [], pageText: '', sources: [], notes: [] });
+
+    expect(verdict.verdict).toBe('broken');
+    expect(verdict.findings.join('\n')).toContain('не проверялась');
+  });
+
+  it('красная четвёртая ось роняет доску целиком', () => {
+    const board = assembleBoard({
+      coherence: { status: 'judged', verdict: 'coherent', findings: [], judgedBy: 'google' },
+      liveness: { verdict: 'alive', findings: [] },
+      evidence: { probes: ALIVE, signals: [] },
+      entry: entryOk,
+      operability: judgeOperability({
+        total: 1,
+        probes: [element({ navigated: false, alert: 'Демо-версия, функция недоступна' })],
+        pageText: '',
+        sources: [],
+        notes: [],
+      }),
+    });
+
+    expect(board.green).toBe(false);
+    expect(renderQualityBoard(board)).toContain('4. Работоспособность — СЛОМАНО');
+  });
+
+  it('число инертных уходит в доску и в реестр расхождений, раздел II', () => {
+    const board = assembleBoard({
+      coherence: { status: 'judged', verdict: 'coherent', findings: [], judgedBy: 'google' },
+      liveness: { verdict: 'alive', findings: [] },
+      evidence: { probes: ALIVE, signals: [] },
+      entry: entryOk,
+      operability: judgeOperability({
+        total: 86,
+        probes: [element(), element({ href: '#', navigated: false, changed: false })],
+        pageText: '',
+        sources: [],
+        notes: [],
+      }),
+    });
+
+    const text = renderQualityBoard(board);
+    expect(board.green).toBe(true);
+    expect(text).toContain('нажато 2 из 86');
+    expect(text).toContain('Инертное законно и потому посчитано: 1');
+    expect(text).toContain('раздел II');
+  });
+
+  it('«не проверяемо приёмкой» доезжает до доски строкой, а не растворяется', () => {
+    const board = assembleBoard({
+      coherence: { status: 'judged', verdict: 'coherent', findings: [], judgedBy: 'google' },
+      liveness: { verdict: 'alive', findings: [] },
+      evidence: { probes: ALIVE, signals: [] },
+      entry: entryOk,
+      operability: OPERABLE,
+      unverified: [{ taskId: 'WA05', reason: 'не проверяемо приёмкой: нет браузера' }],
+    });
+
+    expect(renderQualityBoard(board)).toContain('Не проверено приёмкой: задач 1');
+    expect(renderQualityBoard(board)).toContain('WA05');
+  });
+});
+
 describe('доска — то, что читает заказчик', () => {
   const coherent: CoherenceOutcome = {
     status: 'judged',
@@ -214,6 +413,7 @@ describe('доска — то, что читает заказчик', () => {
       liveness: { verdict: 'alive', findings: [] },
       evidence: { probes: ALIVE, signals: [] },
       entry: entryOk,
+      operability: OPERABLE,
     });
     expect(green.green).toBe(true);
 
@@ -222,6 +422,7 @@ describe('доска — то, что читает заказчик', () => {
       liveness: { verdict: 'alive', findings: [] },
       evidence: { probes: ALIVE, signals: [] },
       entry: { verdict: 'scattered', entry: null, findings: ['страница-сирота'], unreachable: [] },
+      operability: OPERABLE,
     });
     expect(scattered.green).toBe(false);
   });
@@ -232,6 +433,7 @@ describe('доска — то, что читает заказчик', () => {
       liveness: { verdict: 'alive', findings: [] },
       evidence: { probes: ALIVE, signals: [] },
       entry: entryOk,
+      operability: OPERABLE,
     });
 
     expect(board.green).toBe(false);
@@ -249,6 +451,7 @@ describe('доска — то, что читает заказчик', () => {
       liveness: judgeLiveness({ probes: [probe('hover', false)], signals: [] }),
       evidence: { probes: [probe('hover', false)], signals: [] },
       entry: entryOk,
+      operability: OPERABLE,
     });
 
     const text = renderQualityBoard(board);
@@ -256,6 +459,7 @@ describe('доска — то, что читает заказчик', () => {
     expect(text).toContain('кадр 2: заголовок прижат влево');
     expect(text).toContain('2. Живость — СТАТИЧНЫЙ (0 из 1 проверок сдвинулись)');
     expect(text).toContain('3. Вход — один: npm start');
+    expect(text).toContain('4. Работоспособность — работает');
     expect(text).toContain('Итог: НЕ ПРИНЯТО');
   });
 });
@@ -299,6 +503,7 @@ describe('регрессия на кадрах отклонённого прод
       liveness: { verdict: 'alive', findings: [] },
       evidence: { probes: ALIVE, signals: [] },
       entry: entryOk,
+      operability: OPERABLE,
     });
     expect(board.green).toBe(false);
   });
